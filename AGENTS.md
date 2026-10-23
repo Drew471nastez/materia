@@ -50,6 +50,11 @@ read the same way into the builder's Theme settings, with their values in
 `config/settings.json` under `shopify`. A setting the builder has no
 control for keeps its value on the page, and the commit comment names it.
 
+A `select` or `radio` setting with one to three options is drawn as a
+row of buttons, every choice in view; four or more options, or labels too
+long to fit a button, are drawn as a dropdown. Keep the labels to a word or
+two where buttons read better.
+
 ## Settings Storelib adds to Theme settings
 
 The builder shows the theme's own groups and then Storelib's Hover and
