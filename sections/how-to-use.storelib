@@ -1,4 +1,8 @@
 <template compat="shopify">
+{% render 'theme-type' %}
+{%- liquid
+  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+-%}
 {%- comment -%}
   Materia Themes — How to use
   A heading + repeatable "step" blocks (framed image, number, title, description).
@@ -54,7 +58,7 @@
 
   /* Outer */
   #shopify-section-{{ sid }} .htu {
-    background: {{ st.section_bg | default: '#FFFFFF' }};
+    background: {% render 'scheme-color', color: st.section_bg, fallback: 'var(--gradient-background, var(--color-background))' %};
     padding-top: {{ st.padding_top_mobile | default: 40 }}px;
     padding-bottom: {{ st.padding_bottom_mobile | default: 40 }}px;
   }
@@ -81,7 +85,7 @@
   /* Heading is a block — its size / color / alignment / gap are emitted
      per-block (see the heading loop below). Only structural base here. */
   #shopify-section-{{ sid }} .htu__heading {
-    font-weight: 800;
+    font-weight: var(--heading-weight, 700);
     line-height: 1.15;
   }
 
@@ -144,10 +148,10 @@
     position: relative;
     width: 100%;
     aspect-ratio: {{ st.image_ratio | default: '4/3' }};
-    background: {{ st.image_bg | default: '#FFFFFF' }};
+    background: {% render 'scheme-color', color: st.image_bg, fallback: 'var(--color-background)' %};
     border-radius: {{ st.image_radius | default: 10 }}px;
     overflow: hidden;
-    {%- if st.image_border -%}border: 1px solid {{ st.image_border_color | default: '#E5E7EB' }};{%- endif -%}
+    {%- if st.image_border -%}border: 1px solid {% render 'scheme-color', color: st.image_border_color, fallback: 'var(--color-border)' %};{%- endif -%}
   }
   #shopify-section-{{ sid }} .htu__img {
     position: absolute;
@@ -169,16 +173,17 @@
     margin: 18px 0 0;
   }
   #shopify-section-{{ sid }} .htu__num {
-    font-weight: 800;
+    font-family: var(--heading-font, inherit);
+    font-weight: var(--heading-weight, 700);
     line-height: 1;
-    color: {{ st.number_color | default: '#C9CDD2' }};
+    color: {% render 'scheme-color', color: st.number_color, fallback: 'var(--color-primary)' %};
     font-size: {{ st.number_size | default: 22 }}px;
   }
   #shopify-section-{{ sid }} .htu__title {
     margin: 0;
-    font-weight: 700;
+    font-weight: var(--heading-weight, 700);
     line-height: 1.2;
-    color: {{ st.title_color | default: '#111111' }};
+    color: {% render 'scheme-color', color: st.title_color, fallback: 'var(--color-heading)' %};
     font-size: {{ st.title_size_mobile | default: 18 }}px;
   }
   @media (min-width: 768px) {
@@ -187,7 +192,7 @@
   #shopify-section-{{ sid }} .htu__desc {
     margin: 10px 0 0;
     line-height: 1.6;
-    color: {{ st.desc_color | default: '#6B7280' }};
+    color: {% render 'scheme-color', color: st.desc_color, fallback: 'var(--color-text)' %};
     font-size: {{ st.desc_size_mobile | default: 15 }}px;
   }
   #shopify-section-{{ sid }} .htu__desc > :first-child { margin-top: 0; }
@@ -197,7 +202,7 @@
   }
 {% comment %}{% endcomment %}</style>
 
-<section class="htu-wrap">
+<section class="htu-wrap color-{{ color_scheme }} gradient">
   <div class="htu">
     <div class="htu__inner">
       {%- comment -%} Heading block(s) — rendered above the steps grid, fully self-contained {%- endcomment -%}
@@ -215,7 +220,7 @@
             <style>
               #shopify-section-{{ sid }} #htu-h-{{ block.id }} {
                 text-align: {{ hs.align | default: 'center' }};
-                color: {{ hs.color | default: '#111111' }};
+                color: {% render 'scheme-color', color: hs.color, fallback: 'var(--color-heading)' %};
                 font-size: {{ hs.size_mobile | default: 28 }}px;
                 margin: 0 0 {{ hs.gap_below | default: 48 }}px;
               }
@@ -224,7 +229,7 @@
               }
               {%- if hs.enable_accent -%}
               #shopify-section-{{ sid }} #htu-h-{{ block.id }} .htu__accent {
-                color: {{ hs.accent_color | default: '#C9A24B' }};
+                color: {% render 'scheme-color', color: hs.accent_color, fallback: 'var(--color-primary)' %};
                 {% if hs.accent_italic %}font-style: italic;{% endif %}
               }
               {%- endif -%}
@@ -233,7 +238,7 @@
         {%- endif -%}
       {%- endfor -%}
 
-      <ul class="htu__grid">
+      <ul class="htu__grid"{% if st.enable_mobile_carousel and st.carousel_autoplay %} data-htu-autoplay="{{ st.carousel_autoplay_speed | default: 4 | times: 1000 }}"{% endif %}>
         {%- assign step_n = 0 -%}
         {%- for block in section.blocks -%}
           {%- if block.type == 'step' -%}
@@ -271,35 +276,59 @@
 {%- if st.enable_mobile_carousel and st.carousel_autoplay -%}
 <script>
   (function () {
-    var root = document.getElementById('shopify-section-{{ sid }}');
-    if (!root) return;
-    var grid = root.querySelector('.htu__grid');
-    if (!grid) return;
-    var mq = window.matchMedia('(max-width: 767px)');
-    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
-    var delay = {{ st.carousel_autoplay_speed | default: 4 | times: 1000 }};
-    var timer = null, paused = false;
-    function step() {
-      var item = grid.querySelector('.htu__step');
-      if (!item) return grid.clientWidth;
-      var gap = parseFloat(getComputedStyle(grid).columnGap) || 0;
-      return item.getBoundingClientRect().width + gap;
+    var key = '__htuAutoplay_{{ sid }}';
+    function init() {
+      if (typeof window[key] === 'function') { window[key](); window[key] = null; }
+      var root = document.getElementById('shopify-section-{{ sid }}');
+      if (!root) return;
+      var grid = root.querySelector('.htu__grid[data-htu-autoplay]');
+      if (!grid) return;
+      var mq = window.matchMedia('(max-width: 767px)');
+      var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+      var delay = parseInt(grid.getAttribute('data-htu-autoplay'), 10) || 4000;
+      var timer = null, paused = false, visible = true, io = null;
+      function step() {
+        var item = grid.querySelector('.htu__step');
+        if (!item) return grid.clientWidth;
+        var gap = parseFloat(getComputedStyle(grid).columnGap) || 0;
+        return item.getBoundingClientRect().width + gap;
+      }
+      function tick() {
+        if (!grid.isConnected) { cleanup(); return; }
+        if (paused || !mq.matches) return;
+        var max = grid.scrollWidth - grid.clientWidth;
+        if (grid.scrollLeft >= max - 2) { grid.scrollTo({ left: 0, behavior: 'smooth' }); }
+        else { grid.scrollBy({ left: step(), behavior: 'smooth' }); }
+      }
+      function stop() { if (timer) { clearInterval(timer); timer = null; } }
+      function start() { stop(); if (mq.matches && !reduce.matches && visible && !paused && !document.hidden) { timer = setInterval(tick, delay); } }
+      function pause() { paused = true; stop(); }
+      function resume() { paused = false; start(); }
+      function onVis() { if (document.hidden) { stop(); } else { start(); } }
+      ['pointerdown', 'touchstart', 'mouseenter', 'focusin'].forEach(function (ev) { grid.addEventListener(ev, pause, { passive: true }); });
+      ['touchend', 'mouseleave', 'focusout'].forEach(function (ev) { grid.addEventListener(ev, resume, { passive: true }); });
+      document.addEventListener('visibilitychange', onVis);
+      if (mq.addEventListener) { mq.addEventListener('change', start); } else if (mq.addListener) { mq.addListener(start); }
+      if ('IntersectionObserver' in window) {
+        io = new IntersectionObserver(function (entries) { visible = entries[0].isIntersecting; if (visible) { start(); } else { stop(); } });
+        io.observe(grid);
+      }
+      function cleanup() {
+        stop();
+        if (io) { io.disconnect(); io = null; }
+        document.removeEventListener('visibilitychange', onVis);
+        if (mq.removeEventListener) { mq.removeEventListener('change', start); } else if (mq.removeListener) { mq.removeListener(start); }
+      }
+      window[key] = cleanup;
+      start();
     }
-    function tick() {
-      if (paused || !mq.matches) return;
-      var max = grid.scrollWidth - grid.clientWidth;
-      if (grid.scrollLeft >= max - 2) { grid.scrollTo({ left: 0, behavior: 'smooth' }); }
-      else { grid.scrollBy({ left: step(), behavior: 'smooth' }); }
+    init();
+    if (!window[key + '_bound']) {
+      window[key + '_bound'] = true;
+      document.addEventListener('storelib:section-load', function (e) {
+        if (e.detail && String(e.detail.sectionId) === '{{ sid }}') { init(); }
+      });
     }
-    function start() { stop(); if (mq.matches && !reduce.matches) { timer = setInterval(tick, delay); } }
-    function stop() { if (timer) { clearInterval(timer); timer = null; } }
-    function pause() { paused = true; stop(); }
-    function resume() { paused = false; start(); }
-    ['pointerdown', 'touchstart', 'mouseenter', 'focusin'].forEach(function (ev) { grid.addEventListener(ev, pause, { passive: true }); });
-    ['touchend', 'mouseleave', 'focusout'].forEach(function (ev) { grid.addEventListener(ev, resume, { passive: true }); });
-    document.addEventListener('visibilitychange', function () { if (document.hidden) { stop(); } else { start(); } });
-    if (mq.addEventListener) { mq.addEventListener('change', start); } else if (mq.addListener) { mq.addListener(start); }
-    start();
   })();
 {% comment %}{% endcomment %}</script>
 {%- endif -%}
@@ -858,12 +887,6 @@
     "class": "section section-how-to-use",
     "settings": [
       {
-        "type": "checkbox",
-        "id": "reset_spacing",
-        "label": "Remove default space between sections",
-        "default": true
-      },
-      {
         "type": "header",
         "content": "Layout"
       },
@@ -890,6 +913,18 @@
             "label": "Full width"
           }
         ]
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove section spacing",
+        "default": true
       },
       {
         "type": "range",
@@ -921,10 +956,6 @@
         "content": "Mobile carousel"
       },
       {
-        "type": "paragraph",
-        "content": "On mobile the steps become a single-row, swipeable carousel. Desktop layout is unaffected."
-      },
-      {
         "type": "checkbox",
         "id": "enable_mobile_carousel",
         "label": "Enable carousel on mobile",
@@ -937,8 +968,7 @@
         "min": 1,
         "max": 2,
         "step": 0.1,
-        "default": 1.1,
-        "info": "1.1 shows one step plus a peek of the next so it reads as swipeable."
+        "default": 1.1
       },
       {
         "type": "checkbox",
@@ -1019,14 +1049,12 @@
       {
         "type": "color",
         "id": "image_border_color",
-        "label": "Image border color",
-        "default": "#E5E7EB"
+        "label": "Image border color"
       },
       {
         "type": "color",
         "id": "image_bg",
-        "label": "Image background",
-        "default": "#FFFFFF"
+        "label": "Image background"
       },
       {
         "type": "header",
@@ -1035,8 +1063,7 @@
       {
         "type": "color",
         "id": "number_color",
-        "label": "Number color",
-        "default": "#C9CDD2"
+        "label": "Number color"
       },
       {
         "type": "range",
@@ -1051,8 +1078,7 @@
       {
         "type": "color",
         "id": "title_color",
-        "label": "Title color",
-        "default": "#111111"
+        "label": "Title color"
       },
       {
         "type": "range",
@@ -1077,8 +1103,7 @@
       {
         "type": "color",
         "id": "desc_color",
-        "label": "Description color",
-        "default": "#6B7280"
+        "label": "Description color"
       },
       {
         "type": "range",
@@ -1107,8 +1132,7 @@
       {
         "type": "color",
         "id": "section_bg",
-        "label": "Section background",
-        "default": "#FFFFFF"
+        "label": "Section background"
       },
       {
         "type": "range",
@@ -1218,8 +1242,7 @@
         "type": "checkbox",
         "id": "reveal",
         "label": "Reveal on scroll",
-        "default": true,
-        "info": "Uses the theme's global scroll-animation settings."
+        "default": true
       }
     ],
     "blocks": [
@@ -1277,8 +1300,7 @@
           {
             "type": "color",
             "id": "color",
-            "label": "Color",
-            "default": "#111111"
+            "label": "Color"
           },
           {
             "type": "range",
@@ -1304,13 +1326,12 @@
             "type": "text",
             "id": "accent_text",
             "label": "Accent word / phrase",
-            "info": "Must exactly match part of the heading to be highlighted."
+            "info": "Must match heading text"
           },
           {
             "type": "color",
             "id": "accent_color",
-            "label": "Accent color",
-            "default": "#C9A24B"
+            "label": "Accent color"
           },
           {
             "type": "checkbox",
@@ -1328,14 +1349,13 @@
           {
             "type": "image_picker",
             "id": "image",
-            "label": "Image",
-            "info": "Falls back to a placeholder image until you upload one."
+            "label": "Image"
           },
           {
             "type": "text",
             "id": "number",
             "label": "Number",
-            "info": "Leave blank to auto-number by position."
+            "info": "Blank numbers automatically"
           },
           {
             "type": "text",
