@@ -2077,7 +2077,16 @@ class LocalizationForm extends HTMLElement {
       items.forEach((li) => { li.dataset.search = norm(li.textContent.replace(/\s+/g, " ")); });
       input.addEventListener("input", () => {
         const q = norm(input.value.trim());
-        items.forEach((li) => { li.hidden = q !== "" && !li.dataset.search.includes(q); });
+        let shown = 0;
+        items.forEach((li) => { li.hidden = q !== "" && !li.dataset.search.includes(q); if (!li.hidden) shown++; });
+        if (!this._sheetEmpty) {
+          this._sheetEmpty = document.createElement("p");
+          this._sheetEmpty.className = "loc-sheet-empty";
+          this._sheetEmpty.setAttribute("role", "status");
+          this._sheetEmpty.textContent = list.dataset.emptyLabel || "No matches";
+          (this.elements.panel || list).after(this._sheetEmpty);
+        }
+        this._sheetEmpty.hidden = shown > 0;
         if (this.elements.panel) this.elements.panel.scrollTop = 0;
         list.scrollTop = 0;
       });
