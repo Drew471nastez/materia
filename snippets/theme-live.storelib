@@ -1,14 +1,90 @@
 <template compat="shopify">
+{%- comment -%}
+  Materia Themes. Live preview of Theme settings in the builder. Every change
+  is written as CSS variables on <html> (or one attribute on <body>) in a single
+  animation frame; nothing is measured and no page style is rebuilt. Colours
+  that have to win over each colour scheme go in one small sheet, rewritten
+  only when one of those colours changes.
+{%- endcomment -%}
+{%- liquid
+  assign live_field_bg = ''
+  if settings.field_background != blank and settings.field_background.alpha != 0
+    assign live_field_bg = settings.field_background
+  endif
+  assign live_field_text = ''
+  if settings.field_text != blank and settings.field_text.alpha != 0
+    assign live_field_text = settings.field_text
+  endif
+  assign live_hover_bg = ''
+  if settings.storelib_button_hover_bg != blank and settings.storelib_button_hover_bg.alpha != 0
+    assign live_hover_bg = settings.storelib_button_hover_bg
+  endif
+  assign live_hover_text = ''
+  if settings.storelib_button_hover_text != blank and settings.storelib_button_hover_text.alpha != 0
+    assign live_hover_text = settings.storelib_button_hover_text
+  endif
+  assign live_hover_border = ''
+  if settings.storelib_button_hover_border != blank and settings.storelib_button_hover_border.alpha != 0
+    assign live_hover_border = settings.storelib_button_hover_border
+  endif
+-%}
+<style>
+  /* While a setting is being changed, nothing eases: radius, widths, padding
+     and colours follow the slider at once instead of trailing behind it. */
+  html.sl-live-tweak *, html.sl-live-tweak *::before, html.sl-live-tweak *::after { transition: none !important; }
+{% comment %}{% endcomment %}</style>
 <script>
 (function () {
+  if (window.__materiaThemeLive) return;
+  window.__materiaThemeLive = true;
   var root = document.documentElement;
   var frame = 0;
-  var pending = null;
+  var pending = {};
+  var tweakTimer = 0;
   var schemeNodes = new Map();
+  var rtlHref = "{{ 'rtl.css' | asset_url }}";
+  var state = {
+    btn_shape: "{{ settings.btn_shape | default: 'rounded' }}",
+    btn_radius: {{ settings.btn_radius | default: 8 | json }},
+    enable_rounded: {{ settings.enable_rounded | json }},
+    rounded_corner: {{ settings.rounded_corner | default: 0 | json }},
+    input_radius: {{ settings.input_radius | default: 4 | json }},
+    storelib_input_radius: {{ settings.storelib_input_radius | default: -1 | json }},
+    field_background: "{{ live_field_bg }}",
+    field_text: "{{ live_field_text }}",
+    storelib_input_focus: "{{ settings.storelib_input_focus }}",
+    storelib_button_hover_bg: "{{ live_hover_bg }}",
+    storelib_button_hover_text: "{{ live_hover_text }}",
+    storelib_button_hover_border: "{{ live_hover_border }}"
+  };
+  var SHEET_KEYS = ['field_background', 'field_text', 'storelib_input_focus', 'storelib_button_hover_bg', 'storelib_button_hover_text', 'storelib_button_hover_border'];
+  var SHADOWS = {
+    soft: '0 2px 10px -2px rgba(0,0,0,0.06)',
+    medium: '0 8px 22px -6px rgba(0,0,0,0.12)',
+    large: '0 18px 40px -10px rgba(0,0,0,0.18)'
+  };
+
+  function has(s, k) { return Object.prototype.hasOwnProperty.call(s, k) && s[k] != null; }
   function px(value) {
     if (value == null || value === '') return null;
     var text = String(value);
     return /px$|em$|rem$|%$/.test(text) ? text : text + 'px';
+  }
+  function ms(value) {
+    if (value == null || value === '') return null;
+    var text = String(value);
+    return /m?s$/.test(text) ? text : text + 'ms';
+  }
+  function colour(value) {
+    if (value == null) return '';
+    if (typeof value === 'object') value = value.hex || value.value || value.color || '';
+    var text = String(value).trim();
+    if (!text || text === 'transparent' || /^rgba\([^)]*,\s*0(\.0+)?\s*\)$/i.test(text) || /^#[0-9a-f]{6}00$/i.test(text)) return '';
+    return text;
+  }
+  function set(name, value) {
+    if (value == null || value === '') root.style.removeProperty(name);
+    else root.style.setProperty(name, value);
   }
   function nodesFor(id) {
     var list = schemeNodes.get(id);
@@ -60,95 +136,167 @@
       '--btn-link-hover-color': accent
     };
   }
-  function layoutStyle(settings) {
-    var sheet = document.getElementById('sl-live-layout');
+  /* Colours picked for every field or every button are written over each
+     colour scheme, so they live in a sheet (important, to beat the scheme
+     values this script paints inline). */
+  function overrideSheet() {
+    var sheet = document.getElementById('sl-live-overrides');
     if (!sheet) {
       sheet = document.createElement('style');
-      sheet.id = 'sl-live-layout';
+      sheet.id = 'sl-live-overrides';
       document.head.appendChild(sheet);
     }
-    var desktop = settings.spacing_desktop;
-    var gap = settings.grid_gap_desktop;
+    var all = ':root, body, [class*="color-"]';
     var css = '';
-    if (desktop != null) css += '--section-spacing:' + px(desktop) + ';';
-    if (gap != null) css += '--grid-gap:' + px(gap) + ';';
-    sheet.textContent = css ? '@media (min-width:768px){:root{' + css + '}}' : '';
+    var v = colour(state.field_background);
+    if (v) css += all + '{--input-bg:' + v + ' !important}';
+    v = colour(state.field_text);
+    if (v) css += all + '{--input-color:' + v + ' !important}';
+    v = colour(state.storelib_input_focus);
+    if (v) css += 'input:focus, textarea:focus, select:focus{outline:2px solid ' + v + ' !important;outline-offset:2px}';
+    v = colour(state.storelib_button_hover_bg);
+    if (v) css += all + '{--btn-primary-hover-bg-color:' + v + ' !important;--btn-primary-hover-bg-color-graident:' + v + ' !important;--btn-secondary-hover-bg-color:' + v + ' !important}';
+    v = colour(state.storelib_button_hover_text);
+    if (v) css += all + '{--btn-primary-hover-color:' + v + ' !important;--btn-secondary-hover-color:' + v + ' !important;--btn-link-hover-color:' + v + ' !important}';
+    v = colour(state.storelib_button_hover_border);
+    if (v) css += all + '{--btn-primary-hover-border-color:' + v + ' !important;--btn-secondary-hover-border-color:' + v + ' !important}';
+    if (sheet.textContent !== css) sheet.textContent = css;
   }
-  function applySettings(settings) {
-    if (!settings) return;
-    var radius = settings.btn_radius;
-    if (settings.btn_shape === 'pill') radius = 999;
-    else if (settings.btn_shape === 'square') radius = 0;
-    var track = settings.heading_letter_spacing;
-    if (track === 'negative') track = '-0.034em';
-    var vars = {};
-    if (settings.body_font_size != null) vars['--body-font-size'] = px(settings.body_font_size);
-    if (settings.body_line_height != null) vars['--body-line-height'] = String(settings.body_line_height);
-    if (settings.body_font_weight != null) vars['--body-weight'] = String(settings.body_font_weight);
-    if (settings.heading_font_scale != null) vars['--heading-font-scale'] = String(Number(settings.heading_font_scale) / 100);
-    if (settings.heading_line_height != null) vars['--heading-line-height'] = String(settings.heading_line_height);
-    if (settings.heading_font_weight != null) vars['--heading-weight'] = String(settings.heading_font_weight);
-    if (settings.subheading_font_weight != null) vars['--subheading-weight'] = String(settings.subheading_font_weight);
-    if (settings.heading_text_transform != null) vars['--heading-text-transform'] = String(settings.heading_text_transform);
-    if (track != null) vars['--heading-letter-spacing'] = String(track);
-    if (settings.page_width != null) {
-      vars['--page-width'] = px(settings.page_width);
-      vars['--page-width-value'] = String(settings.page_width);
+  function setRtl(on) {
+    root.setAttribute('dir', on ? 'rtl' : 'ltr');
+    root.classList.toggle('rtl', on);
+    if (document.body) document.body.classList.toggle('rtl', on);
+    var links = document.querySelectorAll('link[href*="rtl.css"]');
+    if (on && !links.length) {
+      var link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = rtlHref;
+      link.setAttribute('data-sl-live-rtl', '');
+      document.head.appendChild(link);
     }
-    if (settings.fluid_container_width != null) {
-      vars['--fluid-container-width'] = px(settings.fluid_container_width);
-      vars['--fluid-container-width-value'] = String(settings.fluid_container_width);
+    for (var i = 0; i < links.length; i++) links[i].disabled = !on;
+  }
+  function bodyData(name, value) {
+    if (document.body && value != null && value !== '') document.body.setAttribute(name, String(value));
+  }
+
+  function applySettings(s) {
+    var k;
+    for (k in s) if (Object.prototype.hasOwnProperty.call(s, k) && Object.prototype.hasOwnProperty.call(state, k)) state[k] = s[k];
+
+    /* Type */
+    if (has(s, 'body_font_size')) set('--body-font-size', px(s.body_font_size));
+    if (has(s, 'body_line_height')) set('--body-line-height', String(s.body_line_height));
+    if (has(s, 'body_font_weight')) set('--body-weight', String(s.body_font_weight));
+    if (has(s, 'heading_font_scale')) set('--heading-font-scale', String(Number(s.heading_font_scale) / 100));
+    if (has(s, 'heading_line_height')) set('--heading-line-height', String(s.heading_line_height));
+    if (has(s, 'heading_font_weight')) set('--heading-weight', String(s.heading_font_weight));
+    if (has(s, 'subheading_font_weight')) set('--subheading-weight', String(s.subheading_font_weight));
+    if (has(s, 'heading_text_transform')) set('--heading-text-transform', String(s.heading_text_transform));
+    if (has(s, 'heading_letter_spacing')) set('--heading-letter-spacing', s.heading_letter_spacing === 'negative' ? '-0.034em' : String(s.heading_letter_spacing));
+
+    /* Layout & spacing. Phone and desktop values have their own variables,
+       read by the breakpoints in layout/theme, so one never hides the other. */
+    if (has(s, 'page_width')) {
+      set('--page-width', px(s.page_width));
+      set('--page-width-value', String(s.page_width));
+      set('--theme-page-width', px(s.page_width));
     }
-    if (settings.space_mobile != null) vars['--section-spacing'] = px(settings.space_mobile);
-    if (settings.container_gutter != null) vars['--container-gutter'] = px(settings.container_gutter);
-    if (settings.grid_gap_mobile != null) vars['--grid-gap'] = px(settings.grid_gap_mobile);
-    if (settings.btn_font_size != null) vars['--btn-font-size'] = px(settings.btn_font_size);
-    if (settings.btn_padding_y != null) vars['--btn-padding-y'] = px(settings.btn_padding_y);
-    if (settings.btn_padding_x != null) vars['--btn-padding-x'] = px(settings.btn_padding_x);
-    if (settings.btn_font_weight != null) vars['--btn-font-weight'] = String(settings.btn_font_weight);
-    if (settings.btn_border_width != null) vars['--btn-border-width'] = px(settings.btn_border_width);
-    if (settings.btn_letter_spacing != null) vars['--btn-letter-spacing'] = px(settings.btn_letter_spacing);
-    if (settings.animation_duration != null) vars['--animation-duration'] = px(settings.animation_duration).replace('px', 'ms');
-    if (settings.animation_delay != null) vars['--animation-delay-base'] = px(settings.animation_delay).replace('px', 'ms');
-    if (radius != null) vars['--btn-radius'] = px(radius);
-    if (settings.input_radius != null) vars['--input-border-radius'] = px(settings.input_radius);
-    if (settings.storelib_input_radius != null && Number(settings.storelib_input_radius) >= 0) {
-      vars['--input-border-radius'] = px(settings.storelib_input_radius);
+    if (has(s, 'fluid_container_width')) {
+      set('--fluid-container-width', px(s.fluid_container_width));
+      set('--fluid-container-width-value', px(s.fluid_container_width));
     }
-    if (settings.field_height != null) vars['--input-height'] = px(settings.field_height);
-    if (settings.field_padding_x != null) vars['--input-padding'] = '1rem ' + px(settings.field_padding_x);
-    if (settings.field_border_width != null) vars['--inputs-border-width'] = px(settings.field_border_width);
-    if (settings.field_font_size != null) vars['--input-font-size'] = px(settings.field_font_size);
-    if (settings.field_label_weight != null) vars['--input-label-weight'] = String(settings.field_label_weight);
-    if (settings.storelib_input_border) vars['--input-border-color'] = String(settings.storelib_input_border);
-    if (settings.search_input_radius != null) vars['--search-input-radius'] = px(settings.search_input_radius);
-    if (settings.card_radius != null) vars['--card-radius'] = px(settings.card_radius);
-    if (settings.rounded_corner != null) vars['--rounded-radius'] = px(settings.rounded_corner);
-    paint(root, vars);
-    if (settings.spacing_desktop != null || settings.grid_gap_desktop != null) layoutStyle(settings);
-    var schemes = settings.color_schemes;
+    if (has(s, 'container_gutter')) set('--container-gutter', px(s.container_gutter));
+    if (has(s, 'space_mobile')) set('--sl-live-space-mobile', px(s.space_mobile));
+    if (has(s, 'spacing_desktop')) set('--sl-live-space-desktop', px(s.spacing_desktop));
+    if (has(s, 'grid_gap_mobile')) set('--sl-live-grid-gap-mobile', px(s.grid_gap_mobile));
+    if (has(s, 'grid_gap_desktop')) set('--sl-live-grid-gap-desktop', px(s.grid_gap_desktop));
+    if (has(s, 'enable_rounded') || has(s, 'rounded_corner')) {
+      var on = state.enable_rounded !== false && state.enable_rounded !== 'false';
+      set('--rounded-radius', on ? px(state.rounded_corner || 0) : '0px');
+      if (document.body) document.body.classList.toggle('rounded-style', on && Number(state.rounded_corner) > 1);
+    }
+    if (has(s, 'card_radius')) set('--card-radius', px(s.card_radius));
+    if (has(s, 'pill_radius')) set('--pill-radius', px(s.pill_radius));
+    if (has(s, 'card_shadow')) set('--card-shadow', SHADOWS[s.card_shadow] || 'none');
+    if (has(s, 'border_width')) set('--border-width', px(s.border_width));
+    if (has(s, 'divider_style')) set('--divider-style', String(s.divider_style));
+    if (has(s, 'rtl')) setRtl(s.rtl === true || s.rtl === 'true');
+
+    /* Buttons */
+    if (has(s, 'btn_shape') || has(s, 'btn_radius')) {
+      var radius = state.btn_shape === 'pill' ? 999 : state.btn_shape === 'square' ? 0 : state.btn_radius;
+      set('--btn-radius', px(radius));
+      set('--theme-button-radius', px(radius));
+      bodyData('data-btn-shape', state.btn_shape);
+    }
+    if (has(s, 'btn_font_size')) set('--btn-font-size', px(s.btn_font_size));
+    if (has(s, 'btn_padding_y')) { set('--btn-padding-y', px(s.btn_padding_y)); set('--theme-button-padding-y', px(s.btn_padding_y)); }
+    if (has(s, 'btn_padding_x')) { set('--btn-padding-x', px(s.btn_padding_x)); set('--theme-button-padding-x', px(s.btn_padding_x)); }
+    if (has(s, 'btn_font_weight')) set('--btn-font-weight', String(s.btn_font_weight));
+    if (has(s, 'btn_border_width')) set('--btn-border-width', px(s.btn_border_width));
+    if (has(s, 'btn_letter_spacing')) set('--btn-letter-spacing', px(s.btn_letter_spacing));
+    if (has(s, 'btn_text_transform')) set('--btn-text-transform', String(s.btn_text_transform));
+    if (has(s, 'btn_anim_duration')) set('--btn-anim-duration', ms(s.btn_anim_duration));
+    if (has(s, 'btn_anim_ease')) set('--btn-anim-ease', String(s.btn_anim_ease));
+    if (has(s, 'btn_shadow_enabled')) set('--btn-shadow', (s.btn_shadow_enabled === true || s.btn_shadow_enabled === 'true') ? '0 4px 14px -4px rgba(0, 0, 0, 0.18)' : 'none');
+    if (has(s, 'btn_hover_effect')) bodyData('data-btn-hover', s.btn_hover_effect);
+    if (has(s, 'btn_style')) bodyData('data-btn-style', s.btn_style);
+    if (has(s, 'storelib_button_hover_effect')) bodyData('data-sl-btn-hover', s.storelib_button_hover_effect);
+
+    /* Motion */
+    if (has(s, 'animation_duration')) set('--animation-duration', ms(s.animation_duration));
+    if (has(s, 'animation_delay')) set('--animation-delay-base', ms(s.animation_delay));
+
+    /* Forms and fields */
+    if (has(s, 'field_height')) set('--input-height', px(s.field_height));
+    if (has(s, 'field_padding_x')) set('--input-padding', '1rem ' + px(s.field_padding_x));
+    if (has(s, 'field_border_width')) set('--inputs-border-width', px(s.field_border_width));
+    if (has(s, 'input_radius') || has(s, 'storelib_input_radius')) {
+      var own = Number(state.storelib_input_radius);
+      set('--input-border-radius', px(isFinite(own) && own >= 0 ? own : state.input_radius));
+    }
+    if (has(s, 'search_input_radius')) set('--search-input-radius', px(s.search_input_radius));
+    if (has(s, 'field_font_size')) set('--input-font-size', px(s.field_font_size));
+    if (has(s, 'field_label_weight')) set('--input-label-weight', String(s.field_label_weight));
+    if (Object.prototype.hasOwnProperty.call(s, 'storelib_input_border')) set('--input-border-color', colour(s.storelib_input_border));
+    for (var i = 0; i < SHEET_KEYS.length; i++) {
+      if (Object.prototype.hasOwnProperty.call(s, SHEET_KEYS[i])) { overrideSheet(); break; }
+    }
+
+    /* Colour schemes */
+    var schemes = s.color_schemes;
     if (schemes && typeof schemes === 'object') {
       var ids = Object.keys(schemes);
-      for (var i = 0; i < ids.length; i++) {
-        var varsForScheme = schemeVars(schemes[ids[i]]);
+      for (var n = 0; n < ids.length; n++) {
+        var varsForScheme = schemeVars(schemes[ids[n]]);
         if (!varsForScheme) continue;
-        var list = nodesFor(ids[i]);
-        for (var n = 0; n < list.length; n++) paint(list[n], varsForScheme);
-        if (i === 0 || ids[i] === 'default') paint(root, varsForScheme);
+        var list = nodesFor(ids[n]);
+        for (var m = 0; m < list.length; m++) paint(list[m], varsForScheme);
+        if (n === 0 || ids[n] === 'default') paint(root, varsForScheme);
       }
     }
   }
+
   document.addEventListener('storelib:settings-change', function (event) {
-    pending = (event.detail && (event.detail.settings || event.detail)) || pending;
+    var detail = event.detail || {};
+    var changed = detail.settings || detail;
+    if (!changed || typeof changed !== 'object') return;
+    for (var key in changed) if (Object.prototype.hasOwnProperty.call(changed, key)) pending[key] = changed[key];
+    if (!root.classList.contains('sl-live-tweak')) root.classList.add('sl-live-tweak');
+    clearTimeout(tweakTimer);
+    tweakTimer = setTimeout(function () { root.classList.remove('sl-live-tweak'); }, detail.live ? 400 : 250);
     if (frame) return;
     frame = requestAnimationFrame(function () {
       frame = 0;
       var next = pending;
-      pending = null;
+      pending = {};
       applySettings(next);
     });
   });
-  document.addEventListener('shopify:section:load', function () { schemeNodes.clear(); });
+  function forget() { schemeNodes.clear(); }
+  document.addEventListener('shopify:section:load', forget);
+  document.addEventListener('storelib:section-load', forget);
 })();
 {% comment %}{% endcomment %}</script>
 </template>
