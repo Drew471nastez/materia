@@ -29,6 +29,9 @@ for(const file of batch) {
     assert.equal(new Set(ids).size,ids.length,file+' duplicate setting IDs');
   }
   const markup=text.split('</template>')[0];
+  for(const liquid of markup.matchAll(/\{%-?\s*liquid\b([\s\S]*?)%-?\}/g)) {
+    assert(!/\{%-?/.test(liquid[1]),file+' nested tag inside Liquid block');
+  }
   assert(markup.includes('theme-type') || markup.includes('--theme-font') || markup.includes('--heading-font'),file+' shared typography inside template');
 }
 for(const file of ['main-product.storelib','featured-product.storelib']) {
