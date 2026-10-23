@@ -120,7 +120,7 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
     // panel is fixed. The drawer variant must still cover the full viewport.
     await page.setViewportSize({width:1200,height:800});
     for(const mode of ['popup','basic','drawer']) {
-      await page.setContent(`<style>:root{--color-background:white;--color-heading:#222;--color-border:#ccc}body{margin:0}.bls__drawer{visibility:hidden}.open-search .bls__drawer.open{visibility:visible}</style><div id="search-form" class="search__type-${mode} bls__drawer open"><div class="search__type-${mode==='drawer'?'drawer':'popup'}"><div class="container"><div class="search__type-popup-bar"><form action="/search" class="search-modal__form"><input class="search__input" placeholder="Search"><button class="btn-search-close">Close</button></form></div></div></div></div>`);
+      await page.setContent(`<style>:root{--color-background:white;--color-heading:#222;--color-border:#ccc}body{margin:0}.bls__drawer{visibility:hidden}.open-search .bls__drawer.open{visibility:visible}</style><div id="search-form" class="search__type-${mode} bls__drawer open"><div class="search__type-${mode}"><div class="container"><div class="search__type-popup-bar"><form action="/search" class="search-modal__form"><input class="search__input" placeholder="Search"><button class="btn-search-close">Close</button></form></div></div></div></div>`);
       await page.addStyleTag({content:read('shopify/assets/search-type-default.css')});
       await page.addStyleTag({content:read('shopify/assets/materia-experience.css')});
       await page.evaluate(()=>document.documentElement.classList.add('open-search'));
