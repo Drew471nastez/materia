@@ -2,16 +2,26 @@
 <script>
 (function () {
   var root = document.documentElement;
+  var frame = 0;
+  var pending = null;
+  var schemeNodes = new Map();
   function px(value) {
     if (value == null || value === '') return null;
     var text = String(value);
     return /px$|em$|rem$|%$/.test(text) ? text : text + 'px';
   }
+  function nodesFor(id) {
+    var list = schemeNodes.get(id);
+    if (list && list.length && list[0].isConnected) return list;
+    list = Array.prototype.slice.call(document.querySelectorAll('.color-' + id));
+    schemeNodes.set(id, list);
+    return list;
+  }
   function paint(el, vars) {
-    if (!el) return;
-    Object.keys(vars).forEach(function (key) {
-      if (vars[key] != null && vars[key] !== '') el.style.setProperty(key, vars[key]);
-    });
+    var keys = Object.keys(vars);
+    for (var i = 0; i < keys.length; i++) {
+      if (vars[keys[i]] != null && vars[keys[i]] !== '') el.style.setProperty(keys[i], vars[keys[i]]);
+    }
   }
   function schemeVars(s) {
     if (!s) return null;
@@ -21,15 +31,6 @@
     var heading = s.heading_color;
     var accent = s.primary_color;
     var line = s.border_color;
-    var primaryBg = s.btn_primary_background || accent;
-    var primaryText = s.btn_primary_color || bg;
-    var primaryHoverBg = s.btn_primary_hover_background || heading;
-    var primaryHoverText = s.btn_primary_hover_color || bg;
-    var secondaryBg = s.btn_secondary_background || bg;
-    var secondaryText = s.btn_secondary_color || heading;
-    var secondaryBorder = s.btn_secondary_border || heading;
-    var secondaryHoverBg = s.btn_secondary_hover_background || heading;
-    var secondaryHoverText = s.btn_secondary_hover_color || bg;
     return {
       '--color-background': bg,
       '--gradient-background': bg,
@@ -39,31 +40,39 @@
       '--color-border': line,
       '--color-link': heading,
       '--color-link-hover': accent,
-      '--btn-primary-bg-color': primaryBg,
-      '--btn-primary-color': primaryText,
-      '--btn-primary-hover-bg-color': primaryHoverBg,
-      '--btn-primary-hover-color': primaryHoverText,
-      '--btn-primary-bg-graident-color': primaryBg,
-      '--btn-primary-hover-bg-color-graident': primaryHoverBg,
-      '--btn-primary-border-color': primaryBg,
-      '--btn-primary-hover-border-color': primaryHoverBg,
-      '--btn-secondary-bg-color': secondaryBg,
-      '--btn-secondary-color': secondaryText,
-      '--btn-secondary-border-color': secondaryBorder,
-      '--btn-secondary-hover-bg-color': secondaryHoverBg,
-      '--btn-secondary-hover-color': secondaryHoverText,
-      '--btn-secondary-hover-border-color': secondaryHoverBg,
+      '--btn-primary-bg-color': s.btn_primary_background || accent,
+      '--btn-primary-color': s.btn_primary_color || bg,
+      '--btn-primary-hover-bg-color': s.btn_primary_hover_background || heading,
+      '--btn-primary-hover-color': s.btn_primary_hover_color || bg,
+      '--btn-primary-bg-graident-color': s.btn_primary_background || accent,
+      '--btn-primary-hover-bg-color-graident': s.btn_primary_hover_background || heading,
+      '--btn-primary-border-color': s.btn_primary_background || accent,
+      '--btn-primary-hover-border-color': s.btn_primary_hover_background || heading,
+      '--btn-secondary-bg-color': s.btn_secondary_background || bg,
+      '--btn-secondary-color': s.btn_secondary_color || heading,
+      '--btn-secondary-border-color': s.btn_secondary_border || heading,
+      '--btn-secondary-hover-bg-color': s.btn_secondary_hover_background || heading,
+      '--btn-secondary-hover-color': s.btn_secondary_hover_color || bg,
+      '--btn-secondary-hover-border-color': s.btn_secondary_hover_background || heading,
       '--btn-outline-color': heading,
       '--btn-outline-border-color': line,
       '--btn-link-color': heading,
       '--btn-link-hover-color': accent
     };
   }
-  function applyScheme(id, value, index) {
-    var vars = schemeVars(value);
-    if (!vars) return;
-    document.querySelectorAll('.color-' + id).forEach(function (el) { paint(el, vars); });
-    if (index === 0 || id === 'default') paint(root, vars);
+  function layoutStyle(settings) {
+    var sheet = document.getElementById('sl-live-layout');
+    if (!sheet) {
+      sheet = document.createElement('style');
+      sheet.id = 'sl-live-layout';
+      document.head.appendChild(sheet);
+    }
+    var desktop = settings.spacing_desktop;
+    var gap = settings.grid_gap_desktop;
+    var css = '';
+    if (desktop != null) css += '--section-spacing:' + px(desktop) + ';';
+    if (gap != null) css += '--grid-gap:' + px(gap) + ';';
+    sheet.textContent = css ? '@media (min-width:768px){:root{' + css + '}}' : '';
   }
   function applySettings(settings) {
     if (!settings) return;
@@ -92,58 +101,47 @@
     }
     if (settings.space_mobile != null) vars['--section-spacing'] = px(settings.space_mobile);
     if (settings.container_gutter != null) vars['--container-gutter'] = px(settings.container_gutter);
+    if (settings.grid_gap_mobile != null) vars['--grid-gap'] = px(settings.grid_gap_mobile);
     if (settings.btn_font_size != null) vars['--btn-font-size'] = px(settings.btn_font_size);
     if (settings.btn_padding_y != null) vars['--btn-padding-y'] = px(settings.btn_padding_y);
     if (settings.btn_padding_x != null) vars['--btn-padding-x'] = px(settings.btn_padding_x);
     if (settings.btn_font_weight != null) vars['--btn-font-weight'] = String(settings.btn_font_weight);
     if (settings.btn_border_width != null) vars['--btn-border-width'] = px(settings.btn_border_width);
     if (settings.btn_letter_spacing != null) vars['--btn-letter-spacing'] = px(settings.btn_letter_spacing);
+    if (settings.animation_duration != null) vars['--animation-duration'] = px(settings.animation_duration).replace('px', 'ms');
+    if (settings.animation_delay != null) vars['--animation-delay-base'] = px(settings.animation_delay).replace('px', 'ms');
     if (radius != null) vars['--btn-radius'] = px(radius);
     if (settings.input_radius != null) vars['--input-border-radius'] = px(settings.input_radius);
+    if (settings.storelib_input_radius != null && Number(settings.storelib_input_radius) >= 0) {
+      vars['--input-border-radius'] = px(settings.storelib_input_radius);
+    }
     if (settings.card_radius != null) vars['--card-radius'] = px(settings.card_radius);
+    if (settings.rounded_corner != null) vars['--rounded-radius'] = px(settings.rounded_corner);
     paint(root, vars);
+    if (settings.spacing_desktop != null || settings.grid_gap_desktop != null) layoutStyle(settings);
     var schemes = settings.color_schemes;
     if (schemes && typeof schemes === 'object') {
-      var index = 0;
-      Object.keys(schemes).forEach(function (id) {
-        applyScheme(id, schemes[id], index);
-        index += 1;
-      });
+      var ids = Object.keys(schemes);
+      for (var i = 0; i < ids.length; i++) {
+        var varsForScheme = schemeVars(schemes[ids[i]]);
+        if (!varsForScheme) continue;
+        var list = nodesFor(ids[i]);
+        for (var n = 0; n < list.length; n++) paint(list[n], varsForScheme);
+        if (i === 0 || ids[i] === 'default') paint(root, varsForScheme);
+      }
     }
   }
   document.addEventListener('storelib:settings-change', function (event) {
-    var detail = event.detail || {};
-    applySettings(detail.settings || detail);
-  });
-
-  /* Opening a block's settings was landing at the bottom of that panel.
-     Scroll anchoring does that when the panel grows as controls connect.
-     Keep the settings column anchored to the top when a block is opened. */
-  function calm(doc) {
-    if (!doc || !doc.head || doc.getElementById('sl-editor-calm')) return;
-    var style = doc.createElement('style');
-    style.id = 'sl-editor-calm';
-    style.textContent = 'aside, [class*="sidebar"], [class*="Sidebar"], [class*="settings"], [class*="Settings"] { overflow-anchor: none; }';
-    doc.head.appendChild(style);
-  }
-  calm(document);
-  var parentDoc = null;
-  try { if (window.parent && window.parent !== window) parentDoc = window.parent.document; } catch (error) { parentDoc = null; }
-  calm(parentDoc);
-  document.addEventListener('shopify:block:select', function () {
-    if (!parentDoc) return;
-    var nodes = parentDoc.querySelectorAll('aside, [class*="sidebar"], [class*="Sidebar"], [class*="settings"], [class*="Settings"]');
-    nodes.forEach(function (node) {
-      var scroller = node.scrollHeight > node.clientHeight + 24 ? node : null;
-      if (!scroller) {
-        var inner = node.querySelector('[class*="scroll"], [style*="overflow"]');
-        if (inner && inner.scrollHeight > inner.clientHeight + 24) scroller = inner;
-      }
-      if (!scroller || scroller.scrollTop < 80) return;
-      if (scroller.getBoundingClientRect().width > 480) return;
-      scroller.scrollTop = 0;
+    pending = (event.detail && (event.detail.settings || event.detail)) || pending;
+    if (frame) return;
+    frame = requestAnimationFrame(function () {
+      frame = 0;
+      var next = pending;
+      pending = null;
+      applySettings(next);
     });
   });
+  document.addEventListener('shopify:section:load', function () { schemeNodes.clear(); });
 })();
 {% comment %}{% endcomment %}</script>
 </template>
