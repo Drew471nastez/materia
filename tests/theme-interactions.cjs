@@ -216,7 +216,10 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
     assert.equal(await rootVar('--bages-sale-bg-color'),'#ff0000');
     assert.equal(await page.locator('body').getAttribute('data-badge-shape'),'square');
     assert.equal(await rootVar('--color-text-rgb'),'17, 34, 51');
-    assert.equal(await rootVar('--input-bg'),'rgba(255, 255, 255, 0.6)');passed++;
+    assert.equal(await rootVar('--input-bg'),'rgba(255, 255, 255, 0.6)');
+    await page.evaluate(()=>{document.body.insertAdjacentHTML('beforeend','<a id="live-link" href="#x" style="display:inline-block;padding:20px">Link</a>');document.dispatchEvent(new CustomEvent('storelib:settings-change',{detail:{settings:{storelib_link_hover:'#00aa00'}}}));});
+    await page.waitForTimeout(80);await page.hover('#live-link');
+    assert.equal(await page.$eval('#live-link',el=>getComputedStyle(el).color),'rgb(0, 170, 0)','link hover colour is live');passed++;
     assert.deepEqual(errors,[]);
     console.log(`${passed} browser interaction checks passed`);
   } finally {await browser.close();}
