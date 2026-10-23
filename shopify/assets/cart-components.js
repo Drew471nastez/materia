@@ -859,6 +859,7 @@ class CartNotification extends HTMLElement {
   }
 
   async open() {
+    this._closingUntil = 0;
     if (!this.notification.classList.contains("go_to_cart_page")) {
       if (this.classList.contains("show_popup")) {
         this.cart_icon = document.querySelector("header");
@@ -896,13 +897,18 @@ class CartNotification extends HTMLElement {
   }
 
   close() {
-    this.notification.querySelector(".minicart__wrapper").classList.add("open");
+    // One close at a time: the bound buttons and the shared handler can both fire.
+    if (this._closingUntil && Date.now() < this._closingUntil) return;
+    const wrapper = this.notification.querySelector(".minicart__wrapper");
+    if (!wrapper) return;
+    wrapper.classList.add("open");
     const cartRecommend = document.querySelector(".cart-recommend");
     let time = 0;
     if (cartRecommend && cartRecommend.classList.contains("open")) {
       time = 500;
       cartRecommend.classList.remove("open");
     }
+    this._closingUntil = Date.now() + time + 120;
 
     setTimeout(() => {
       this.notification.classList.remove("open");

@@ -2023,6 +2023,7 @@ class LocalizationForm extends HTMLElement {
         const q = norm(input.value.trim());
         items.forEach((li) => { li.hidden = q !== "" && !li.dataset.search.includes(q); });
         if (this.elements.panel) this.elements.panel.scrollTop = 0;
+        list.scrollTop = 0;
       });
       input.addEventListener("keydown", (e) => {
         if (e.key !== "Enter") return;
@@ -2146,6 +2147,35 @@ class LocalizationForm extends HTMLElement {
     } catch (e) {}
   }
 
+  // Colours for the sheet come from what is really painted behind the
+  // selector, and the text is checked against it so it always reads.
+  applySheetColors(list) {
+    const parse = (c) => {
+      const m = c && c.match(/rgba?\(([^)]+)\)/);
+      if (!m) return null;
+      const p = m[1].split(/[\s,\/]+/).filter(Boolean).map(Number);
+      return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+    };
+    const lum = ({ r, g, b }) => {
+      const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    let bg = null;
+    for (let el = this; el && el.nodeType === 1; el = el.parentElement) {
+      const c = parse(getComputedStyle(el).backgroundColor);
+      if (c && c.a > 0.85) { bg = c; break; }
+    }
+    if (!bg) bg = parse(getComputedStyle(document.body).backgroundColor) || { r: 255, g: 255, b: 255, a: 1 };
+    let fg = parse(getComputedStyle(this.elements.button || this).color) || { r: 17, g: 17, b: 17, a: 1 };
+    if (contrast(bg, fg) < 4.5) fg = lum(bg) > 0.35 ? { r: 17, g: 17, b: 17 } : { r: 255, g: 255, b: 255 };
+    const css = (c) => `rgb(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)})`;
+    list.style.setProperty('--color-background', css(bg));
+    list.style.setProperty('--color-heading', css(fg));
+    list.style.setProperty('--color-text', css(fg));
+    list.style.setProperty('--color-border', `color-mix(in srgb, ${css(fg)} 14%, transparent)`);
+  }
+
   portalMobileSheet() {
     clearTimeout(this._portalRestoreTimer);
     const list = this.elements.list;
@@ -2153,11 +2183,7 @@ class LocalizationForm extends HTMLElement {
     if (!this._sheetPortaled) {
       // A fixed sheet nested inside a sticky or transformed header is clipped
       // on iOS, so only the open panel moves to <body>.
-      const sourceStyle = getComputedStyle(this);
-      ['--color-background','--color-heading','--color-text','--color-border'].forEach(name => {
-        const value = sourceStyle.getPropertyValue(name).trim();
-        if (value) list.style.setProperty(name, value);
-      });
+      this.applySheetColors(list);
       list.classList.add('materia-localization-sheet');
       document.body.appendChild(list);
       this._sheetPortaled = true;
@@ -2191,6 +2217,10 @@ class LocalizationForm extends HTMLElement {
     if (!anyOpen && this._backdrop) {
       this._backdrop.classList.remove("open");
       this._backdrop.style.removeProperty("opacity");
+    }
+    if (!this._sheetPortaled && this._sheetSearch && this._sheetSearch.value) {
+      this._sheetSearch.value = '';
+      this._sheetSearch.dispatchEvent(new Event('input'));
     }
     if (this._sheetPortaled) {
       list.classList.remove('is-open', 'sheet-dragging');
@@ -2243,6 +2273,8 @@ class LocalizationForm extends HTMLElement {
       if (window.matchMedia("(max-width: 1024.98px)").matches) {
         this.portalMobileSheet();
         this._backdrop?.classList.add("open");
+      } else if (this._sheetSearch) {
+        setTimeout(() => this._sheetSearch?.focus({ preventScroll: true }), 60);
       }
     }
   }
@@ -5180,7 +5212,7 @@ class ButtonWishlist extends HTMLElement {
             if (this.closest(".wishlist-page-main")) {
               this.closest(".wishlist-list").remove();
               const product = document.querySelectorAll(
-                `.wishlist-page-section .product-item__action button-wishlist`
+                `.wishlist-page-section .wishlist-list:not([hidden]) .product-item__action button-wishlist`
               );
               if (product.length < 1) {
                 document
@@ -5192,7 +5224,7 @@ class ButtonWishlist extends HTMLElement {
             }
           } else {
             listProductIds.push(...parseLocalListProductIds);
-            window.location.href = `${window.shopUrl}${window.Shopify.routes.root}pages/wishlist`;
+            window.location.href = `${window.shopUrl}${window.Shopify.routes.root}wishlist`;
           }
         } else {
           listProductIds.push(...parseLocalListProductIds);

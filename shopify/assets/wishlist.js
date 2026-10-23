@@ -19,6 +19,21 @@ var WishlistPageShopify = (function () {
         const div_no_product = wishlistDiv.querySelector(
           ".wishlist-no-product-js"
         );
+        const local = wishlistDiv.querySelector("[data-wishlist-local]");
+        if (local) {
+          // Products are already on the page; show the saved ones.
+          const saved = new Set((wishlist_items || []).map(String));
+          const designMode = window.Shopify?.designMode || document.documentElement.classList.contains("shopify-design-mode");
+          let shown = 0;
+          local.querySelectorAll("[data-wishlist-id]").forEach((item) => {
+            const on = saved.has(String(item.dataset.wishlistId));
+            if (on) shown++;
+            if (on || !designMode) item.hidden = !on;
+          });
+          if (!shown && !local.querySelector("[data-wishlist-id]:not([hidden])")) div_no_product.classList.remove("hidden");
+          _this.skeletonFunction(0);
+          return;
+        }
         if (wishlist_items === null || wishlist_items.length === 0) {
           _this.skeletonFunction(0);
           div_no_product.classList.remove("hidden");
