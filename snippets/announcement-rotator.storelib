@@ -1,0 +1,121 @@
+<template compat="shopify">
+<script>
+(() => {
+  // A new tag also upgrades editors that still have the previous definition loaded.
+  if (customElements.get('announcement-rotator-v2')) return;
+  customElements.define('announcement-rotator-v2', class extends HTMLElement {
+    connectedCallback() {
+      queueMicrotask(() => {
+        if (!this.isConnected || this.cleanup) return;
+        const slides = [...this.querySelectorAll('.topbar-message')];
+        const controls = this.parentElement;
+        if (!slides.length) return;
+        let index = 0, target = 0, timer, visible = true, animating = false, animation, disposed = false;
+        const motion = matchMedia('(prefers-reduced-motion: reduce)');
+        const stop = () => clearTimeout(timer);
+        const schedule = () => {
+          stop();
+          if (disposed || animating || slides.length < 2 || motion.matches || !visible || document.hidden ||
+              controls.matches(':hover') || controls.contains(document.activeElement)) return;
+          timer = setTimeout(() => show(index + 1), Math.max(1, Number(this.dataset.delay) || 5) * 1000);
+        };
+        const apply = next => {
+          index = next;
+          slides.forEach((slide, i) => {
+            slide.classList.toggle('is-active', i === index);
+            slide.setAttribute('aria-hidden', String(i !== index));
+            slide.inert = i !== index;
+          });
+        };
+        // Fade out fully before fading in: no hard visibility cut or overlapping
+        // letters. Rapid clicks update the destination without restarting a fade.
+        const transition = async () => {
+          animating = true;
+          this.dataset.transitioning = 'true';
+          const duration = Math.max(120, Number(this.dataset.duration) || 700) / 2;
+          try {
+            animation = slides[index].animate([{opacity: 1}, {opacity: 0}], {duration, easing: 'ease-in-out', fill: 'forwards'});
+            await animation.finished;
+            if (disposed) return;
+            const outgoing = animation;
+            apply(target);
+            animation = slides[index].animate([{opacity: 0}, {opacity: 1}], {duration, easing: 'ease-in-out', fill: 'forwards'});
+            outgoing.cancel();
+            await animation.finished;
+          } catch (error) {
+            if (error.name !== 'AbortError') throw error;
+          } finally {
+            animation?.cancel();
+            animation = null;
+            animating = false;
+            this.dataset.transitioning = 'false';
+            if (!disposed) {
+              if (target !== index) show(target);
+              else schedule();
+            }
+          }
+        };
+        const show = next => {
+          target = (next + slides.length) % slides.length;
+          this.dataset.activeIndex = target;
+          stop();
+          if (motion.matches || typeof this.animate !== 'function') { apply(target); schedule(); return; }
+          if (!animating && target !== index) transition();
+          else if (!animating) schedule();
+        };
+        const motionChange = () => {
+          if (motion.matches) { animation?.cancel(); apply(target); }
+          schedule();
+        };
+        const click = event => {
+          const button = event.target.closest('.topbar-slider-arrow');
+          if (!button || !controls.contains(button)) return;
+          event.preventDefault();
+          show(target + (button.classList.contains('topbar-slider-arrow--prev') ? -1 : 1));
+        };
+        const focusOut = () => queueMicrotask(schedule);
+        let startX;
+        const down = event => { startX = event.clientX; };
+        const up = event => {
+          if (startX != null && Math.abs(event.clientX - startX) > 40) show(target + (event.clientX < startX ? 1 : -1));
+          startX = null;
+        };
+        controls.addEventListener('click', click);
+        controls.addEventListener('pointerenter', stop);
+        controls.addEventListener('pointerleave', schedule);
+        controls.addEventListener('focusin', stop);
+        controls.addEventListener('focusout', focusOut);
+        this.addEventListener('pointerdown', down);
+        this.addEventListener('pointerup', up);
+        document.addEventListener('visibilitychange', schedule);
+        motion.addEventListener('change', motionChange);
+        const observer = new IntersectionObserver(entries => {
+          visible = entries[0].isIntersecting;
+          schedule();
+        });
+        observer.observe(this);
+        controls.querySelectorAll('.topbar-slider-arrow').forEach(button => { button.disabled = slides.length < 2; });
+        this.cleanup = () => {
+          disposed = true;
+          stop(); animation?.cancel(); observer.disconnect();
+          controls.removeEventListener('click', click);
+          controls.removeEventListener('pointerenter', stop);
+          controls.removeEventListener('pointerleave', schedule);
+          controls.removeEventListener('focusin', stop);
+          controls.removeEventListener('focusout', focusOut);
+          this.removeEventListener('pointerdown', down);
+          this.removeEventListener('pointerup', up);
+          document.removeEventListener('visibilitychange', schedule);
+          motion.removeEventListener('change', motionChange);
+        };
+        apply(0);
+        this.dataset.activeIndex = '0';
+        this.dataset.transitioning = 'false';
+        schedule();
+      });
+    }
+    disconnectedCallback() { this.cleanup?.(); this.cleanup = null; }
+  });
+})();
+</script>
+</template>

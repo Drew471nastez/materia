@@ -1,0 +1,52 @@
+<template compat="shopify">
+{%- comment -%}
+  Editor only. When the builder re-renders a section or the cart drawer after
+  a settings change, the new markup brings new <img> elements that blank and
+  decode again even though the picture is already on screen. This keeps the
+  loaded image element when the new one asks for the same picture, so logos,
+  product photos and cart thumbnails stay put while settings change.
+{%- endcomment -%}
+<script>
+(() => {
+  if (window.__materiaLiveImages) return;
+  const editor = window.self !== window.top || !!window.Shopify?.designMode || document.documentElement.classList.contains('shopify-design-mode');
+  if (!editor) return;
+  window.__materiaLiveImages = true;
+  const imagesIn = node => node.tagName === 'IMG' ? [node] : (node.firstElementChild ? [...node.getElementsByTagName('img')] : []);
+  const keep = (fresh, old) => {
+    // The new element's attributes win (classes, sizes, alt); only the decoded picture is reused.
+    for (const {name} of [...old.attributes]) if (!fresh.hasAttribute(name)) old.removeAttribute(name);
+    for (const {name, value} of [...fresh.attributes]) if (old.getAttribute(name) !== value) old.setAttribute(name, value);
+    old.classList.remove('bls-loading-image');
+    fresh.replaceWith(old);
+    old.closest('motion-element')?.classList.remove('bls-loading-image');
+  };
+  const observer = new MutationObserver(records => {
+    let pool = null;
+    for (const record of records) for (const node of record.removedNodes) {
+      if (node.nodeType !== 1 || node.isConnected) continue;
+      for (const img of imagesIn(node)) {
+        if (!img.complete || !img.naturalWidth || img.closest('[data-no-image-carry]')) continue;
+        pool ||= new Map();
+        if (!pool.has(img.src)) pool.set(img.src, img);
+      }
+    }
+    if (!pool) return;
+    // Our own swaps must not be seen as another re-render.
+    observer.disconnect();
+    for (const record of records) for (const node of record.addedNodes) {
+      if (node.nodeType !== 1 || !node.isConnected) continue;
+      for (const img of imagesIn(node)) {
+        const old = pool.get(img.src);
+        if (!old || old === img || old.getAttribute('srcset') !== img.getAttribute('srcset')) continue;
+        pool.delete(img.src);
+        keep(img, old);
+      }
+    }
+    observer.takeRecords();
+    observer.observe(document.documentElement, {childList: true, subtree: true});
+  });
+  observer.observe(document.documentElement, {childList: true, subtree: true});
+})();
+</script>
+</template>

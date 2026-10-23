@@ -1,0 +1,599 @@
+<template compat="shopify">
+{%- assign fb_accessibility_free = 'accessibility.free' | t -%}
+{%- assign fb_accessibility_estimated_shipping = 'accessibility.estimated_shipping' | t -%}
+{%- comment -%}
+  Materia Themes — Cart Drawer Addons.
+  Renders one or more conversion boosters in a given slot:
+    • trust    — trust-badges row (with optional custom-SVG mode)
+    • urgency  — daily-cutoff countdown
+    • announce — promo / gift announcement bar
+    • stock    — auto low-stock urgency from cart line items
+    • savings  — auto "you saved X" from compare-at prices
+
+  Slots: top_of_drawer | below_items | above_subtotal | above_checkout | below_checkout
+
+  Usage:
+    {% render 'cart-drawer-addons', slot: 'above_subtotal' %}
+{%- endcomment -%}
+{%- liquid
+  assign s = settings
+  assign current_slot = slot | default: 'above_subtotal'
+
+  assign trust_slot    = s.cd_trust_position    | default: 'above_subtotal'
+  assign urgency_slot  = s.cd_urgency_position  | default: 'above_checkout'
+  assign announce_slot = s.cd_announce_position | default: 'top_of_drawer'
+  assign stock_slot    = s.cd_stock_position    | default: 'below_items'
+  assign savings_slot  = s.cd_savings_position  | default: 'above_subtotal'
+  assign loyalty_slot  = s.cd_loyalty_position  | default: 'above_checkout'
+  assign eta_slot      = s.cd_eta_position      | default: 'above_subtotal'
+  assign payments_slot = s.cd_payments_position | default: 'below_checkout'
+-%}
+
+{%- capture trust_icons -%}
+  <symbol id="cda-icon-lock" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="cda-icon-shield" viewBox="0 0 24 24" fill="none"><path d="M12 3l8 3v6c0 5-4 7.5-8 9-4-1.5-8-4-8-9V6l8-3Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cda-icon-check" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M8 12l3 3 5-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cda-icon-truck" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="13" height="9" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M15 10h4l3 4v2h-7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="18" r="2" stroke="currentColor" stroke-width="1.6"/><circle cx="18" cy="18" r="2" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="cda-icon-return" viewBox="0 0 24 24" fill="none"><path d="M4 12a8 8 0 0 1 14-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M18 4v4h-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 12a8 8 0 0 1-14 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M6 20v-4h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cda-icon-star" viewBox="0 0 24 24" fill="none"><path d="M12 3l2.7 5.5 6 .9-4.3 4.3 1 6L12 17l-5.4 2.7 1-6L3.3 9.4l6-.9L12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cda-icon-leaf" viewBox="0 0 24 24" fill="none"><path d="M5 19c8 0 14-6 14-14-7 0-13 1-14 8-.5 4 0 6 0 6Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 19c2-3 5-6 9-9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="cda-icon-heart" viewBox="0 0 24 24" fill="none"><path d="M12 20s-7-4.5-7-9.5A4 4 0 0 1 12 7a4 4 0 0 1 7 3.5C19 15.5 12 20 12 20Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+{%- endcapture -%}
+
+{%- if s.cd_trust_enable or s.cd_urgency_enable or s.cd_announce_enable or s.cd_stock_enable or s.cd_savings_enable or s.cd_loyalty_enable or s.cd_eta_enable or s.cd_payments_enable -%}
+
+  {%- comment -%} ───────── ANNOUNCEMENT BAR ───────── {%- endcomment -%}
+  {%- if s.cd_announce_enable and announce_slot == current_slot and s.cd_announce_text != blank -%}
+    {%- assign anim_class = '' -%}
+    {%- case s.cd_announce_animation -%}
+      {%- when 'shine'  -%}{%- assign anim_class = ' cda-announce--shine'  -%}
+      {%- when 'pulse'  -%}{%- assign anim_class = ' cda-announce--pulse'  -%}
+      {%- when 'scroll' -%}{%- assign anim_class = ' cda-announce--scroll' -%}
+    {%- endcase -%}
+    <div class="cda-announce{{ anim_class }}"
+         style="--cda-announce-bg: {{ s.cd_announce_bg | default: '#0F172A' }};
+                --cda-announce-color: {{ s.cd_announce_text_color | default: '#FFFFFF' }};
+                margin-top: {{ s.cd_announce_padding_top | default: 8 }}px;
+                margin-bottom: {{ s.cd_announce_padding_bottom | default: 8 }}px;">
+      {%- if s.cd_announce_link != blank -%}
+        <a class="cda-announce__inner" href="{{ s.cd_announce_link }}">
+          <span class="cda-announce__text">{{ s.cd_announce_text }}</span>
+          {%- if s.cd_announce_cta != blank -%}
+            <span class="cda-announce__cta">{{ s.cd_announce_cta }}</span>
+          {%- endif -%}
+        </a>
+      {%- else -%}
+        <div class="cda-announce__inner">
+          <span class="cda-announce__text">{{ s.cd_announce_text }}</span>
+        </div>
+      {%- endif -%}
+    </div>
+  {%- endif -%}
+
+  {%- comment -%} ───────── TRUST BADGES ───────── {%- endcomment -%}
+  {%- if s.cd_trust_enable and trust_slot == current_slot -%}
+    {%- assign layout_class = 'cda-trust--row' -%}
+    {%- if s.cd_trust_layout == 'stacked' -%}
+      {%- assign layout_class = 'cda-trust--stacked' -%}
+    {%- endif -%}
+    {%- comment -%}
+      Trust badge text color falls back to the active CART SCHEME's
+      `--color-text` (instead of hardcoded `#111111` which painted as
+      black on black on dark schemes). The icon colour stays at the
+      default green accent unless the merchant overrides it — green
+      reads on every scheme as an accent color.
+    {%- endcomment -%}
+    <div class="cda-trust {{ layout_class }}"
+         style="--cda-trust-icon: {{ s.cd_trust_icon_color | default: '#10b981' }};
+                --cda-trust-text: {{ s.cd_trust_text_color | default: 'var(--color-text, #111111)' }};
+                --cda-trust-text-size: {{ s.cd_trust_text_size | default: 12 }}px;
+                --cda-trust-icon-size: {{ s.cd_trust_icon_size | default: 16 }}px;
+                margin-top: {{ s.cd_trust_padding_top | default: 12 }}px;
+                margin-bottom: {{ s.cd_trust_padding_bottom | default: 12 }}px;">
+      {%- unless s.cd_trust_use_svg -%}
+        <svg width="0" height="0" style="position:absolute" aria-hidden="true">{{ trust_icons }}</svg>
+      {%- endunless -%}
+      {%- assign tlist = '1,2,3' | split: ',' -%}
+      {%- for n in tlist -%}
+        {%- capture k_text -%}cd_trust{{ n }}_text{%- endcapture -%}
+        {%- capture k_icon -%}cd_trust{{ n }}_icon{%- endcapture -%}
+        {%- capture k_svg  -%}cd_trust{{ n }}_svg{%- endcapture -%}
+        {%- assign t_text = s[k_text] -%}
+        {%- assign t_icon = s[k_icon] | default: 'check' -%}
+        {%- assign t_svg  = s[k_svg] -%}
+        {%- if t_text != blank -%}
+          <div class="cda-trust__item">
+            <span class="cda-trust__icon" aria-hidden="true">
+              {%- if s.cd_trust_use_svg and t_svg != blank -%}
+                {{ t_svg }}
+              {%- else -%}
+                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#cda-icon-{{ t_icon }}"></use></svg>
+              {%- endif -%}
+            </span>
+            <span class="cda-trust__label">{{ t_text }}</span>
+          </div>
+        {%- endif -%}
+      {%- endfor -%}
+    </div>
+  {%- endif -%}
+
+  {%- comment -%} ───────── URGENCY BAR ───────── {%- endcomment -%}
+  {%- if s.cd_urgency_enable and urgency_slot == current_slot and s.cd_urgency_text != blank -%}
+    {%- liquid
+      comment
+        Server-side cutoff check using the SHOP's timezone (the unit the
+        merchant configured). If today's cutoff has already passed we
+        render nothing at all — that way the bar never flashes for
+        late-night visitors and never lingers if JS fails to run.
+      endcomment
+      assign cutoff_str   = s.cd_urgency_cutoff | default: '16:00'
+      assign cutoff_parts = cutoff_str | split: ':'
+      assign cutoff_h     = cutoff_parts[0] | times: 1
+      assign cutoff_m     = cutoff_parts[1] | times: 1
+      assign cutoff_total = cutoff_h | times: 60 | plus: cutoff_m
+
+      assign now_h     = 'now' | date: '%H' | times: 1
+      assign now_m     = 'now' | date: '%M' | times: 1
+      assign now_s     = 'now' | date: '%S' | times: 1
+      assign now_total = now_h | times: 60 | plus: now_m
+
+      assign show_bar = false
+      if now_total < cutoff_total
+        assign show_bar = true
+      endif
+
+      comment
+        Pre-compute the initial countdown so the bar shows the correct
+        time on first paint — JS updates it every second from there.
+      endcomment
+      assign rem_minutes_total = cutoff_total | minus: now_total | minus: 1
+      assign rem_seconds       = 60 | minus: now_s
+      if rem_seconds == 60
+        assign rem_seconds       = 0
+        assign rem_minutes_total = rem_minutes_total | plus: 1
+      endif
+      assign rem_h = rem_minutes_total | divided_by: 60
+      assign rem_m = rem_minutes_total | modulo: 60
+
+      assign pad_m = rem_m
+      if rem_m < 10
+        assign pad_m = '0' | append: rem_m
+      endif
+      assign pad_s = rem_seconds
+      if rem_seconds < 10
+        assign pad_s = '0' | append: rem_seconds
+      endif
+
+      if rem_h > 0
+        assign pad_h = rem_h
+        if rem_h < 10
+          assign pad_h = '0' | append: rem_h
+        endif
+        assign initial_time = pad_h | append: ':' | append: pad_m | append: ':' | append: pad_s
+      else
+        assign initial_time = pad_m | append: ':' | append: pad_s
+      endif
+
+      assign timer_html = '<strong class="cda-urgency__timer">' | append: initial_time | append: '</strong>'
+      assign tpl = s.cd_urgency_text
+      if tpl contains '{time}'
+        assign initial_text_html = tpl | replace: '{time}', timer_html
+      else
+        assign initial_text_html = tpl | append: ' ' | append: timer_html
+      endif
+    -%}
+    {%- if show_bar -%}
+      <div class="cda-urgency{% if s.cd_urgency_pulse %} cda-urgency--pulse{% endif %}"
+           data-cd-urgency
+           data-template="{{ s.cd_urgency_text | escape }}"
+           data-cutoff="{{ cutoff_str }}"
+           style="--cda-urgency-bg: {{ s.cd_urgency_bg | default: '#FFF7ED' }};
+                  --cda-urgency-color: {{ s.cd_urgency_text_color | default: '#111111' }};
+                  --cda-urgency-accent: {{ s.cd_urgency_accent | default: '#EA580C' }};
+                  margin-top: {{ s.cd_urgency_padding_top | default: 8 }}px;
+                  margin-bottom: {{ s.cd_urgency_padding_bottom | default: 8 }}px;">
+        <span class="cda-urgency__dot" aria-hidden="true"></span>
+        <span class="cda-urgency__text">{{ initial_text_html }}</span>
+      </div>
+    {%- endif -%}
+  {%- endif -%}
+
+  {%- comment -%} ───────── STOCK URGENCY (auto) ───────── {%- endcomment -%}
+  {%- if s.cd_stock_enable and stock_slot == current_slot -%}
+    {%- assign threshold = s.cd_stock_threshold | default: 10 | plus: 0 -%}
+    {%- assign tpl = s.cd_stock_text | default: 'Only {qty} left of {name} — order soon!' -%}
+    {%- assign rendered = '' -%}
+    {%- for line in cart.items -%}
+      {%- if line.variant.inventory_management != blank
+             and line.variant.inventory_policy == 'deny'
+             and line.variant.inventory_quantity > 0
+             and line.variant.inventory_quantity <= threshold -%}
+        {%- assign msg = tpl
+              | replace: '{qty}', line.variant.inventory_quantity
+              | replace: '{name}', line.product.title -%}
+        {%- capture row -%}
+          <div class="cda-stock"
+               style="--cda-stock-bg: {{ s.cd_stock_bg | default: '#FEF2F2' }};
+                      --cda-stock-color: {{ s.cd_stock_text_color | default: '#991B1B' }};
+                      --cda-stock-accent: {{ s.cd_stock_accent | default: '#DC2626' }};
+                      margin-top: {{ s.cd_stock_padding_top | default: 8 }}px;
+                      margin-bottom: {{ s.cd_stock_padding_bottom | default: 8 }}px;">
+            <span class="cda-stock__dot" aria-hidden="true"></span>
+            <span class="cda-stock__text">{{ msg }}</span>
+          </div>
+        {%- endcapture -%}
+        {%- assign rendered = rendered | append: row -%}
+      {%- endif -%}
+    {%- endfor -%}
+    {{ rendered }}
+  {%- endif -%}
+
+  {%- comment -%} ───────── LOYALTY REWARDS TEASER ───────── {%- endcomment -%}
+  {%- if s.cd_loyalty_enable and loyalty_slot == current_slot -%}
+    {%- assign mode = s.cd_loyalty_mode | default: 'points' -%}
+    {%- assign rate = s.cd_loyalty_rate | default: 10 | plus: 0 -%}
+    {%- assign cart_dollars = cart.items_subtotal_price | divided_by: 100.0 -%}
+    {%- if mode == 'points' -%}
+      {%- assign value_num = cart_dollars | times: rate | round -%}
+      {%- assign value_str = value_num | append: ' points' -%}
+    {%- elsif mode == 'percent' -%}
+      {%- assign cashback_cents = cart.items_subtotal_price | times: rate | divided_by: 100 -%}
+      {%- assign value_str = cashback_cents | money -%}
+    {%- else -%}
+      {%- assign value_str = rate | times: 100 | money -%}
+    {%- endif -%}
+    {%- if cart.items_subtotal_price > 0 -%}
+      {%- assign tpl = s.cd_loyalty_text | default: 'You will earn {value} on this order' -%}
+      {%- assign value_html = '<strong class="cda-loyalty__value">' | append: value_str | append: '</strong>' -%}
+      {%- assign loyalty_msg = tpl | replace: '{value}', value_html -%}
+      <div class="cda-loyalty"
+           style="--cda-loyalty-bg: {{ s.cd_loyalty_bg | default: '#FEF3C7' }};
+                  --cda-loyalty-color: {{ s.cd_loyalty_text_color | default: '#92400E' }};
+                  --cda-loyalty-accent: {{ s.cd_loyalty_accent | default: '#D97706' }};
+                  margin-top: {{ s.cd_loyalty_padding_top | default: 8 }}px;
+                  margin-bottom: {{ s.cd_loyalty_padding_bottom | default: 8 }}px;">
+        <span class="cda-loyalty__text">{{ loyalty_msg }}</span>
+      </div>
+    {%- endif -%}
+  {%- endif -%}
+
+  {%- comment -%} ───────── ESTIMATED SHIPPING ───────── {%- endcomment -%}
+  {%- if s.cd_eta_enable and eta_slot == current_slot -%}
+    {%- assign eta_mode = s.cd_eta_mode | default: 'static' -%}
+    {%- assign eta_amount_cents = s.cd_eta_amount | default: 8 | times: 100 -%}
+    {%- assign eta_threshold_cents = s.cd_eta_threshold | default: 75 | times: 100 -%}
+    {%- assign is_free = false -%}
+    {%- if eta_amount_cents == 0 -%}{%- assign is_free = true -%}{%- endif -%}
+    {%- if eta_mode == 'threshold' and cart.items_subtotal_price >= eta_threshold_cents -%}
+      {%- assign is_free = true -%}
+    {%- endif -%}
+    {%- comment -%}
+      Pill colours. The merchant can override each via the customizer
+      (`cd_eta_bg`, `cd_eta_text_color`, `cd_eta_accent`); when those
+      are blank we fall back to the active CART SCHEME so the pill
+      blends with whatever colour scheme the merchant picked in
+      Theme settings → Cart & checkout. Falls through to a soft tint
+      of the scheme bg (same 7% mix used by the rest of the cart) plus
+      the scheme text colour, instead of hardcoded `#F8FAFC` / `#0F172A`
+      which painted as a white-on-white blob on dark schemes.
+    {%- endcomment -%}
+    <div class="cda-eta"
+         style="--cda-eta-bg: {{ s.cd_eta_bg | default: 'color-mix(in srgb, var(--color-background, #ffffff) 93%, var(--color-text, #111111) 7%)' }};
+                --cda-eta-color: {{ s.cd_eta_text_color | default: 'var(--color-text, #111111)' }};
+                --cda-eta-accent: {{ s.cd_eta_accent | default: 'var(--color-heading, var(--color-text, #111111))' }};
+                --cda-eta-free: {{ s.cd_eta_free_color | default: '#059669' }};
+                margin-top: {{ s.cd_eta_padding_top | default: 8 }}px;
+                margin-bottom: {{ s.cd_eta_padding_bottom | default: 8 }}px;">
+      <span class="cda-eta__icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2.5" y="7" width="11" height="9" rx="1.5"/>
+          <path d="M13.5 10.5h4.2c.4 0 .7.18.93.49l2.3 3.05c.18.24.27.53.27.83V15.5a1 1 0 0 1-1 1h-1.7"/>
+          <circle cx="9" cy="17.25" r="1.75"/><circle cx="17.5" cy="17.25" r="1.75"/>
+        </svg>
+      </span>
+      <span class="cda-eta__label">{{ s.cd_eta_label | default: fb_accessibility_estimated_shipping }}</span>
+      <span class="cda-eta__meta">
+        {%- if s.cd_eta_eta_text != blank -%}<span class="cda-eta__window">{{ s.cd_eta_eta_text }}</span>{%- endif -%}
+        {%- if is_free -%}
+          <span class="cda-eta__price cda-eta__price--free">{{ s.cd_eta_free_label | default: fb_accessibility_free }}</span>
+        {%- else -%}
+          <span class="cda-eta__price">{{ eta_amount_cents | money }}</span>
+        {%- endif -%}
+      </span>
+    </div>
+  {%- endif -%}
+
+  {%- comment -%} ───────── EXPRESS PAYMENT METHODS ───────── {%- endcomment -%}
+  {%- if s.cd_payments_enable and payments_slot == current_slot -%}
+    {%- assign p_align = s.cd_payments_alignment | default: 'center' -%}
+    {%- assign p_justify = 'center' -%}
+    {%- if p_align == 'left' -%}{%- assign p_justify = 'flex-start' -%}{%- endif -%}
+    {%- if p_align == 'right' -%}{%- assign p_justify = 'flex-end' -%}{%- endif -%}
+    <div class="cda-payments{% if s.cd_payments_grayscale %} cda-payments--gray{% endif %}"
+         style="--cda-payments-color: var(--color-text, #6B7280);
+                --cda-payments-text-size: {{ s.cd_payments_text_size | default: 12 }}px;
+                --cda-payments-badge-h: {{ s.cd_payments_badge_size | default: 20 }}px;
+                --cda-payments-badge-h-m: {{ s.cd_payments_badge_size_mobile | default: 18 }}px;
+                --cda-payments-justify: {{ p_justify }};
+                margin-top: {{ s.cd_payments_padding_top | default: 10 }}px;
+                margin-bottom: {{ s.cd_payments_padding_bottom | default: 10 }}px;">
+      {%- if s.cd_payments_text != blank -%}
+        <span class="cda-payments__label">{{ s.cd_payments_text }}</span>
+      {%- endif -%}
+      <ul class="cda-payments__list" role="list">
+        {%- if s.cd_payments_show_visa -%}
+          <li>{% render 'payment-icon', method: 'visa', icon_class: 'cda-payments__svg' %}</li>
+        {%- endif -%}
+        {%- if s.cd_payments_show_mastercard -%}
+          <li>{% render 'payment-icon', method: 'master', icon_class: 'cda-payments__svg' %}</li>
+        {%- endif -%}
+        {%- if s.cd_payments_show_amex -%}
+          <li>{% render 'payment-icon', method: 'american_express', icon_class: 'cda-payments__svg' %}</li>
+        {%- endif -%}
+        {%- if s.cd_payments_show_paypal -%}
+          <li>{% render 'payment-icon', method: 'paypal', icon_class: 'cda-payments__svg' %}</li>
+        {%- endif -%}
+        {%- if s.cd_payments_show_apple_pay -%}
+          <li>{% render 'payment-icon', method: 'apple_pay', icon_class: 'cda-payments__svg' %}</li>
+        {%- endif -%}
+        {%- if s.cd_payments_show_google_pay -%}
+          <li>{% render 'payment-icon', method: 'google_pay', icon_class: 'cda-payments__svg' %}</li>
+        {%- endif -%}
+        {%- if s.cd_payments_show_klarna -%}
+          <li>{% render 'payment-icon', method: 'klarna', icon_class: 'cda-payments__svg' %}</li>
+        {%- endif -%}
+        {%- if s.cd_payments_show_afterpay -%}
+          <li>{% render 'payment-icon', method: 'afterpay', icon_class: 'cda-payments__svg' %}</li>
+        {%- endif -%}
+      </ul>
+    </div>
+  {%- endif -%}
+
+  {%- comment -%} ───────── MONEY SAVED (auto) ───────── {%- endcomment -%}
+  {%- if s.cd_savings_enable and savings_slot == current_slot -%}
+    {%- assign saved = 0 -%}
+    {%- for line in cart.items -%}
+      {%- if line.variant.compare_at_price and line.variant.compare_at_price > line.variant.price -%}
+        {%- assign diff = line.variant.compare_at_price | minus: line.variant.price | times: line.quantity -%}
+        {%- assign saved = saved | plus: diff -%}
+      {%- endif -%}
+    {%- endfor -%}
+    {%- if saved > 0 -%}
+      {%- assign amount_html = saved | money -%}
+      {%- assign tpl = s.cd_savings_text | default: "🎉 You're saving {amount} today" -%}
+      {%- assign msg_with_strong = '<strong class="cda-savings__amount">' | append: amount_html | append: '</strong>' -%}
+      {%- assign msg_html = tpl | replace: '{amount}', msg_with_strong -%}
+      <div class="cda-savings"
+           style="--cda-savings-bg: {{ s.cd_savings_bg | default: '#ECFDF5' }};
+                  --cda-savings-color: {{ s.cd_savings_text_color | default: '#065F46' }};
+                  --cda-savings-accent: {{ s.cd_savings_accent | default: '#059669' }};
+                  margin-top: {{ s.cd_savings_padding_top | default: 8 }}px;
+                  margin-bottom: {{ s.cd_savings_padding_bottom | default: 8 }}px;">
+        <span class="cda-savings__text">{{ msg_html }}</span>
+      </div>
+    {%- endif -%}
+  {%- endif -%}
+
+{%- endif -%}
+
+<style data-cda-styles>
+  /* Universal */
+  .cda-trust, .cda-urgency, .cda-announce, .cda-stock, .cda-savings { box-sizing: border-box; }
+
+  /* Trust */
+  .cda-trust { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 0; }
+  .cda-trust--stacked { gap: 18px; }
+  .cda-trust__item { display: inline-flex; align-items: center; gap: 6px; color: var(--cda-trust-text); font-size: var(--cda-trust-text-size); line-height: 1.25; font-weight: 500; }
+  .cda-trust--stacked .cda-trust__item { flex-direction: column; align-items: center; text-align: center; gap: 4px; flex: 1 1 0; min-width: 0; }
+  .cda-trust__icon { width: var(--cda-trust-icon-size); height: var(--cda-trust-icon-size); display: inline-flex; align-items: center; justify-content: center; color: var(--cda-trust-icon); flex: 0 0 auto; }
+  .cda-trust__icon svg { width: 100%; height: 100%; display: block; fill: none; }
+  .cda-trust__icon svg, .cda-trust__icon svg * { stroke: currentColor; }
+  .cda-trust__label { white-space: nowrap; }
+  .cda-trust--stacked .cda-trust__label { white-space: normal; }
+
+  /* On mobile, force the row layout to a single horizontal swipe-able
+     line so all badges stay on one row and the user can swipe through. */
+  @media (max-width: 767px) {
+    .cda-trust:not(.cda-trust--stacked) {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      scroll-snap-type: x proximity;
+      /* extend scroll viewport to the full drawer width so badges run
+         edge-to-edge while still respecting the parent's left padding
+         when not overflowing. */
+      margin-inline: -8px;
+      padding-inline: 8px;
+    }
+    .cda-trust:not(.cda-trust--stacked)::-webkit-scrollbar { display: none; }
+    .cda-trust:not(.cda-trust--stacked) .cda-trust__item {
+      flex: 0 0 auto;
+      scroll-snap-align: start;
+    }
+  }
+
+  /* Urgency — smoother loop */
+  .cda-urgency { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: var(--cda-urgency-bg); color: var(--cda-urgency-color); font-size: 13px; line-height: 1.4; font-weight: 500; }
+  .cda-urgency__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cda-urgency-accent); flex: 0 0 auto; position: relative; }
+  .cda-urgency--pulse .cda-urgency__dot::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--cda-urgency-accent);
+    opacity: 0.5;
+    animation: cda-pulse 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    transform-origin: center;
+  }
+  .cda-urgency__timer { color: var(--cda-urgency-accent); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+  @keyframes cda-pulse {
+    0%   { transform: scale(1);   opacity: 0.55; }
+    60%  { transform: scale(2.2); opacity: 0; }
+    100% { transform: scale(2.2); opacity: 0; }
+  }
+
+  /* Announce */
+  .cda-announce { background: var(--cda-announce-bg); color: var(--cda-announce-color); border-radius: 10px; overflow: hidden; position: relative; }
+  .cda-announce__inner { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; font-size: 13px; line-height: 1.35; text-align: center; text-decoration: none; color: inherit; }
+  .cda-announce__cta { background: rgba(255,255,255,.18); padding: 4px 10px; border-radius: 999px; font-weight: 600; font-size: 12px; }
+  a.cda-announce__inner:hover { opacity: 0.92; }
+  .cda-announce--pulse { animation: cda-soft-pulse 2.4s ease-in-out infinite; }
+  @keyframes cda-soft-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.01); } }
+  .cda-announce--shine::after { content: ""; position: absolute; top: 0; left: -50%; width: 30%; height: 100%; background: linear-gradient(120deg, transparent, rgba(255,255,255,.18), transparent); transform: skewX(-20deg); animation: cda-shine 2.6s ease-in-out infinite; pointer-events: none; }
+  @keyframes cda-shine { 0% { left: -50%; } 60% { left: 120%; } 100% { left: 120%; } }
+  .cda-announce--scroll .cda-announce__inner { display: block; white-space: nowrap; padding-inline: 0; }
+  .cda-announce--scroll .cda-announce__text { display: inline-block; padding-left: 100%; animation: cda-marquee 18s linear infinite; }
+  @keyframes cda-marquee { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+
+  /* Stock urgency */
+  .cda-stock { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; background: var(--cda-stock-bg); color: var(--cda-stock-color); font-size: 12.5px; line-height: 1.4; font-weight: 500; }
+  .cda-stock__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cda-stock-accent); flex: 0 0 auto; position: relative; }
+  .cda-stock__dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--cda-stock-accent); opacity: 0.5; animation: cda-pulse 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+
+  /* Money saved */
+  .cda-savings { padding: 10px 14px; border-radius: 12px; background: var(--cda-savings-bg); color: var(--cda-savings-color); font-size: 13px; line-height: 1.4; font-weight: 500; text-align: center; }
+  .cda-savings__amount { color: var(--cda-savings-accent); font-weight: 800; }
+
+  /* Loyalty teaser */
+  .cda-loyalty { padding: 10px 14px; border-radius: 12px; background: var(--cda-loyalty-bg); color: var(--cda-loyalty-color); font-size: 13px; line-height: 1.4; font-weight: 500; text-align: center; }
+  .cda-loyalty__value { color: var(--cda-loyalty-accent); font-weight: 800; }
+
+  /* Estimated shipping */
+  .cda-eta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--cda-eta-bg);
+    color: var(--cda-eta-color);
+    font-size: 13px;
+    line-height: 1.35;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+  .cda-eta__icon { width: 22px; height: 22px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; color: currentColor; opacity: 0.85; }
+  .cda-eta__icon svg { width: 100%; height: 100%; display: block; }
+  .cda-eta__label { flex: 1 1 auto; min-width: 0; font-weight: 500; }
+  .cda-eta__meta { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+  .cda-eta__window { font-size: 11.5px; opacity: 0.7; white-space: nowrap; }
+  .cda-eta__price { font-weight: 700; color: var(--cda-eta-accent); white-space: nowrap; font-variant-numeric: tabular-nums; transition: color 0.25s ease; }
+  .cda-eta__price--free {
+    color: var(--cda-eta-free);
+    background: rgba(16, 185, 129, 0.12);
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+  }
+  @media (max-width: 420px) {
+    .cda-eta__window { display: none; }
+  }
+
+  /* Express payment methods */
+  .cda-payments {
+    display: flex;
+    flex-direction: column;
+    align-items: var(--cda-payments-justify, center);
+    gap: 6px;
+  }
+  .cda-payments__label {
+    font-size: var(--cda-payments-text-size);
+    color: var(--cda-payments-color);
+    font-weight: 500;
+    line-height: 1.2;
+  }
+  .cda-payments__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: var(--cda-payments-justify, center);
+    gap: 6px;
+    width: 100%;
+  }
+  .cda-payments__list li { display: inline-flex; align-items: center; }
+  .cda-payments__svg {
+    height: var(--cda-payments-badge-h);
+    width: auto;
+    display: block;
+    transition: filter 0.2s ease, opacity 0.2s ease;
+  }
+  /* Mobile-only override — independent of the desktop slider so merchants
+     can dial in a different badge height for narrow viewports without
+     touching the desktop value. */
+  @media (max-width: 749px) {
+    .cda-payments__svg {
+      height: var(--cda-payments-badge-h-m, var(--cda-payments-badge-h));
+    }
+  }
+  .cda-payments--gray .cda-payments__svg { filter: grayscale(1); opacity: 0.7; }
+  .cda-payments--gray .cda-payments__svg:hover { filter: grayscale(0); opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cda-announce--pulse, .cda-announce--shine::after, .cda-announce--scroll .cda-announce__text,
+    .cda-urgency--pulse .cda-urgency__dot::after, .cda-stock__dot::after { animation: none !important; }
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    function cdaTick(){
+      var bars = document.querySelectorAll('[data-cd-urgency]');
+      bars.forEach(function(el){
+        var tpl = el.getAttribute('data-template') || '';
+        var cutoff = (el.getAttribute('data-cutoff') || '16:00').split(':');
+        var H = parseInt(cutoff[0],10), M = parseInt(cutoff[1],10) || 0;
+        if (isNaN(H)) H = 16;
+        var now = new Date();
+        var end = new Date();
+        end.setHours(H, M, 0, 0);
+        var diff = (end - now) / 1000;
+        if (diff <= 0) {
+          /* Past cutoff in the user's local clock — fully hide the bar
+             and remove it from the layout so no margin/space lingers. */
+          el.hidden = true;
+          el.style.display = 'none';
+          return;
+        }
+        /* Pre-rendered bars come in visible already; make sure they
+           stay visible if anything else flipped them off. */
+        if (el.hidden) el.hidden = false;
+        if (el.style.display === 'none') el.style.display = '';
+        var h = Math.floor(diff / 3600);
+        var m = Math.floor((diff % 3600) / 60);
+        var s = Math.floor(diff % 60);
+        var pad = function(n){ return n < 10 ? '0' + n : '' + n; };
+        var time = (h > 0 ? pad(h) + ':' : '') + pad(m) + ':' + pad(s);
+        var slot = el.querySelector('.cda-urgency__text');
+        if (!slot) return;
+        var hasPlaceholder = tpl.indexOf('{time}') !== -1;
+        var html = hasPlaceholder
+          ? tpl.replace('{time}', '<strong class="cda-urgency__timer">' + time + '</strong>')
+          : tpl + ' <strong class="cda-urgency__timer">' + time + '</strong>';
+        /* Only update the timer fragment so we don't fight the server-
+           rendered initial markup on every tick (avoids a visible flash
+           on first paint). */
+        var existingTimer = slot.querySelector('.cda-urgency__timer');
+        if (existingTimer) {
+          existingTimer.textContent = time;
+        } else {
+          slot.innerHTML = html;
+        }
+      });
+    }
+    /* Always run a tick on each render so newly-injected addons refresh
+       immediately when the cart drawer is re-rendered after add/remove. */
+    cdaTick();
+    /* Single global interval — set only once. */
+    if (!window.__cdaUrgencyInterval) {
+      window.__cdaUrgencyInterval = setInterval(cdaTick, 1000);
+    }
+    /* Expose so cart-update code can call it explicitly if needed */
+    window.cdaTick = cdaTick;
+  })();
+{% comment %}{% endcomment %}</script>
+
+</template>

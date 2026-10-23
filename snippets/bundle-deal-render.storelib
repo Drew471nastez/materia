@@ -1,0 +1,444 @@
+<template compat="shopify">
+{%- comment -%}
+  Materia Themes — Bundle & Save (multi-product).
+  Params: block, section, product (the section's product), shop.
+
+  Two selectable options: just this product, or a bundle of this product +
+  the merchant-picked products (each with a variant dropdown) + optional free gift.
+  No own button — it hijacks the section's Add-to-Cart so the shopper uses the
+  normal button, and adds every item of the chosen option via the theme's cart.
+  100% block.settings + product driven.
+{%- endcomment -%}
+{%- liquid
+  assign bs = block.settings
+  assign uid = block.id
+  assign main_p = product
+  assign p2 = bs.bundle_product_2
+  assign p3 = bs.bundle_product_3
+  assign gift = bs.free_gift_product
+
+  assign accent       = bs.accent       | default: '#C7CDD4'
+  assign card_bg      = bs.card_bg      | default: '#FFFFFF'
+  assign card_border  = bs.card_border  | default: '#E5E7EB'
+  assign title_color  = bs.title_color  | default: '#111111'
+  assign price_color  = bs.price_color  | default: '#111111'
+  assign save_color   = bs.save_color   | default: '#6B7280'
+  assign radius       = bs.card_radius  | default: 14
+  assign thumb_size   = bs.thumb_size   | default: 56
+  assign thumb_radius = bs.thumb_radius | default: 12
+  assign bundle_pct   = bs.bundle_discount_percent | default: 0
+  assign pad_top      = bs.padding_top    | default: 10
+  assign pad_bottom   = bs.padding_bottom | default: 10
+  assign expand_all   = false
+  if bs.display_style == 'expand_all'
+    assign expand_all = true
+  endif
+
+  assign has_bundle = false
+  if p2 != blank or p3 != blank
+    assign has_bundle = true
+  endif
+  assign default_option = bs.default_option | default: 'bundle'
+  unless has_bundle
+    assign default_option = 'single'
+  endunless
+-%}
+
+{%- if main_p == blank -%}
+  {%- if request.design_mode -%}
+    <div style="padding:16px;border:1px dashed #ccc;border-radius:8px;color:#666;font-size:14px;">
+      Bundle &amp; Save: pick a product in this section’s settings to preview this block.
+    </div>
+  {%- endif -%}
+{%- else -%}
+<style>
+  #BundleDeal-{{ uid }} {
+    --bdl-accent: {{ accent }};
+    --bdl-accent-strong: color-mix(in srgb, {{ accent }} 50%, #111827 50%);
+    --bdl-card-bg: {{ card_bg }};
+    --bdl-card-bg-sel: color-mix(in srgb, {{ accent }} 14%, {{ card_bg }} 86%);
+    --bdl-border: {{ card_border }};
+    --bdl-title: {{ title_color }};
+    --bdl-price: {{ price_color }};
+    --bdl-save: {{ save_color }};
+    --bdl-radius: {{ radius }}px;
+    --bdl-badge-bg: {{ bs.badge_bg | default: '#111111' }};
+    --bdl-badge-color: {{ bs.badge_color | default: '#FFFFFF' }};
+    --bdl-free-bg: {{ bs.free_badge_bg | default: accent }};
+    --bdl-free-color: {{ bs.free_badge_color | default: '#FFFFFF' }};
+    font-family: var(--body-font, inherit);
+    max-width: 100%;
+    padding-top: {{ pad_top }}px;
+    padding-bottom: {{ pad_bottom }}px;
+  }
+  /* SAVE MORE heading with customizable side dividers */
+  #BundleDeal-{{ uid }} .bdl__title {
+    display: flex; align-items: center; justify-content: center;
+    gap: {{ bs.divider_gap | default: 16 }}px;
+    font-family: var(--heading-font, inherit);
+    font-size: {{ bs.heading_size | default: 18 }}px;
+    font-weight: 700;
+    color: var(--bdl-title);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    margin: 0 0 16px;
+  }
+  {%- if bs.show_divider != false -%}
+  #BundleDeal-{{ uid }} .bdl__title::before,
+  #BundleDeal-{{ uid }} .bdl__title::after {
+    content: ""; flex: 1 1 auto;
+    border-top: {{ bs.divider_thickness | default: 2 }}px {{ bs.divider_style | default: 'solid' }} {{ bs.divider_color | default: '#C7CDD4' }};
+    {%- if bs.divider_max and bs.divider_max > 0 %} max-width: {{ bs.divider_max }}px;{% endif -%}
+  }
+  {%- endif -%}
+
+  #BundleDeal-{{ uid }} .bdl__group { display: flex; flex-direction: column; gap: 12px; }
+  #BundleDeal-{{ uid }} .bdl-card {
+    display: block; position: relative;
+    border: 1.5px solid var(--bdl-border);
+    border-radius: var(--bdl-radius);
+    background: var(--bdl-card-bg);
+    padding: 16px 18px;
+    cursor: pointer;
+    transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+  }
+  #BundleDeal-{{ uid }} .bdl-card:hover { border-color: color-mix(in srgb, var(--bdl-accent-strong) 50%, var(--bdl-border) 50%); }
+  #BundleDeal-{{ uid }} .bdl-card.is-selected {
+    border-color: var(--bdl-accent-strong);
+    box-shadow: 0 0 0 1.5px var(--bdl-accent-strong);
+    background: var(--bdl-card-bg-sel);
+  }
+  #BundleDeal-{{ uid }} .bdl-card__badge {
+    position: absolute; top: -9px; right: 14px; z-index: 1;
+    background: var(--bdl-badge-bg); color: var(--bdl-badge-color);
+    font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+    padding: 3px 10px; border-radius: 999px; line-height: 1.4; white-space: nowrap;
+  }
+  #BundleDeal-{{ uid }} .bdl-card__radio { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+  #BundleDeal-{{ uid }} .bdl-card__head { display: flex; align-items: center; gap: 12px; }
+  #BundleDeal-{{ uid }} .bdl-dot {
+    width: 20px; height: 20px; border-radius: 50%; box-sizing: border-box;
+    border: 2px solid var(--bdl-accent); background: #fff; flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  #BundleDeal-{{ uid }} .bdl-card.is-selected .bdl-dot { border-color: var(--bdl-accent-strong); }
+  #BundleDeal-{{ uid }} .bdl-card.is-selected .bdl-dot::after {
+    content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--bdl-accent-strong);
+  }
+  #BundleDeal-{{ uid }} .bdl-thumb {
+    width: var(--bdl-ts, {{ thumb_size }}px); height: var(--bdl-ts, {{ thumb_size }}px);
+    border-radius: var(--bdl-tr, {{ thumb_radius }}px);
+    overflow: hidden; flex: 0 0 auto; background: #f2f2f2; display: block;
+  }
+  #BundleDeal-{{ uid }} .bdl-thumb img, #BundleDeal-{{ uid }} .bdl-thumb svg { width: 100%; height: 100%; object-fit: cover; display: block; }
+  #BundleDeal-{{ uid }} .bdl-card__titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+  #BundleDeal-{{ uid }} .bdl-card__title { font-weight: 700; color: var(--bdl-title); font-size: 17px; line-height: 1.2; }
+  #BundleDeal-{{ uid }} .bdl-card__save { font-size: 13px; color: var(--bdl-save); }
+  #BundleDeal-{{ uid }} .bdl-card__save:empty { display: none; }
+  #BundleDeal-{{ uid }} .bdl-card__amt { display: flex; flex-direction: column; align-items: flex-end; flex: 0 0 auto; line-height: 1.2; }
+  #BundleDeal-{{ uid }} .bdl-card__price { font-weight: 700; color: var(--bdl-price); font-size: 18px; }
+  #BundleDeal-{{ uid }} .bdl-card__was { color: #9CA3AF; font-size: 13px; text-decoration: line-through; }
+  #BundleDeal-{{ uid }} .bdl-card__was:empty { display: none; }
+
+  #BundleDeal-{{ uid }} .bdl-card__detail { display: none; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--bdl-border); }
+  #BundleDeal-{{ uid }} .bdl-card.is-selected .bdl-card__detail { display: block; }
+  #BundleDeal-{{ uid }}.bdl--expand-all .bdl-card__detail { display: block; }
+  #BundleDeal-{{ uid }} .bdl-lines { display: flex; flex-direction: column; gap: 12px; }
+  #BundleDeal-{{ uid }} .bdl-line { display: flex; align-items: center; gap: 12px; }
+  #BundleDeal-{{ uid }} .bdl-line[data-free="1"] {
+    background: color-mix(in srgb, var(--bdl-accent) 16%, transparent);
+    border-radius: 10px; padding: 8px 10px; margin: 2px -2px 0;
+  }
+  #BundleDeal-{{ uid }} .bdl-line__main { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1 1 auto; }
+  #BundleDeal-{{ uid }} .bdl-line__name { font-size: 14px; color: var(--bdl-title); font-weight: 600; line-height: 1.25; }
+  #BundleDeal-{{ uid }} .bdl-line__plus { color: var(--bdl-accent-strong); font-weight: 700; }
+  #BundleDeal-{{ uid }} .bdl-line__freetag {
+    font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+    color: var(--bdl-free-color); background: var(--bdl-free-bg);
+    border-radius: 999px; padding: 2px 9px; margin-left: 6px; line-height: 1.4; white-space: nowrap;
+  }
+  /* Variant selects — deliberately subtle + compact */
+  #BundleDeal-{{ uid }} .bdl-line__select {
+    appearance: auto; max-width: 132px; font-size: 12px; color: var(--bdl-save);
+    padding: 4px 8px; border: 1px solid var(--bdl-border); border-radius: 7px;
+    background: transparent; line-height: 1.2; cursor: pointer;
+  }
+  #BundleDeal-{{ uid }} .bdl-line__select:hover { border-color: color-mix(in srgb, var(--bdl-accent-strong) 45%, var(--bdl-border) 55%); }
+  #BundleDeal-{{ uid }} .bdl-line__select:focus-visible { outline: none; border-color: var(--bdl-accent-strong); box-shadow: 0 0 0 2px color-mix(in srgb, var(--bdl-accent) 35%, transparent); }
+  #BundleDeal-{{ uid }} .bdl-line__price { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; flex: 0 0 auto; line-height: 1.2; }
+  #BundleDeal-{{ uid }} .bdl-line__amt { font-weight: 700; color: var(--bdl-price); font-size: 14px; }
+  #BundleDeal-{{ uid }} .bdl-line__amt:empty { display: none; }
+  #BundleDeal-{{ uid }} .bdl-line__was { color: #9CA3AF; font-size: 12px; text-decoration: line-through; }
+  #BundleDeal-{{ uid }} .bdl-line__was:empty { display: none; }
+
+  #BundleDeal-{{ uid }} .bdl-foot { margin: 12px 0 0; text-align: center; font-size: 12px; color: var(--bdl-save); }
+  #BundleDeal-{{ uid }} .bdl-foot:empty { display: none; }
+  #BundleDeal-{{ uid }} .bdl-err { display: none; margin-top: 10px; text-align: center; font-size: 13px; color: #b42318; }
+
+  @media (max-width: 768px) {
+    #BundleDeal-{{ uid }} .bdl-card { padding: 13px 13px; }
+    #BundleDeal-{{ uid }} .bdl-card__title { font-size: 15px; }
+    #BundleDeal-{{ uid }} .bdl-card__price { font-size: 16px; }
+    #BundleDeal-{{ uid }} .bdl-line__select { max-width: 108px; font-size: 11px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #BundleDeal-{{ uid }} * { transition: none !important; }
+  }
+{% comment %}{% endcomment %}</style>
+
+<div id="BundleDeal-{{ uid }}" class="bdl{% if expand_all %} bdl--expand-all{% endif %}" data-bundle-deal data-pct="{{ bundle_pct }}" {{ block.shopify_attributes }}>
+  {%- if bs.heading != blank -%}<p class="bdl__title">{{ bs.heading }}</p>{%- endif -%}
+
+  <div class="bdl__group">
+    {%- comment -%} ---------- OPTION 1: single product ---------- {%- endcomment -%}
+    <label class="bdl-card{% if default_option == 'single' %} is-selected{% endif %}" data-card="single">
+      <input class="bdl-card__radio" type="radio" name="bdl-{{ uid }}" value="single" {% if default_option == 'single' %}checked{% endif %}>
+      {%- if bs.single_badge != blank -%}<span class="bdl-card__badge">{{ bs.single_badge }}</span>{%- endif -%}
+      <span class="bdl-card__head">
+        <span class="bdl-dot" aria-hidden="true"></span>
+        <span class="bdl-thumb" style="--bdl-ts: {{ thumb_size }}px; --bdl-tr: {{ thumb_radius }}px;">
+          {%- assign single_img = bs.single_image | default: main_p.featured_image -%}
+          {%- if single_img != blank -%}
+            <img src="{{ single_img | image_url: width: 200 }}" alt="{{ main_p.title | escape }}" loading="lazy" width="{{ thumb_size }}" height="{{ thumb_size }}">
+          {%- else -%}{{ 'product-1' | placeholder_svg_tag: '' }}{%- endif -%}
+        </span>
+        <span class="bdl-card__titles">
+          <span class="bdl-card__title">{{ bs.single_label | default: main_p.title }}</span>
+          <span class="bdl-card__save" data-card-save></span>
+        </span>
+        <span class="bdl-card__amt">
+          <span class="bdl-card__price" data-card-price>—</span>
+          <s class="bdl-card__was" data-card-compare></s>
+        </span>
+      </span>
+      <span class="bdl-card__detail">
+        <div class="bdl-lines">
+          <div class="bdl-line" data-line data-role="main">
+            <span class="bdl-line__main">
+              <span class="bdl-line__name">{{ main_p.title }}</span>
+              {%- assign mv0 = main_p.selected_or_first_available_variant -%}
+              {%- if main_p.variants.size > 1 -%}
+                <select class="bdl-line__select" data-select aria-label="{{ main_p.title | escape }} options">
+                  {%- for v in main_p.variants -%}
+                    <option value="{{ v.id }}" data-price="{{ v.price }}" data-compare="{{ v.compare_at_price | default: v.price }}"{% unless v.available %} disabled{% endunless %}{% if v.id == mv0.id %} selected{% endif %}>{{ v.title }}{% unless v.available %} — {{ 'products.product.sold_out' | t }}{% endunless %}</option>
+                  {%- endfor -%}
+                </select>
+              {%- else -%}
+                <input type="hidden" data-select data-price="{{ mv0.price }}" data-compare="{{ mv0.compare_at_price | default: mv0.price }}" value="{{ mv0.id }}">
+              {%- endif -%}
+            </span>
+          </div>
+        </div>
+      </span>
+    </label>
+
+    {%- comment -%} ---------- OPTION 2: bundle ---------- {%- endcomment -%}
+    {%- if has_bundle -%}
+    <label class="bdl-card{% if default_option == 'bundle' %} is-selected{% endif %}" data-card="bundle">
+      <input class="bdl-card__radio" type="radio" name="bdl-{{ uid }}" value="bundle" {% if default_option == 'bundle' %}checked{% endif %}>
+      {%- if bs.bundle_badge != blank -%}<span class="bdl-card__badge">{{ bs.bundle_badge }}</span>{%- endif -%}
+      <span class="bdl-card__head">
+        <span class="bdl-dot" aria-hidden="true"></span>
+        <span class="bdl-card__titles">
+          <span class="bdl-card__title">{{ bs.bundle_label | default: 'Bundle & Save' }}</span>
+          <span class="bdl-card__save" data-card-save></span>
+        </span>
+        <span class="bdl-card__amt">
+          <span class="bdl-card__price" data-card-price>—</span>
+          <s class="bdl-card__was" data-card-compare></s>
+        </span>
+      </span>
+      <span class="bdl-card__detail">
+        <div class="bdl-lines">
+          {%- render 'bundle-deal-line', p: main_p, role: 'main', uid: uid, thumb_size: thumb_size, thumb_radius: thumb_radius, custom_image: bs.single_image -%}
+          {%- if p2 != blank -%}{%- render 'bundle-deal-line', p: p2, role: 'addon', uid: uid, thumb_size: thumb_size, thumb_radius: thumb_radius, custom_image: bs.bundle_image_2 -%}{%- endif -%}
+          {%- if p3 != blank -%}{%- render 'bundle-deal-line', p: p3, role: 'addon', uid: uid, thumb_size: thumb_size, thumb_radius: thumb_radius, custom_image: bs.bundle_image_3 -%}{%- endif -%}
+          {%- if gift != blank -%}{%- render 'bundle-deal-line', p: gift, role: 'gift', uid: uid, thumb_size: thumb_size, thumb_radius: thumb_radius, is_free: true, custom_image: bs.free_gift_image, free_text: bs.free_badge_text -%}{%- endif -%}
+        </div>
+      </span>
+    </label>
+    {%- endif -%}
+  </div>
+
+  {%- if bs.footnote != blank -%}<p class="bdl-foot">{{ bs.footnote }}</p>{%- endif -%}
+  <p class="bdl-err" data-bdl-err>{{ bs.error_text | default: 'Something went wrong — please try again.' }}</p>
+</div>
+
+<script>
+(function(){
+  var root = document.getElementById('BundleDeal-{{ uid }}');
+  if (!root || root.__bdlInit) return;
+  root.__bdlInit = true;
+
+  var moneyFormat = {{ shop.money_format | json }};
+  var pct = parseFloat(root.dataset.pct || '0') || 0;
+  var errEl = root.querySelector('[data-bdl-err]');
+  var scope = root.closest('.shopify-section') || document;
+
+  function formatMoney(cents){
+    if (cents == null || isNaN(cents)) return '';
+    var fmt = moneyFormat || '{% raw %}{{amount}}{% endraw %}';
+    var match = fmt.match(/\{\{\s*(\w+)\s*\}\}/);
+    var key = match ? match[1] : 'amount';
+    function fmtNum(num, precision, thousands, decimal){
+      thousands = thousands || ','; decimal = (decimal == null ? '.' : decimal);
+      var n = (num/100.0).toFixed(precision);
+      var parts = n.split('.');
+      var whole = parts[0].replace(/(\d)(?=(\d\d\d)+(?!\d))/g, '$1' + thousands);
+      return whole + (parts[1] ? decimal + parts[1] : '');
+    }
+    var value;
+    switch(key){
+      case 'amount_no_decimals': value = fmtNum(cents, 0); break;
+      case 'amount_with_comma_separator': value = fmtNum(cents, 2, '.', ','); break;
+      case 'amount_no_decimals_with_comma_separator': value = fmtNum(cents, 0, '.', ','); break;
+      case 'amount_with_space_separator': value = fmtNum(cents, 2, ' ', ','); break;
+      case 'amount_with_apostrophe_separator': value = fmtNum(cents, 2, "'", '.'); break;
+      default: value = fmtNum(cents, 2);
+    }
+    return fmt.replace(/\{\{\s*\w+\s*\}\}/, value);
+  }
+
+  function readSel(sel){
+    if (!sel) return null;
+    if (sel.tagName === 'SELECT'){
+      var o = sel.options[sel.selectedIndex] || sel.options[0];
+      if (!o) return null;
+      return { id: o.value, price: +o.dataset.price || 0, compare: +(o.dataset.compare || o.dataset.price) || 0 };
+    }
+    return { id: sel.value, price: +sel.dataset.price || 0, compare: +(sel.dataset.compare || sel.dataset.price) || 0 };
+  }
+
+  var cards = Array.prototype.slice.call(root.querySelectorAll('.bdl-card'));
+
+  function computeCard(card){
+    var total = 0, compare = 0;
+    card.querySelectorAll('[data-line]').forEach(function(line){
+      var sel = line.querySelector('[data-select]');
+      var r = readSel(sel); if (!r) return;
+      var isFree = line.dataset.free === '1';
+      var amt = line.querySelector('[data-line-price]');
+      var was = line.querySelector('[data-line-compare]');
+      if (amt) amt.textContent = isFree ? '' : formatMoney(r.price);
+      if (!isFree){ total += r.price; compare += Math.max(r.compare, r.price); }
+      else { compare += r.price; }
+      if (was){
+        var showWas = isFree ? r.price : (r.compare > r.price ? r.compare : 0);
+        was.textContent = showWas ? formatMoney(showWas) : '';
+      }
+    });
+    var isBundle = card.dataset.card === 'bundle';
+    var finalTotal = isBundle && pct > 0 ? Math.round(total * (1 - pct/100)) : total;
+    if (isBundle && pct > 0) compare = Math.max(compare, total);
+    var priceEl = card.querySelector('[data-card-price]');
+    var compEl  = card.querySelector('[data-card-compare]');
+    var saveEl  = card.querySelector('[data-card-save]');
+    if (priceEl) priceEl.textContent = formatMoney(finalTotal);
+    var saved = compare - finalTotal;
+    if (compEl) compEl.textContent = saved > 0 ? formatMoney(compare) : '';
+    if (saveEl) saveEl.textContent = saved > 0 ? ({{ bs.save_prefix | default: "Save" | json }} + ' ' + formatMoney(saved)) : '';
+    card.__items = collectItems(card);
+  }
+
+  function collectItems(card){
+    var items = [];
+    card.querySelectorAll('[data-line]').forEach(function(line){
+      var sel = line.querySelector('[data-select]');
+      var r = readSel(sel); if (!r || !r.id) return;
+      var props = { '_bundle': {{ bs.bundle_label | default: "Bundle & Save" | json }} };
+      if (line.dataset.free === '1') props['_gift'] = 'true';
+      items.push({ id: r.id, quantity: 1, properties: props });
+    });
+    return items;
+  }
+
+  function selectCard(value){
+    cards.forEach(function(c){
+      var on = c.dataset.card === value;
+      c.classList.toggle('is-selected', on);
+      var radio = c.querySelector('.bdl-card__radio');
+      if (radio) radio.checked = on;
+    });
+  }
+  function selectedCard(){ return cards.filter(function(c){ return c.classList.contains('is-selected'); })[0] || cards[0]; }
+
+  root.querySelectorAll('.bdl-line__select').forEach(function(sel){
+    sel.addEventListener('click', function(e){ e.stopPropagation(); });
+    sel.addEventListener('change', function(){ computeCard(sel.closest('.bdl-card')); });
+  });
+  root.querySelectorAll('.bdl-card__radio').forEach(function(radio){
+    radio.addEventListener('change', function(){ if (radio.checked) selectCard(radio.value); });
+  });
+
+  cards.forEach(computeCard);
+  var checked = root.querySelector('.bdl-card__radio:checked');
+  selectCard(checked ? checked.value : (cards[0] && cards[0].dataset.card));
+
+  /* ---- Add to cart: hijack THIS section's Add-to-Cart button(s) ---- */
+  function getCartEl(){
+    return document.querySelector('cart-notification') || document.querySelector('cart-drawer');
+  }
+  async function handleAddClick(e){
+    var card = selectedCard();
+    if (!card) return;
+    var items = (card.__items && card.__items.length) ? card.__items : collectItems(card);
+    if (!items.length) return;
+    e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation();
+    var btn = e.currentTarget;
+    if (btn.__bdlAdding) return;
+    btn.__bdlAdding = true; btn.classList.add('loading'); btn.setAttribute('aria-disabled', 'true');
+    if (errEl) errEl.style.display = 'none';
+    try{
+      var cartEl = getCartEl();
+      var sectionsParam = (cartEl && typeof cartEl.getSectionsToRender === 'function')
+        ? cartEl.getSectionsToRender().map(function(s){ return s.id; }).join(',') : '';
+      var fd = new FormData();
+      items.forEach(function(it, i){
+        fd.append('items[' + i + '][id]', String(it.id));
+        fd.append('items[' + i + '][quantity]', String(it.quantity));
+        var props = it.properties || {};
+        Object.keys(props).forEach(function(k){ fd.append('items[' + i + '][properties][' + k + ']', String(props[k])); });
+      });
+      if (sectionsParam){ fd.append('sections', sectionsParam); fd.append('sections_url', window.location.pathname); }
+      var addUrl = (window.routes && window.routes.cart_add_url) || '/cart/add';
+      var res = await fetch(addUrl, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/javascript' }, body: fd });
+      var data = await res.json().catch(function(){ return null; });
+      if (!data || data.status || data.errors){ throw new Error('rejected'); }
+      if (data.sections){
+        Object.keys(data.sections).forEach(function(sid){
+          var target = document.getElementById(sid); if (!target) return;
+          var doc = new DOMParser().parseFromString(data.sections[sid], 'text/html');
+          var fresh = doc.querySelector('#minicart-form');
+          if (fresh) target.innerHTML = fresh.innerHTML;
+        });
+      }
+      if (cartEl){
+        if (typeof cartEl.cartAction === 'function'){ try{ cartEl.cartAction(); }catch(_){} }
+        if (cartEl.classList && cartEl.classList.contains('is-empty')) cartEl.classList.remove('is-empty');
+        setTimeout(function(){ if (typeof cartEl.open === 'function'){ try{ cartEl.open(); }catch(_){} } }, 0);
+      }
+      try{
+        var cj = await (await fetch('/cart.json')).json();
+        if (cj && cj.item_count !== undefined){
+          document.querySelectorAll('.cart-count').forEach(function(el){
+            if (el.classList.contains('cart-count-drawer')) el.innerHTML = '(' + cj.item_count + ')';
+            else el.innerHTML = cj.item_count > 100 ? '~' : cj.item_count;
+          });
+        }
+      }catch(_){}
+      if (!cartEl){ window.location.href = (window.routes && window.routes.cart_url) || '/cart'; }
+    }catch(err){
+      if (errEl) errEl.style.display = 'block';
+    }finally{
+      btn.__bdlAdding = false; btn.classList.remove('loading'); btn.removeAttribute('aria-disabled');
+    }
+  }
+  function hookBtn(btn){ if (btn.__bdlHooked) return; btn.__bdlHooked = true; btn.addEventListener('click', handleAddClick, true); }
+  function hookAll(){ scope.querySelectorAll('button[name="add"], form[action*="/cart/add"] button[type="submit"]').forEach(hookBtn); }
+  hookAll();
+  new MutationObserver(function(){ hookAll(); }).observe(scope === document ? document.body : scope, { childList: true, subtree: true });
+})();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+
+</template>
