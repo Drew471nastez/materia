@@ -1,6 +1,10 @@
 <template compat="shopify">
+{% render 'theme-type' %}
+{%- liquid
+  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+-%}
 {%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
-{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' and section.settings.reveal != false -%}
 <style>
   #shopify-section-{{ section.id }}.scroll-trigger {
     --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
@@ -83,7 +87,7 @@
     }
   }
   /* Section width — CSS-only, no HTML wrapper */
-  {%- case section.settings.inner_width -%}
+  {%- case section.settings.section_width -%}
     {%- when 'container' -%}
       #shopify-section-{{ section.id }} { max-width: calc(var(--page-width, 1300px) + 3rem); margin-inline: auto; padding-inline: 1.5rem; box-sizing: border-box; }
     {%- when 'fluid_container' -%}
@@ -197,14 +201,14 @@
     --scrolling-item-gap: {{ section.settings.mobile_item_gap }}px;
     --scrolling-padding-top: {{ section.settings.mobile_top_padding }}px;
     --scrolling-padding-bottom: {{ section.settings.mobile_bottom_padding }}px;
-    --scrolling-background-color: {{ section.settings.background_gradient | default: section.settings.background_color }} !important;
-    --scrolling-text-color: {{ section.settings.text_color }} !important;
+    --scrolling-background-color: {% if section.settings.background_gradient != blank %}{{ section.settings.background_gradient }}{% else %}{% render 'scheme-color', color: section.settings.background_color, fallback: 'var(--color-background)' %}{% endif %} !important;
+    --scrolling-text-color: {% render 'scheme-color', color: section.settings.text_color, fallback: 'var(--color-text)' %} !important;
     --scrolling-animation-duration: {{ section.settings.duration }}s;
     --scrolling-text-size: {{ section.settings.mobile_text_size }}px;
-    --scrolling-section-width: {{ section.settings.inner_width }}px;
+    --scrolling-section-width: {% if section.settings.inner_width > 0 %}{{ section.settings.inner_width }}px{% else %}none{% endif %};
     --scrolling-pause-on-hover: {% if section.settings.pause_on_hover %}paused{% else %}running{% endif %};
     --scrolling-animation-direction: {{ section.settings.direction }};
-    --scrolling-font-weight: {{ section.settings.text_weight }};
+    --scrolling-font-weight: {% if section.settings.text_weight == 'theme' or section.settings.text_weight == blank %}var(--body-weight, 500){% else %}{{ section.settings.text_weight }}{% endif %};
   }
 
   @media screen and (min-width: 768px) {
@@ -214,6 +218,10 @@
       --scrolling-padding-bottom: {{ section.settings.desktop_bottom_padding }}px;
       --scrolling-text-size: {{ section.settings.desktop_text_size }}px;
     }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #scrolling-{{ section.id }} .scrolling__marquee { overflow-x: auto; }
+    #scrolling-{{ section.id }} .scrolling__marquee-wrapper { animation: none; }
   }
 {% comment %}{% endcomment %}</style>
 
@@ -230,7 +238,7 @@
           style="
             --svg-size-mobile: {{ block.settings.svg_icon_size_mobile }}px;
             --svg-size-desktop: {{ block.settings.svg_icon_size_desktop }}px;
-            --svg-color: {{ block.settings.svg_icon_color }} !important;
+            --svg-color: {% render 'scheme-color', color: block.settings.svg_icon_color, fallback: 'currentColor' %} !important;
             --svg-icon-offset-y: {{ block.settings.svg_icon_vertical_offset | default: 0 }}px;
           "
         >
@@ -258,7 +266,7 @@
   </div>
 {% endcapture %}
 
-<div id="scrolling-{{ section.id }}" class="scrolling-{{ section.id }} scrolling-marquee-1">
+<div id="scrolling-{{ section.id }}" class="scrolling-{{ section.id }} scrolling-marquee-1 color-{{ color_scheme }} gradient">
   <div {{ html_id }} class="{{ 'scrolling__marquee ' | append: section.settings.html_class | strip }}">
     {%- for i in (1..section.settings.repeat_count) -%}
       {{ marquee_wrapper }}
@@ -705,14 +713,8 @@
     "class": "scrollingbar section-edge-bleed",
     "settings": [
       {
-        "type": "checkbox",
-        "id": "reset_spacing",
-        "label": "Remove default space between sections",
-        "default": true
-      },
-      {
         "type": "header",
-        "content": "General"
+        "content": "Layout"
       },
       {
         "type": "select",
@@ -737,6 +739,18 @@
             "label": "Full width"
           }
         ]
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
       },
       {
         "type": "header",
@@ -767,6 +781,10 @@
         "id": "text_weight",
         "label": "Text weight",
         "options": [
+          {
+            "value": "theme",
+            "label": "Theme"
+          },
           {
             "value": "100",
             "label": "Thin"
@@ -804,13 +822,12 @@
             "label": "Black"
           }
         ],
-        "default": "500"
+        "default": "theme"
       },
       {
         "type": "color",
         "id": "text_color",
-        "label": "Text color",
-        "default": "#fff"
+        "label": "Text color"
       },
       {
         "type": "header",
@@ -819,14 +836,13 @@
       {
         "type": "color",
         "id": "background_color",
-        "label": "Background color",
-        "default": "#000"
+        "label": "Background color"
       },
       {
         "type": "color_background",
         "id": "background_gradient",
         "label": "Background gradient",
-        "info": "If set, overrides the background color."
+        "info": "Overrides background color"
       },
       {
         "type": "header",
@@ -836,20 +852,18 @@
         "type": "checkbox",
         "id": "reveal",
         "label": "Reveal on scroll",
-        "default": true,
-        "info": "Uses your global Animations & motion setting."
+        "default": true
       },
       {
         "type": "number",
         "id": "duration",
         "label": "Duration (s)",
-        "default": 30,
-        "info": "If the content is long then the duration should be increased."
+        "default": 30
       },
       {
         "type": "select",
         "id": "direction",
-        "label": "Direction:",
+        "label": "Direction",
         "options": [
           {
             "label": "To left",
@@ -875,8 +889,7 @@
         "min": 1,
         "max": 5,
         "step": 1,
-        "default": 3,
-        "info": "How many times the marquee content should be repeated"
+        "default": 3
       },
       {
         "type": "header",
@@ -885,8 +898,9 @@
       {
         "type": "number",
         "id": "inner_width",
-        "label": "Section width (px)",
-        "default": 1920
+        "label": "Max width (px)",
+        "default": 1920,
+        "info": "0 for no limit"
       },
       {
         "type": "range",
@@ -991,8 +1005,7 @@
       {
         "type": "text",
         "id": "html_id",
-        "label": "HTML ID",
-        "info": "Unique identifier for linking directly to this section. Leave blank if unsure."
+        "label": "HTML ID"
       },
       {
         "type": "text",
@@ -1019,14 +1032,13 @@
           {
             "type": "image_picker",
             "id": "image",
-            "label": "Image",
-            "info": "Optional. If SVG code is provided below, it will be used instead of this image."
+            "label": "Image"
           },
           {
             "type": "textarea",
             "id": "svg_icon",
             "label": "SVG icon code",
-            "info": "Paste full <svg>…</svg> markup. This will override the image above if provided."
+            "info": "Overrides the image"
           },
           {
             "type": "header",
@@ -1041,8 +1053,8 @@
           {
             "type": "color",
             "id": "svg_icon_color",
-            "label": "SVG icon color (applies only when enabled)",
-            "default": "#000000"
+            "label": "SVG icon color",
+            "visible_if": "{{ block.settings.enable_svg_icon_color }}"
           },
           {
             "type": "header",

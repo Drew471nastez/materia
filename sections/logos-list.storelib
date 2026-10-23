@@ -1,8 +1,12 @@
 <template compat="shopify">
+{% render 'theme-type' %}
+{%- liquid
+  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+-%}
 {%- liquid
   assign section_st = section.settings
   assign section_width = section_st.section_width
-  assign color_scheme = section_st.color_scheme
+  assign color_scheme = section_st.color_scheme.id | default: section_st.color_scheme | default: 'default-color-scheme'
   assign column_gap = section_st.column_gap
   assign items_per_row_mobile = section_st.items_per_row_mobile
   assign heading = section_st.heading
@@ -51,13 +55,16 @@
     display: none !important;
   }
   .section-{{ section.id }} .swiper-wrapper {
-    margin-top: 20px;
+    margin-top: {{ section_st.information_spacing | default: 20 }}px;
     margin-bottom: 15px;
   }
   .section-{{ section.id }} .reveal_on_scroll {
     opacity: 0;
     transform: translateY(20px);
     transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .section-{{ section.id }} .reveal_on_scroll { opacity: 1; transform: none; transition: none; }
   }
   .section-{{ section.id }} .reveal_on_scroll.revealed {
     opacity: 1;
@@ -69,7 +76,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: {{ section_st.arrow_bg_color }};
+    background-color: {% render 'scheme-color', color: section_st.arrow_bg_color, fallback: 'var(--color-border)' %};
+    color: {% render 'scheme-color', color: section_st.arrow_icon_color, fallback: 'var(--color-heading)' %};
+    transition: opacity var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease);
     width: {{ section_st.arrow_bg_size }}px;
     height: {{ section_st.arrow_bg_size }}px;
     border-radius: 50%;
@@ -108,7 +117,7 @@
 {% if section_st.collection_hover_animation == 'smoot_fade' %}
   <style>
     .section-{{ section.id }} .hover-smoot_fade {
-      transition: opacity 0.3s ease, transform 0.3s ease;
+      transition: opacity var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), transform var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease);
       transform-origin: center;
     }
     .section-{{ section.id }} .hover-smoot_fade:hover {
@@ -152,7 +161,6 @@
     .section-{{ section.id }} .custom-swiper-button-prev:hover,
     .section-{{ section.id }} .custom-swiper-button-next:hover {
       opacity: 0.8;
-      transition: opacity 0.3s ease;
     }
 {% comment %}{% endcomment %}  </style>
 {% endif %}
@@ -171,6 +179,33 @@
       height: auto;
     }
   }
+  .section-{{ section.id }} .collection-item {
+    display: flex;
+    justify-content: {% case section_st.text_alignment %}{% when 'left' %}flex-start{% when 'right' %}flex-end{% else %}center{% endcase %};
+  }
+  .section-{{ section.id }} .collection-item > a { display: block; }
+  .section-{{ section.id }} .collection-item .logo-image { display: block; max-width: 100%; }
+  {%- liquid
+    assign ll_ratio = ''
+    case section_st.image_ratio
+      when 'square'
+        assign ll_ratio = '1/1'
+      when 'portrait'
+        assign ll_ratio = '3/4'
+      when 'landscape'
+        assign ll_ratio = '4/3'
+      when 'custom'
+        if section_st.custom_ratio != blank
+          assign ll_ratio = section_st.custom_ratio | replace: ':', '/'
+        endif
+    endcase
+  -%}
+  {%- if ll_ratio != '' %}
+  .section-{{ section.id }} .collection-item .logo-image { aspect-ratio: {{ ll_ratio }}; object-fit: contain; }
+  {%- endif %}
+  .section-{{ section.id }} .collection-item svg.logo-image { aspect-ratio: {% if ll_ratio != '' %}{{ ll_ratio }}{% else %}3/2{% endif %}; height: auto; fill: currentColor; color: var(--color-text); opacity: .4; background: rgba(127,127,127,.1); }
+  .section-{{ section.id }} .collection-item .logo-image.rounded { border-radius: 50%; aspect-ratio: 1/1; object-fit: cover; }
+  .section-{{ section.id }} .btn_view-all { font-size: {{ section_st.font_size | default: 16 }}px; }
   .section-{{ section.id }} .custom-swiper-button-prev svg,
   .section-{{ section.id }} .custom-swiper-button-next svg {
     width: 110%; /* Scales SVG inside the circle */
@@ -192,7 +227,7 @@
         {%- if heading != blank -%}
           <div class="secion__header-inner">
             <h2
-              class="section__header-heading heading-letter-spacing mt-0 mb-0 {% if scroll_animation != 'none' %} scroll-trigger {{ scroll_animation }}{% endif %}"
+              class="section__header-heading heading-letter-spacing mt-0 mb-0 {{ section_st.font_weight }} {% if scroll_animation != 'none' %} scroll-trigger {{ scroll_animation }}{% endif %}"
               style="font-size: {{ header_size_slider }}px; {% if scroll_animation != 'none' %} --animation-order: 0; {% endif %}"
             >
               {{ section_st.heading }}
@@ -202,7 +237,7 @@
         {% if show_view_all_button == true and section_st.header_alignment != 'center' %}
           <a
             class="btn_view-all no-underline inline-flex btn-link"
-            href="{{ section_st.collection.url }}"
+            href="{{ section_st.view_all_url | default: section_st.collection.url }}"
             aria-label="{{ section_st.view_all_text }}"
           >
             {{ section_st.view_all_text }}
@@ -251,8 +286,13 @@
                 style="--animation-order: {{ forloop.index }};"
               {%- endif -%}
             >
-              <a href="{{ block_st.collection_url }}">
-                <img {% if section_st.enable_lazy_load %}loading="lazy"{% endif %} src="{% if block_st.logo_image %}{{ block_st.logo_image | img_url: 'master' }}{% else %}https://2dbags.co/wp-content/uploads/revslider/lookbook1-demo_slider/placeholder.jpg{% endif %}" alt="{{ 'accessibility.logo' | t }}" class="logo-image{% if section_st.rounded_image %} rounded{% endif %}">
+              <a href="{{ block_st.collection_url | default: '#' }}">
+                {%- if block_st.logo_image != blank -%}
+                {%- assign ll_alt = 'accessibility.logo' | t -%}
+                <img {% if section_st.enable_lazy_load %}loading="lazy" {% endif %}decoding="async" src="{{ block_st.logo_image | img_url: 'master' }}" width="{{ block_st.logo_image.width }}" height="{{ block_st.logo_image.height }}" alt="{{ block_st.logo_image.alt | default: ll_alt | escape }}" class="logo-image{% if section_st.rounded_image %} rounded{% endif %}">
+                {%- else -%}
+                {{ 'image' | placeholder_svg_tag: 'logo-image' }}
+                {%- endif -%}
               </a>
             </div>
           {% endfor %}
@@ -274,7 +314,7 @@
               <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
               <g id="SVGRepo_iconCarrier">
                 <path d="M15 7L10 12L15 17"
-                      stroke="{{ section_st.arrow_icon_color }}"
+                      stroke="currentColor"
                       stroke-width="1.5"
                       stroke-linecap="round"
                       stroke-linejoin="round"></path>
@@ -289,7 +329,7 @@
               <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
               <g id="SVGRepo_iconCarrier">
                 <path d="M15 7L10 12L15 17"
-                      stroke="{{ section_st.arrow_icon_color }}"
+                      stroke="currentColor"
                       stroke-width="1.5"
                       stroke-linecap="round"
                       stroke-linejoin="round"></path>
@@ -310,7 +350,7 @@
       <div class="text-center mt-30">
         <a
           class="inline-flex btn-primary load-more no-underline relative"
-          href="{{ section_st.collection.url }}"
+          href="{{ section_st.view_all_url | default: section_st.collection.url }}"
           aria-label="{{ section_st.view_all_text }}"
         >
           {{ section_st.view_all_text }}
@@ -322,24 +362,26 @@
 
 <!-- Reveal Animation JS -->
 <script>
-  function revealElements() {
-    var revealElements = document.querySelectorAll('.reveal_on_scroll');
-    revealElements.forEach(function(el) {
-      setTimeout(function(){
-        el.classList.add('revealed');
-      }, 100);
-    });
-  }
-
-  // Run on initial load
-  document.addEventListener("DOMContentLoaded", revealElements);
-
-  // Run when section is loaded in the Shopify editor
-  document.addEventListener('shopify:section:load', function(event) {
-    if (event.detail.sectionId === '{{ section.id }}') {
-      revealElements();
+  (function () {
+    var id = '{{ section.id }}';
+    function run() {
+      var root = document.querySelector('.section-' + id);
+      if (!root) return;
+      root.querySelectorAll('.reveal_on_scroll').forEach(function (el) {
+        setTimeout(function () { el.classList.add('revealed'); }, 100);
+      });
     }
-  });
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
+    else run();
+    var key = '__logosListReveal_' + id;
+    if (window[key]) return;
+    window[key] = true;
+    ['shopify:section:load', 'storelib:section-load'].forEach(function (name) {
+      document.addEventListener(name, function (event) {
+        if (event.detail && event.detail.sectionId === id) run();
+      });
+    });
+  })();
 {% comment %}{% endcomment %}</script>
 
 
@@ -876,6 +918,40 @@
     "settings": [
       {
         "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "fluid_container",
+        "options": [
+          {
+            "value": "container",
+            "label": "Default"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "header",
         "content": "Section Padding Options"
       },
       {
@@ -930,40 +1006,6 @@
       },
       {
         "type": "header",
-        "content": "Layout Options"
-      },
-      {
-        "type": "select",
-        "id": "section_width",
-        "label": "Layout Container Type",
-        "default": "fluid_container",
-        "options": [
-          {
-            "value": "container",
-            "label": "Fixed Container"
-          },
-          {
-            "value": "fluid_container",
-            "label": "Fluid Container"
-          },
-          {
-            "value": "stretch_width",
-            "label": "Stretched Container"
-          },
-          {
-            "value": "full_width",
-            "label": "Edge-to-Edge Layout"
-          }
-        ]
-      },
-      {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color Palette",
-        "default": "scheme-1"
-      },
-      {
-        "type": "header",
         "content": "Title & Header Options"
       },
       {
@@ -982,6 +1024,11 @@
         "id": "view_all_text",
         "label": "See All Button Text",
         "default": "View All"
+      },
+      {
+        "type": "url",
+        "id": "view_all_url",
+        "label": "See All link"
       },
       {
         "type": "range",
@@ -1021,7 +1068,7 @@
         "type": "select",
         "id": "image_ratio",
         "label": "Picture Aspect Ratio",
-        "default": "landscape",
+        "default": "adapt",
         "options": [
           {
             "value": "adapt",
@@ -1048,7 +1095,9 @@
       {
         "type": "text",
         "id": "custom_ratio",
-        "label": "Custom Aspect Ratio"
+        "label": "Custom Aspect Ratio",
+        "visible_if": "{{ section.settings.image_ratio == 'custom' }}",
+        "placeholder": "3:2"
       },
       {
         "type": "range",
@@ -1096,7 +1145,7 @@
       {
         "type": "select",
         "id": "text_alignment",
-        "label": "Content Text Alignment",
+        "label": "Logo alignment",
         "default": "center",
         "options": [
           {
@@ -1116,7 +1165,7 @@
       {
         "type": "range",
         "id": "font_size",
-        "label": "Body Font Size",
+        "label": "Link font size",
         "min": 12,
         "max": 24,
         "step": 1,
@@ -1126,7 +1175,7 @@
       {
         "type": "select",
         "id": "font_weight",
-        "label": "Text Weight",
+        "label": "Title weight",
         "default": "heading_weight",
         "options": [
           {
@@ -1146,11 +1195,11 @@
       {
         "type": "range",
         "id": "information_spacing",
-        "label": "Vertical Space Between Image And Title",
+        "label": "Space above logos",
         "min": 0,
-        "max": 30,
+        "max": 60,
         "step": 1,
-        "default": 12,
+        "default": 20,
         "unit": "px"
       },
       {
@@ -1238,33 +1287,31 @@
         "options": [
           {
             "value": "both",
-            "label": "Show on Both Desktop and Mobile"
+            "label": "Both"
           },
           {
             "value": "desktop_only",
-            "label": "Show Only on Desktop"
+            "label": "Desktop only"
           },
           {
             "value": "mobile_only",
-            "label": "Show Only on Mobile"
+            "label": "Mobile only"
           },
           {
             "value": "hide",
-            "label": "Hide Arrows"
+            "label": "Hidden"
           }
         ]
       },
       {
         "type": "color",
         "id": "arrow_bg_color",
-        "label": "Arrow Background Color",
-        "default": "#F1F1F1"
+        "label": "Arrow background"
       },
       {
         "type": "color",
         "id": "arrow_icon_color",
-        "label": "Arrow Icon Color",
-        "default": "#000000"
+        "label": "Arrow icon"
       },
       {
         "type": "range",
