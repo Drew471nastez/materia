@@ -260,7 +260,9 @@ class SlideSection extends HTMLElement {
       ? _this?.dataset.autoplaySpeed * 1000
       : 3000;
     var speed = _this?.dataset.speed ? _this?.dataset.speed : 400;
-    const reducedTopbarMotion = _this.classList.contains("topbar-slider") &&
+    // Topbar and slideshow: under reduced motion nothing turns by itself and a
+    // change is a cut.
+    const reducedTopbarMotion = (_this.classList.contains("topbar-slider") || _this.classList.contains("slideshow")) &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reducedTopbarMotion) {
       autoplaying = false;
@@ -364,10 +366,11 @@ class SlideSection extends HTMLElement {
     } else if (effect === "flip") {
       effectOpts.flipEffect = { slideShadows: false, limitRotation: true };
     }
-    // Premium crossfade for the plain 'fade' option (Swiper otherwise hard-cuts via the
-    // .slideshow.fade opacity:0 CSS). Harmless for non-fade effects.
+    // Fade without cross-fade: the incoming slide fades in over the one it
+    // replaces (going back, the outgoing one fades off the slide beneath), so
+    // the two are never both half transparent over the section background.
     if (effectName === "fade") {
-      effectOpts.fadeEffect = { crossFade: true };
+      effectOpts.fadeEffect = { crossFade: false };
     }
     this.globalSlide = new Swiper(_this, {
       slidesPerView: autoItem ? "auto" : itemMobile,
@@ -445,7 +448,7 @@ class SlideSection extends HTMLElement {
           });
           e.autoplay.stop();
           if (_this?.dataset.autoplay === "true" && !reducedTopbarMotion) {
-            Motion.inView(
+            _this._stopInView = Motion.inView(
               _this,
               async () => {
                 e.autoplay.start();
@@ -506,6 +509,11 @@ class SlideSection extends HTMLElement {
           // Rapid arrow clicks therefore re-ease smoothly instead of snapping.
           if (!_this.classList.contains("slideshow")) return;
           if (_this.classList.contains('is-dragging')) return;
+          // The slide arriving by arrow, dot or autoplay plays its picture
+          // entrance (fade_in / reveal_up) once; the others rest.
+          const arriving = swiper && swiper.slides ? swiper.slides[swiper.activeIndex] : null;
+          if (swiper && swiper.slides) swiper.slides.forEach((slide) => { if (slide !== arriving) slide.removeAttribute("data-fx-enter"); });
+          if (arriving && !arriving.hasAttribute("data-fx-enter")) arriving.setAttribute("data-fx-enter", "");
           _this.classList.add("is-entering");
           clearTimeout(_this._enterTimer);
           // Fallback removal in case TransitionEnd is skipped on a fast interrupt.
@@ -572,6 +580,26 @@ class SlideSection extends HTMLElement {
         },
       },
     });
+  }
+
+  // A slideshow redrawn by the builder is a new element; the old one stops its
+  // Swiper (autoplay timer, listeners) here. Moved, not removed: it starts again.
+  disconnectedCallback() {
+    if (!this.classList.contains("slideshow")) return;
+    clearTimeout(this._enterTimer);
+    if (typeof this._stopInView === "function") this._stopInView();
+    this._stopInView = null;
+    if (this.globalSlide && !this.globalSlide.destroyed) {
+      this.globalSlide.destroy(true, true);
+      this._restart = true;
+    }
+    this.classList.remove("is-entering", "is-dragging");
+  }
+
+  connectedCallback() {
+    if (!this._restart) return;
+    this._restart = false;
+    this.initSlide();
   }
 
   initSecTiktok(sec) {
