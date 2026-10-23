@@ -1,4 +1,8 @@
 <template compat="shopify">
+{% render 'theme-type' %}
+{%- liquid
+  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+-%}
 {%- comment -%}
   Testimonial Logos
   Press/testimonial section: one large centered quote with a decorative quote
@@ -16,7 +20,7 @@
 
 {%- liquid
   assign s = section.settings
-  assign scheme = s.color_scheme | default: 'scheme-1'
+  assign scheme = color_scheme
   assign uid = section.id
 
   assign pt = s.padding_top | default: 60
@@ -27,14 +31,12 @@
   assign qmax = s.quote_max_width | default: 900
 
   assign qfont = 'var(--heading-font, inherit)'
+  assign qweight = 'var(--heading-weight, 500)'
   if s.quote_font == 'theme-body'
     assign qfont = 'var(--body-font, inherit)'
+    assign qweight = 'var(--body-weight, 400)'
   endif
 
-  assign qcolor = 'var(--color-heading)'
-  if s.quote_color_custom
-    assign qcolor = s.quote_color | default: '#111111'
-  endif
 
   assign asd = s.author_size_d | default: 13
   assign asm = s.author_size_m | default: 12
@@ -158,8 +160,8 @@
     font-family: {{ qfont }};
     font-size: {{ qsd }}px;
     line-height: 1.45;
-    font-weight: 500;
-    color: {{ qcolor }};
+    font-weight: {{ qweight }};
+    color: {% if s.quote_color_custom %}{% render 'scheme-color', color: s.quote_color, fallback: 'var(--color-heading)' %}{% else %}var(--color-heading){% endif %};
   }
 
   #shopify-section-{{ uid }} .tlg__quote-text p { margin: 0 0 0.6em; }
@@ -205,7 +207,7 @@
     {%- if s.grayscale_inactive %}
     filter: grayscale(1);
     {%- endif %}
-    transition: opacity 0.25s ease, filter 0.25s ease;
+    transition: opacity var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), filter var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease);
   }
 
   #shopify-section-{{ uid }} .tlg__logo:not(.is-active):hover { opacity: 0.7; }
@@ -296,7 +298,7 @@
   </div>
 {%- endcapture -%}
 <testimonial-logos
-  class="tlg-{{ uid }} color-{{ scheme }}"
+  class="tlg-{{ uid }} color-{{ scheme }} gradient"
   data-transition="{{ t_style }}"
   data-speed="{{ t_speed }}"
   {%- if s.autoplay %} data-autoplay="{{ s.autoplay_interval | default: 6 }}"{%- endif %}
@@ -410,6 +412,15 @@
           [this, 'focusout', onFocusOut]
         );
 
+        this._visible = true;
+        if ('IntersectionObserver' in window && this.autoplayMs) {
+          this._io = new IntersectionObserver(function (entries) {
+            self._visible = entries[0].isIntersecting;
+            if (self._visible) self._startAutoplay(); else self._stopAutoplay();
+          });
+          this._io.observe(this);
+        }
+
         this._startAutoplay();
       }
 
@@ -417,6 +428,7 @@
         if (!this._ready) return;
         this._ready = false;
         this._stopAutoplay();
+        if (this._io) { this._io.disconnect(); this._io = null; }
         if (this._swapTimer) { clearTimeout(this._swapTimer); this._swapTimer = null; }
         (this._handlers || []).forEach(function (h) {
           h[0].removeEventListener(h[1], h[2]);
@@ -490,7 +502,7 @@
 
       _startAutoplay() {
         this._stopAutoplay();
-        if (!this.autoplayMs || this.tabs.length < 2) return;
+        if (!this.autoplayMs || this.tabs.length < 2 || this._visible === false) return;
         if (window.Shopify && window.Shopify.designMode) return;
         var self = this;
         this._autoTimer = setInterval(function () {
@@ -511,6 +523,14 @@
     document.addEventListener('shopify:section:load', function (e) {
       var els = e.target.querySelectorAll('testimonial-logos');
       Array.prototype.forEach.call(els, function (el) {
+        if (typeof el.refresh === 'function') el.refresh();
+      });
+    });
+
+    document.addEventListener('storelib:section-load', function (e) {
+      var root = e.target && e.target.querySelectorAll ? e.target : document.getElementById('shopify-section-' + (e.detail && e.detail.sectionId));
+      if (!root) return;
+      Array.prototype.forEach.call(root.querySelectorAll('testimonial-logos'), function (el) {
         if (typeof el.refresh === 'function') el.refresh();
       });
     });
@@ -881,12 +901,6 @@
         "content": "Layout"
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "scheme-1"
-      },
-      {
         "type": "select",
         "id": "width",
         "label": "Section width",
@@ -909,6 +923,12 @@
             "label": "Full width"
           }
         ]
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "header",
@@ -987,15 +1007,13 @@
       {
         "type": "checkbox",
         "id": "quote_color_custom",
-        "label": "Use custom quote color",
-        "default": false,
-        "info": "Overrides the color scheme heading color."
+        "label": "Custom quote color",
+        "default": false
       },
       {
         "type": "color",
         "id": "quote_color",
         "label": "Quote color",
-        "default": "#111111",
         "visible_if": "{{ section.settings.quote_color_custom }}"
       },
       {
@@ -1149,8 +1167,7 @@
           {
             "type": "image_picker",
             "id": "logo_image",
-            "label": "Logo image",
-            "info": "Transparent PNG or SVG works best. Leave empty to show a placeholder image."
+            "label": "Logo image"
           },
           {
             "type": "richtext",
@@ -1161,8 +1178,7 @@
           {
             "type": "text",
             "id": "author",
-            "label": "Author / attribution",
-            "info": "Optional. Renders small under the quote."
+            "label": "Author"
           }
         ]
       }

@@ -1,4 +1,8 @@
 <template compat="shopify">
+{% render 'theme-type' %}
+{%- liquid
+  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+-%}
 <style data-rs-bulletproof>
   {%- if section.settings.reset_spacing -%}
     /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
@@ -131,7 +135,6 @@
 {%- liquid
   assign s = section.settings
   assign section_width = s.section_width | default: 'container'
-  assign color_scheme = s.color_scheme | default: 'scheme-1'
   if s.reset_spacing
     assign reset_spacing = ' remove_spacing'
   endif
@@ -141,8 +144,6 @@
   assign column_gap = s.column_gap | default: 24
   assign animate = s.animate
   assign duration = s.duration | default: 1800
-  assign accent_color = s.accent_color | default: 'currentColor'
-  assign track_color = s.track_color | default: 'rgba(0,0,0,0.08)'
   assign ring_size = s.ring_size | default: 140
   assign ring_thickness = s.ring_thickness | default: 6
   assign value_size = s.value_size | default: 36
@@ -159,13 +160,13 @@
   --scp-cols: {{ columns }};
   --scp-cols-mb: {{ columns_mobile }};
   --scp-gap: {{ column_gap }}px;
-  --scp-accent: {{ accent_color }};
-  --scp-track: {{ track_color }};
+  --scp-accent: {% render 'scheme-color', color: s.accent_color, fallback: 'var(--color-primary)' %};
+  --scp-track: {% render 'scheme-color', color: s.track_color, fallback: 'var(--color-border)' %};
   --scp-ring: {{ ring_size }}px;
   --scp-ring-th: {{ ring_thickness }}px;
   --scp-value: {{ value_size }}px;
   --scp-label: {{ label_size }}px;
-  --scp-card-bg: {{ s.card_bg | default: 'rgba(0,0,0,0.02)' }};
+  --scp-card-bg: {% render 'scheme-color', color: s.card_bg, fallback: 'color-mix(in srgb, var(--color-text) 4%, transparent)' %};
   --scp-card-radius: {{ s.card_radius | default: 18 }}px;
   --scp-item-padding: {{ s.custom_item_padding | default: 8 }}px;
   --scp-max-width: {{ s.custom_max_width | default: 1280 }}px;
@@ -226,6 +227,9 @@
   }
   #shopify-section-{{ section.id }} .scp-ring svg { transform: rotate(-90deg); width: 100%; height: 100%; }
   #shopify-section-{{ section.id }} .scp-ring__track { fill: none; stroke: var(--scp-track); stroke-width: var(--scp-ring-th); }
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ section.id }} .scp-ring__fill { transition: none; }
+  }
   #shopify-section-{{ section.id }} .scp-ring__fill {
     fill: none;
     stroke: var(--scp-accent);
@@ -269,14 +273,14 @@
   }
   #shopify-section-{{ section.id }} .scp-trend--up    { background: rgba(34,197,94,0.12); color: rgb(22,163,74); }
   #shopify-section-{{ section.id }} .scp-trend--down  { background: rgba(239,68,68,0.12); color: rgb(220,38,38); }
-  #shopify-section-{{ section.id }} .scp-trend--flat  { background: rgba(0,0,0,0.06); color: inherit; }
+  #shopify-section-{{ section.id }} .scp-trend--flat  { background: color-mix(in srgb, var(--color-text) 8%, transparent); color: inherit; }
   /* Badge mode */
   #shopify-section-{{ section.id }} .scp-badge {
     display: inline-flex; align-items: center; justify-content: center;
     padding: 8px 16px; min-width: 76px;
     border-radius: 999px;
     background: var(--scp-accent);
-    color: #fff;
+    color: var(--color-background);
     font-weight: 700;
     font-size: var(--scp-value);
     line-height: 1;
@@ -288,6 +292,7 @@
 
 <div
   class="section{% if s.padding_top < 30 %} pt-min{% endif %}{% if s.padding_bottom < 30 %} pb-min{% endif %} color-{{ color_scheme }} gradient{{ reset_spacing }}"
+  {% unless s.reveal %}data-ti-no-reveal{% endunless %}
   style="{{ style | strip | strip_newlines }}"
 >
   <div class="{{ section_width }}">
@@ -321,7 +326,7 @@
             data-motion="fade-up-sm"
             data-motion-delay="{{ forloop.index0 | times: 80 }}"
             {% if scroll_animation != 'slide_in' %}hold{% endif %}
-            class="scp-item scp-item--{{ style_mode }} {% if scroll_animation != 'none' %} scroll-trigger {{ scroll_animation }}{% endif %}"
+            class="scp-item scp-item--{{ style_mode }} {% if scroll_animation != 'none' and s.reveal %} scroll-trigger {{ scroll_animation }}{% endif %}"
             {{ block.shopify_attributes }}
             style="--animation-order: {{ forloop.index }};"
           >
@@ -379,8 +384,10 @@
 {%- if animate -%}
 <script>
   (function () {
+    function init() {
     var section = document.getElementById('shopify-section-{{ section.id }}');
     if (!section) return;
+    if (section.__scpIO) { section.__scpIO.disconnect(); section.__scpIO = null; }
     var items = section.querySelectorAll('[data-animate="true"]');
     if (!items.length) return;
     function easeOut(p) { return 1 - Math.pow(1 - p, 3); }
@@ -441,9 +448,18 @@
           }
         });
       }, { threshold: 0.3 });
+      section.__scpIO = io;
       items.forEach(function (el) { io.observe(el); });
     } else {
       items.forEach(run);
+    }
+    }
+    init();
+    if (!window.__scpLoad_{{ section.id | replace: '-', '_' }}) {
+      window.__scpLoad_{{ section.id | replace: '-', '_' }} = true;
+      document.addEventListener('storelib:section-load', function (e) {
+        if (e.detail && e.detail.sectionId === '{{ section.id }}') init();
+      });
     }
   })();
 {% comment %}{% endcomment %}</script>
@@ -984,20 +1000,8 @@
     },
     "settings": [
       {
-        "type": "checkbox",
-        "id": "reset_spacing",
-        "label": "Remove default space between sections",
-        "default": true
-      },
-      {
         "type": "header",
-        "content": "General"
-      },
-      {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "scheme-1"
+        "content": "Layout"
       },
       {
         "type": "select",
@@ -1022,6 +1026,22 @@
             "label": "Full width"
           }
         ]
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "General"
       },
       {
         "type": "header",
@@ -1085,7 +1105,7 @@
       {
         "type": "color",
         "id": "custom_text_color",
-        "label": "Text / label color override"
+        "label": "Text color"
       },
       {
         "type": "header",
@@ -1094,8 +1114,7 @@
       {
         "type": "color",
         "id": "accent_color",
-        "label": "Accent color",
-        "info": "Number / ring fill / badge background."
+        "label": "Accent color"
       },
       {
         "type": "color",
@@ -1105,8 +1124,7 @@
       {
         "type": "color",
         "id": "card_bg",
-        "label": "Card background",
-        "info": "Used by Big number card mode."
+        "label": "Card background"
       },
       {
         "type": "range",
@@ -1121,7 +1139,7 @@
       {
         "type": "color",
         "id": "custom_section_bg",
-        "label": "Section background override"
+        "label": "Section background"
       },
       {
         "type": "color",
@@ -1141,8 +1159,7 @@
         "type": "checkbox",
         "id": "reveal",
         "label": "Reveal on scroll",
-        "default": true,
-        "info": "Uses your global Animations & motion setting."
+        "default": true
       },
       {
         "type": "header",
@@ -1351,14 +1368,12 @@
             "type": "text",
             "id": "value",
             "label": "Number",
-            "default": "1200",
-            "info": "Digits only — commas/decimals stripped for animation."
+            "default": "1200"
           },
           {
             "type": "text",
             "id": "ring_max",
             "label": "Ring max value",
-            "info": "Used by Progress ring mode. Leave empty to fill 100%.",
             "default": "100"
           },
           {
@@ -1382,8 +1397,7 @@
           {
             "type": "text",
             "id": "trend_value",
-            "label": "Trend value",
-            "info": "e.g. +12% YoY. Leave empty to hide the pill."
+            "label": "Trend value"
           },
           {
             "type": "header",
@@ -1421,8 +1435,7 @@
           {
             "type": "html",
             "id": "icon",
-            "label": "Inline SVG",
-            "info": "Shown above the number inside the ring."
+            "label": "Inline SVG"
           }
         ]
       }

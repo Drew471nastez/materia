@@ -1,4 +1,8 @@
 <template compat="shopify">
+{% render 'theme-type' %}
+{%- liquid
+  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+-%}
 <style data-rs-bulletproof>
   {%- if section.settings.reset_spacing -%}
     /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
@@ -127,7 +131,6 @@
 {%- liquid
   assign s = section.settings
   assign section_width = s.section_width
-  assign color_scheme = s.color_scheme
   if s.reset_spacing
     assign reset_spacing = ' remove_spacing'
   endif
@@ -159,8 +162,8 @@
   --counter-label-size: {{ label_size }}px;
   --counter-value-weight: {{ value_weight }};
   {%- if accent_color != blank -%}--counter-accent: {{ accent_color }};{%- endif -%}
-  --counter-divider: {{ s.divider_color | default: 'rgba(0,0,0,.12)' }};
-  --counter-card-bg: {{ s.card_bg | default: 'rgba(0,0,0,0.03)' }};
+  --counter-divider: {% render 'scheme-color', color: s.divider_color, fallback: 'var(--color-border)' %};
+  --counter-card-bg: {% render 'scheme-color', color: s.card_bg, fallback: 'color-mix(in srgb, var(--color-text) 4%, transparent)' %};
   --counter-card-radius: {{ s.card_radius | default: 16 }}px;
   {%- if s.custom_section_bg != blank -%}--counter-section-bg: {{ s.custom_section_bg }};{%- endif -%}
   {%- if s.custom_text_color != blank -%}--counter-text-override: {{ s.custom_text_color }};{%- endif -%}
@@ -273,6 +276,7 @@
 
 <div
   class="section{% if s.padding_top < 30 %} pt-min{% endif %}{% if s.padding_bottom < 30 %} pb-min{% endif %} color-{{ color_scheme }} gradient{{ reset_spacing }}"
+  {% unless s.reveal %}data-ti-no-reveal{% endunless %}
   style="{{ style | strip | strip_newlines }}"
 >
   <div class="{{ section_width }}">
@@ -299,7 +303,7 @@
             data-motion="fade-up-sm"
             data-motion-delay="{{ forloop.index0 | times: 80 }}"
             {% if scroll_animation != 'slide_in' %}hold{% endif %}
-            class="stat-counter__item {% if scroll_animation != 'none' %} scroll-trigger {{ scroll_animation }}{% endif %}"
+            class="stat-counter__item {% if scroll_animation != 'none' and s.reveal %} scroll-trigger {{ scroll_animation }}{% endif %}"
             {{ block.shopify_attributes }}
             style="--animation-order: {{ forloop.index }};"
           >
@@ -332,8 +336,10 @@
 {%- if animate -%}
 <script>
   (function () {
+    function init() {
     var section = document.getElementById('shopify-section-{{ section.id }}');
     if (!section) return;
+    if (section.__scIO) { section.__scIO.disconnect(); section.__scIO = null; }
     var nums = section.querySelectorAll('.stat-counter__number[data-animate="true"]');
     if (!nums.length) return;
     function animateNum(el) {
@@ -361,9 +367,18 @@
           }
         });
       }, { threshold: 0.3 });
+      section.__scIO = io;
       nums.forEach(function (n) { io.observe(n); });
     } else {
       nums.forEach(animateNum);
+    }
+    }
+    init();
+    if (!window.__scLoad_{{ section.id | replace: '-', '_' }}) {
+      window.__scLoad_{{ section.id | replace: '-', '_' }} = true;
+      document.addEventListener('storelib:section-load', function (e) {
+        if (e.detail && e.detail.sectionId === '{{ section.id }}') init();
+      });
     }
   })();
 {% comment %}{% endcomment %}</script>
@@ -547,7 +562,7 @@
       "id": "divider",
       "label": "Vertical dividers between stats",
       "default": true,
-      "info": "Inline layout only — desktop."
+      "info": "Inline layout, desktop only"
     },
     {
       "type": "color",
@@ -911,20 +926,8 @@
     },
     "settings": [
       {
-        "type": "checkbox",
-        "id": "reset_spacing",
-        "label": "Remove default space between sections",
-        "default": true
-      },
-      {
         "type": "header",
-        "content": "General"
-      },
-      {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "scheme-1"
+        "content": "Layout"
       },
       {
         "type": "select",
@@ -949,6 +952,22 @@
             "label": "Full width"
           }
         ]
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "General"
       },
       {
         "type": "select",
@@ -1062,7 +1081,7 @@
       {
         "type": "color",
         "id": "custom_text_color",
-        "label": "Text color override"
+        "label": "Text color"
       },
       {
         "type": "header",
@@ -1071,14 +1090,14 @@
       {
         "type": "checkbox",
         "id": "divider",
-        "label": "Vertical dividers between stats",
+        "label": "Dividers between stats",
         "default": true,
-        "info": "Inline layout only — desktop."
+        "info": "Inline layout, desktop only"
       },
       {
         "type": "color",
         "id": "divider_color",
-        "label": "Divider / outline color"
+        "label": "Divider color"
       },
       {
         "type": "color",
@@ -1099,19 +1118,17 @@
       {
         "type": "color",
         "id": "accent_color",
-        "label": "Number / icon color",
-        "info": "Leave empty to use your color scheme heading color."
+        "label": "Number color"
       },
       {
         "type": "color",
         "id": "custom_section_bg",
-        "label": "Section background override",
-        "info": "Leave empty to use the color scheme."
+        "label": "Section background"
       },
       {
         "type": "color",
         "id": "custom_label_color",
-        "label": "Label color override"
+        "label": "Label color"
       },
       {
         "type": "header",
@@ -1121,8 +1138,7 @@
         "type": "checkbox",
         "id": "reveal",
         "label": "Reveal on scroll",
-        "default": true,
-        "info": "Uses your global Animations & motion setting."
+        "default": true
       },
       {
         "type": "header",
@@ -1330,20 +1346,17 @@
             "type": "text",
             "id": "value",
             "label": "Number",
-            "default": "1000",
-            "info": "Digits only — commas/decimals stripped for animation."
+            "default": "1000"
           },
           {
             "type": "text",
             "id": "prefix",
-            "label": "Prefix",
-            "info": "Shown before the number, e.g. $ or +"
+            "label": "Prefix"
           },
           {
             "type": "text",
             "id": "suffix",
-            "label": "Suffix",
-            "info": "Shown after the number, e.g. K, M, +, %"
+            "label": "Suffix"
           },
           {
             "type": "text",
@@ -1367,8 +1380,7 @@
           {
             "type": "html",
             "id": "icon",
-            "label": "Inline SVG",
-            "info": "Paste an inline SVG to show above the number."
+            "label": "Inline SVG"
           }
         ]
       }
