@@ -539,6 +539,12 @@
     opacity: 1 !important;
     transform: none !important;
   }
+  /* Every slide is opaque in the section's colour, so the slide underneath
+     (creative effects hold it in place) never shows through the text area
+     or an empty picture of the slide on top. */
+  #{{ section.id }} slide-section .swiper-slide {
+    background-color: var(--color-background, #fff);
+  }
   #{{ section.id }} .banner__media :is(img, video) {
     backface-visibility: hidden;
   }
@@ -1345,16 +1351,21 @@
           function wire(sw) {
             if (!sw || sw.__materiaSwipe) return;
             sw.__materiaSwipe = true;
-            var dragged = false;
-            sw.on('sliderFirstMove', function () { dragged = true; slider.classList.add('is-dragging'); });
-            sw.on('slideChangeTransitionStart', function () {
-              sw.slides.forEach(function (s) { if (!s.classList.contains('swiper-slide-active')) s.removeAttribute('data-swiped'); });
-              if (dragged && sw.slides[sw.activeIndex]) sw.slides[sw.activeIndex].setAttribute('data-swiped', '');
-            });
-            sw.on('transitionEnd', function () { dragged = false; slider.classList.remove('is-dragging'); });
+            var dragged = false, endTimer = 0;
+            var mark = function () {
+              sw.slides.forEach(function (s, i) {
+                if (dragged && i === sw.activeIndex) s.setAttribute('data-swiped', '');
+                else s.removeAttribute('data-swiped');
+              });
+            };
+            sw.on('sliderFirstMove', function () { clearTimeout(endTimer); dragged = true; slider.classList.add('is-dragging'); });
+            /* With loop and the creative effects the slide changes during the
+               drag, so the slide reached is marked whenever it changes. */
+            sw.on('realIndexChange', mark);
             sw.on('touchEnd', function () {
-              /* A drag that snaps back without changing slide ends here too. */
-              setTimeout(function () { if (!sw.animating) { dragged = false; slider.classList.remove('is-dragging'); } }, (sw.params.speed || 400) + 80);
+              if (!dragged) return;
+              clearTimeout(endTimer);
+              endTimer = setTimeout(function () { dragged = false; slider.classList.remove('is-dragging'); }, (sw.params.speed || 400) + 120);
             });
           }
           if (slider.swiper) return wire(slider.swiper);
