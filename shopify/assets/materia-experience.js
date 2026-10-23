@@ -140,7 +140,9 @@
   let announcementResize;
   function syncAnnouncementHeight() {
     announcementResize?.disconnect();
-    const bars = [...document.querySelectorAll('.section-announcement-bar, [id*="announcement-bar"]')]
+    const candidates = [...document.querySelectorAll('.section-announcement-bar, [id*="announcement-bar"], [data-sticky-announcement], [data-sticky-topbar], announcement-bar, .unique-announcement-bar, .abp4')];
+    const bars = candidates.map(node => node.closest('.shopify-section') || node)
+      .filter((node, index, all) => all.indexOf(node) === index)
       .filter((node, _index, all) => !all.some(other => other !== node && other.contains(node)));
     const measure = () => {
       const height = bars.reduce((total, node) => {

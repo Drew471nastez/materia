@@ -7686,6 +7686,13 @@ if (!customElements.get("product-form")) {
           cartRecommend.classList.remove("open");
         }
         this.submitButton.classList.add("loading");
+        // The drawer is interaction feedback, not a network result. Open it in
+        // the next frame while Shopify prepares the updated sections, then
+        // replace its contents in place when the response arrives.
+        if (!this.cartPage && this.cart?.classList.contains("open_drawer")) {
+          this.cart.setAttribute("aria-busy", "true");
+          requestAnimationFrame(() => this.cart?.open?.());
+        }
         const config = fetchConfig("javascript");
         config.headers["X-Requested-With"] = "XMLHttpRequest";
         delete config.headers["Content-Type"];
@@ -7931,6 +7938,7 @@ if (!customElements.get("product-form")) {
             console.error(e);
           })
           .finally(() => {
+            this.cart?.removeAttribute("aria-busy");
             BlsLazyloadImg.init();
             if (document.documentElement.classList.contains("open-popup")) {
               document.documentElement.classList.remove("open-popup");
