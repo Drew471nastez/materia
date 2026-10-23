@@ -55,8 +55,14 @@
     storelib_input_focus: "{{ settings.storelib_input_focus }}",
     storelib_button_hover_bg: "{{ live_hover_bg }}",
     storelib_button_hover_text: "{{ live_hover_text }}",
-    storelib_button_hover_border: "{{ live_hover_border }}"
+    storelib_button_hover_border: "{{ live_hover_border }}",
+    menu_font: "{{ settings.menu_font | default: 'body_font' }}",
+    button_font: "{{ settings.button_font | default: 'heading_font' }}"
   };
+  /* Menu hovers the header no longer draws; it shows these as underline. */
+  var RETIRED_HOVERS = ['background', 'slide_up', 'glow', 'double_line', 'uppercase', 'scale', 'subtle_fade'];
+  var BADGE_SHADOW = '0 2px 6px rgba(0,0,0,.18)';
+  function yes(value) { return value === true || value === 'true'; }
   var SHEET_KEYS = ['field_background', 'field_text', 'storelib_input_focus', 'storelib_button_hover_bg', 'storelib_button_hover_text', 'storelib_button_hover_border'];
   var SHADOWS = {
     soft: '0 2px 10px -2px rgba(0,0,0,0.06)',
@@ -113,6 +119,13 @@
     var fallbacks = value.fallback_families || value.fallbacks || '';
     return family ? '"' + String(family).replace(/"/g, '\\"') + '"' + (fallbacks ? ', ' + fallbacks : '') : '';
   }
+  /* "r, g, b" of a hex colour, for the theme's rgba(var(--color-*-rgb), a) rules. */
+  function rgb(value) {
+    var text = colour(value).replace('#', '');
+    if (text.length === 3 || text.length === 4) text = text.replace(/(.)/g, '$1$1');
+    if (!/^[0-9a-f]{6}([0-9a-f]{2})?$/i.test(text)) return null;
+    return [0, 2, 4].map(function (i) { return parseInt(text.substr(i, 2), 16); }).join(', ');
+  }
   function schemeVars(s) {
     if (!s) return null;
     if (s.settings) s = s.settings;
@@ -121,7 +134,12 @@
     var heading = s.heading_color;
     var accent = s.primary_color;
     var line = s.border_color;
+    var bgRgb = rgb(bg);
     return {
+      '--color-primary-rgb': rgb(accent),
+      '--color-text-rgb': rgb(text),
+      '--color-heading-rgb': rgb(heading),
+      '--input-bg': colour(state.field_background) ? null : (bgRgb ? 'rgba(' + bgRgb + ', 0.6)' : null),
       '--color-background': bg,
       '--gradient-background': bg,
       '--color-text': text,
@@ -210,6 +228,14 @@
     if (has(s, 'subheading_font_weight')) set('--subheading-weight', String(s.subheading_font_weight));
     if (has(s, 'heading_text_transform')) set('--heading-text-transform', String(s.heading_text_transform));
     if (has(s, 'heading_letter_spacing')) set('--heading-letter-spacing', s.heading_letter_spacing === 'negative' ? '-0.034em' : String(s.heading_letter_spacing));
+    if (has(s, 'menu_font')) set('--menu-font', state.menu_font === 'body_font' ? 'var(--body-font)' : 'var(--heading-font)');
+    if (has(s, 'button_font')) set('--btn-font', state.button_font === 'body_font' ? 'var(--body-font)' : 'var(--heading-font)');
+    if (has(s, 'menu_hover_style')) {
+      var hover = RETIRED_HOVERS.indexOf(String(s.menu_hover_style)) > -1 ? 'underline' : String(s.menu_hover_style);
+      bodyData('data-menu-hover', hover);
+      var headers = document.querySelectorAll('header[data-menu-hover-theme]');
+      for (var h = 0; h < headers.length; h++) headers[h].setAttribute('data-menu-hover', hover);
+    }
 
     /* Layout & spacing. Phone and desktop values have their own variables,
        read by the breakpoints in layout/theme, so one never hides the other. */
@@ -260,6 +286,32 @@
     if (has(s, 'btn_style')) bodyData('data-btn-style', s.btn_style);
     if (has(s, 'btn_secondary_style')) bodyData('data-btn-secondary-style', s.btn_secondary_style);
     if (has(s, 'storelib_button_hover_effect')) bodyData('data-sl-btn-hover', s.storelib_button_hover_effect);
+    if (has(s, 'icon_btn_size')) set('--icon-btn-size', px(s.icon_btn_size));
+    if (has(s, 'search_popup_height')) set('--search-popup-height', px(s.search_popup_height));
+
+    /* Product badges */
+    if (has(s, 'badges_rounded_corner')) set('--bages-radius', px(s.badges_rounded_corner));
+    if (has(s, 'badges_font_weight')) set('--badges-font-weight', String(s.badges_font_weight));
+    if (has(s, 'badges_letter_spacing')) set('--badges-letter-spacing', px(s.badges_letter_spacing));
+    if (has(s, 'badges_uppercase')) set('--badges-transform', s.badges_uppercase === false || s.badges_uppercase === 'false' ? 'none' : 'uppercase');
+    if (has(s, 'badges_stack_max')) set('--badges-max-stack', String(s.badges_stack_max));
+    if (has(s, 'badges_padding_x')) set('--badges-padding-x', px(s.badges_padding_x));
+    if (has(s, 'badges_padding_y')) set('--badges-padding-y', px(s.badges_padding_y));
+    if (has(s, 'badges_offset_x')) set('--badges-offset-x', px(s.badges_offset_x));
+    if (has(s, 'badges_offset_y')) set('--badges-offset-y', px(s.badges_offset_y));
+    if (has(s, 'badges_gap')) set('--badges-gap', px(s.badges_gap));
+    if (has(s, 'badges_drop_shadow')) set('--badges-shadow', yes(s.badges_drop_shadow) ? BADGE_SHADOW : 'none');
+    [['sale_color', '--bages-sale-color'], ['sale_background', '--bages-sale-bg-color'],
+     ['new_color', '--bages-new-color'], ['new_background', '--bages-new-bg-color'],
+     ['pre_order_color', '--bages-pre-order-color'], ['pre_order_background', '--bages-pre-order-bg-color'],
+     ['sold_out_color', '--bages-sold-out-color'], ['sold_out_background', '--bages-sold-out-bg-color'],
+     ['custom_badge_color', '--bages-custom-color'], ['custom_badge_background', '--bages-custom-bg-color']].forEach(function (pair) {
+      if (Object.prototype.hasOwnProperty.call(s, pair[0])) set(pair[1], colour(s[pair[0]]) || 'transparent');
+    });
+    if (has(s, 'badges_shape')) bodyData('data-badge-shape', s.badges_shape);
+    if (has(s, 'badges_size')) bodyData('data-badge-size', s.badges_size);
+    if (has(s, 'badges_position')) bodyData('data-badge-position', s.badges_position);
+    if (has(s, 'badges_animation')) bodyData('data-badge-anim', s.badges_animation);
 
     /* Motion */
     if (has(s, 'animation_duration')) set('--animation-duration', ms(s.animation_duration));

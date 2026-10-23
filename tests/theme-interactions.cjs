@@ -8,7 +8,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 (async () => {
-  const browser = await chromium.launch({executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox']});
+  const browser = await chromium.launch({executablePath: ['/usr/bin/chromium','/opt/pw-browsers/chromium'].find(f=>fs.existsSync(f)), headless: true, args: ['--no-sandbox']});
   const page = await browser.newPage({viewport: {width: 1100, height: 800}});
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -191,6 +191,20 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
     assert.equal(await page.locator('#live-slide').getAttribute('data-button-appearance'),'solid');
     assert.equal(await page.locator('#live-secondary').getAttribute('data-button-appearance'),'outline');
     assert.equal(await page.locator('#live-slide').getAttribute('data-button-hover'),'lift');passed++;
+    // Fonts, menu hover, badges and the scheme's rgb values follow the builder too.
+    await page.evaluate(()=>{document.body.insertAdjacentHTML('beforeend','<header id="hdr-theme" data-menu-hover="underline" data-menu-hover-theme></header><header id="hdr-own" data-menu-hover="fade"></header><button id="font-btn" style="font-family:var(--btn-font)">Buy</button>');document.documentElement.style.setProperty('--btn-font','var(--heading-font)');});
+    await page.evaluate(()=>document.dispatchEvent(new CustomEvent('storelib:settings-change',{detail:{settings:{font_heading_system:{family:'Lora',fallback_families:'serif'},menu_font:'body_font',menu_hover_style:'scale',badges_rounded_corner:7,badges_shape:'square',sale_background:'#ff0000',color_schemes:{default:{settings:{background:'#fff',text_color:'#112233',heading_color:'#222222',primary_color:'#114488'}}}}}})));
+    await page.waitForTimeout(80);
+    assert.equal(await page.$eval('#font-btn',el=>getComputedStyle(el).fontFamily),'Lora, serif','button font follows a new heading font');
+    const rootVar=name=>page.evaluate(n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim(),name);
+    assert.equal(await page.evaluate(()=>document.documentElement.style.getPropertyValue('--menu-font')),'var(--body-font)');
+    assert.equal(await page.locator('#hdr-theme').getAttribute('data-menu-hover'),'underline','retired hover shows as underline');
+    assert.equal(await page.locator('#hdr-own').getAttribute('data-menu-hover'),'fade','a header with its own hover keeps it');
+    assert.equal(await rootVar('--bages-radius'),'7px');
+    assert.equal(await rootVar('--bages-sale-bg-color'),'#ff0000');
+    assert.equal(await page.locator('body').getAttribute('data-badge-shape'),'square');
+    assert.equal(await rootVar('--color-text-rgb'),'17, 34, 51');
+    assert.equal(await rootVar('--input-bg'),'rgba(255, 255, 255, 0.6)');passed++;
     assert.deepEqual(errors,[]);
     console.log(`${passed} browser interaction checks passed`);
   } finally {await browser.close();}
