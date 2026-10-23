@@ -34,6 +34,23 @@ for(const file of batch) {
   }
   assert(markup.includes('theme-type') || markup.includes('--theme-font') || markup.includes('--heading-font'),file+' shared typography inside template');
 }
+// A case's else must come last: a when after it is swallowed by the else in
+// engines that read it that way, so every later block renders for any block.
+for (const folder of ['sections','blocks','snippets','layout']) {
+  if (!fs.existsSync(path.join(root,folder))) continue;
+  for (const file of fs.readdirSync(path.join(root,folder)).filter(f=>f.endsWith('.storelib'))) {
+    const text=fs.readFileSync(path.join(root,folder,file),'utf8').replace(/<schema>[\s\S]*$/,'')
+      .replace(/\{%-?\s*(comment|raw)\s*-?%\}[\s\S]*?\{%-?\s*end\1\s*-?%\}/g,'');
+    const stack=[];
+    for (const tag of text.matchAll(/\{%-?\s*(\w+)/g)) {
+      const name=tag[1];
+      if (['if','unless','for','case','capture','form','paginate','tablerow'].includes(name)) stack.push({name});
+      else if (name.startsWith('end') && stack.length && stack[stack.length-1].name===name.slice(3)) stack.pop();
+      else if (name==='else' && stack.length && stack[stack.length-1].name==='case') stack[stack.length-1].else=true;
+      else if (name==='when') assert(!(stack.length && stack[stack.length-1].else), folder+'/'+file+' when after the case else');
+    }
+  }
+}
 for(const file of ['main-product.storelib','featured-product.storelib']) {
   const text=fs.readFileSync(path.join(root,'sections',file),'utf8');
   const model=JSON.parse(text.match(/<schema>\s*([\s\S]*?)\s*<\/schema>/)[1]).shopify;
