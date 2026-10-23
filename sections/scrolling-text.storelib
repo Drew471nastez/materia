@@ -1,4 +1,5 @@
 <template compat="shopify">
+{% render 'theme-type' %}
 {%- comment -%}
   Materia Themes — Scrolling Text.
   A horizontal marquee of large words. Each word is a block and can be SOLID or
@@ -10,7 +11,7 @@
 
 {%- liquid
   assign st = section.settings
-  assign color_scheme = st.color_scheme.id | default: st.color_scheme
+  assign color_scheme = st.color_scheme.id | default: st.color_scheme | default: 'default-color-scheme'
 
   # Resolve the font-family string: custom URL font > Shopify font picker > theme font.
   assign use_cf = st.use_custom_font
@@ -28,10 +29,17 @@
   endif
 
   # Resolve text colour: custom (default black) or follow the colour scheme.
-  if st.use_custom_text_color
-    assign mq_color = st.text_color | default: '#000000'
-  else
-    assign mq_color = 'var(--color-text)'
+  assign mq_color = 'var(--color-text)'
+  if st.use_custom_text_color and st.text_color != blank and st.text_color.alpha != 0
+    assign mq_color = st.text_color
+  endif
+  assign mq_weight = st.font_weight | default: 'theme'
+  if mq_weight == 'theme'
+    if st.base_font == 'body' and use_cf != true
+      assign mq_weight = 'var(--body-weight, 400)'
+    else
+      assign mq_weight = 'var(--heading-weight, 700)'
+    endif
   endif
 -%}
 
@@ -115,7 +123,7 @@
     --stm-duration: {{ st.duration | default: 40 }}s;
     --stm-direction: {{ st.direction | default: 'normal' }};
     --stm-pause: {% if st.pause_on_hover %}paused{% else %}running{% endif %};
-    --stm-weight: {{ st.font_weight | default: '700' }};
+    --stm-weight: {{ mq_weight }};
     --stm-ls: {{ st.letter_spacing | default: 0 }}px;
     --stm-tt: {{ st.text_transform | default: 'none' }};
     --stm-font: {{ mq_font }};
@@ -168,7 +176,7 @@
   {%- comment -%} Per-word solid vs. outline + optional colour override. {%- endcomment -%}
   {%- for block in section.blocks -%}
     {%- assign b = block.settings -%}
-    {%- if b.color != blank -%}{%- assign c = b.color -%}{%- else -%}{%- assign c = 'var(--stm-color)' -%}{%- endif -%}
+    {%- capture c -%}{% render 'scheme-color', color: b.color, fallback: 'var(--stm-color)' %}{%- endcapture -%}
     #shopify-section-{{ section.id }} .stm__item[data-block-id="{{ block.id }}"] {
       {%- if b.use_outline_text -%}
         color: transparent;
@@ -185,13 +193,22 @@
   @media (prefers-reduced-motion: reduce) {
     #shopify-section-{{ section.id }} .stm__track { animation: none; }
   }
+  {%- case st.section_width -%}
+    {%- when 'container' -%}
+      #shopify-section-{{ section.id }} .stm { max-width: calc(var(--page-width, 1300px) + 3rem); margin-inline: auto; padding-inline: 1.5rem; box-sizing: border-box; }
+    {%- when 'fluid_container' -%}
+      #shopify-section-{{ section.id }} .stm { max-width: calc(var(--fluid-container-width, 1500px) + 3rem); margin-inline: auto; padding-inline: 1.5rem; box-sizing: border-box; }
+    {%- when 'stretch_width' -%}
+      #shopify-section-{{ section.id }} .stm { padding-inline: 1.5rem; box-sizing: border-box; }
+      @media (min-width: 1200px) { #shopify-section-{{ section.id }} .stm { padding-inline: 3rem; } }
+  {%- endcase -%}
   {%- unless st.show_on_mobile -%}
     @media (max-width: 767.98px) { #shopify-section-{{ section.id }} { display: none !important; } }
   {%- endunless -%}
 {% comment %}{% endcomment %}</style>
 
 <!-- ti-theme:start -->
-<div class="stm section color-{{ color_scheme }} gradient">
+<div class="stm section color-{{ color_scheme }} gradient {{ st.section_width }}">
   {%- if section.blocks.size > 0 -%}
     <div class="stm__viewport">
       {%- for i in (1..st.repeat_count) -%}
@@ -671,20 +688,44 @@
     "max_blocks": 50,
     "settings": [
       {
-        "type": "checkbox",
-        "id": "reset_spacing",
-        "label": "Remove default space around section",
-        "default": false
+        "type": "header",
+        "content": "Layout"
       },
       {
-        "type": "header",
-        "content": "General"
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "options": [
+          {
+            "value": "container",
+            "label": "Default"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ],
+        "default": "full_width"
       },
       {
         "type": "color_scheme",
         "id": "color_scheme",
         "label": "Color scheme",
-        "default": "scheme-1"
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove section spacing",
+        "default": false
       },
       {
         "type": "header",
@@ -714,8 +755,12 @@
         "type": "select",
         "id": "font_weight",
         "label": "Font weight",
-        "default": "700",
+        "default": "theme",
         "options": [
+          {
+            "value": "theme",
+            "label": "Theme"
+          },
           {
             "value": "300",
             "label": "Light"
@@ -788,7 +833,6 @@
         "type": "select",
         "id": "base_font",
         "label": "Theme font",
-        "info": "Used when 'Use a custom font' is off.",
         "default": "heading",
         "options": [
           {
@@ -810,21 +854,21 @@
       {
         "type": "font_picker",
         "id": "custom_font",
-        "label": "Custom font (font library)",
+        "label": "Custom font",
         "default": "assistant_n4",
-        "info": "Applied only when 'Use a custom font' is on."
+        "visible_if": "{{ section.settings.use_custom_font }}"
       },
       {
         "type": "text",
         "id": "custom_font_url",
-        "label": "Custom font URL (optional)",
-        "info": "Paste a hosted font file URL (.woff2/.ttf). Overrides the font above when a family name is also set."
+        "label": "Custom font URL",
+        "visible_if": "{{ section.settings.use_custom_font }}"
       },
       {
         "type": "text",
         "id": "custom_font_family",
-        "label": "Custom font family name",
-        "info": "Required with the custom font URL above, e.g. \"Acme Grotesk\"."
+        "label": "Font family name",
+        "visible_if": "{{ section.settings.use_custom_font }}"
       },
       {
         "type": "header",
@@ -834,14 +878,13 @@
         "type": "checkbox",
         "id": "use_custom_text_color",
         "label": "Use custom text color",
-        "info": "Off = follow the color scheme. On = use the color below (default black).",
-        "default": true
+        "default": false
       },
       {
         "type": "color",
         "id": "text_color",
         "label": "Text color",
-        "default": "#000000"
+        "visible_if": "{{ section.settings.use_custom_text_color }}"
       },
       {
         "type": "header",
@@ -851,12 +894,12 @@
         "type": "range",
         "id": "duration",
         "label": "Scroll duration",
-        "info": "Higher = slower. Increase for long content.",
         "min": 5,
         "max": 120,
         "step": 5,
         "unit": "s",
-        "default": 40
+        "default": 40,
+        "info": "Higher is slower"
       },
       {
         "type": "select",
@@ -904,7 +947,6 @@
         "type": "range",
         "id": "repeat_count",
         "label": "Content repeats",
-        "info": "How many times the words repeat to fill the row. Increase if you see a gap.",
         "min": 2,
         "max": 8,
         "step": 1,
@@ -1008,8 +1050,7 @@
         "type": "checkbox",
         "id": "reveal",
         "label": "Reveal on scroll",
-        "default": true,
-        "info": "Uses your global Animations & motion setting."
+        "default": true
       }
     ],
     "blocks": [
@@ -1042,8 +1083,7 @@
           {
             "type": "color",
             "id": "color",
-            "label": "Color (optional)",
-            "info": "Leave blank to use the section text color."
+            "label": "Color (optional)"
           }
         ]
       }
@@ -1056,8 +1096,6 @@
           "text_size": 80,
           "text_size_mobile": 40,
           "font_weight": "700",
-          "use_custom_text_color": true,
-          "text_color": "#000000",
           "duration": 40,
           "direction": "normal"
         },

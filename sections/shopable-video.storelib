@@ -1,4 +1,5 @@
 <template compat="shopify">
+{% render 'theme-type' %}
 {%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
 {%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
 <style>
@@ -37,7 +38,7 @@
   Section background colour wiring. Painted on the section wrapper so
   the colour fills edge-to-edge regardless of inner section width.
 {%- endcomment -%}
-{%- if section.settings.section_bg != blank -%}
+{%- if section.settings.section_bg != blank and section.settings.section_bg.alpha != 0 -%}
   <style>
     #shopify-section-{{ section.id }} {
       background-color: {{ section.settings.section_bg }};
@@ -158,7 +159,7 @@
 {%- liquid
   assign s = section.settings
   assign section_width = s.section_width | default: 'container'
-  assign color_scheme = s.color_scheme | default: 'scheme-1'
+  assign color_scheme = s.color_scheme.id | default: s.color_scheme | default: 'default-color-scheme'
   if s.reset_spacing
     assign reset_spacing = ' remove_spacing'
   endif
@@ -189,9 +190,9 @@
   --sv-radius: {{ s.card_radius | default: 16 }}px;
   --sv-overlay: {{ overlay_opacity | divided_by: 100.0 }};
   --sv-overlay-color: {{ s.custom_card_overlay_color | default: '#000000' }} !important;
-  --sv-cta-bg: {{ s.custom_cta_bg | default: '#FFFFFF' }};
-  --sv-cta-text: {{ s.custom_cta_text | default: '#111111' }};
-  --sv-heading-color: {{ s.custom_heading_color | default: '#FFFFFF' }} !important;
+  --sv-cta-bg: {% render 'scheme-color', color: s.custom_cta_bg, fallback: 'var(--btn-primary-bg-color)' %};
+  --sv-cta-text: {% render 'scheme-color', color: s.custom_cta_text, fallback: 'var(--btn-primary-color)' %};
+  --sv-heading-color: {% render 'scheme-color', color: s.custom_heading_color, fallback: '#ffffff' %} !important;
   --sv-card-padding: {{ s.custom_card_padding | default: 18 }}px;
   --sv-heading-size: {{ s.custom_heading_size | default: 18 }}px;
   {%- if s.custom_section_bg != blank -%}--sv-section-bg: {{ s.custom_section_bg }};{%- endif -%}
@@ -210,7 +211,12 @@
     border-radius: var(--sv-radius);
     overflow: hidden;
     aspect-ratio: var(--sv-ratio);
-    background: #f5f5f5 url('https://2dbags.co/wp-content/uploads/revslider/lookbook1-demo_slider/placeholder.jpg') center/cover no-repeat;
+    background: color-mix(in srgb, var(--color-text) 8%, var(--color-background));
+  }
+  #shopify-section-{{ section.id }} .sv-card svg.sv-card__placeholder {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    fill: color-mix(in srgb, var(--color-text) 35%, transparent);
   }
   #shopify-section-{{ section.id }} .sv-card--has-media {
     background: #000;
@@ -240,7 +246,8 @@
   #shopify-section-{{ section.id }} .sv-card__content--bottom { bottom: 0; }
   #shopify-section-{{ section.id }} .sv-card__heading {
     font-size: var(--sv-heading-size);
-    font-weight: 600;
+    font-family: var(--heading-font, inherit);
+    font-weight: var(--heading-weight, 600);
     line-height: 1.25;
     margin: 0;
     color: var(--sv-heading-color);
@@ -262,9 +269,16 @@
     font-size: 13px;
     font-weight: 600;
     text-decoration: none;
-    transition: transform .15s ease;
+    transform: translateY(0);
+    transition: transform var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), background-color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), box-shadow var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease);
   }
   #shopify-section-{{ section.id }} .sv-card__cta:hover { transform: translateY(-1px); }
+  #shopify-section-{{ section.id }} .sv-card__product { transition: transform var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), box-shadow var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease); }
+  #shopify-section-{{ section.id }} .sv-card__product:hover { transform: translateY(-1px); }
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ section.id }} .sv-card__cta,
+    #shopify-section-{{ section.id }} .sv-card__product { transition: none; transform: none; }
+  }
   #shopify-section-{{ section.id }} .sv-card__content--center .sv-card__cta { align-self: center; }
   #shopify-section-{{ section.id }} .sv-card__content--bottom .sv-card__cta { align-self: flex-start; }
   #shopify-section-{{ section.id }} .sv-card__product {
@@ -272,8 +286,8 @@
     left: 14px; bottom: 14px;
     display: inline-flex; align-items: center; gap: 10px;
     padding: 8px 14px 8px 8px;
-    background: rgba(255,255,255,0.95);
-    color: #111;
+    background: var(--color-background);
+    color: var(--color-heading);
     border-radius: 999px;
     text-decoration: none;
     pointer-events: auto;
@@ -353,6 +367,7 @@
                     endfor
                   -%}
                   <video
+                    data-sv-video{% if autoplay_videos %} data-sv-autoplay{% endif %}
                     {% if autoplay_videos %}autoplay{% endif %}
                     {% if muted or autoplay_videos %}muted{% endif %}
                     {% if loop_videos %}loop{% endif %}
@@ -370,9 +385,9 @@
                     <iframe src="https://player.vimeo.com/video/{{ yt_id }}?{% if autoplay_videos %}autoplay=1&{% endif %}{% if muted or autoplay_videos %}muted=1&{% endif %}{% if loop_videos %}loop=1&{% endif %}{% unless show_controls %}controls=0&{% endunless %}" allow="autoplay; encrypted-media" allowfullscreen></iframe>
                   {%- endif -%}
                 {%- elsif b.poster_image != blank -%}
-                  <img src="{{ b.poster_image | image_url: width: 800 }}" alt="{{ b.poster_image.alt | escape }}" loading="lazy">
+                  <img src="{{ b.poster_image | image_url: width: 800 }}" alt="{{ b.poster_image.alt | escape }}" width="{{ b.poster_image.width }}" height="{{ b.poster_image.height }}" loading="lazy" decoding="async">
                 {%- else -%}
-                  <img src="https://2dbags.co/wp-content/uploads/revslider/lookbook1-demo_slider/placeholder.jpg" alt="{{ 'accessibility.placeholder' | t }}" loading="lazy">
+                  {{ 'lifestyle-2' | placeholder_svg_tag: 'sv-card__placeholder' }}
                 {%- endif -%}
 
                 {%- assign show_overlay = false -%}
@@ -425,8 +440,42 @@
     {% endif %}
   </div>
 </div>
-
-
+<script>
+  (function () {
+    var sid = {{ section.id | json }};
+    function svInit() {
+      var root = document.getElementById('shopify-section-' + sid);
+      if (!root) return;
+      if (root._svObserver) { root._svObserver.disconnect(); root._svObserver = null; }
+      var videos = root.querySelectorAll('video[data-sv-video]');
+      if (!videos.length || !('IntersectionObserver' in window)) return;
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          var v = entry.target;
+          if (entry.isIntersecting) {
+            if (v.hasAttribute('data-sv-autoplay')) {
+              var pr = v.play();
+              if (pr && pr.catch) pr.catch(function () {});
+            }
+          } else if (!v.paused) {
+            v.pause();
+          }
+        });
+      }, { threshold: 0.25 });
+      videos.forEach(function (v) { io.observe(v); });
+      root._svObserver = io;
+    }
+    svInit();
+    window.__svListen = window.__svListen || {};
+    if (!window.__svListen[sid]) {
+      window.__svListen[sid] = true;
+      document.addEventListener('storelib:section-load', function (e) {
+        if (e.detail && e.detail.sectionId && String(e.detail.sectionId) !== String(sid)) return;
+        svInit();
+      });
+    }
+  })();
+{% comment %}{% endcomment %}</script>
 
 </template>
 
@@ -1034,14 +1083,8 @@
     },
     "settings": [
       {
-        "type": "checkbox",
-        "id": "reset_spacing",
-        "label": "Remove default space between sections",
-        "default": true
-      },
-      {
         "type": "header",
-        "content": "General"
+        "content": "Layout"
       },
       {
         "type": "select",
@@ -1071,7 +1114,17 @@
         "type": "color_scheme",
         "id": "color_scheme",
         "label": "Color scheme",
-        "default": "scheme-1"
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove section spacing",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "General"
       },
       {
         "type": "select",
@@ -1162,8 +1215,7 @@
         "type": "checkbox",
         "id": "muted",
         "label": "Mute videos",
-        "default": true,
-        "info": "Required by browsers when auto-play is on."
+        "default": true
       },
       {
         "type": "checkbox",
@@ -1194,8 +1246,7 @@
       {
         "type": "color",
         "id": "custom_heading_color",
-        "label": "Card headline color",
-        "default": "#FFFFFF"
+        "label": "Card headline color"
       },
       {
         "type": "header",
@@ -1204,14 +1255,12 @@
       {
         "type": "color",
         "id": "custom_cta_bg",
-        "label": "CTA button background",
-        "default": "#FFFFFF"
+        "label": "CTA button background"
       },
       {
         "type": "color",
         "id": "custom_cta_text",
-        "label": "CTA button text color",
-        "default": "#111111"
+        "label": "CTA button text"
       },
       {
         "type": "header",
@@ -1220,14 +1269,13 @@
       {
         "type": "color",
         "id": "custom_section_bg",
-        "label": "Section background override"
+        "label": "Inner background"
       },
       {
         "type": "color",
         "id": "custom_card_overlay_color",
         "label": "Card overlay color",
-        "default": "#000000",
-        "info": "Color of the dark overlay behind text. Use the slider above to control opacity."
+        "default": "#000000"
       },
       {
         "type": "range",
@@ -1237,8 +1285,7 @@
         "max": 80,
         "step": 5,
         "unit": "%",
-        "default": 10,
-        "info": "Helps the headline / CTA stay readable."
+        "default": 10
       },
       {
         "type": "range",
@@ -1424,7 +1471,7 @@
       },
       {
         "type": "header",
-        "content": "Section margin (around the section)"
+        "content": "Section margin"
       },
       {
         "type": "range",
@@ -1478,9 +1525,7 @@
       {
         "type": "color",
         "id": "section_bg",
-        "label": "Section background color",
-        "info": "Background colour of the whole section. Set transparent to inherit the page.",
-        "default": "#FFFFFF"
+        "label": "Section background"
       }
     ],
     "blocks": [
@@ -1505,13 +1550,12 @@
               "youtube",
               "vimeo"
             ],
-            "info": "YouTube or Vimeo. Used when no upload is set."
+            "info": "YouTube or Vimeo"
           },
           {
             "type": "image_picker",
             "id": "poster_image",
-            "label": "Poster image",
-            "info": "Shown before the video plays. Required when only using a poster."
+            "label": "Poster image"
           },
           {
             "type": "header",
@@ -1559,8 +1603,7 @@
           {
             "type": "product",
             "id": "product",
-            "label": "Product",
-            "info": "Shows a tappable product chip in the bottom-left."
+            "label": "Product"
           }
         ]
       }

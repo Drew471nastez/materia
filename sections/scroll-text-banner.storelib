@@ -1,4 +1,5 @@
 <template compat="shopify">
+{% render 'theme-type' %}
 {%- comment -%}
   Scrolling Text Reveal
   A sticky, scroll-driven text reveal banner: the section pins while the
@@ -11,7 +12,7 @@
 
 {%- liquid
   assign s = section.settings
-  assign scheme = s.color_scheme | default: 'scheme-1'
+  assign scheme = s.color_scheme.id | default: s.color_scheme | default: 'default-color-scheme'
   assign uid = section.id
 
   assign slen = s.scroll_length | default: 250
@@ -27,8 +28,11 @@
   assign lh = s.line_height | default: 1.4
   assign base_op = s.base_opacity | default: 15
   assign dim = base_op | divided_by: 100.0
-  assign hl_bg = s.highlight_bg | default: '#ffffff'
-  assign hl_tx = s.highlight_text | default: '#111111'
+-%}
+{%- capture hl_bg -%}{% render 'scheme-color', color: s.highlight_bg, fallback: 'var(--color-heading)' %}{%- endcapture -%}
+{%- capture hl_tx -%}{% render 'scheme-color', color: s.highlight_text, fallback: 'var(--color-background)' %}{%- endcapture -%}
+{%- liquid
+  assign s = section.settings
   assign hl_rad = s.highlight_radius | default: 6
 
   assign pt = s.padding_top | default: 0
@@ -42,11 +46,11 @@
   assign dimc = s.reveal_dim_color
 
   assign txc = 'var(--color-heading)'
-  if s.custom_text_color
-    assign txc = s.text_color | default: '#FFFFFF'
+  if s.custom_text_color and s.text_color != blank and s.text_color.alpha != 0
+    assign txc = s.text_color
   endif
 
-  assign fw = 400
+  assign fw = 'var(--body-weight, 400)'
   if s.bold
     assign fw = 700
   endif
@@ -148,6 +152,8 @@
     line-height: {{ lh }};
     {%- if fstyle == 'mono' %}
     font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    {%- else %}
+    font-family: var(--heading-font, inherit);
     {%- endif %}
     {%- if s.uppercase %}
     text-transform: uppercase;
@@ -250,7 +256,8 @@
     text-decoration: underline;
     text-decoration-thickness: 1px;
     text-underline-offset: 0.35em;
-    transition: opacity 0.25s ease;
+    opacity: 1;
+    transition: opacity var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease);
   }
 
   #shopify-section-{{ uid }} a.stw__btn:hover {
@@ -284,7 +291,7 @@
   }
 {% comment %}{% endcomment %}</style>
 
-<scroll-text-banner class="stw-{{ uid }} color-{{ scheme }}" data-offset="{{ sticky_off }}">
+<scroll-text-banner class="stw-{{ uid }} color-{{ scheme }} gradient" data-offset="{{ sticky_off }}">
   <div class="stw__viewport">
     <div class="stw__inner">
       <div class="stw__text">
@@ -444,10 +451,12 @@
     /* Theme editor: section:load replaces the section's DOM, which re-runs
        connectedCallback on the fresh element. The explicit refresh below is a
        safety net in case the editor morphs the DOM instead of replacing it. */
-    document.addEventListener('shopify:section:load', (event) => {
-      const el = event.target && event.target.querySelector('scroll-text-banner');
+    const onSectionLoad = (event) => {
+      const el = event.target && event.target.querySelector && event.target.querySelector('scroll-text-banner');
       if (el && typeof el.refresh === 'function') el.refresh();
-    });
+    };
+    document.addEventListener('shopify:section:load', onSectionLoad);
+    document.addEventListener('storelib:section-load', onSectionLoad);
   })();
 {% comment %}{% endcomment %}</script>
 
@@ -815,12 +824,6 @@
         "content": "Layout"
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "scheme-1"
-      },
-      {
         "type": "select",
         "id": "width",
         "label": "Section width",
@@ -845,6 +848,12 @@
         ]
       },
       {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
         "type": "range",
         "id": "scroll_length",
         "label": "Scroll length",
@@ -852,15 +861,13 @@
         "max": 400,
         "step": 10,
         "unit": "vh",
-        "default": 250,
-        "info": "How far the visitor scrolls while the section stays pinned."
+        "default": 250
       },
       {
         "type": "checkbox",
         "id": "fit_content_d",
         "label": "Fit height to text (desktop)",
-        "default": false,
-        "info": "The banner hugs the text instead of filling the screen — no empty space above or below."
+        "default": false
       },
       {
         "type": "range",
@@ -871,7 +878,6 @@
         "step": 5,
         "unit": "vh",
         "default": 100,
-        "info": "Height of the visible pinned banner. 100 fills the screen.",
         "visible_if": "{{ section.settings.fit_content_d == false }}"
       },
       {
@@ -900,7 +906,7 @@
         "step": 4,
         "unit": "px",
         "default": 0,
-        "info": "Offsets the pinned stage from the top of the screen. Useful when the store has a sticky header."
+        "info": "Height of a sticky header"
       },
       {
         "type": "header",
@@ -914,8 +920,7 @@
         "max": 120,
         "step": 2,
         "unit": "px",
-        "default": 0,
-        "info": "Spaces the text block within the pinned full-height stage."
+        "default": 0
       },
       {
         "type": "range",
@@ -1031,13 +1036,12 @@
       {
         "type": "range",
         "id": "base_opacity",
-        "label": "Unrevealed word opacity",
+        "label": "Unrevealed opacity",
         "min": 5,
         "max": 50,
         "step": 5,
         "unit": "%",
-        "default": 15,
-        "info": "Words start at this opacity and light up to full as you scroll."
+        "default": 15
       },
       {
         "type": "range",
@@ -1047,8 +1051,7 @@
         "max": 0.6,
         "step": 0.1,
         "unit": "s",
-        "default": 0.3,
-        "info": "How long each word takes to ease in once the scroll reaches it."
+        "default": 0.3
       },
       {
         "type": "header",
@@ -1058,21 +1061,18 @@
         "type": "checkbox",
         "id": "custom_text_color",
         "label": "Custom text color",
-        "default": false,
-        "info": "Override the color scheme's heading color for the un-highlighted text."
+        "default": false
       },
       {
         "type": "color",
         "id": "text_color",
         "label": "Text color",
-        "default": "#FFFFFF",
         "visible_if": "{{ section.settings.custom_text_color }}"
       },
       {
         "type": "color",
         "id": "reveal_dim_color",
-        "label": "Un-revealed word color",
-        "info": "Optional. Leave blank to keep the text color and fade with the opacity above."
+        "label": "Unrevealed color"
       },
       {
         "type": "header",
@@ -1081,15 +1081,12 @@
       {
         "type": "color",
         "id": "highlight_bg",
-        "label": "Highlight background",
-        "default": "#ffffff",
-        "info": "Bold phrases in the text render as pills with this background."
+        "label": "Highlight background"
       },
       {
         "type": "color",
         "id": "highlight_text",
-        "label": "Highlight text",
-        "default": "#111111"
+        "label": "Highlight text"
       },
       {
         "type": "range",
