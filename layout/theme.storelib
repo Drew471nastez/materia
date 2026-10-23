@@ -793,22 +793,29 @@
             }
           }
         }
-        var lastScan = 0, scanTimer = 0;
+        var lastScan = 0, scanTimer = 0, settleScan = 0, finalScan = 0;
         function queueScan() {
+          if (document.hidden) return;
           if (scanTimer) return;
           var wait = Math.max(0, 500 - (Date.now() - lastScan));
           scanTimer = setTimeout(function () {
             scanTimer = 0; lastScan = Date.now();
             (window.requestAnimationFrame || setTimeout)(scan);
-            // A second look shortly after, for elements that just came into view.
-            setTimeout(function () { (window.requestAnimationFrame || setTimeout)(scan); }, 1000);
-            setTimeout(function () { (window.requestAnimationFrame || setTimeout)(scan); }, 2800);
+            // Keep only two settling checks, not two more for every scroll tick.
+            clearTimeout(settleScan); clearTimeout(finalScan);
+            settleScan = setTimeout(function () { if (!document.hidden) requestAnimationFrame(scan); }, 1000);
+            finalScan = setTimeout(function () { if (!document.hidden) requestAnimationFrame(scan); }, 2800);
           }, wait);
         }
         addEventListener('scroll', queueScan, { passive: true });
         addEventListener('resize', queueScan, { passive: true });
         addEventListener('load', queueScan);
         addEventListener('pageshow', queueScan);
+        addEventListener('pagehide', function () {
+          clearTimeout(scanTimer); clearTimeout(settleScan); clearTimeout(finalScan);
+          scanTimer = settleScan = finalScan = 0;
+        });
+        document.addEventListener('visibilitychange', function () { if (!document.hidden) queueScan(); });
         document.addEventListener('DOMContentLoaded', function () { setTimeout(queueScan, 1500); });
 
         /* (3) */

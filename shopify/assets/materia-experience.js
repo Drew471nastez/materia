@@ -21,17 +21,24 @@
   });
   window.addEventListener('pageshow', clearNavPending);
   function syncButtons(scope = document) {
+    const select = selector => [
+      ...(scope.matches?.(selector) ? [scope] : []),
+      ...scope.querySelectorAll(selector),
+    ];
+    const attr = (node, name, value) => {
+      if (node.getAttribute(name) !== value) node.setAttribute(name, value);
+    };
     const purchase = '.product-detail__buy-buttons :is(button[name="add"], .shopify-payment-button__button:not(.shopify-payment-button__button--branded)), .product-detail__information :is(.btn-primary, .btn-secondary, .btn-outline, [data-sl-button]):not(.btn-reset):not(.icon-btn):not(.quantity__button), .product-item__button-submit, .footer__newsletter button[type="submit"], #minicart_wrapper .cart__addon-content :is(.btn-save, .coupon-apply, .add-giftwrap, .btn-cancel), #minicart_wrapper .drawer-bottom :is(.btn-primary, .btn-outline, .btn-secondary)';
     const shared = '.shopify-section :is(a, button, input[type="submit"]):is(.btn-primary, .btn-secondary, .btn-outline):not(.btn-reset):not(.icon-btn):not(.btn-icon--circle)';
-    scope.querySelectorAll(purchase + ', ' + shared).forEach(button => {
+    select(purchase + ', ' + shared).forEach(button => {
       const role = button.dataset.themeButton || (button.matches('.shopify-payment-button__button, .btn-secondary, .btn-outline, .btn-cancel') ? 'secondary' : 'primary');
-      button.setAttribute('data-theme-button', role);
-      button.setAttribute('data-sl-button', '');
+      attr(button, 'data-theme-button', role);
+      attr(button, 'data-sl-button', '');
     });
-    document.querySelectorAll('[data-theme-button]').forEach(button => {
+    select('[data-theme-button]').forEach(button => {
       const role = button.getAttribute('data-theme-button');
       const extraHover = document.body?.dataset.slBtnHover;
-      button.dataset.buttonHover = extraHover && extraHover !== 'theme' ? extraHover : (document.body?.dataset.btnHover || 'fade');
+      attr(button, 'data-button-hover', extraHover && extraHover !== 'theme' ? extraHover : (document.body?.dataset.btnHover || 'fade'));
       let wrapper = button.closest('[data-atc-appearance]');
       const sticky = button.closest('sticky-add-cart');
       if (sticky) {
@@ -39,12 +46,12 @@
         wrapper = source?.querySelector('[data-atc-appearance]') || wrapper;
         const original = wrapper?.querySelector(role === 'secondary' ? '.shopify-payment-button__button:not(.shopify-payment-button__button--branded)' : 'button[name="add"]');
         const weight = original && getComputedStyle(original).getPropertyValue('--mb-weight').trim();
-        if (weight) button.style.setProperty('--mb-weight', weight);
-        else button.style.removeProperty('--mb-weight');
+        if (weight && button.style.getPropertyValue('--mb-weight') !== weight) button.style.setProperty('--mb-weight', weight);
+        else if (!weight && button.style.getPropertyValue('--mb-weight')) button.style.removeProperty('--mb-weight');
       }
       const local = button.dataset.buttonLocalAppearance || wrapper?.dataset[role === 'secondary' ? 'buyAppearance' : 'atcAppearance'];
       const appearance = local && local !== 'theme' ? local : document.body?.getAttribute(role === 'secondary' ? 'data-btn-secondary-style' : 'data-btn-style');
-      button.setAttribute('data-button-appearance', appearance || (role === 'secondary' ? 'outline' : 'solid'));
+      attr(button, 'data-button-appearance', appearance || (role === 'secondary' ? 'outline' : 'solid'));
     });
   }
   /* Search opens from the header: --search-top is the header's bottom edge
@@ -62,19 +69,33 @@
     searchOpen = open;
   }).observe(document.documentElement, {attributes: true, attributeFilter: ['class']});
   addEventListener('resize', () => { if (searchOpen) searchTop(); }, {passive: true});
-  document.addEventListener('DOMContentLoaded', () => syncButtons());
-  document.addEventListener('storelib:section-load', () => syncButtons());
-  document.addEventListener('shopify:section:load', () => syncButtons());
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => syncButtons(), {once:true});
+  const sectionButtons = event => {
+    const id = event.detail?.sectionId;
+    const scope = event.target?.nodeType === 1 ? event.target : (id && document.getElementById('shopify-section-' + id));
+    syncButtons(scope || document);
+    // Sticky purchase bars may be portaled outside their source section.
+    if (scope?.matches?.('[data-atc-appearance]') || scope?.querySelector('[data-atc-appearance]')) {
+      document.querySelectorAll('sticky-add-cart').forEach(sticky => syncButtons(sticky));
+    }
+  };
+  document.addEventListener('storelib:section-load', sectionButtons);
+  document.addEventListener('shopify:section:load', sectionButtons);
   document.addEventListener('storelib:settings-change', () => {
     if (!window.__materiaThemeLive) requestAnimationFrame(() => syncButtons());
   });
   // theme-live applies settings in its own animation frame, after the original
   // Storelib event. Read appearance/effect attributes only once they are current.
-  document.addEventListener('materia:theme-applied', () => syncButtons());
+  document.addEventListener('materia:theme-applied', event => {
+    const changed = event.detail?.settings;
+    if (!changed || ['btn_style','btn_secondary_style','btn_hover_effect','storelib_button_hover_effect','btn_font_weight'].some(key => Object.prototype.hasOwnProperty.call(changed,key))) syncButtons();
+  });
   new MutationObserver(records => {
+    const scopes = new Set();
     for (const record of records) for (const node of record.addedNodes) {
-      if (node.nodeType === 1 && (node.matches('.shopify-payment-button__button') || node.querySelector('.shopify-payment-button__button'))) syncButtons(node.parentElement || document);
+      if (node.nodeType === 1 && (node.matches('.shopify-payment-button__button') || node.querySelector('.shopify-payment-button__button'))) scopes.add(node.parentElement || document);
     }
+    scopes.forEach(scope => { if (scope.isConnected) syncButtons(scope); });
   }).observe(document.documentElement, {childList: true, subtree: true});
   syncButtons();
   // Give native and Storelib-managed forms immediate feedback without replacing
@@ -124,8 +145,9 @@
     if (submitter?.matches?.('[data-requires-terms]') && submitter.disabled) e.preventDefault();
   }, true);
   const refresh = () => { syncTerms(); };
-  document.addEventListener('cart:updated', () => syncButtons());
-  document.addEventListener('materia:cart-drawer-updated', () => syncButtons());
+  const drawerButtons = () => syncButtons(document.querySelector('#minicart_wrapper, cart-notification, cart-drawer') || document);
+  document.addEventListener('cart:updated', drawerButtons);
+  document.addEventListener('materia:cart-drawer-updated', drawerButtons);
   document.addEventListener('DOMContentLoaded', refresh);
   document.addEventListener('cart:refresh', refresh);
   document.addEventListener('cart:updated', refresh);

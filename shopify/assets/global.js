@@ -2,13 +2,17 @@
 "use-strict";
 var BlsLazyloadImg = (function () {
   return {
-    init: function () {
-      this.lazyReady();
+    init: function (scope = document) {
+      this.lazyReady(scope);
     },
-    lazyReady: function () {
+    lazyReady: function (scope = document) {
+      const images = selector => [
+        ...(scope.matches?.(selector) ? [scope] : []),
+        ...scope.querySelectorAll(selector),
+      ];
       // Immediately clear loading state on already-cached images (prevents
       // gray-thumbnail flash when cart re-renders images that are in cache).
-      document.querySelectorAll(".bls-image-js img.bls-loading-image").forEach((img) => {
+      images(".bls-image-js img.bls-loading-image").forEach((img) => {
         if (img.complete) {
           img.closest("motion-element")?.classList.remove("bls-loading-image");
           img.classList.remove("bls-loading-image");
@@ -49,14 +53,14 @@ var BlsLazyloadImg = (function () {
           },
           { rootMargin: "10px" }
         );
-        document.querySelectorAll(".bls-image-js img").forEach((img) => {
+        images(".bls-image-js img").forEach((img) => {
           const source = `${img.getAttribute('src')}|${img.getAttribute('srcset')}`;
           if (this._observedImages.get(img) === source || img.complete) return;
           this._observedImages.set(img, source);
           this._imageObserver.observe(img);
         });
       } else {
-        document.querySelectorAll('.bls-image-js .bls-loading-image').forEach(img => {
+        images('.bls-image-js .bls-loading-image').forEach(img => {
           img.classList.remove('bls-loading-image');
           img.closest('motion-element')?.classList.remove('bls-loading-image');
         });
@@ -80,8 +84,8 @@ BlsLazyloadImg.init();
    unobserve targets after firing. Storefront is untouched (designMode only). */
 if (window.Shopify && Shopify.designMode) {
   ["shopify:section:load", "shopify:section:select"].forEach((evt) => {
-    document.addEventListener(evt, () => {
-      BlsLazyloadImg.init();
+    document.addEventListener(evt, event => {
+      BlsLazyloadImg.init(event.target?.querySelectorAll ? event.target : document);
       if (typeof initLazyloadItem === "function") initLazyloadItem();
     });
   });

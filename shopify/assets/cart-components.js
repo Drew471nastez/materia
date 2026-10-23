@@ -805,7 +805,7 @@ class CartNotification extends HTMLElement {
         try { if (this.__cartWatchdog) { clearTimeout(this.__cartWatchdog); this.__cartWatchdog = null; } } catch (_) {}
         try {
           if (typeof BlsLazyloadImg !== "undefined" && BlsLazyloadImg && BlsLazyloadImg.init) {
-            BlsLazyloadImg.init();
+            BlsLazyloadImg.init(this);
           }
         } catch (_) {}
         try { if (cart_item) cart_item.classList.remove("loading"); } catch (_) {}
@@ -892,9 +892,9 @@ class CartNotification extends HTMLElement {
         document.documentElement.classList.add("open-drawer", "open-minicart");
       }
 
-      // The image scan walks every product image on the page; run it after the
-      // frame that starts the slide so the drawer moves at once.
-      requestAnimationFrame(() => window.BlsLazyloadImg?.init?.());
+      // Initialize only the drawer's images after its entrance starts; leave
+      // the rest of the storefront untouched.
+      requestAnimationFrame(() => window.BlsLazyloadImg?.init?.(this));
     } else {
       this.notification.querySelector("a").click();
     }
@@ -1040,7 +1040,7 @@ class BaseFetcher extends HTMLElement {
 
   initializeLazyLoading() {
     if (typeof BlsLazyloadImg !== 'undefined') {
-      BlsLazyloadImg.init();
+      BlsLazyloadImg.init(this);
     }
   }
 

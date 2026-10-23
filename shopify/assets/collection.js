@@ -471,7 +471,7 @@ var eventCollectionShopify = (function () {
           }
           if (typeof initLazyloadItem === 'function') initLazyloadItem();
           if (typeof BlsLazyloadImg !== 'undefined' && BlsLazyloadImg.init) {
-            BlsLazyloadImg.init();
+            BlsLazyloadImg.init(fresh_grid_list || document);
           }
           // Safety net — hydrate any <img> still holding a data-src/data-srcset
           // without a matching src. Runs after the browser paints so we don't
