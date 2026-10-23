@@ -9286,8 +9286,13 @@ class ProductWithBanner extends HTMLElement {
 
   waitForSlideSection() {
     const slideSection = this.querySelector("slide-section");
-    if (!slideSection || !slideSection.globalSlide) {
-      setTimeout(() => this.waitForSlideSection(), 100);
+    // No slider here, or it was removed: stop (this used to poll every 100ms
+    // for the life of the page). A slider that starts late (on the home page
+    // sliders wait for the first interaction) is checked less and less often.
+    if (!slideSection || !this.isConnected) return;
+    if (!slideSection.globalSlide) {
+      this._slideWait = Math.min((this._slideWait || 100) * 1.5, 1000);
+      setTimeout(() => this.waitForSlideSection(), this._slideWait);
       return;
     }
     slideSection.updateActiveBanner = () => {};

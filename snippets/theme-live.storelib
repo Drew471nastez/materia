@@ -2,9 +2,10 @@
 {%- comment -%}
   Materia Themes. Live preview of Theme settings in the builder. Every change
   is written as CSS variables on <html> (or one attribute on <body>) in a single
-  animation frame; nothing is measured and no page style is rebuilt. Colours
-  that have to win over each colour scheme go in one small sheet, rewritten
-  only when one of those colours changes.
+  animation frame; nothing is measured and no page style is rebuilt. Colour
+  schemes and the colours picked for every field or button share one
+  constructed sheet adopted after the page's own, rewritten only when one of
+  them changes: a colour drag touches no element.
 {%- endcomment -%}
 {%- liquid
   assign live_field_bg = ''
@@ -42,6 +43,10 @@
   var pending = {};
   var tweakTimer = 0;
   var liveSchemes = {};
+  var releaseTimer = 0;
+  /* Scheme ids in theme order: the first one is also the page's own (:root). */
+  var SCHEME_IDS = [{% for scheme in settings.color_schemes %}{{ scheme.id | json }}{% unless forloop.last %},{% endunless %}{% endfor %}];
+  SCHEME_IDS = SCHEME_IDS.filter(function (id) { return typeof id === 'string' && id; });
   var rtlHref = "{{ 'rtl.css' | asset_url }}";
   var state = {
     btn_shape: "{{ settings.btn_shape | default: 'rounded' }}",
@@ -97,21 +102,47 @@
     if (window.CSS && CSS.escape) return CSS.escape(String(value));
     return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
   }
-  function schemeSheet() {
-    var sheet = document.getElementById('sl-live-schemes');
-    if (!sheet) {
-      sheet = document.createElement('style');
-      sheet.id = 'sl-live-schemes';
-      document.head.appendChild(sheet);
-    }
+  /* Colour schemes, then the colours picked for every field or button, in
+     ONE constructed sheet adopted after every other sheet on the page. A drag
+     replaces its text once per frame: no element gets an inline style, no
+     <style> node changes (so the page's MutationObservers stay quiet), and
+     nothing is measured. Old browsers get one <style> at the end of <head>. */
+  var colourSheet = null;
+  var colourEl = null;
+  var lastColourCss = null;
+  function schemeCss() {
     var css = '';
+    var first = SCHEME_IDS.length ? SCHEME_IDS[0] : null;
     Object.keys(liveSchemes).forEach(function (id) {
       var vars = liveSchemes[id];
-      var declarations = Object.keys(vars).filter(function (key) { return vars[key] != null && vars[key] !== ''; })
+      var declarations = Object.keys(vars).filter(function (key) { return vars[key] != null && vars[key] !== '' && !/[;{}<]/.test(String(vars[key])); })
         .map(function (key) { return key + ':' + vars[key] + '!important'; }).join(';');
-      if (declarations) css += '.color-' + cssName(id) + '{' + declarations + '}';
+      if (declarations) css += (id === first ? ':root,' : '') + '.color-' + cssName(id) + '{' + declarations + '}';
     });
-    if (sheet.textContent !== css) sheet.textContent = css;
+    return css;
+  }
+  function writeColours() {
+    var css = schemeCss() + overrideCss();
+    if (css === lastColourCss) return;
+    lastColourCss = css;
+    if (colourSheet === null) {
+      colourSheet = false;
+      try { if ('adoptedStyleSheets' in document && typeof CSSStyleSheet === 'function') colourSheet = new CSSStyleSheet(); } catch (e) { colourSheet = false; }
+    }
+    if (colourSheet) {
+      try {
+        colourSheet.replaceSync(css);
+        var list = document.adoptedStyleSheets;
+        if (list.indexOf(colourSheet) < 0) document.adoptedStyleSheets = list.concat([colourSheet]);
+        return;
+      } catch (e) { colourSheet = false; }
+    }
+    if (!colourEl) {
+      colourEl = document.createElement('style');
+      colourEl.id = 'sl-live-colours';
+      document.head.appendChild(colourEl);
+    }
+    colourEl.textContent = css;
   }
   function fontFamily(value) {
     if (!value) return '';
@@ -169,16 +200,9 @@
       '--btn-link-hover-color': accent
     };
   }
-  /* Colours picked for every field or every button are written over each
-     colour scheme, so they live in a sheet (important, to beat the scheme
-     values this script paints inline). */
-  function overrideSheet() {
-    var sheet = document.getElementById('sl-live-overrides');
-    if (!sheet) {
-      sheet = document.createElement('style');
-      sheet.id = 'sl-live-overrides';
-      document.head.appendChild(sheet);
-    }
+  /* Colours picked for every field or every button, written over each colour
+     scheme: they follow the scheme rules in the same sheet, so they win. */
+  function overrideCss() {
     var all = ':root, body, [class*="color-"]';
     var css = '';
     var v = colour(state.field_background);
@@ -195,7 +219,7 @@
     if (v) css += all + '{--btn-primary-hover-color:' + v + ' !important;--btn-secondary-hover-color:' + v + ' !important;--btn-link-hover-color:' + v + ' !important}';
     v = colour(state.storelib_button_hover_border);
     if (v) css += all + '{--btn-primary-hover-border-color:' + v + ' !important;--btn-secondary-hover-border-color:' + v + ' !important}';
-    if (sheet.textContent !== css) sheet.textContent = css;
+    return css;
   }
   function setRtl(on) {
     root.setAttribute('dir', on ? 'rtl' : 'ltr');
@@ -212,7 +236,7 @@
     for (var i = 0; i < links.length; i++) links[i].disabled = !on;
   }
   function bodyData(name, value) {
-    if (document.body && value != null && value !== '') document.body.setAttribute(name, String(value));
+    if (document.body && value != null && value !== '' && document.body.getAttribute(name) !== String(value)) document.body.setAttribute(name, String(value));
   }
 
   function applySettings(s) {
@@ -332,31 +356,44 @@
     if (has(s, 'field_font_size')) set('--input-font-size', px(s.field_font_size));
     if (has(s, 'field_label_weight')) set('--input-label-weight', String(s.field_label_weight));
     if (Object.prototype.hasOwnProperty.call(s, 'storelib_input_border')) set('--input-border-color', colour(s.storelib_input_border));
+    var colours = false;
     for (var i = 0; i < SHEET_KEYS.length; i++) {
-      if (Object.prototype.hasOwnProperty.call(s, SHEET_KEYS[i])) { overrideSheet(); break; }
+      if (Object.prototype.hasOwnProperty.call(s, SHEET_KEYS[i])) { colours = true; break; }
     }
 
     /* Colour schemes */
     var schemes = s.color_schemes;
     if (schemes && typeof schemes === 'object') {
       var ids = Object.keys(schemes);
+      if (!SCHEME_IDS.length && ids.length) SCHEME_IDS = [ids[0]];
       for (var n = 0; n < ids.length; n++) {
         var varsForScheme = schemeVars(schemes[ids[n]]);
         if (!varsForScheme) continue;
         liveSchemes[ids[n]] = varsForScheme;
-        if (n === 0 || ids[n] === 'default') {
-          Object.keys(varsForScheme).forEach(function (key) { set(key, varsForScheme[key]); });
-        }
+        colours = true;
       }
-      schemeSheet();
     }
+    if (colours) writeColours();
+    return colours;
+  }
+
+  /* Once a colour is let go (or picked in one go), what reads painted colours
+     (the cart drawer's readable-text check) looks once. Never during a drag. */
+  function afterRelease() {
+    clearTimeout(releaseTimer);
+    releaseTimer = setTimeout(function () {
+      document.dispatchEvent(new CustomEvent('materia:cart-drawer-updated'));
+    }, 180);
   }
 
   document.addEventListener('storelib:settings-change', function (event) {
     var detail = event.detail || {};
     var changed = detail.settings || detail;
     if (!changed || typeof changed !== 'object') return;
+    var live = detail.live === true;
     for (var key in changed) if (Object.prototype.hasOwnProperty.call(changed, key)) pending[key] = changed[key];
+    if (live) clearTimeout(releaseTimer);
+    else pending.__release = true;
     if (!root.classList.contains('sl-live-tweak')) root.classList.add('sl-live-tweak');
     clearTimeout(tweakTimer);
     tweakTimer = setTimeout(function () { root.classList.remove('sl-live-tweak'); }, detail.live ? 400 : 250);
@@ -365,8 +402,12 @@
       frame = 0;
       var next = pending;
       pending = {};
-      applySettings(next);
-      document.dispatchEvent(new CustomEvent('materia:theme-applied', {detail:{settings:next}}));
+      var release = next.__release;
+      delete next.__release;
+      if (applySettings(next) && release) afterRelease();
+      /* materia-experience re-reads the buttons only when the settings in
+         detail touch them, so a colour drag makes no one walk every button. */
+      document.dispatchEvent(new CustomEvent('materia:theme-applied', {detail: {settings: next}}));
     });
   });
 })();

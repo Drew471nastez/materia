@@ -100,7 +100,9 @@ function initializeScrollAnimationTrigger(root = document, editorEvent = false) 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => initializeScrollAnimationTrigger(), {once:true});
 else initializeScrollAnimationTrigger();
 
-['shopify:section:load', 'shopify:section:select', 'shopify:section:reorder'].forEach(name => {
+// storelib:section-load is the builder redrawing a section in place: it shows
+// at once, never replays its entrance.
+['shopify:section:load', 'storelib:section-load', 'shopify:section:select', 'shopify:section:reorder'].forEach(name => {
   document.addEventListener(name, event => initializeScrollAnimationTrigger(event.target, true));
 });
 document.addEventListener('shopify:section:unload', event => {
