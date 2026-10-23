@@ -29,6 +29,21 @@
       button.setAttribute('data-button-appearance', appearance || (role === 'secondary' ? 'outline' : 'solid'));
     });
   }
+  /* Search opens from the header: --search-top is the header's bottom edge
+     at the moment it opens (0 when the header is out of view). */
+  const searchTop = () => {
+    const header = document.querySelector('.section-header header.header, header.header');
+    const bottom = header ? header.getBoundingClientRect().bottom : 0;
+    const top = bottom > 0 && bottom < innerHeight * 0.6 ? Math.round(bottom) : 0;
+    document.documentElement.style.setProperty('--search-top', top + 'px');
+  };
+  let searchOpen = document.documentElement.classList.contains('open-search');
+  new MutationObserver(() => {
+    const open = document.documentElement.classList.contains('open-search');
+    if (open && !searchOpen) searchTop();
+    searchOpen = open;
+  }).observe(document.documentElement, {attributes: true, attributeFilter: ['class']});
+  addEventListener('resize', () => { if (searchOpen) searchTop(); }, {passive: true});
   document.addEventListener('DOMContentLoaded', () => syncButtons());
   document.addEventListener('storelib:section-load', () => syncButtons());
   document.addEventListener('shopify:section:load', () => syncButtons());
