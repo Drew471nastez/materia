@@ -1,0 +1,2547 @@
+<template compat="shopify">
+{%- assign fb_accessibility_field = 'accessibility.field' | t -%}
+{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- comment -%}
+  Materia Themes — Contact Form Simple
+  Clean, block-organized contact form. The form fields and contact info
+  rows are blocks, so the merchant can mix-and-match what's shown without
+  touching liquid. Two-column layout on desktop (form + info / image),
+  stacks on mobile. Submits via Shopify's contact form action — uses the
+  built-in form handling, success message, and error handling.
+
+  Block types:
+    - heading       : Section heading
+    - subheading    : Section subheading
+    - field         : One form field (name / email / phone / subject / textarea / etc.)
+    - submit        : The submit button
+    - info          : One contact info row (icon + label + value)
+    - side_image    : Optional image for the right (or left) column
+{%- endcomment -%}
+
+{%- liquid
+  assign st  = section.settings
+  assign sid = section.id
+  assign fields  = section.blocks | where: 'type', 'field'
+  assign infos   = section.blocks | where: 'type', 'info'
+  assign submits = section.blocks | where: 'type', 'submit'
+  assign side_image_block = nil
+  for b in section.blocks
+    if b.type == 'side_image' and side_image_block == nil
+      assign side_image_block = b
+    endif
+  endfor
+  assign align = st.header_align | default: 'center'
+  case align
+    when 'left'
+      assign flex_align = 'flex-start'
+    when 'right'
+      assign flex_align = 'flex-end'
+    else
+      assign flex_align = 'center'
+  endcase
+  assign side_pos = st.side_column_position | default: 'right'
+-%}
+
+<style>
+  /* Section isolation */
+  #shopify-section-{{ sid }} { isolation: isolate; position: relative; }
+  :where(#shopify-section-{{ sid }}) { font-family: var(--body-font, inherit); }
+  :where(#shopify-section-{{ sid }}) :is(h1, h2, h3, h4, h5, h6) { font-family: var(--heading-font, inherit); }
+  #shopify-section-{{ sid }} *, #shopify-section-{{ sid }} *:before, #shopify-section-{{ sid }} *:after { box-sizing: border-box; }
+
+  /* Margins */
+  #shopify-section-{{ sid }} {
+    margin-top: {{ st.section_margin_top_mobile | default: 0 }}px;
+    margin-bottom: {{ st.section_margin_bottom_mobile | default: 0 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} {
+      margin-top: {{ st.section_margin_top_desktop | default: 0 }}px;
+      margin-bottom: {{ st.section_margin_bottom_desktop | default: 0 }}px;
+    }
+  }
+  {%- if st.reset_spacing -%}
+    #shopify-section-{{ sid }} { margin-top: 0 !important; margin-bottom: 0 !important; }
+    #shopify-section-{{ sid }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif -%}
+
+  /* Outer */
+  #shopify-section-{{ sid }} .cfs {
+    background: {{ st.section_bg | default: '#FFFFFF' }} !important;
+    padding-top: {{ st.padding_top_mobile | default: 56 }}px;
+    padding-bottom: {{ st.padding_bottom_mobile | default: 56 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .cfs {
+      padding-top: {{ st.padding_top_desktop | default: 96 }}px;
+      padding-bottom: {{ st.padding_bottom_desktop | default: 96 }}px;
+    }
+  }
+
+  /* Section width */
+  #shopify-section-{{ sid }} .cfs__inner {
+    max-width: {{ st.section_max_width_mobile | default: 560 }}px;
+    margin-inline: auto;
+    padding-inline: 1.25rem;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .cfs__inner {
+      max-width: {{ st.section_max_width_tablet | default: 900 }}px;
+      padding-inline: 1.5rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    #shopify-section-{{ sid }} .cfs__inner {
+      max-width: {{ st.section_max_width_desktop | default: 1100 }}px;
+    }
+  }
+
+  /* Header */
+  #shopify-section-{{ sid }} .cfs__header {
+    display: flex;
+    flex-direction: column;
+    align-items: {{ flex_align }};
+    text-align: {{ align }};
+    margin: 0 auto {{ st.gap_subheading_content_mobile | default: 32 }}px;
+    gap: {{ st.heading_sub_gap_mobile | default: 8 }}px;
+    width: 100%;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .cfs__header {
+      margin-bottom: {{ st.gap_subheading_content | default: 56 }}px;
+      gap: {{ st.heading_sub_gap_desktop | default: 14 }}px;
+    }
+  }
+  /* Margin reset on header DESCENDANTS only */
+  #shopify-section-{{ sid }} .cfs__header > *,
+  #shopify-section-{{ sid }} .cfs__header :is(h1, h2, h3, h4, h5, h6, p, div, span) {
+    margin-block: 0 !important;
+    margin-block-start: 0 !important;
+    margin-block-end: 0 !important;
+    padding-block: 0 !important;
+  }
+
+  /* Content grid */
+  #shopify-section-{{ sid }} .cfs__grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: {{ st.col_gap_mobile | default: 32 }}px;
+  }
+  @media (min-width: 900px) {
+    #shopify-section-{{ sid }} .cfs__grid {
+      grid-template-columns: {{ st.form_col_ratio | default: '3fr' }} {{ st.side_col_ratio | default: '2fr' }};
+      gap: {{ st.col_gap_desktop | default: 48 }}px;
+      align-items: start;
+    }
+    {%- if side_pos == 'left' -%}
+      #shopify-section-{{ sid }} .cfs__form-col { order: 2; }
+      #shopify-section-{{ sid }} .cfs__side-col { order: 1; }
+    {%- endif -%}
+  }
+
+  /* Form */
+  #shopify-section-{{ sid }} .cfs__form {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: {{ st.field_gap | default: 16 }}px;
+    background: {{ st.form_bg | default: 'transparent' }};
+    {% if st.form_bg != blank and st.form_bg != 'transparent' and st.form_bg != 'rgba(0,0,0,0)' %}
+    padding: {{ st.form_padding | default: 32 }}px;
+    border-radius: {{ st.form_radius | default: 16 }}px;
+    {% endif %}
+  }
+  #shopify-section-{{ sid }} .cfs__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  #shopify-section-{{ sid }} .cfs__field--half {
+    /* Used for grouped half-width fields on desktop */
+  }
+  @media (min-width: 600px) {
+    #shopify-section-{{ sid }} .cfs__field-pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: {{ st.field_gap | default: 16 }}px;
+    }
+  }
+  #shopify-section-{{ sid }} .cfs__label {
+    font-size: {{ st.label_size | default: 14 }}px;
+    font-weight: {{ st.label_weight | default: 600 }};
+    color: {{ st.label_color | default: '#0F172A' }};
+    margin: 0 !important;
+  }
+  #shopify-section-{{ sid }} .cfs__label-required { color: {{ st.required_color | default: '#EF4444' }}; margin-left: 2px; }
+
+  #shopify-section-{{ sid }} .cfs__input,
+  #shopify-section-{{ sid }} .cfs__textarea,
+  #shopify-section-{{ sid }} .cfs__select {
+    width: 100%;
+    border: {{ st.input_border_width | default: 1 }}px solid {{ st.input_border_color | default: '#E2E8F0' }};
+    background: {{ st.input_bg | default: '#FFFFFF' }};
+    color: {{ st.input_text_color | default: '#0F172A' }};
+    padding: {{ st.input_padding_y | default: 14 }}px {{ st.input_padding_x | default: 16 }}px;
+    border-radius: {{ st.input_radius | default: 10 }}px;
+    font-size: {{ st.input_size | default: 16 }}px;
+    line-height: 1.4;
+    font-family: inherit;
+    transition: border-color .2s ease, box-shadow .2s ease;
+    outline: none;
+  }
+  #shopify-section-{{ sid }} .cfs__input::placeholder,
+  #shopify-section-{{ sid }} .cfs__textarea::placeholder {
+    color: {{ st.placeholder_color | default: '#94A3B8' }};
+  }
+  #shopify-section-{{ sid }} .cfs__input:focus,
+  #shopify-section-{{ sid }} .cfs__textarea:focus,
+  #shopify-section-{{ sid }} .cfs__select:focus {
+    border-color: {{ st.input_focus_color | default: '#0F172A' }};
+    box-shadow: 0 0 0 3px {{ st.input_focus_color | default: '#0F172A' }}22;
+  }
+  #shopify-section-{{ sid }} .cfs__textarea {
+    min-height: {{ st.textarea_min_height | default: 140 }}px;
+    resize: vertical;
+  }
+
+  /* Submit button */
+  #shopify-section-{{ sid }} .cfs__submit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: {%- if st.submit_full_width -%}100%{%- else -%}auto{%- endif -%};
+    background: {{ st.submit_bg | default: '#0F172A' }};
+    color: {{ st.submit_color | default: '#FFFFFF' }};
+    border: 0;
+    padding: {{ st.submit_pad_y | default: 16 }}px {{ st.submit_pad_x | default: 32 }}px;
+    border-radius: {{ st.submit_radius | default: 100 }}px;
+    font-weight: 700;
+    font-size: {{ st.submit_size | default: 16 }}px;
+    cursor: pointer;
+    transition: background .2s ease, transform .15s ease;
+    align-self: {{ flex_align }};
+    font-family: inherit;
+  }
+  #shopify-section-{{ sid }} .cfs__submit:hover {
+    background: {{ st.submit_bg_hover | default: '#1F2937' }};
+    transform: translateY(-1px);
+  }
+
+  /* Form messages */
+  #shopify-section-{{ sid }} .cfs__success,
+  #shopify-section-{{ sid }} .cfs__errors {
+    padding: 14px 18px;
+    border-radius: 10px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  #shopify-section-{{ sid }} .cfs__success {
+    background: #DCFCE7;
+    color: #15803D;
+    border: 1px solid #BBF7D0;
+  }
+  #shopify-section-{{ sid }} .cfs__errors {
+    background: #FEE2E2;
+    color: #B91C1C;
+    border: 1px solid #FECACA;
+  }
+  #shopify-section-{{ sid }} .cfs__errors ul { margin: 6px 0 0; padding-left: 20px; }
+
+  /* Side column */
+  #shopify-section-{{ sid }} .cfs__side {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  #shopify-section-{{ sid }} .cfs__side-image {
+    width: 100%;
+    height: auto;
+    border-radius: {{ st.side_image_radius | default: 16 }}px;
+    object-fit: cover;
+    display: block;
+  }
+
+  /* Info row */
+  #shopify-section-{{ sid }} .cfs__info {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    gap: 14px;
+    align-items: center;
+    padding: 14px 0;
+    border-top: 1px solid {{ st.info_border_color | default: '#E2E8F0' }};
+  }
+  #shopify-section-{{ sid }} .cfs__info:first-of-type { border-top: 0; padding-top: 0; }
+  #shopify-section-{{ sid }} .cfs__info-icon {
+    width: 40px; height: 40px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: {{ st.info_icon_bg | default: '#F1F5F9' }};
+    color: {{ st.info_icon_color | default: '#0F172A' }};
+  }
+  #shopify-section-{{ sid }} .cfs__info-icon svg { width: 20px; height: 20px; }
+  #shopify-section-{{ sid }} .cfs__info-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: {{ st.info_label_color | default: '#64748B' }};
+    font-weight: 600;
+    line-height: 1.2;
+  }
+  #shopify-section-{{ sid }} .cfs__info-value {
+    font-size: 16px;
+    color: {{ st.info_value_color | default: '#0F172A' }};
+    font-weight: 500;
+    line-height: 1.4;
+  }
+  #shopify-section-{{ sid }} .cfs__info-value a { color: inherit; text-decoration: none; }
+  #shopify-section-{{ sid }} .cfs__info-value a:hover { text-decoration: underline; }
+
+  /* Show / hide by device */
+  {%- if st.show_section_on == 'mobile' -%}
+    #shopify-section-{{ sid }} .cfs { display: none; }
+    @media (max-width: 767px) { #shopify-section-{{ sid }} .cfs { display: block; } }
+  {%- elsif st.show_section_on == 'desktop' -%}
+    #shopify-section-{{ sid }} .cfs { display: none; }
+    @media (min-width: 768px) { #shopify-section-{{ sid }} .cfs { display: block; } }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+
+<section class="cfs" id="cfs-{{ sid }}">
+  <div class="cfs__inner">
+
+    {%- comment -%}========== HEADER ==========={%- endcomment -%}
+    {%- assign has_header = false -%}
+    {%- for b in section.blocks -%}
+      {%- if b.type == 'heading' or b.type == 'subheading' -%}
+        {%- assign has_header = true -%}
+      {%- endif -%}
+    {%- endfor -%}
+
+    {%- if has_header -%}
+      <div class="cfs__header">
+        {%- for block in section.blocks -%}
+          {%- assign bs = block.settings -%}
+          {%- case block.type -%}
+
+            {%- when 'heading' -%}
+              {%- if bs.text != blank -%}
+                <{{ bs.tag | default: 'h2' }} id="block-{{ block.id }}" class="cfs__heading" {{ block.shopify_attributes }}>{{ bs.text }}</{{ bs.tag | default: 'h2' }}>
+                <style>
+                  #shopify-section-{{ sid }} #block-{{ block.id }} {
+                    margin: 0 !important;
+                    margin-block: 0 !important;
+                    padding: 0 !important;
+                    color: {{ bs.color | default: '#0F172A' }} !important;
+                    font-weight: {{ bs.weight | default: 700 }};
+                    line-height: {{ bs.line_height | default: 1.2 }};
+                    font-size: {{ bs.size_mobile | default: 30 }}px !important;
+                  }
+                  @media (min-width: 768px) {
+                    #shopify-section-{{ sid }} #block-{{ block.id }} { font-size: {{ bs.size_desktop | default: 44 }}px !important; }
+                  }
+{% comment %}{% endcomment %}                </style>
+              {%- endif -%}
+
+            {%- when 'subheading' -%}
+              {%- if bs.text != blank -%}
+                <div id="block-{{ block.id }}" class="cfs__sub" {{ block.shopify_attributes }}>{{ bs.text }}</div>
+                <style>
+                  #shopify-section-{{ sid }} #block-{{ block.id }} {
+                    margin: 0 !important;
+                    margin-block: 0 !important;
+                    padding: 0 !important;
+                    color: {{ bs.color | default: '#475569' }} !important;
+                    font-size: {{ bs.size | default: 16 }}px;
+                    line-height: 1.5;
+                    max-width: {{ bs.max_width | default: 580 }}px;
+                  }
+                  #shopify-section-{{ sid }} #block-{{ block.id }} > * { margin: 0 !important; padding: 0 !important; }
+{% comment %}{% endcomment %}                </style>
+              {%- endif -%}
+
+          {%- endcase -%}
+        {%- endfor -%}
+      </div>
+    {%- endif -%}
+
+    {%- comment -%}========== TWO-COLUMN GRID ==========={%- endcomment -%}
+    <div class="cfs__grid">
+
+      {%- comment -%}---- FORM COLUMN ----{%- endcomment -%}
+      <div class="cfs__form-col">
+        {%- assign form_id = 'cfs-form-' | append: sid -%}
+        {%- form 'contact', id: form_id, class: 'cfs__form' -%}
+          {%- if form.posted_successfully? -%}
+            <div class="cfs__success" role="status">{{ st.success_message | default: 'Thanks for reaching out — we will get back to you shortly.' }}</div>
+          {%- endif -%}
+          {%- if form.errors -%}
+            <div class="cfs__errors" role="alert">
+              <strong>{{ 'templates.contact.form.error_heading' | t | default: 'Please fix the following:' }}</strong>
+              <ul>
+                {%- for field in form.errors -%}
+                  <li>{{ form.errors.messages[field] }}</li>
+                {%- endfor -%}
+              </ul>
+            </div>
+          {%- endif -%}
+
+          {%- assign field_count = fields | size -%}
+          {%- if field_count == 0 -%}
+            {%- comment -%} Default fallback fields when no field blocks exist {%- endcomment -%}
+            <div class="cfs__field-pair">
+              <div class="cfs__field">
+                <label class="cfs__label" for="cfs-name-{{ sid }}">{{ 'accessibility.name' | t }}</label>
+                <input class="cfs__input" type="text" id="cfs-name-{{ sid }}" name="contact[Name]" placeholder="{{ 'accessibility.your_name' | t }}" autocomplete="name">
+              </div>
+              <div class="cfs__field">
+                <label class="cfs__label" for="cfs-email-{{ sid }}">{{ 'accessibility.email' | t }} <span class="cfs__label-required">*</span></label>
+                <input class="cfs__input" type="email" id="cfs-email-{{ sid }}" name="contact[email]" placeholder="you@example.com" autocomplete="email" required>
+              </div>
+            </div>
+            <div class="cfs__field">
+              <label class="cfs__label" for="cfs-msg-{{ sid }}">{{ 'accessibility.message' | t }} <span class="cfs__label-required">*</span></label>
+              <textarea class="cfs__textarea" id="cfs-msg-{{ sid }}" name="contact[body]" placeholder="{{ 'accessibility.how_can_we_help' | t }}" required></textarea>
+            </div>
+            {%- assign send_fallback = 'accessibility.send_message' | t -%}
+            <button type="submit" class="cfs__submit">{{ st.submit_label | default: send_fallback }}</button>
+          {%- else -%}
+            {%- comment -%} Render configured field blocks {%- endcomment -%}
+            {%- assign pair_open = false -%}
+            {%- for fb in fields -%}
+              {%- assign fs = fb.settings -%}
+              {%- assign id_attr = 'cfs-' | append: sid | append: '-' | append: fb.id -%}
+              {%- assign field_name = fs.name | default: fs.label | default: fb_accessibility_field -%}
+              {%- assign attr_name = 'contact[' | append: field_name | append: ']' -%}
+              {%- if fs.field_type == 'email' -%}
+                {%- assign attr_name = 'contact[email]' -%}
+              {%- elsif fs.field_type == 'textarea' -%}
+                {%- assign attr_name = 'contact[body]' -%}
+              {%- endif -%}
+
+              {%- if fs.half_width and fs.field_type != 'textarea' -%}
+                {%- unless pair_open -%}<div class="cfs__field-pair">{%- assign pair_open = true -%}{%- endunless -%}
+              {%- else -%}
+                {%- if pair_open -%}</div>{%- assign pair_open = false -%}{%- endif -%}
+              {%- endif -%}
+
+              <div class="cfs__field" id="block-{{ fb.id }}" {{ fb.shopify_attributes }}>
+                {%- if fs.label != blank -%}
+                  <label class="cfs__label" for="{{ id_attr }}">{{ fs.label }}{% if fs.required %} <span class="cfs__label-required">*</span>{% endif %}</label>
+                {%- endif -%}
+                {%- case fs.field_type -%}
+                  {%- when 'textarea' -%}
+                    <textarea class="cfs__textarea" id="{{ id_attr }}" name="{{ attr_name }}" placeholder="{{ fs.placeholder | escape }}" {% if fs.required %}required{% endif %}></textarea>
+                  {%- when 'email' -%}
+                    <input class="cfs__input" type="email" id="{{ id_attr }}" name="{{ attr_name }}" placeholder="{{ fs.placeholder | escape }}" autocomplete="email" {% if fs.required %}required{% endif %}>
+                  {%- when 'tel' -%}
+                    <input class="cfs__input" type="tel" id="{{ id_attr }}" name="{{ attr_name }}" placeholder="{{ fs.placeholder | escape }}" autocomplete="tel" {% if fs.required %}required{% endif %}>
+                  {%- when 'select' -%}
+                    {%- assign options = fs.options | default: '' | split: ',' -%}
+                    <select class="cfs__select" id="{{ id_attr }}" name="{{ attr_name }}" {% if fs.required %}required{% endif %}>
+                      {%- if fs.placeholder != blank -%}<option value="">{{ fs.placeholder }}</option>{%- endif -%}
+                      {%- for opt in options -%}
+                        {%- assign trimmed = opt | strip -%}
+                        <option value="{{ trimmed | escape }}">{{ trimmed }}</option>
+                      {%- endfor -%}
+                    </select>
+                  {%- else -%}
+                    <input class="cfs__input" type="text" id="{{ id_attr }}" name="{{ attr_name }}" placeholder="{{ fs.placeholder | escape }}" {% if fs.required %}required{% endif %}>
+                {%- endcase -%}
+              </div>
+            {%- endfor -%}
+            {%- if pair_open -%}</div>{%- endif -%}
+
+            {%- assign send_fallback2 = 'accessibility.send_message' | t -%}
+            {%- if submits.size > 0 -%}
+              {%- for sb in submits -%}
+                <button type="submit" class="cfs__submit" id="block-{{ sb.id }}" {{ sb.shopify_attributes }}>{{ sb.settings.label | default: send_fallback2 }}</button>
+              {%- endfor -%}
+            {%- else -%}
+              <button type="submit" class="cfs__submit">{{ st.submit_label | default: send_fallback2 }}</button>
+            {%- endif -%}
+          {%- endif -%}
+        {%- endform -%}
+      </div>
+
+      {%- comment -%}---- SIDE COLUMN ----{%- endcomment -%}
+      {%- if infos.size > 0 or side_image_block -%}
+        <div class="cfs__side-col">
+          <div class="cfs__side">
+            {%- if side_image_block and side_image_block.settings.image -%}
+              <img class="cfs__side-image"
+                   src="{{ side_image_block.settings.image | image_url: width: 1000 }}"
+                   alt="{{ side_image_block.settings.alt | default: '' | escape }}"
+                   loading="lazy"
+                   width="{{ side_image_block.settings.image.width }}"
+                   height="{{ side_image_block.settings.image.height }}"
+                   {{ side_image_block.shopify_attributes }}>
+            {%- endif -%}
+
+            {%- if infos.size > 0 -%}
+              <div class="cfs__info-list">
+                {%- for inf in infos -%}
+                  {%- assign is = inf.settings -%}
+                  <div class="cfs__info" id="block-{{ inf.id }}" {{ inf.shopify_attributes }}>
+                    <span class="cfs__info-icon">
+                      {%- case is.icon -%}
+                        {%- when 'mail' -%}
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="2 6 12 13 22 6"/></svg>
+                        {%- when 'phone' -%}
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.33 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                        {%- when 'pin' -%}
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 7-8 12-8 12s-8-5-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                        {%- when 'clock' -%}
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        {%- when 'message' -%}
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        {%- else -%}
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>
+                      {%- endcase -%}
+                    </span>
+                    {%- comment -%}
+                      Resolve the displayed value & link with smart defaults
+                      from Shopify's Store Information when the section block
+                      leaves them blank.
+                    {%- endcomment -%}
+                    {%- assign info_value = is.value -%}
+                    {%- assign info_link  = is.link -%}
+                    {%- if info_value == blank -%}
+                      {%- case is.icon -%}
+                        {%- when 'mail',    'message' -%}{%- assign info_value = shop.email -%}
+                        {%- when 'phone' -%}{%- assign info_value = shop.phone | default: shop.address.phone -%}
+                        {%- when 'pin' -%}{%- assign info_value = shop.address.summary -%}
+                      {%- endcase -%}
+                    {%- endif -%}
+                    {%- if info_link == blank and info_value != blank -%}
+                      {%- case is.icon -%}
+                        {%- when 'mail',    'message' -%}{%- assign info_link = 'mailto:' | append: info_value -%}
+                        {%- when 'phone' -%}{%- assign cleaned = info_value | remove: ' ' | remove: '(' | remove: ')' | remove: '-' -%}{%- assign info_link = 'tel:' | append: cleaned -%}
+                      {%- endcase -%}
+                    {%- endif -%}
+                    <div>
+                      {%- if is.label != blank -%}
+                        <div class="cfs__info-label">{{ is.label }}</div>
+                      {%- endif -%}
+                      {%- if info_value != blank -%}
+                        <div class="cfs__info-value">
+                          {%- if info_link != blank -%}<a href="{{ info_link }}">{{ info_value }}</a>{%- else -%}{{ info_value }}{%- endif -%}
+                        </div>
+                      {%- endif -%}
+                    </div>
+                  </div>
+                {%- endfor -%}
+              </div>
+            {%- endif -%}
+          </div>
+        </div>
+      {%- endif -%}
+
+    </div>
+  </div>
+</section>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "contact-form-simple",
+  "name": "Contact Form Simple",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "General"
+    },
+    {
+      "type": "select",
+      "id": "show_section_on",
+      "label": "Show section on",
+      "default": "all",
+      "options": [
+        {
+          "value": "all",
+          "label": "All Devices"
+        },
+        {
+          "value": "mobile",
+          "label": "Only Mobile"
+        },
+        {
+          "value": "desktop",
+          "label": "Only Desktop"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_4",
+      "label": "Section width"
+    },
+    {
+      "type": "range",
+      "id": "section_max_width_desktop",
+      "label": "Section width (desktop ≥1024px)",
+      "min": 600,
+      "max": 1500,
+      "step": 10,
+      "unit": "px",
+      "default": 960
+    },
+    {
+      "type": "range",
+      "id": "section_max_width_tablet",
+      "label": "Section width (tablet ≥768px)",
+      "min": 500,
+      "max": 1100,
+      "step": 10,
+      "unit": "px",
+      "default": 900
+    },
+    {
+      "type": "range",
+      "id": "section_max_width_mobile",
+      "label": "Section width (mobile)",
+      "min": 280,
+      "max": 800,
+      "step": 10,
+      "unit": "px",
+      "default": 560
+    },
+    {
+      "type": "header",
+      "id": "hdr_8",
+      "label": "Header layout"
+    },
+    {
+      "type": "select",
+      "id": "header_align",
+      "label": "Header alignment",
+      "default": "center",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ],
+      "info": "Aligns both heading, subheading, and submit button."
+    },
+    {
+      "type": "range",
+      "id": "heading_sub_gap_desktop",
+      "label": "Gap heading → subheading (desktop)",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 14
+    },
+    {
+      "type": "range",
+      "id": "heading_sub_gap_mobile",
+      "label": "Gap heading → subheading (mobile)",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 8
+    },
+    {
+      "type": "range",
+      "id": "gap_subheading_content",
+      "label": "Gap subheading → form (desktop)",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "gap_subheading_content_mobile",
+      "label": "Gap subheading → form (mobile)",
+      "min": 0,
+      "max": 120,
+      "step": 2,
+      "unit": "px",
+      "default": 32
+    },
+    {
+      "type": "header",
+      "id": "hdr_14",
+      "label": "Layout"
+    },
+    {
+      "type": "select",
+      "id": "side_column_position",
+      "label": "Side column position (desktop)",
+      "default": "right",
+      "options": [
+        {
+          "value": "right",
+          "label": "Right"
+        },
+        {
+          "value": "left",
+          "label": "Left"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "id": "form_col_ratio",
+      "label": "Form column ratio (desktop)",
+      "default": "3fr"
+    },
+    {
+      "type": "text",
+      "id": "side_col_ratio",
+      "label": "Side column ratio (desktop)",
+      "default": "2fr"
+    },
+    {
+      "type": "range",
+      "id": "col_gap_desktop",
+      "label": "Column gap (desktop)",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "default": 48
+    },
+    {
+      "type": "range",
+      "id": "col_gap_mobile",
+      "label": "Column gap (mobile)",
+      "min": 0,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 32
+    },
+    {
+      "type": "header",
+      "id": "hdr_20",
+      "label": "Form style"
+    },
+    {
+      "type": "color",
+      "id": "form_bg",
+      "label": "Form background"
+    },
+    {
+      "type": "range",
+      "id": "form_padding",
+      "label": "Form padding (when bg set)",
+      "min": 0,
+      "max": 60,
+      "step": 2,
+      "unit": "px",
+      "default": 32
+    },
+    {
+      "type": "range",
+      "id": "form_radius",
+      "label": "Form corner radius",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "field_gap",
+      "label": "Gap between fields",
+      "min": 4,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "header",
+      "id": "hdr_25",
+      "label": "Field style"
+    },
+    {
+      "type": "color",
+      "id": "label_color",
+      "label": "Label color",
+      "default": "#0F172A"
+    },
+    {
+      "type": "select",
+      "id": "label_weight",
+      "label": "Label weight",
+      "default": "600",
+      "options": [
+        {
+          "value": "400",
+          "label": "Normal"
+        },
+        {
+          "value": "500",
+          "label": "Medium"
+        },
+        {
+          "value": "600",
+          "label": "Semi-bold"
+        },
+        {
+          "value": "700",
+          "label": "Bold"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "label_size",
+      "label": "Label size",
+      "min": 11,
+      "max": 18,
+      "step": 1,
+      "unit": "px",
+      "default": 14
+    },
+    {
+      "type": "color",
+      "id": "required_color",
+      "label": "Required asterisk color",
+      "default": "#EF4444"
+    },
+    {
+      "type": "color",
+      "id": "input_bg",
+      "label": "Input background",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "color",
+      "id": "input_text_color",
+      "label": "Input text color",
+      "default": "#0F172A"
+    },
+    {
+      "type": "color",
+      "id": "placeholder_color",
+      "label": "Placeholder color",
+      "default": "#94A3B8"
+    },
+    {
+      "type": "color",
+      "id": "input_border_color",
+      "label": "Input border color",
+      "default": "#E2E8F0"
+    },
+    {
+      "type": "range",
+      "id": "input_border_width",
+      "label": "Input border width",
+      "min": 0,
+      "max": 4,
+      "step": 1,
+      "unit": "px",
+      "default": 1
+    },
+    {
+      "type": "color",
+      "id": "input_focus_color",
+      "label": "Input focus accent color",
+      "default": "#0F172A"
+    },
+    {
+      "type": "range",
+      "id": "input_radius",
+      "label": "Input corner radius",
+      "min": 0,
+      "max": 30,
+      "step": 1,
+      "unit": "px",
+      "default": 10
+    },
+    {
+      "type": "range",
+      "id": "input_padding_y",
+      "label": "Input padding y",
+      "min": 6,
+      "max": 24,
+      "step": 1,
+      "unit": "px",
+      "default": 14
+    },
+    {
+      "type": "range",
+      "id": "input_padding_x",
+      "label": "Input padding x",
+      "min": 6,
+      "max": 24,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "input_size",
+      "label": "Input text size",
+      "min": 12,
+      "max": 22,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "textarea_min_height",
+      "label": "Textarea min height",
+      "min": 80,
+      "max": 320,
+      "step": 4,
+      "unit": "px",
+      "default": 140
+    },
+    {
+      "type": "header",
+      "id": "hdr_41",
+      "label": "Submit button"
+    },
+    {
+      "type": "text",
+      "id": "submit_label",
+      "label": "Default submit label",
+      "default": "Send message"
+    },
+    {
+      "type": "checkbox",
+      "id": "submit_full_width",
+      "label": "Full-width submit button",
+      "default": false
+    },
+    {
+      "type": "color",
+      "id": "submit_bg",
+      "label": "Background",
+      "default": "#0F172A"
+    },
+    {
+      "type": "color",
+      "id": "submit_bg_hover",
+      "label": "Background (hover)",
+      "default": "#1F2937"
+    },
+    {
+      "type": "color",
+      "id": "submit_color",
+      "label": "Text color",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "range",
+      "id": "submit_radius",
+      "label": "Corner radius",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 100,
+      "info": "Max value = pill shape."
+    },
+    {
+      "type": "range",
+      "id": "submit_size",
+      "label": "Text size",
+      "min": 12,
+      "max": 22,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "submit_pad_x",
+      "label": "Padding x",
+      "min": 12,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 32
+    },
+    {
+      "type": "range",
+      "id": "submit_pad_y",
+      "label": "Padding y",
+      "min": 8,
+      "max": 28,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "header",
+      "id": "hdr_51",
+      "label": "Info row style"
+    },
+    {
+      "type": "color",
+      "id": "info_icon_bg",
+      "label": "Info icon background",
+      "default": "#F1F5F9"
+    },
+    {
+      "type": "color",
+      "id": "info_icon_color",
+      "label": "Info icon color",
+      "default": "#0F172A"
+    },
+    {
+      "type": "color",
+      "id": "info_label_color",
+      "label": "Info label color",
+      "default": "#64748B"
+    },
+    {
+      "type": "color",
+      "id": "info_value_color",
+      "label": "Info value color",
+      "default": "#0F172A"
+    },
+    {
+      "type": "color",
+      "id": "info_border_color",
+      "label": "Divider between info rows",
+      "default": "#E2E8F0"
+    },
+    {
+      "type": "header",
+      "id": "hdr_57",
+      "label": "Side image"
+    },
+    {
+      "type": "range",
+      "id": "side_image_radius",
+      "label": "Side image corner radius",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "header",
+      "id": "hdr_59",
+      "label": "Messages"
+    },
+    {
+      "type": "text",
+      "id": "success_message",
+      "label": "Success message",
+      "default": "Thanks for reaching out — we will get back to you shortly."
+    },
+    {
+      "type": "header",
+      "id": "hdr_61",
+      "label": "Style"
+    },
+    {
+      "type": "color",
+      "id": "section_bg",
+      "label": "Section background",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "header",
+      "id": "hdr_63",
+      "label": "Layout & Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top_desktop",
+      "label": "Top padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 96
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_desktop",
+      "label": "Bottom padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 96
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_desktop",
+      "label": "Top margin (desktop px)",
+      "min": -200,
+      "max": 300,
+      "step": 5,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_desktop",
+      "label": "Bottom margin (desktop px)",
+      "min": -200,
+      "max": 300,
+      "step": 5,
+      "default": 0
+    },
+    {
+      "type": "header",
+      "id": "hdr_68",
+      "label": "Mobile"
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "label": "Top padding (mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "label": "Bottom padding (mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_mobile",
+      "label": "Top margin (mobile px)",
+      "min": -200,
+      "max": 300,
+      "step": 5,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_mobile",
+      "label": "Bottom margin (mobile px)",
+      "min": -200,
+      "max": 300,
+      "step": 5,
+      "default": 0
+    }
+  ],
+  "blocks": [
+    {
+      "type": "heading",
+      "name": "Heading",
+      "settings": [
+        {
+          "type": "inline_richtext",
+          "id": "text",
+          "label": "Heading",
+          "default": "Get in touch"
+        },
+        {
+          "type": "select",
+          "id": "tag",
+          "label": "HTML tag",
+          "default": "h2",
+          "options": [
+            {
+              "value": "h1",
+              "label": "H1"
+            },
+            {
+              "value": "h2",
+              "label": "H2"
+            },
+            {
+              "value": "h3",
+              "label": "H3"
+            },
+            {
+              "value": "h4",
+              "label": "H4"
+            }
+          ]
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#0F172A"
+        },
+        {
+          "type": "select",
+          "id": "weight",
+          "label": "Weight",
+          "default": "700",
+          "options": [
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semi-bold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            },
+            {
+              "value": "800",
+              "label": "Extra-bold"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "size_desktop",
+          "label": "Size (desktop)",
+          "min": 18,
+          "max": 80,
+          "step": 1,
+          "unit": "px",
+          "default": 44
+        },
+        {
+          "type": "range",
+          "id": "size_mobile",
+          "label": "Size (mobile)",
+          "min": 16,
+          "max": 60,
+          "step": 1,
+          "unit": "px",
+          "default": 30
+        },
+        {
+          "type": "range",
+          "id": "line_height",
+          "label": "Line height",
+          "min": 0.9,
+          "max": 2,
+          "step": 0.1,
+          "default": 1.2
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "subheading",
+      "name": "Subheading",
+      "settings": [
+        {
+          "type": "richtext",
+          "id": "text",
+          "label": "Text",
+          "default": "<p>Have a question, idea, or just want to say hello? Drop us a message and we'll get back as quickly as we can.</p>"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#475569"
+        },
+        {
+          "type": "range",
+          "id": "size",
+          "label": "Size",
+          "min": 12,
+          "max": 24,
+          "step": 1,
+          "unit": "px",
+          "default": 16
+        },
+        {
+          "type": "range",
+          "id": "line_height",
+          "label": "Line height",
+          "min": 1,
+          "max": 2,
+          "step": 0.1,
+          "default": 1.5
+        },
+        {
+          "type": "range",
+          "id": "max_width",
+          "label": "Max width",
+          "min": 200,
+          "max": 900,
+          "step": 10,
+          "unit": "px",
+          "default": 600
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "field",
+      "name": "Form field",
+      "settings": [
+        {
+          "type": "select",
+          "id": "field_type",
+          "label": "Field type",
+          "default": "text",
+          "options": [
+            {
+              "value": "text",
+              "label": "Text"
+            },
+            {
+              "value": "email",
+              "label": "Email"
+            },
+            {
+              "value": "tel",
+              "label": "Phone"
+            },
+            {
+              "value": "select",
+              "label": "Dropdown"
+            },
+            {
+              "value": "textarea",
+              "label": "Textarea (long message)"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Label",
+          "default": "Name"
+        },
+        {
+          "type": "text",
+          "id": "name",
+          "label": "Field name",
+          "default": "Name",
+          "info": "Used as the form field name (sent in the email). For email, use 'email'; for textarea, use 'body'."
+        },
+        {
+          "type": "text",
+          "id": "placeholder",
+          "label": "Placeholder",
+          "default": "Your name"
+        },
+        {
+          "type": "checkbox",
+          "id": "required",
+          "label": "Required",
+          "default": false
+        },
+        {
+          "type": "checkbox",
+          "id": "half_width",
+          "label": "Half-width on desktop",
+          "default": false,
+          "info": "Pair two consecutive half-width fields side-by-side on desktop."
+        },
+        {
+          "type": "textarea",
+          "id": "options",
+          "label": "Dropdown options (comma-separated)",
+          "info": "Only used when field type is Dropdown."
+        }
+      ]
+    },
+    {
+      "type": "submit",
+      "name": "Submit button",
+      "settings": [
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Button label",
+          "default": "Send message"
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "info",
+      "name": "Contact info row",
+      "settings": [
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "default": "mail",
+          "options": [
+            {
+              "value": "mail",
+              "label": "Mail"
+            },
+            {
+              "value": "phone",
+              "label": "Phone"
+            },
+            {
+              "value": "pin",
+              "label": "Map pin"
+            },
+            {
+              "value": "clock",
+              "label": "Clock"
+            },
+            {
+              "value": "message",
+              "label": "Message"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Label",
+          "default": "Email us"
+        },
+        {
+          "type": "text",
+          "id": "value",
+          "label": "Value",
+          "info": "Leave blank to auto-fill from Shopify Store Information (mail → store email, phone → store phone, map pin → store address)."
+        },
+        {
+          "type": "url",
+          "id": "link",
+          "label": "Link (optional)",
+          "info": "Leave blank to auto-build mailto: / tel: links from the value."
+        }
+      ]
+    },
+    {
+      "type": "side_image",
+      "name": "Side image",
+      "settings": [
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Image"
+        },
+        {
+          "type": "text",
+          "id": "alt",
+          "label": "Alt text"
+        }
+      ],
+      "limit": 1
+    }
+  ],
+  "presets": [
+    {
+      "name": "Contact Form Simple",
+      "category": "Contact",
+      "blocks": [
+        {
+          "type": "heading"
+        },
+        {
+          "type": "subheading"
+        },
+        {
+          "type": "field",
+          "settings": {
+            "field_type": "text",
+            "label": "Name",
+            "name": "Name",
+            "placeholder": "Your name",
+            "required": true,
+            "half_width": true
+          }
+        },
+        {
+          "type": "field",
+          "settings": {
+            "field_type": "email",
+            "label": "Email",
+            "name": "email",
+            "placeholder": "you@example.com",
+            "required": true,
+            "half_width": true
+          }
+        },
+        {
+          "type": "field",
+          "settings": {
+            "field_type": "text",
+            "label": "Subject",
+            "name": "Subject",
+            "placeholder": "What is it about?",
+            "required": false,
+            "half_width": false
+          }
+        },
+        {
+          "type": "field",
+          "settings": {
+            "field_type": "textarea",
+            "label": "Message",
+            "name": "body",
+            "placeholder": "How can we help?",
+            "required": true,
+            "half_width": false
+          }
+        },
+        {
+          "type": "submit"
+        },
+        {
+          "type": "info",
+          "settings": {
+            "icon": "mail",
+            "label": "Email us"
+          }
+        },
+        {
+          "type": "info",
+          "settings": {
+            "icon": "phone",
+            "label": "Call us"
+          }
+        },
+        {
+          "type": "info",
+          "settings": {
+            "icon": "clock",
+            "label": "Hours",
+            "value": "Mon–Fri, 9am–6pm"
+          }
+        }
+      ]
+    }
+  ],
+  "shopify": {
+    "name": "Contact Form Simple",
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "select",
+        "id": "show_section_on",
+        "label": "Show section on",
+        "default": "all",
+        "options": [
+          {
+            "value": "all",
+            "label": "All Devices"
+          },
+          {
+            "value": "mobile",
+            "label": "Only Mobile"
+          },
+          {
+            "value": "desktop",
+            "label": "Only Desktop"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Section width"
+      },
+      {
+        "type": "range",
+        "id": "section_max_width_desktop",
+        "label": "Section width (desktop ≥1024px)",
+        "min": 600,
+        "max": 1500,
+        "step": 10,
+        "unit": "px",
+        "default": 960
+      },
+      {
+        "type": "range",
+        "id": "section_max_width_tablet",
+        "label": "Section width (tablet ≥768px)",
+        "min": 500,
+        "max": 1100,
+        "step": 10,
+        "unit": "px",
+        "default": 900
+      },
+      {
+        "type": "range",
+        "id": "section_max_width_mobile",
+        "label": "Section width (mobile)",
+        "min": 280,
+        "max": 800,
+        "step": 10,
+        "unit": "px",
+        "default": 560
+      },
+      {
+        "type": "header",
+        "content": "Header layout"
+      },
+      {
+        "type": "select",
+        "id": "header_align",
+        "label": "Header alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ],
+        "info": "Aligns both heading, subheading, and submit button."
+      },
+      {
+        "type": "range",
+        "id": "heading_sub_gap_desktop",
+        "label": "Gap heading → subheading (desktop)",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "range",
+        "id": "heading_sub_gap_mobile",
+        "label": "Gap heading → subheading (mobile)",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 8
+      },
+      {
+        "type": "range",
+        "id": "gap_subheading_content",
+        "label": "Gap subheading → form (desktop)",
+        "min": 0,
+        "max": 120,
+        "step": 4,
+        "unit": "px",
+        "default": 56
+      },
+      {
+        "type": "range",
+        "id": "gap_subheading_content_mobile",
+        "label": "Gap subheading → form (mobile)",
+        "min": 0,
+        "max": 120,
+        "step": 2,
+        "unit": "px",
+        "default": 32
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "side_column_position",
+        "label": "Side column position (desktop)",
+        "default": "right",
+        "options": [
+          {
+            "value": "right",
+            "label": "Right"
+          },
+          {
+            "value": "left",
+            "label": "Left"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "id": "form_col_ratio",
+        "label": "Form column ratio (desktop)",
+        "default": "3fr"
+      },
+      {
+        "type": "text",
+        "id": "side_col_ratio",
+        "label": "Side column ratio (desktop)",
+        "default": "2fr"
+      },
+      {
+        "type": "range",
+        "id": "col_gap_desktop",
+        "label": "Column gap (desktop)",
+        "min": 0,
+        "max": 100,
+        "step": 4,
+        "unit": "px",
+        "default": 48
+      },
+      {
+        "type": "range",
+        "id": "col_gap_mobile",
+        "label": "Column gap (mobile)",
+        "min": 0,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 32
+      },
+      {
+        "type": "header",
+        "content": "Form style"
+      },
+      {
+        "type": "color",
+        "id": "form_bg",
+        "label": "Form background",
+        "default": "rgba(0,0,0,0)"
+      },
+      {
+        "type": "range",
+        "id": "form_padding",
+        "label": "Form padding (when bg set)",
+        "min": 0,
+        "max": 60,
+        "step": 2,
+        "unit": "px",
+        "default": 32
+      },
+      {
+        "type": "range",
+        "id": "form_radius",
+        "label": "Form corner radius",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "field_gap",
+        "label": "Gap between fields",
+        "min": 4,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "header",
+        "content": "Field style"
+      },
+      {
+        "type": "color",
+        "id": "label_color",
+        "label": "Label color",
+        "default": "#0F172A"
+      },
+      {
+        "type": "select",
+        "id": "label_weight",
+        "label": "Label weight",
+        "default": "600",
+        "options": [
+          {
+            "value": "400",
+            "label": "Normal"
+          },
+          {
+            "value": "500",
+            "label": "Medium"
+          },
+          {
+            "value": "600",
+            "label": "Semi-bold"
+          },
+          {
+            "value": "700",
+            "label": "Bold"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "label_size",
+        "label": "Label size",
+        "min": 11,
+        "max": 18,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "color",
+        "id": "required_color",
+        "label": "Required asterisk color",
+        "default": "#EF4444"
+      },
+      {
+        "type": "color",
+        "id": "input_bg",
+        "label": "Input background",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "input_text_color",
+        "label": "Input text color",
+        "default": "#0F172A"
+      },
+      {
+        "type": "color",
+        "id": "placeholder_color",
+        "label": "Placeholder color",
+        "default": "#94A3B8"
+      },
+      {
+        "type": "color",
+        "id": "input_border_color",
+        "label": "Input border color",
+        "default": "#E2E8F0"
+      },
+      {
+        "type": "range",
+        "id": "input_border_width",
+        "label": "Input border width",
+        "min": 0,
+        "max": 4,
+        "step": 1,
+        "unit": "px",
+        "default": 1
+      },
+      {
+        "type": "color",
+        "id": "input_focus_color",
+        "label": "Input focus accent color",
+        "default": "#0F172A"
+      },
+      {
+        "type": "range",
+        "id": "input_radius",
+        "label": "Input corner radius",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "unit": "px",
+        "default": 10
+      },
+      {
+        "type": "range",
+        "id": "input_padding_y",
+        "label": "Input padding y",
+        "min": 6,
+        "max": 24,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "range",
+        "id": "input_padding_x",
+        "label": "Input padding x",
+        "min": 6,
+        "max": 24,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "input_size",
+        "label": "Input text size",
+        "min": 12,
+        "max": 22,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "textarea_min_height",
+        "label": "Textarea min height",
+        "min": 80,
+        "max": 320,
+        "step": 4,
+        "unit": "px",
+        "default": 140
+      },
+      {
+        "type": "header",
+        "content": "Submit button"
+      },
+      {
+        "type": "text",
+        "id": "submit_label",
+        "label": "Default submit label",
+        "default": "Send message"
+      },
+      {
+        "type": "checkbox",
+        "id": "submit_full_width",
+        "label": "Full-width submit button",
+        "default": false
+      },
+      {
+        "type": "color",
+        "id": "submit_bg",
+        "label": "Background",
+        "default": "#0F172A"
+      },
+      {
+        "type": "color",
+        "id": "submit_bg_hover",
+        "label": "Background (hover)",
+        "default": "#1F2937"
+      },
+      {
+        "type": "color",
+        "id": "submit_color",
+        "label": "Text color",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "range",
+        "id": "submit_radius",
+        "label": "Corner radius",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "default": 100,
+        "info": "Max value = pill shape."
+      },
+      {
+        "type": "range",
+        "id": "submit_size",
+        "label": "Text size",
+        "min": 12,
+        "max": 22,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "submit_pad_x",
+        "label": "Padding x",
+        "min": 12,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 32
+      },
+      {
+        "type": "range",
+        "id": "submit_pad_y",
+        "label": "Padding y",
+        "min": 8,
+        "max": 28,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "header",
+        "content": "Info row style"
+      },
+      {
+        "type": "color",
+        "id": "info_icon_bg",
+        "label": "Info icon background",
+        "default": "#F1F5F9"
+      },
+      {
+        "type": "color",
+        "id": "info_icon_color",
+        "label": "Info icon color",
+        "default": "#0F172A"
+      },
+      {
+        "type": "color",
+        "id": "info_label_color",
+        "label": "Info label color",
+        "default": "#64748B"
+      },
+      {
+        "type": "color",
+        "id": "info_value_color",
+        "label": "Info value color",
+        "default": "#0F172A"
+      },
+      {
+        "type": "color",
+        "id": "info_border_color",
+        "label": "Divider between info rows",
+        "default": "#E2E8F0"
+      },
+      {
+        "type": "header",
+        "content": "Side image"
+      },
+      {
+        "type": "range",
+        "id": "side_image_radius",
+        "label": "Side image corner radius",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "header",
+        "content": "Messages"
+      },
+      {
+        "type": "text",
+        "id": "success_message",
+        "label": "Success message",
+        "default": "Thanks for reaching out — we will get back to you shortly."
+      },
+      {
+        "type": "header",
+        "content": "Style"
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Section background",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "header",
+        "content": "Layout & Spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top_desktop",
+        "label": "Top padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 96
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_desktop",
+        "label": "Bottom padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 96
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin (desktop px)",
+        "min": -200,
+        "max": 300,
+        "step": 5,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin (desktop px)",
+        "min": -200,
+        "max": 300,
+        "step": 5,
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "range",
+        "id": "padding_top_mobile",
+        "label": "Top padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 56
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_mobile",
+        "label": "Bottom padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 56
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_mobile",
+        "label": "Top margin (mobile px)",
+        "min": -200,
+        "max": 300,
+        "step": 5,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_mobile",
+        "label": "Bottom margin (mobile px)",
+        "min": -200,
+        "max": 300,
+        "step": 5,
+        "default": 0
+      }
+    ],
+    "blocks": [
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "inline_richtext",
+            "id": "text",
+            "label": "Heading",
+            "default": "Get in touch"
+          },
+          {
+            "type": "select",
+            "id": "tag",
+            "label": "HTML tag",
+            "default": "h2",
+            "options": [
+              {
+                "value": "h1",
+                "label": "H1"
+              },
+              {
+                "value": "h2",
+                "label": "H2"
+              },
+              {
+                "value": "h3",
+                "label": "H3"
+              },
+              {
+                "value": "h4",
+                "label": "H4"
+              }
+            ]
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#0F172A"
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Weight",
+            "default": "700",
+            "options": [
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi-bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              },
+              {
+                "value": "800",
+                "label": "Extra-bold"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "size_desktop",
+            "label": "Size (desktop)",
+            "min": 18,
+            "max": 80,
+            "step": 1,
+            "unit": "px",
+            "default": 44
+          },
+          {
+            "type": "range",
+            "id": "size_mobile",
+            "label": "Size (mobile)",
+            "min": 16,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 30
+          },
+          {
+            "type": "range",
+            "id": "line_height",
+            "label": "Line height",
+            "min": 0.9,
+            "max": 2,
+            "step": 0.1,
+            "default": 1.2
+          }
+        ]
+      },
+      {
+        "type": "subheading",
+        "name": "Subheading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "richtext",
+            "id": "text",
+            "label": "Text",
+            "default": "<p>Have a question, idea, or just want to say hello? Drop us a message and we'll get back as quickly as we can.</p>"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#475569"
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "label": "Size",
+            "min": 12,
+            "max": 24,
+            "step": 1,
+            "unit": "px",
+            "default": 16
+          },
+          {
+            "type": "range",
+            "id": "line_height",
+            "label": "Line height",
+            "min": 1,
+            "max": 2,
+            "step": 0.1,
+            "default": 1.5
+          },
+          {
+            "type": "range",
+            "id": "max_width",
+            "label": "Max width",
+            "min": 200,
+            "max": 900,
+            "step": 10,
+            "unit": "px",
+            "default": 600
+          }
+        ]
+      },
+      {
+        "type": "field",
+        "name": "Form field",
+        "settings": [
+          {
+            "type": "select",
+            "id": "field_type",
+            "label": "Field type",
+            "default": "text",
+            "options": [
+              {
+                "value": "text",
+                "label": "Text"
+              },
+              {
+                "value": "email",
+                "label": "Email"
+              },
+              {
+                "value": "tel",
+                "label": "Phone"
+              },
+              {
+                "value": "select",
+                "label": "Dropdown"
+              },
+              {
+                "value": "textarea",
+                "label": "Textarea (long message)"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Label",
+            "default": "Name"
+          },
+          {
+            "type": "text",
+            "id": "name",
+            "label": "Field name",
+            "default": "Name",
+            "info": "Used as the form field name (sent in the email). For email, use 'email'; for textarea, use 'body'."
+          },
+          {
+            "type": "text",
+            "id": "placeholder",
+            "label": "Placeholder",
+            "default": "Your name"
+          },
+          {
+            "type": "checkbox",
+            "id": "required",
+            "label": "Required",
+            "default": false
+          },
+          {
+            "type": "checkbox",
+            "id": "half_width",
+            "label": "Half-width on desktop",
+            "default": false,
+            "info": "Pair two consecutive half-width fields side-by-side on desktop."
+          },
+          {
+            "type": "textarea",
+            "id": "options",
+            "label": "Dropdown options (comma-separated)",
+            "info": "Only used when field type is Dropdown."
+          }
+        ]
+      },
+      {
+        "type": "submit",
+        "name": "Submit button",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Button label",
+            "default": "Send message"
+          }
+        ]
+      },
+      {
+        "type": "info",
+        "name": "Contact info row",
+        "settings": [
+          {
+            "type": "select",
+            "id": "icon",
+            "label": "Icon",
+            "default": "mail",
+            "options": [
+              {
+                "value": "mail",
+                "label": "Mail"
+              },
+              {
+                "value": "phone",
+                "label": "Phone"
+              },
+              {
+                "value": "pin",
+                "label": "Map pin"
+              },
+              {
+                "value": "clock",
+                "label": "Clock"
+              },
+              {
+                "value": "message",
+                "label": "Message"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Label",
+            "default": "Email us"
+          },
+          {
+            "type": "text",
+            "id": "value",
+            "label": "Value",
+            "info": "Leave blank to auto-fill from Shopify Store Information (mail → store email, phone → store phone, map pin → store address)."
+          },
+          {
+            "type": "url",
+            "id": "link",
+            "label": "Link (optional)",
+            "info": "Leave blank to auto-build mailto: / tel: links from the value."
+          }
+        ]
+      },
+      {
+        "type": "side_image",
+        "name": "Side image",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "image_picker",
+            "id": "image",
+            "label": "Image"
+          },
+          {
+            "type": "text",
+            "id": "alt",
+            "label": "Alt text"
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Contact Form Simple",
+        "category": "Contact",
+        "blocks": [
+          {
+            "type": "heading"
+          },
+          {
+            "type": "subheading"
+          },
+          {
+            "type": "field",
+            "settings": {
+              "field_type": "text",
+              "label": "Name",
+              "name": "Name",
+              "placeholder": "Your name",
+              "required": true,
+              "half_width": true
+            }
+          },
+          {
+            "type": "field",
+            "settings": {
+              "field_type": "email",
+              "label": "Email",
+              "name": "email",
+              "placeholder": "you@example.com",
+              "required": true,
+              "half_width": true
+            }
+          },
+          {
+            "type": "field",
+            "settings": {
+              "field_type": "text",
+              "label": "Subject",
+              "name": "Subject",
+              "placeholder": "What is it about?",
+              "required": false,
+              "half_width": false
+            }
+          },
+          {
+            "type": "field",
+            "settings": {
+              "field_type": "textarea",
+              "label": "Message",
+              "name": "body",
+              "placeholder": "How can we help?",
+              "required": true,
+              "half_width": false
+            }
+          },
+          {
+            "type": "submit"
+          },
+          {
+            "type": "info",
+            "settings": {
+              "icon": "mail",
+              "label": "Email us"
+            }
+          },
+          {
+            "type": "info",
+            "settings": {
+              "icon": "phone",
+              "label": "Call us"
+            }
+          },
+          {
+            "type": "info",
+            "settings": {
+              "icon": "clock",
+              "label": "Hours",
+              "value": "Mon–Fri, 9am–6pm"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

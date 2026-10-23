@@ -1,0 +1,2695 @@
+<template compat="shopify">
+{%- assign fb_accessibility_media = 'accessibility.media' | t -%}
+{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- comment -%}
+  Materia Themes — Image With Text Stats
+
+  Two-column layout with media on the left and stats/copy on the right.
+  Both sides are 100% block-based for full reorderability and flexibility.
+
+  Block types:
+    • media     — image OR video (image_picker, Shopify video, video URL,
+                  + per-block: show controls, autoplay, muted, loop)
+    • heading   — section heading text
+    • subheading— supporting copy under the heading
+    • footnote  — small line under the stats
+    • stat      — animated ring + percent + body
+
+  Media layout:
+    • Auto: 1 → single, 2 → side-by-side, 3+ → carousel
+    • Or pick exact per-row count: 1 / 1.2 / 1.5 / 2 / 2.5 / 3
+    • 3+ slots = horizontal scroll with slim light-gray progress bar
+{%- endcomment -%}
+
+{%- liquid
+  assign st  = section.settings
+  assign sid = section.id
+
+  case st.media_position
+    when 'right'
+      assign _flex_dir = 'row-reverse'
+    else
+      assign _flex_dir = 'row'
+  endcase
+
+  case st.content_align
+    when 'center'
+      assign _ai = 'center'
+      assign _ta = 'center'
+    when 'right'
+      assign _ai = 'flex-end'
+      assign _ta = 'right'
+    else
+      assign _ai = 'flex-start'
+      assign _ta = 'left'
+  endcase
+  case st.content_align_mobile
+    when 'center'
+      assign _ai_m = 'center'
+      assign _ta_m = 'center'
+    when 'right'
+      assign _ai_m = 'flex-end'
+      assign _ta_m = 'right'
+    else
+      assign _ai_m = 'flex-start'
+      assign _ta_m = 'left'
+  endcase
+
+  assign media_blocks = section.blocks | where: 'type', 'media'
+  assign media_count  = media_blocks | size
+
+  assign per_row = st.per_row | default: '1.2'
+  if per_row == 'auto'
+    if media_count <= 1
+      assign per_row_value = 1
+      assign final_layout = 'single'
+    elsif media_count == 2
+      assign per_row_value = 2
+      assign final_layout = 'side_by_side'
+    else
+      assign per_row_value = 2.5
+      assign final_layout = 'carousel'
+    endif
+  else
+    assign per_row_value = per_row | times: 1.0
+    if media_count > per_row_value
+      assign final_layout = 'carousel'
+    elsif per_row_value <= 1
+      assign final_layout = 'single'
+    elsif media_count <= 1
+      assign final_layout = 'single'
+    else
+      assign final_layout = 'side_by_side'
+    endif
+  endif
+
+  assign slot_width_pct = 100.0 | divided_by: per_row_value
+-%}
+
+<style>
+  /* Custom fonts (toggle, off by default) */
+  {%- if st.enable_custom_fonts and st.body_font -%}
+    #shopify-section-{{ sid }},
+    #shopify-section-{{ sid }} :is(p, div, span, a, li) {
+      font-family: {{ st.body_font.family }}, {{ st.body_font.fallback_families }};
+      font-weight: {{ st.body_font.weight }};
+    }
+  {%- endif -%}
+  {%- if st.enable_custom_fonts and st.heading_font -%}
+    #shopify-section-{{ sid }} :is(h1, h2, h3, h4, h5, h6) {
+      font-family: {{ st.heading_font.family }}, {{ st.heading_font.fallback_families }};
+      font-weight: {{ st.heading_font.weight }};
+    }
+  {%- endif -%}
+
+  #shopify-section-{{ sid }} {
+    background-color: {{ st.section_bg | default: '#FFFFFF' }};
+    margin-top: {{ st.section_margin_top_mobile | default: 0 }}px;
+    margin-bottom: {{ st.section_margin_bottom_mobile | default: 0 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} {
+      margin-top: {{ st.section_margin_top_desktop | default: 0 }}px;
+      margin-bottom: {{ st.section_margin_bottom_desktop | default: 0 }}px;
+    }
+  }
+  {%- if st.reset_spacing -%}
+    #shopify-section-{{ sid }} {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+    }
+    #shopify-section-{{ sid }} + .shopify-section { margin-top: 0 !important; padding-top: 0 !important; }
+    .shopify-section:has(+ #shopify-section-{{ sid }}) { margin-bottom: 0 !important; padding-bottom: 0 !important; }
+  {%- endif -%}
+
+  {%- case st.section_width -%}
+    {%- when 'container' -%}
+      #shopify-section-{{ sid }} .iws__inner { max-width: calc(var(--page-width, 1300px) + 3rem); margin-inline: auto; }
+    {%- when 'fluid_container' -%}
+      #shopify-section-{{ sid }} .iws__inner { max-width: calc(var(--fluid-container-width, 1500px) + 3rem); margin-inline: auto; }
+    {%- when 'stretch_width' -%}
+      @media (min-width: 1200px) {
+        #shopify-section-{{ sid }} .iws__inner { padding-inline: 3rem; }
+      }
+  {%- endcase -%}
+
+  #shopify-section-{{ sid }} .iws {
+    padding: {{ st.padding_top_mobile | default: 60 }}px {{ st.side_padding_mobile | default: 20 }}px {{ st.padding_bottom_mobile | default: 60 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .iws {
+      padding: {{ st.padding_top_desktop | default: 100 }}px {{ st.side_padding_desktop | default: 32 }}px {{ st.padding_bottom_desktop | default: 100 }}px;
+    }
+  }
+  #shopify-section-{{ sid }} .iws__inner { width: 100%; box-sizing: border-box; }
+
+  /* Two-column grid */
+  #shopify-section-{{ sid }} .iws__grid {
+    display: flex;
+    flex-direction: column;
+    gap: {{ st.gap_mobile | default: 32 }}px;
+  }
+  @media (min-width: 900px) {
+    #shopify-section-{{ sid }} .iws__grid {
+      flex-direction: {{ _flex_dir }};
+      gap: {{ st.gap_desktop | default: 64 }}px;
+      align-items: center;
+    }
+  }
+  #shopify-section-{{ sid }} .iws__media,
+  #shopify-section-{{ sid }} .iws__text { width: 100%; box-sizing: border-box; }
+  @media (min-width: 900px) {
+    #shopify-section-{{ sid }} .iws__media { width: {{ st.media_column_width | default: 50 }}%; }
+    #shopify-section-{{ sid }} .iws__text  { width: calc(100% - {{ st.media_column_width | default: 50 }}%); }
+  }
+  #iws-{{ sid }}.iws--no-media .iws__media { display: none; }
+  @media (min-width: 900px) {
+    #iws-{{ sid }}.iws--no-media .iws__text {
+      width: 100%;
+      max-width: {{ st.text_max_width | default: 900 }}px;
+      margin-inline: auto;
+    }
+  }
+
+  /* Media area */
+  #shopify-section-{{ sid }} .iws__media-grid {
+    display: flex;
+    gap: {{ st.media_gap | default: 12 }}px;
+    width: 100%;
+  }
+  #shopify-section-{{ sid }} .iws__media-grid--single { flex-direction: column; }
+  #shopify-section-{{ sid }} .iws__media-grid--side_by_side { flex-direction: row; }
+  #shopify-section-{{ sid }} .iws__media-grid--carousel {
+    flex-direction: row;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    padding-bottom: 6px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: pan-x;
+  }
+  #shopify-section-{{ sid }} .iws__media-grid--carousel::-webkit-scrollbar { display: none; }
+  #shopify-section-{{ sid }} .iws__media-grid--carousel.iws--dragging {
+    cursor: grabbing;
+    scroll-snap-type: none;
+    scroll-behavior: auto;
+  }
+  #shopify-section-{{ sid }} .iws__media-grid--carousel.iws--dragging * { pointer-events: none !important; }
+  #shopify-section-{{ sid }} .iws__media-grid--carousel img,
+  #shopify-section-{{ sid }} .iws__media-grid--carousel video { -webkit-user-drag: none; user-drag: none; }
+
+  #shopify-section-{{ sid }} .iws__slot {
+    flex: 0 0 auto;
+    border-radius: {{ st.media_radius | default: 16 }}px;
+    overflow: hidden;
+    background: rgba(0,0,0,0.04);
+    aspect-ratio: {{ st.media_aspect_w | default: 3 }} / {{ st.media_aspect_h | default: 4 }};
+    position: relative;
+    isolation: isolate;
+    contain: layout paint;
+  }
+  #shopify-section-{{ sid }} .iws__media-grid--single .iws__slot { width: 100%; }
+  #shopify-section-{{ sid }} .iws__media-grid--side_by_side .iws__slot {
+    flex: 1 1 calc({{ slot_width_pct }}% - {{ st.media_gap | default: 12 }}px);
+    min-width: 0;
+  }
+  #shopify-section-{{ sid }} .iws__media-grid--carousel .iws__slot {
+    width: calc({{ slot_width_pct }}% - {{ st.media_gap | default: 12 | times: 0.5 | round: 1 }}px);
+    scroll-snap-align: start;
+  }
+  #shopify-section-{{ sid }} .iws__slot img,
+  #shopify-section-{{ sid }} .iws__slot video,
+  #shopify-section-{{ sid }} .iws__slot .video-wrapper,
+  #shopify-section-{{ sid }} .iws__slot .video-wrapper > * {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  /* Slim light-gray progress bar */
+  #shopify-section-{{ sid }} .iws__progress {
+    position: relative;
+    width: 100%;
+    height: {{ st.progress_height | default: 2 }}px;
+    margin-top: {{ st.progress_margin | default: 18 }}px;
+    background: {{ st.progress_track | default: '#E5E7EB' }};
+    border-radius: 999px;
+    overflow: hidden;
+    cursor: pointer;
+  }
+  #shopify-section-{{ sid }} .iws__progress-fill {
+    position: absolute;
+    top: 0; bottom: 0; left: 0;
+    width: 0%;
+    background: {{ st.progress_fill | default: '#3F2A5C' }};
+    border-radius: 999px;
+    transition: width .15s linear;
+  }
+
+  /* Right column */
+  #shopify-section-{{ sid }} .iws__text {
+    display: flex;
+    flex-direction: column;
+    gap: {{ st.content_gap | default: 24 }}px;
+    align-items: {{ _ai_m }};
+    text-align: {{ _ta_m }};
+    color: {{ st.text_color | default: '#0F172A' }};
+  }
+  @media (min-width: 900px) {
+    #shopify-section-{{ sid }} .iws__text {
+      align-items: {{ _ai }};
+      text-align: {{ _ta }};
+    }
+  }
+  #shopify-section-{{ sid }} .iws__text > * { margin: 0; max-width: 100%; }
+
+  #shopify-section-{{ sid }} .iws__heading {
+    /* No hard-coded weight — inherits the theme's heading typography by default.
+       Turn on "Custom font weight" on the Heading block to override. */
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+  }
+  #shopify-section-{{ sid }} .iws__subheading {
+    line-height: 1.6;
+    max-width: 540px;
+  }
+  #shopify-section-{{ sid }} .iws__subheading p { margin: 0 0 0.5em; color: inherit; }
+  #shopify-section-{{ sid }} .iws__subheading p:last-child { margin: 0; }
+
+  /* Per-block heading / subheading / footnote styling */
+  {%- for block in section.blocks -%}
+    {%- assign bs = block.settings -%}
+    {%- if block.type == 'heading' -%}
+      #shopify-section-{{ sid }} .iws__heading[data-block-id="{{ block.id }}"] {
+        color: {{ bs.color | default: '#3F2A5C' }};
+        font-size: {{ bs.size_mobile | default: 32 }}px;
+        text-transform: {% if bs.uppercase %}uppercase{% else %}none{% endif %};
+        {%- if bs.weight_enable -%}font-weight: {{ bs.weight | default: 800 }};{%- endif -%}
+      }
+      @media (min-width: 768px) {
+        #shopify-section-{{ sid }} .iws__heading[data-block-id="{{ block.id }}"] {
+          font-size: {{ bs.size_desktop | default: 48 }}px;
+        }
+      }
+    {%- endif -%}
+    {%- if block.type == 'subheading' -%}
+      #shopify-section-{{ sid }} .iws__subheading[data-block-id="{{ block.id }}"] {
+        color: {{ bs.color | default: '#5B4480' }};
+        font-size: {{ bs.size_mobile | default: 14 }}px;
+        {%- if bs.weight_enable -%}font-weight: {{ bs.weight | default: 400 }};{%- endif -%}
+      }
+      @media (min-width: 768px) {
+        #shopify-section-{{ sid }} .iws__subheading[data-block-id="{{ block.id }}"] {
+          font-size: {{ bs.size_desktop | default: 16 }}px;
+        }
+      }
+    {%- endif -%}
+    {%- if block.type == 'footnote' -%}
+      #shopify-section-{{ sid }} .iws__footnote[data-block-id="{{ block.id }}"] {
+        color: {{ bs.color | default: '#7B5BA0' }};
+        font-size: {{ bs.size | default: 13 }}px;
+        margin-top: {{ bs.margin_top | default: 12 }}px;
+        {%- if bs.weight_enable -%}font-weight: {{ bs.weight | default: 400 }};{%- endif -%}
+      }
+    {%- endif -%}
+  {%- endfor -%}
+
+  /* Stats list */
+  #shopify-section-{{ sid }} .iws__stats {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: 100%;
+  }
+  #shopify-section-{{ sid }} .iws__stat {
+    display: flex;
+    align-items: flex-start;
+    gap: {{ st.stat_gap | default: 18 }}px;
+    padding-top: {{ st.stat_pad_y | default: 22 }}px;
+    padding-bottom: {{ st.stat_pad_y | default: 22 }}px;
+    border-top: 1px solid {{ st.stat_divider | default: 'rgba(127,73,176,0.18)' }};
+  }
+  #shopify-section-{{ sid }} .iws__stat:last-child { border-bottom: 1px solid {{ st.stat_divider | default: 'rgba(127,73,176,0.18)' }}; }
+  #shopify-section-{{ sid }} .iws__stat-ring {
+    flex-shrink: 0;
+    position: relative;
+    width: {{ st.ring_size | default: 70 }}px;
+    height: {{ st.ring_size | default: 70 }}px;
+  }
+  #shopify-section-{{ sid }} .iws__stat-ring svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+    /* SVG defaults to overflow:hidden, which clips the round stroke cap right
+       at the viewBox edge and leaves an ugly flat notch on the outside of the
+       ring at the top. Letting it paint freely keeps the cap perfectly round. */
+    overflow: visible;
+  }
+  #shopify-section-{{ sid }} .iws__stat-ring-bg {
+    stroke: {{ st.ring_bg | default: '#9A9A9A' }};
+  }
+  #shopify-section-{{ sid }} .iws__stat-ring-fill {
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+  #shopify-section-{{ sid }} .iws__stat-percent {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: {{ st.percent_size | default: 14 }}px;
+    font-weight: 700;
+    color: {{ st.heading_color | default: '#3F2A5C' }};
+    opacity: 0;
+    transition: opacity 0.5s ease 0.4s;
+  }
+  #iws-{{ sid }}[data-iws-revealed="1"] .iws__stat-percent { opacity: 1; }
+  #shopify-section-{{ sid }} .iws__stat-body {
+    flex: 1 1 auto;
+    min-width: 0;
+    align-self: center;
+    font-size: {{ st.stat_text_size | default: 16 }}px;
+    line-height: 1.5;
+    color: {{ st.stat_text_color | default: '#3F2A5C' }};
+  }
+  #shopify-section-{{ sid }} .iws__stat-body p { margin: 0; color: inherit; }
+{% comment %}{% endcomment %}</style>
+
+<div id="iws-{{ sid }}" class="iws section sec__image-text-stats{% if media_count == 0 %} iws--no-media{% endif %}" data-section-id="{{ sid }}">
+  <div class="iws__inner">
+    <div class="iws__grid">
+
+      {%- if media_count > 0 -%}
+        <div class="iws__media">
+          <div class="iws__media-grid iws__media-grid--{{ final_layout }}" {% if final_layout == 'carousel' %}data-iws-carousel="1" data-iws-autoplay="{% if st.carousel_autoplay %}1{% else %}0{% endif %}" data-iws-autoplay-speed="{{ st.carousel_autoplay_speed | default: 4 }}"{% endif %}>
+            {%- for blk in media_blocks -%}
+              {%- assign mb = blk.settings -%}
+              <div class="iws__slot" {{ blk.shopify_attributes }}>
+                {%- liquid
+                  assign use_video = false
+                  if mb.media_type == 'video' or mb.media_type == 'video_url'
+                    assign use_video = true
+                  endif
+                  assign autoplay = mb.autoplay
+                  if autoplay == nil
+                    assign autoplay = true
+                  endif
+                  assign muted = mb.muted
+                  if muted == nil
+                    assign muted = true
+                  endif
+                  assign loop_video = mb.loop
+                  if loop_video == nil
+                    assign loop_video = true
+                  endif
+                -%}
+                {%- if mb.media_type == 'video' and mb.video != blank -%}
+                  {{ mb.video | video_tag: autoplay: autoplay, muted: muted, playsinline: true, loop: loop_video, controls: mb.show_controls, image_size: '1200x' }}
+                {%- elsif mb.media_type == 'video_url' and mb.video_url != blank -%}
+                  <video
+                    src="{{ mb.video_url }}"
+                    {% if autoplay %}autoplay{% endif %}
+                    {% if muted %}muted{% endif %}
+                    {% if loop_video %}loop{% endif %}
+                    {% if mb.show_controls %}controls{% endif %}
+                    playsinline></video>
+                {%- elsif mb.image != blank -%}
+                  <img
+                    src="{{ mb.image | image_url: width: 1200 }}"
+                    srcset="{{ mb.image | image_url: width: 600 }} 600w,
+                            {{ mb.image | image_url: width: 900 }} 900w,
+                            {{ mb.image | image_url: width: 1200 }} 1200w"
+                    sizes="(min-width: 900px) {{ slot_width_pct | round: 1 }}vw, {{ slot_width_pct | round: 1 }}vw"
+                    alt="{{ mb.image.alt | default: fb_accessibility_media | escape }}"
+                    loading="lazy"
+                  >
+                {%- else -%}
+                  <img src="https://2dbags.co/wp-content/uploads/revslider/lookbook1-demo_slider/placeholder.jpg" alt="{{ 'accessibility.placeholder' | t }}" loading="lazy">
+                {%- endif -%}
+              </div>
+            {%- endfor -%}
+          </div>
+
+          {%- if final_layout == 'carousel' and media_count > 1 -%}
+            <div class="iws__progress" data-iws-progress role="progressbar" aria-label="{{ 'accessibility.carousel_progress' | t }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div class="iws__progress-fill" data-iws-progress-fill></div>
+            </div>
+          {%- endif -%}
+        </div>
+      {%- endif -%}
+
+      <div class="iws__text">
+        {%- assign all_stats     = section.blocks | where: 'type', 'stat' -%}
+        {%- assign stats_anchors = section.blocks | where: 'type', 'stats_group' -%}
+        {%- assign has_anchor    = false -%}
+        {%- if stats_anchors.size > 0 -%}{%- assign has_anchor = true -%}{%- endif -%}
+
+        {%- for block in section.blocks -%}
+          {%- assign bs = block.settings -%}
+          {%- case block.type -%}
+
+            {%- when 'heading' -%}
+              {%- assign htag = bs.tag | default: 'h2' -%}
+              <{{ htag }} class="iws__heading" data-block-id="{{ block.id }}" {{ block.shopify_attributes }}>{%- if bs.text != blank -%}{{ bs.text | escape }}{%- else -%}Heading text{%- endif -%}</{{ htag }}>
+
+            {%- when 'subheading' -%}
+              <div class="iws__subheading" data-block-id="{{ block.id }}" {{ block.shopify_attributes }}>{%- if bs.text != blank -%}{{ bs.text }}{%- else -%}<p>{{ 'accessibility.add_supporting_copy' | t }}</p>{%- endif -%}</div>
+
+            {%- when 'stats_group' -%}
+              <div class="iws__stats" {{ block.shopify_attributes }}>
+                {%- if all_stats.size > 0 -%}
+                  {%- for stat in all_stats -%}
+                    {%- assign sb = stat.settings -%}
+                    {%- assign pct = sb.percent | default: 80 -%}
+                    {%- if pct > 100 -%}{%- assign pct = 100 -%}{%- endif -%}
+                    {%- if pct < 0 -%}{%- assign pct = 0 -%}{%- endif -%}
+                    {%- assign circumference = 175.93 -%}
+                    {%- assign offset = circumference | times: pct | divided_by: 100.0 -%}
+                    {%- assign final_offset = circumference | minus: offset -%}
+                    <div class="iws__stat" {{ stat.shopify_attributes }}>
+                      <div class="iws__stat-ring">
+                        <svg viewBox="0 0 64 64" aria-hidden="true">
+                          <circle class="iws__stat-ring-bg" cx="32" cy="32" r="28" fill="none" stroke-width="6"/>
+                          <circle class="iws__stat-ring-fill" cx="32" cy="32" r="28" fill="none" stroke-width="6"
+                            stroke="{{ st.accent_color | default: '#7C3AED' }}"
+                            stroke-dasharray="{{ circumference }}"
+                            stroke-dashoffset="{{ circumference }}"
+                            data-iws-target-offset="{{ final_offset }}"/>
+                        </svg>
+                        <span class="iws__stat-percent">{{ pct }}%</span>
+                      </div>
+                      <div class="iws__stat-body"{% if sb.weight_enable %} style="font-weight:{{ sb.weight | default: 400 }}"{% endif %}>{%- if sb.text != blank -%}{{ sb.text }}{%- else -%}<p>{{ 'accessibility.describe_stat' | t }}</p>{%- endif -%}</div>
+                    </div>
+                  {%- endfor -%}
+                {%- else -%}
+                  <div class="iws__stat iws__stat--empty">
+                    <div class="iws__stat-body" style="opacity:.6">{{ 'accessibility.add_stat_blocks' | t }}</div>
+                  </div>
+                {%- endif -%}
+              </div>
+
+            {%- when 'stat' -%}
+              {%- if has_anchor == false -%}
+                {%- assign prev_index = forloop.index0 | minus: 1 -%}
+                {%- assign prev_block = section.blocks[prev_index] -%}
+                {%- assign open_group = false -%}
+                {%- if forloop.first -%}{%- assign open_group = true -%}{%- elsif prev_block.type != 'stat' -%}{%- assign open_group = true -%}{%- endif -%}
+                {%- if open_group -%}<div class="iws__stats iws__stats--orphan">{%- endif -%}
+
+                {%- assign sb = bs -%}
+                {%- assign pct = sb.percent | default: 80 -%}
+                {%- if pct > 100 -%}{%- assign pct = 100 -%}{%- endif -%}
+                {%- if pct < 0 -%}{%- assign pct = 0 -%}{%- endif -%}
+                {%- assign circumference = 175.93 -%}
+                {%- assign offset = circumference | times: pct | divided_by: 100.0 -%}
+                {%- assign final_offset = circumference | minus: offset -%}
+                <div class="iws__stat" {{ block.shopify_attributes }}>
+                  <div class="iws__stat-ring">
+                    <svg viewBox="0 0 64 64" aria-hidden="true">
+                      <circle class="iws__stat-ring-bg" cx="32" cy="32" r="28" fill="none" stroke-width="6"/>
+                      <circle class="iws__stat-ring-fill" cx="32" cy="32" r="28" fill="none" stroke-width="6"
+                        stroke="{{ st.accent_color | default: '#7C3AED' }}"
+                        stroke-dasharray="{{ circumference }}"
+                        stroke-dashoffset="{{ circumference }}"
+                        data-iws-target-offset="{{ final_offset }}"/>
+                    </svg>
+                    <span class="iws__stat-percent">{{ pct }}%</span>
+                  </div>
+                  <div class="iws__stat-body"{% if sb.weight_enable %} style="font-weight:{{ sb.weight | default: 400 }}"{% endif %}>{%- if sb.text != blank -%}{{ sb.text }}{%- else -%}<p>{{ 'accessibility.describe_stat' | t }}</p>{%- endif -%}</div>
+                </div>
+
+                {%- assign next_index = forloop.index0 | plus: 1 -%}
+                {%- assign next_block = section.blocks[next_index] -%}
+                {%- assign close_group = false -%}
+                {%- if forloop.last -%}{%- assign close_group = true -%}{%- elsif next_block.type != 'stat' -%}{%- assign close_group = true -%}{%- endif -%}
+                {%- if close_group -%}</div>{%- endif -%}
+              {%- endif -%}
+
+            {%- when 'footnote' -%}
+              <p class="iws__footnote" data-block-id="{{ block.id }}" {{ block.shopify_attributes }}>{%- if bs.text != blank -%}{{ bs.text | escape }}{%- else -%}Add a small note here.{%- endif -%}</p>
+
+          {%- endcase -%}
+        {%- endfor -%}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function() {
+    var section = document.getElementById('iws-{{ sid }}');
+    if (!section) return;
+
+    /* 1. Animated stat ring fill on view-in */
+    function reveal() {
+      if (section.dataset.iwsRevealed === '1') return;
+      section.dataset.iwsRevealed = '1';
+      section.querySelectorAll('.iws__stat-ring-fill[data-iws-target-offset]').forEach(function(ring) {
+        var t = ring.getAttribute('data-iws-target-offset');
+        if (t !== null) ring.setAttribute('stroke-dashoffset', t);
+      });
+    }
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      reveal();
+    } else if ('IntersectionObserver' in window) {
+      var io = new IntersectionObserver(function(es) {
+        es.forEach(function(e) { if (e.isIntersecting) { reveal(); io.unobserve(e.target); } });
+      }, { threshold: 0.25, rootMargin: '0px 0px -10% 0px' });
+      io.observe(section);
+    } else {
+      reveal();
+    }
+
+    /* 2. Slim progress bar tracks carousel scroll */
+    var carousel = section.querySelector('[data-iws-carousel="1"]');
+    if (!carousel) return;
+    var progress = section.querySelector('[data-iws-progress]');
+    var fill     = section.querySelector('[data-iws-progress-fill]');
+
+    function update() {
+      if (!progress || !fill) return;
+      var max = carousel.scrollWidth - carousel.clientWidth;
+      if (max <= 0) { fill.style.width = '100%'; progress.setAttribute('aria-valuenow', '100'); return; }
+      var pct = Math.max(0, Math.min(100, (carousel.scrollLeft / max) * 100));
+      fill.style.width = pct + '%';
+      progress.setAttribute('aria-valuenow', Math.round(pct));
+    }
+    if (progress) {
+      progress.addEventListener('click', function(e) {
+        var rect = progress.getBoundingClientRect();
+        var pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        var max = carousel.scrollWidth - carousel.clientWidth;
+        carousel.scrollTo({ left: max * pct, behavior: 'smooth' });
+      });
+    }
+    var ticking = false;
+    carousel.addEventListener('scroll', function() {
+      if (!ticking) { window.requestAnimationFrame(function(){ update(); ticking = false; }); ticking = true; }
+    }, { passive: true });
+    window.addEventListener('resize', update);
+    update();
+
+    /* 3. Mouse-drag swipe (touch is native via overflow:auto) */
+    var isDown = false, moved = false, startX = 0, startScroll = 0, lastX = 0, velocity = 0, lastT = 0;
+    var DRAG_THRESHOLD = 5;
+    function onDown(e) {
+      if (e.button !== undefined && e.button !== 0) return;
+      isDown = true; moved = false;
+      startX = e.pageX; lastX = e.pageX; lastT = Date.now(); velocity = 0;
+      startScroll = carousel.scrollLeft;
+    }
+    function onMove(e) {
+      if (!isDown) return;
+      var dx = e.pageX - startX;
+      if (!moved && Math.abs(dx) < DRAG_THRESHOLD) return;
+      if (!moved) { moved = true; carousel.classList.add('iws--dragging'); }
+      e.preventDefault();
+      var now = Date.now();
+      var dt = Math.max(1, now - lastT);
+      velocity = (e.pageX - lastX) / dt;
+      lastX = e.pageX; lastT = now;
+      carousel.scrollLeft = startScroll - dx;
+    }
+    function onUp() {
+      if (!isDown) return;
+      isDown = false;
+      if (moved) {
+        // momentum
+        var v = velocity * 18; // tuning
+        var start = carousel.scrollLeft;
+        var target = start - v;
+        var max = carousel.scrollWidth - carousel.clientWidth;
+        target = Math.max(0, Math.min(max, target));
+        carousel.scrollTo({ left: target, behavior: 'smooth' });
+        // re-enable snap after momentum settles
+        setTimeout(function(){ carousel.classList.remove('iws--dragging'); }, 320);
+        // swallow the next click so we don't follow a link or fire a video
+        var swallow = function(ev){ ev.stopPropagation(); ev.preventDefault(); };
+        carousel.addEventListener('click', swallow, { capture: true, once: true });
+      } else {
+        carousel.classList.remove('iws--dragging');
+      }
+    }
+    carousel.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove, { passive: false });
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('blur', onUp);
+    // prevent native image dragging
+    carousel.addEventListener('dragstart', function(e){ e.preventDefault(); });
+
+    /* 4. Keyboard navigation */
+    carousel.setAttribute('tabindex', '0');
+    carousel.addEventListener('keydown', function(e) {
+      var slots = carousel.querySelectorAll('.iws__slot');
+      if (!slots.length) return;
+      var step = slots[0].offsetWidth + 12;
+      if (e.key === 'ArrowLeft')  { e.preventDefault(); carousel.scrollBy({ left: -step, behavior: 'smooth' }); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); carousel.scrollBy({ left:  step, behavior: 'smooth' }); }
+    });
+
+    /* 5. Autoplay (optional) — advances one slot at a time and loops back to
+       the start. Speed is set per-section (seconds). Pauses on hover, focus,
+       pointer/touch interaction and when the tab is hidden; skipped entirely
+       for visitors who prefer reduced motion. */
+    var apOn    = carousel.getAttribute('data-iws-autoplay') === '1';
+    var apSpeed = (parseFloat(carousel.getAttribute('data-iws-autoplay-speed')) || 4) * 1000;
+    var apReduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (apOn && !apReduce) {
+      var apGap = {{ st.media_gap | default: 12 }};
+      var apTimer = null, apRaf = null;
+      // Custom rAF tween for buttery autoplay. We drive scrollLeft ourselves on
+      // every animation frame (so it runs at the display's refresh rate — 120fps
+      // on a 120Hz screen) with an easeInOutCubic curve for a soft start/stop.
+      // We force scroll-behavior:auto during the tween so the CSS smooth-scroll
+      // doesn't ALSO try to animate the same property (that double-animation is
+      // the usual cause of stutter); it's restored the instant the glide ends.
+      // easeInOutSine — gentler than cubic, so the start and stop feel feather-soft.
+      var apEase = function(t){ return -(Math.cos(Math.PI * t) - 1) / 2; };
+      // CSS scroll-snap is `x mandatory`. If we leave it on while driving
+      // scrollLeft frame-by-frame, the browser re-snaps to the nearest slot on
+      // every frame and the glide collapses into an instant jump — THAT was the
+      // abruptness. So during a tween we turn snap off (and the CSS smooth-scroll
+      // off so it doesn't double-animate), then restore both at the end. The
+      // tween always lands exactly on a slot edge, so restoring snap is seamless.
+      var apReset = function(){ carousel.style.scrollBehavior = ''; carousel.style.scrollSnapType = ''; };
+      var apTweenTo = function(target, duration) {
+        if (apRaf) { cancelAnimationFrame(apRaf); apRaf = null; }
+        var start = carousel.scrollLeft;
+        var change = target - start;
+        if (Math.abs(change) < 1) return;
+        carousel.style.scrollBehavior = 'auto';
+        carousel.style.scrollSnapType = 'none';
+        var t0 = null;
+        var frame = function(now) {
+          if (t0 === null) t0 = now;
+          var p = Math.min(1, (now - t0) / duration);
+          carousel.scrollLeft = start + change * apEase(p);
+          if (p < 1) { apRaf = requestAnimationFrame(frame); }
+          else { apRaf = null; apReset(); }
+        };
+        apRaf = requestAnimationFrame(frame);
+      };
+      var apStep = function() {
+        var max = carousel.scrollWidth - carousel.clientWidth;
+        if (max <= 0) return;
+        var first = carousel.querySelector('.iws__slot');
+        var dist = first ? (first.offsetWidth + apGap) : carousel.clientWidth;
+        if (carousel.scrollLeft >= max - 2) {
+          // Loop back to the start with a long, calm glide.
+          apTweenTo(0, 1100);
+        } else {
+          // ~900ms glide per slot — unhurried and smooth, always shorter than
+          // the autoplay interval so each step finishes before the next begins.
+          apTweenTo(Math.min(max, carousel.scrollLeft + dist), Math.min(900, apSpeed - 150));
+        }
+      };
+      var apStart = function() { if (!apTimer) { apTimer = setInterval(apStep, apSpeed); } };
+      var apStop  = function() {
+        if (apTimer) { clearInterval(apTimer); apTimer = null; }
+        if (apRaf) { cancelAnimationFrame(apRaf); apRaf = null; apReset(); }
+      };
+      apStart();
+      carousel.addEventListener('mouseenter', apStop);
+      carousel.addEventListener('mouseleave', apStart);
+      carousel.addEventListener('focusin',  apStop);
+      carousel.addEventListener('focusout', apStart);
+      carousel.addEventListener('mousedown', apStop);
+      window.addEventListener('mouseup', apStart);
+      carousel.addEventListener('touchstart', apStop, { passive: true });
+      carousel.addEventListener('touchend',   apStart, { passive: true });
+      document.addEventListener('visibilitychange', function() {
+        if (document.hidden) { apStop(); } else { apStart(); }
+      });
+    }
+  })();
+{% comment %}{% endcomment %}</script>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "image-with-text-stats",
+  "name": "Image With Text Stats",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "Layout"
+    },
+    {
+      "type": "select",
+      "id": "section_width",
+      "label": "Section width",
+      "default": "container",
+      "options": [
+        {
+          "value": "container",
+          "label": "Default"
+        },
+        {
+          "value": "fluid_container",
+          "label": "Fluid container"
+        },
+        {
+          "value": "stretch_width",
+          "label": "Stretched"
+        },
+        {
+          "value": "full_width",
+          "label": "Full width"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "media_position",
+      "label": "Media position (desktop)",
+      "default": "left",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "content_align",
+      "label": "Content alignment (desktop)",
+      "default": "left",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "content_align_mobile",
+      "label": "Content alignment (mobile)",
+      "default": "left",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "media_column_width",
+      "label": "Media column width (desktop)",
+      "min": 30,
+      "max": 70,
+      "step": 1,
+      "unit": "%",
+      "default": 50
+    },
+    {
+      "type": "range",
+      "id": "text_max_width",
+      "label": "Stats max width (when no media)",
+      "min": 400,
+      "max": 1400,
+      "step": 20,
+      "unit": "px",
+      "default": 900
+    },
+    {
+      "type": "range",
+      "id": "gap_desktop",
+      "label": "Column gap (desktop)",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "default": 64
+    },
+    {
+      "type": "range",
+      "id": "gap_mobile",
+      "label": "Column gap (mobile)",
+      "min": 0,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 32
+    },
+    {
+      "type": "range",
+      "id": "content_gap",
+      "label": "Vertical gap between blocks",
+      "min": 0,
+      "max": 60,
+      "step": 2,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "header",
+      "id": "hdr_12",
+      "label": "Media layout"
+    },
+    {
+      "type": "select",
+      "id": "per_row",
+      "label": "Items per row",
+      "default": "1.2",
+      "info": "Auto: 1→single, 2→side-by-side, 3+→carousel. Or pick an exact count. Anything more than the chosen count becomes a carousel.",
+      "options": [
+        {
+          "value": "auto",
+          "label": "Auto"
+        },
+        {
+          "value": "1",
+          "label": "1 per row"
+        },
+        {
+          "value": "1.2",
+          "label": "1.2 per row"
+        },
+        {
+          "value": "1.5",
+          "label": "1.5 per row"
+        },
+        {
+          "value": "2",
+          "label": "2 per row"
+        },
+        {
+          "value": "2.5",
+          "label": "2.5 per row"
+        },
+        {
+          "value": "3",
+          "label": "3 per row"
+        }
+      ]
+    },
+    {
+      "type": "checkbox",
+      "id": "carousel_autoplay",
+      "label": "Autoplay carousel",
+      "default": false,
+      "info": "Only applies when the media is a carousel (more items than the items-per-row). Auto-advances and loops back to the start. Pauses on hover, focus, drag and when the tab is hidden; disabled for visitors who prefer reduced motion."
+    },
+    {
+      "type": "range",
+      "id": "carousel_autoplay_speed",
+      "label": "Autoplay speed (seconds)",
+      "min": 2,
+      "max": 12,
+      "step": 1,
+      "unit": "s",
+      "default": 4,
+      "visible_if": "{{ section.settings.carousel_autoplay }}"
+    },
+    {
+      "type": "range",
+      "id": "media_aspect_w",
+      "label": "Slot aspect — width",
+      "min": 1,
+      "max": 16,
+      "step": 1,
+      "default": 3
+    },
+    {
+      "type": "range",
+      "id": "media_aspect_h",
+      "label": "Slot aspect — height",
+      "min": 1,
+      "max": 24,
+      "step": 1,
+      "default": 4
+    },
+    {
+      "type": "range",
+      "id": "media_radius",
+      "label": "Slot corner radius",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "media_gap",
+      "label": "Gap between slots",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "color",
+      "id": "progress_track",
+      "label": "Progress bar track",
+      "default": "#E5E7EB"
+    },
+    {
+      "type": "color",
+      "id": "progress_fill",
+      "label": "Progress bar fill",
+      "default": "#3F2A5C"
+    },
+    {
+      "type": "range",
+      "id": "progress_height",
+      "label": "Progress bar height",
+      "min": 1,
+      "max": 8,
+      "step": 1,
+      "unit": "px",
+      "default": 2
+    },
+    {
+      "type": "range",
+      "id": "progress_margin",
+      "label": "Progress bar top margin",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "default": 18
+    },
+    {
+      "type": "header",
+      "id": "hdr_24",
+      "label": "Stats list (visual)"
+    },
+    {
+      "type": "color",
+      "id": "accent_color",
+      "label": "Default ring fill",
+      "default": "#7C3AED"
+    },
+    {
+      "type": "color",
+      "id": "ring_bg",
+      "label": "Ring background",
+      "default": "#9A9A9A"
+    },
+    {
+      "type": "color",
+      "id": "stat_divider",
+      "label": "Divider line color"
+    },
+    {
+      "type": "color",
+      "id": "stat_text_color",
+      "label": "Stat text color",
+      "default": "#3F2A5C"
+    },
+    {
+      "type": "color",
+      "id": "heading_color",
+      "label": "Percent number color",
+      "default": "#3F2A5C"
+    },
+    {
+      "type": "range",
+      "id": "ring_size",
+      "label": "Ring size",
+      "min": 40,
+      "max": 120,
+      "step": 2,
+      "unit": "px",
+      "default": 70
+    },
+    {
+      "type": "range",
+      "id": "percent_size",
+      "label": "Percent number size",
+      "min": 10,
+      "max": 22,
+      "step": 1,
+      "unit": "px",
+      "default": 14
+    },
+    {
+      "type": "range",
+      "id": "stat_text_size",
+      "label": "Stat text size",
+      "min": 12,
+      "max": 22,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "stat_gap",
+      "label": "Ring → text gap",
+      "min": 4,
+      "max": 32,
+      "step": 2,
+      "unit": "px",
+      "default": 18
+    },
+    {
+      "type": "range",
+      "id": "stat_pad_y",
+      "label": "Stat top + bottom padding",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "default": 22
+    },
+    {
+      "type": "header",
+      "id": "hdr_35",
+      "label": "Custom fonts (optional)"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_custom_fonts",
+      "label": "Enable custom fonts",
+      "default": false,
+      "info": "When off, this section uses the theme's global Typography fonts."
+    },
+    {
+      "type": "font_picker",
+      "id": "heading_font",
+      "label": "Heading font",
+      "default": "assistant_n4"
+    },
+    {
+      "type": "font_picker",
+      "id": "body_font",
+      "label": "Body font",
+      "default": "assistant_n4"
+    },
+    {
+      "type": "header",
+      "id": "hdr_39",
+      "label": "Section colors + spacing"
+    },
+    {
+      "type": "color",
+      "id": "section_bg",
+      "label": "Section background",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Default text color",
+      "default": "#0F172A"
+    },
+    {
+      "type": "range",
+      "id": "padding_top_desktop",
+      "label": "Top padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 100
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_desktop",
+      "label": "Bottom padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 100
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "label": "Top padding (mobile)",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "default": 60
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "label": "Bottom padding (mobile)",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "default": 60
+    },
+    {
+      "type": "range",
+      "id": "side_padding_desktop",
+      "label": "Horizontal padding (desktop)",
+      "min": 0,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 32
+    },
+    {
+      "type": "range",
+      "id": "side_padding_mobile",
+      "label": "Horizontal padding (mobile)",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "default": 20
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_desktop",
+      "label": "Top margin (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_desktop",
+      "label": "Bottom margin (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_mobile",
+      "label": "Top margin (mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_mobile",
+      "label": "Bottom margin (mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 0
+    }
+  ],
+  "blocks": [
+    {
+      "type": "media",
+      "name": "Image / Video",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Choose what to show"
+        },
+        {
+          "type": "select",
+          "id": "media_type",
+          "label": "Media type",
+          "default": "image",
+          "options": [
+            {
+              "value": "image",
+              "label": "Image"
+            },
+            {
+              "value": "video",
+              "label": "Video (uploaded to Shopify)"
+            },
+            {
+              "value": "video_url",
+              "label": "Video URL (external .mp4)"
+            }
+          ]
+        },
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Image"
+        },
+        {
+          "type": "video",
+          "id": "video",
+          "label": "Video (uploaded)",
+          "info": "Pick a Shopify-uploaded video file."
+        },
+        {
+          "type": "url",
+          "id": "video_url",
+          "label": "Video URL",
+          "info": "External direct .mp4 URL."
+        },
+        {
+          "type": "header",
+          "id": "hdr_6",
+          "label": "Video playback"
+        },
+        {
+          "type": "checkbox",
+          "id": "autoplay",
+          "label": "Autoplay",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "muted",
+          "label": "Muted",
+          "default": true,
+          "info": "Required for autoplay in most browsers."
+        },
+        {
+          "type": "checkbox",
+          "id": "loop",
+          "label": "Loop",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "show_controls",
+          "label": "Show player controls (play / pause)",
+          "default": false
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "name": "Heading",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Text",
+          "default": "INCREDIBLE RESULTS"
+        },
+        {
+          "type": "select",
+          "id": "tag",
+          "label": "HTML tag",
+          "default": "h2",
+          "options": [
+            {
+              "value": "h1",
+              "label": "H1"
+            },
+            {
+              "value": "h2",
+              "label": "H2"
+            },
+            {
+              "value": "h3",
+              "label": "H3"
+            }
+          ]
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#3F2A5C"
+        },
+        {
+          "type": "checkbox",
+          "id": "weight_enable",
+          "label": "Custom font weight",
+          "default": false,
+          "info": "Off uses the theme's typography weight. Turn on to override."
+        },
+        {
+          "type": "select",
+          "id": "weight",
+          "label": "Weight",
+          "default": "800",
+          "visible_if": "{{ block.settings.weight_enable }}",
+          "options": [
+            {
+              "value": "300",
+              "label": "Light"
+            },
+            {
+              "value": "400",
+              "label": "Normal"
+            },
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semi-bold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            },
+            {
+              "value": "800",
+              "label": "Extra-bold"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "size_desktop",
+          "label": "Size (desktop)",
+          "min": 24,
+          "max": 80,
+          "step": 1,
+          "unit": "px",
+          "default": 48
+        },
+        {
+          "type": "range",
+          "id": "size_mobile",
+          "label": "Size (mobile)",
+          "min": 18,
+          "max": 56,
+          "step": 1,
+          "unit": "px",
+          "default": 32
+        },
+        {
+          "type": "checkbox",
+          "id": "uppercase",
+          "label": "UPPERCASE",
+          "default": true
+        }
+      ],
+      "limit": 2
+    },
+    {
+      "type": "subheading",
+      "name": "Subheading",
+      "settings": [
+        {
+          "type": "richtext",
+          "id": "text",
+          "label": "Text",
+          "default": "<p>{{ 'accessibility.add_supporting_copy' | t }}</p>"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#5B4480"
+        },
+        {
+          "type": "checkbox",
+          "id": "weight_enable",
+          "label": "Custom font weight",
+          "default": false,
+          "info": "Off uses the theme's typography weight. Turn on to override."
+        },
+        {
+          "type": "select",
+          "id": "weight",
+          "label": "Weight",
+          "default": "400",
+          "visible_if": "{{ block.settings.weight_enable }}",
+          "options": [
+            {
+              "value": "300",
+              "label": "Light"
+            },
+            {
+              "value": "400",
+              "label": "Normal"
+            },
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semi-bold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "size_desktop",
+          "label": "Size (desktop)",
+          "min": 12,
+          "max": 24,
+          "step": 1,
+          "unit": "px",
+          "default": 16
+        },
+        {
+          "type": "range",
+          "id": "size_mobile",
+          "label": "Size (mobile)",
+          "min": 11,
+          "max": 20,
+          "step": 1,
+          "unit": "px",
+          "default": 14
+        }
+      ],
+      "limit": 2
+    },
+    {
+      "type": "stats_group",
+      "name": "Stats list (anchor)",
+      "settings": [
+        {
+          "type": "paragraph",
+          "id": "para_1",
+          "label": "Drag this block to position the stats list in the right column. Add Stat blocks below to populate it.",
+          "content": "Drag this block to position the stats list in the right column. Add Stat blocks below to populate it."
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "stat",
+      "name": "Stat",
+      "settings": [
+        {
+          "type": "range",
+          "id": "percent",
+          "label": "Percent",
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "unit": "%",
+          "default": 90
+        },
+        {
+          "type": "richtext",
+          "id": "text",
+          "label": "Body text",
+          "default": "<p>Short description of what this stat measures and why it matters.</p>"
+        },
+        {
+          "type": "checkbox",
+          "id": "weight_enable",
+          "label": "Custom font weight",
+          "default": false,
+          "info": "Off uses the theme's typography weight. Turn on to override."
+        },
+        {
+          "type": "select",
+          "id": "weight",
+          "label": "Weight",
+          "default": "400",
+          "visible_if": "{{ block.settings.weight_enable }}",
+          "options": [
+            {
+              "value": "300",
+              "label": "Light"
+            },
+            {
+              "value": "400",
+              "label": "Normal"
+            },
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semi-bold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "footnote",
+      "name": "Footnote",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Text",
+          "default": "Results are based on 20,000+ orders"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#7B5BA0"
+        },
+        {
+          "type": "checkbox",
+          "id": "weight_enable",
+          "label": "Custom font weight",
+          "default": false,
+          "info": "Off uses the theme's typography weight. Turn on to override."
+        },
+        {
+          "type": "select",
+          "id": "weight",
+          "label": "Weight",
+          "default": "400",
+          "visible_if": "{{ block.settings.weight_enable }}",
+          "options": [
+            {
+              "value": "300",
+              "label": "Light"
+            },
+            {
+              "value": "400",
+              "label": "Normal"
+            },
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semi-bold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "size",
+          "label": "Font size",
+          "min": 10,
+          "max": 18,
+          "step": 1,
+          "unit": "px",
+          "default": 13
+        },
+        {
+          "type": "range",
+          "id": "margin_top",
+          "label": "Top margin",
+          "min": 0,
+          "max": 40,
+          "step": 2,
+          "unit": "px",
+          "default": 12
+        }
+      ],
+      "limit": 1
+    }
+  ],
+  "presets": [
+    {
+      "name": "Image With Text Stats",
+      "category": "Image With Text",
+      "blocks": [
+        {
+          "type": "media",
+          "settings": {
+            "media_type": "image"
+          }
+        },
+        {
+          "type": "media",
+          "settings": {
+            "media_type": "image"
+          }
+        },
+        {
+          "type": "heading",
+          "settings": {
+            "text": "INCREDIBLE RESULTS"
+          }
+        },
+        {
+          "type": "stats_group"
+        },
+        {
+          "type": "stat",
+          "settings": {
+            "percent": 94,
+            "text": "<p>of our customers noticed a visible boost in skin firmness after using our cream daily, feeling more radiant and refreshed in their everyday routine.</p>"
+          }
+        },
+        {
+          "type": "stat",
+          "settings": {
+            "percent": 87,
+            "text": "<p>of users experienced a clear improvement in hydration, citing our cream as a major factor in restoring their skin's softness and natural glow.</p>"
+          }
+        },
+        {
+          "type": "stat",
+          "settings": {
+            "percent": 98,
+            "text": "<p>of our clientele observed that our deeply nourishing formula helped them maintain smoother, healthier skin all day long, making every touch feel special.</p>"
+          }
+        },
+        {
+          "type": "footnote",
+          "settings": {
+            "text": "Results are based on 20,000+ orders"
+          }
+        }
+      ]
+    }
+  ],
+  "shopify": {
+    "name": "Image With Text Stats",
+    "tag": "section",
+    "class": "section sec__image-text-stats",
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "container",
+        "options": [
+          {
+            "value": "container",
+            "label": "Default"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "media_position",
+        "label": "Media position (desktop)",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "content_align",
+        "label": "Content alignment (desktop)",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "content_align_mobile",
+        "label": "Content alignment (mobile)",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "media_column_width",
+        "label": "Media column width (desktop)",
+        "min": 30,
+        "max": 70,
+        "step": 1,
+        "unit": "%",
+        "default": 50
+      },
+      {
+        "type": "range",
+        "id": "text_max_width",
+        "label": "Stats max width (when no media)",
+        "min": 400,
+        "max": 1400,
+        "step": 20,
+        "unit": "px",
+        "default": 900
+      },
+      {
+        "type": "range",
+        "id": "gap_desktop",
+        "label": "Column gap (desktop)",
+        "min": 0,
+        "max": 160,
+        "step": 4,
+        "unit": "px",
+        "default": 64
+      },
+      {
+        "type": "range",
+        "id": "gap_mobile",
+        "label": "Column gap (mobile)",
+        "min": 0,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 32
+      },
+      {
+        "type": "range",
+        "id": "content_gap",
+        "label": "Vertical gap between blocks",
+        "min": 0,
+        "max": 60,
+        "step": 2,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "header",
+        "content": "Media layout"
+      },
+      {
+        "type": "select",
+        "id": "per_row",
+        "label": "Items per row",
+        "default": "1.2",
+        "info": "Auto: 1→single, 2→side-by-side, 3+→carousel. Or pick an exact count. Anything more than the chosen count becomes a carousel.",
+        "options": [
+          {
+            "value": "auto",
+            "label": "Auto"
+          },
+          {
+            "value": "1",
+            "label": "1 per row"
+          },
+          {
+            "value": "1.2",
+            "label": "1.2 per row"
+          },
+          {
+            "value": "1.5",
+            "label": "1.5 per row"
+          },
+          {
+            "value": "2",
+            "label": "2 per row"
+          },
+          {
+            "value": "2.5",
+            "label": "2.5 per row"
+          },
+          {
+            "value": "3",
+            "label": "3 per row"
+          }
+        ]
+      },
+      {
+        "type": "checkbox",
+        "id": "carousel_autoplay",
+        "label": "Autoplay carousel",
+        "default": false,
+        "info": "Only applies when the media is a carousel (more items than the items-per-row). Auto-advances and loops back to the start. Pauses on hover, focus, drag and when the tab is hidden; disabled for visitors who prefer reduced motion."
+      },
+      {
+        "type": "range",
+        "id": "carousel_autoplay_speed",
+        "label": "Autoplay speed (seconds)",
+        "min": 2,
+        "max": 12,
+        "step": 1,
+        "unit": "s",
+        "default": 4,
+        "visible_if": "{{ section.settings.carousel_autoplay }}"
+      },
+      {
+        "type": "range",
+        "id": "media_aspect_w",
+        "label": "Slot aspect — width",
+        "min": 1,
+        "max": 16,
+        "step": 1,
+        "default": 3
+      },
+      {
+        "type": "range",
+        "id": "media_aspect_h",
+        "label": "Slot aspect — height",
+        "min": 1,
+        "max": 24,
+        "step": 1,
+        "default": 4
+      },
+      {
+        "type": "range",
+        "id": "media_radius",
+        "label": "Slot corner radius",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "media_gap",
+        "label": "Gap between slots",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "default": 12
+      },
+      {
+        "type": "color",
+        "id": "progress_track",
+        "label": "Progress bar track",
+        "default": "#E5E7EB"
+      },
+      {
+        "type": "color",
+        "id": "progress_fill",
+        "label": "Progress bar fill",
+        "default": "#3F2A5C"
+      },
+      {
+        "type": "range",
+        "id": "progress_height",
+        "label": "Progress bar height",
+        "min": 1,
+        "max": 8,
+        "step": 1,
+        "unit": "px",
+        "default": 2
+      },
+      {
+        "type": "range",
+        "id": "progress_margin",
+        "label": "Progress bar top margin",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "default": 18
+      },
+      {
+        "type": "header",
+        "content": "Stats list (visual)"
+      },
+      {
+        "type": "color",
+        "id": "accent_color",
+        "label": "Default ring fill",
+        "default": "#7C3AED"
+      },
+      {
+        "type": "color",
+        "id": "ring_bg",
+        "label": "Ring background",
+        "default": "#9A9A9A"
+      },
+      {
+        "type": "color",
+        "id": "stat_divider",
+        "label": "Divider line color",
+        "default": "rgba(127,73,176,0.18)"
+      },
+      {
+        "type": "color",
+        "id": "stat_text_color",
+        "label": "Stat text color",
+        "default": "#3F2A5C"
+      },
+      {
+        "type": "color",
+        "id": "heading_color",
+        "label": "Percent number color",
+        "default": "#3F2A5C"
+      },
+      {
+        "type": "range",
+        "id": "ring_size",
+        "label": "Ring size",
+        "min": 40,
+        "max": 120,
+        "step": 2,
+        "unit": "px",
+        "default": 70
+      },
+      {
+        "type": "range",
+        "id": "percent_size",
+        "label": "Percent number size",
+        "min": 10,
+        "max": 22,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "range",
+        "id": "stat_text_size",
+        "label": "Stat text size",
+        "min": 12,
+        "max": 22,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "stat_gap",
+        "label": "Ring → text gap",
+        "min": 4,
+        "max": 32,
+        "step": 2,
+        "unit": "px",
+        "default": 18
+      },
+      {
+        "type": "range",
+        "id": "stat_pad_y",
+        "label": "Stat top + bottom padding",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "default": 22
+      },
+      {
+        "type": "header",
+        "content": "Custom fonts (optional)"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Enable custom fonts",
+        "default": false,
+        "info": "When off, this section uses the theme's global Typography fonts."
+      },
+      {
+        "type": "font_picker",
+        "id": "heading_font",
+        "label": "Heading font",
+        "default": "assistant_n4"
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Body font",
+        "default": "assistant_n4"
+      },
+      {
+        "type": "header",
+        "content": "Section colors + spacing"
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Section background",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "text_color",
+        "label": "Default text color",
+        "default": "#0F172A"
+      },
+      {
+        "type": "range",
+        "id": "padding_top_desktop",
+        "label": "Top padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 100
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_desktop",
+        "label": "Bottom padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 100
+      },
+      {
+        "type": "range",
+        "id": "padding_top_mobile",
+        "label": "Top padding (mobile)",
+        "min": 0,
+        "max": 160,
+        "step": 4,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_mobile",
+        "label": "Bottom padding (mobile)",
+        "min": 0,
+        "max": 160,
+        "step": 4,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "range",
+        "id": "side_padding_desktop",
+        "label": "Horizontal padding (desktop)",
+        "min": 0,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 32
+      },
+      {
+        "type": "range",
+        "id": "side_padding_mobile",
+        "label": "Horizontal padding (mobile)",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "default": 20
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_mobile",
+        "label": "Top margin (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_mobile",
+        "label": "Bottom margin (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 0
+      }
+    ],
+    "blocks": [
+      {
+        "type": "media",
+        "name": "Image / Video",
+        "settings": [
+          {
+            "type": "header",
+            "content": "Choose what to show"
+          },
+          {
+            "type": "select",
+            "id": "media_type",
+            "label": "Media type",
+            "default": "image",
+            "options": [
+              {
+                "value": "image",
+                "label": "Image"
+              },
+              {
+                "value": "video",
+                "label": "Video (uploaded to Shopify)"
+              },
+              {
+                "value": "video_url",
+                "label": "Video URL (external .mp4)"
+              }
+            ]
+          },
+          {
+            "type": "image_picker",
+            "id": "image",
+            "label": "Image"
+          },
+          {
+            "type": "video",
+            "id": "video",
+            "label": "Video (uploaded)",
+            "info": "Pick a Shopify-uploaded video file."
+          },
+          {
+            "type": "url",
+            "id": "video_url",
+            "label": "Video URL",
+            "info": "External direct .mp4 URL."
+          },
+          {
+            "type": "header",
+            "content": "Video playback"
+          },
+          {
+            "type": "checkbox",
+            "id": "autoplay",
+            "label": "Autoplay",
+            "default": true
+          },
+          {
+            "type": "checkbox",
+            "id": "muted",
+            "label": "Muted",
+            "default": true,
+            "info": "Required for autoplay in most browsers."
+          },
+          {
+            "type": "checkbox",
+            "id": "loop",
+            "label": "Loop",
+            "default": true
+          },
+          {
+            "type": "checkbox",
+            "id": "show_controls",
+            "label": "Show player controls (play / pause)",
+            "default": false
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 2,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Text",
+            "default": "INCREDIBLE RESULTS"
+          },
+          {
+            "type": "select",
+            "id": "tag",
+            "label": "HTML tag",
+            "default": "h2",
+            "options": [
+              {
+                "value": "h1",
+                "label": "H1"
+              },
+              {
+                "value": "h2",
+                "label": "H2"
+              },
+              {
+                "value": "h3",
+                "label": "H3"
+              }
+            ]
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#3F2A5C"
+          },
+          {
+            "type": "checkbox",
+            "id": "weight_enable",
+            "label": "Custom font weight",
+            "default": false,
+            "info": "Off uses the theme's typography weight. Turn on to override."
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Weight",
+            "default": "800",
+            "visible_if": "{{ block.settings.weight_enable }}",
+            "options": [
+              {
+                "value": "300",
+                "label": "Light"
+              },
+              {
+                "value": "400",
+                "label": "Normal"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi-bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              },
+              {
+                "value": "800",
+                "label": "Extra-bold"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "size_desktop",
+            "label": "Size (desktop)",
+            "min": 24,
+            "max": 80,
+            "step": 1,
+            "unit": "px",
+            "default": 48
+          },
+          {
+            "type": "range",
+            "id": "size_mobile",
+            "label": "Size (mobile)",
+            "min": 18,
+            "max": 56,
+            "step": 1,
+            "unit": "px",
+            "default": 32
+          },
+          {
+            "type": "checkbox",
+            "id": "uppercase",
+            "label": "UPPERCASE",
+            "default": true
+          }
+        ]
+      },
+      {
+        "type": "subheading",
+        "name": "Subheading",
+        "limit": 2,
+        "settings": [
+          {
+            "type": "richtext",
+            "id": "text",
+            "label": "Text",
+            "default": "<p>{{ 'accessibility.add_supporting_copy' | t }}</p>"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#5B4480"
+          },
+          {
+            "type": "checkbox",
+            "id": "weight_enable",
+            "label": "Custom font weight",
+            "default": false,
+            "info": "Off uses the theme's typography weight. Turn on to override."
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Weight",
+            "default": "400",
+            "visible_if": "{{ block.settings.weight_enable }}",
+            "options": [
+              {
+                "value": "300",
+                "label": "Light"
+              },
+              {
+                "value": "400",
+                "label": "Normal"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi-bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "size_desktop",
+            "label": "Size (desktop)",
+            "min": 12,
+            "max": 24,
+            "step": 1,
+            "unit": "px",
+            "default": 16
+          },
+          {
+            "type": "range",
+            "id": "size_mobile",
+            "label": "Size (mobile)",
+            "min": 11,
+            "max": 20,
+            "step": 1,
+            "unit": "px",
+            "default": 14
+          }
+        ]
+      },
+      {
+        "type": "stats_group",
+        "name": "Stats list (anchor)",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "paragraph",
+            "content": "Drag this block to position the stats list in the right column. Add Stat blocks below to populate it."
+          }
+        ]
+      },
+      {
+        "type": "stat",
+        "name": "Stat",
+        "settings": [
+          {
+            "type": "range",
+            "id": "percent",
+            "label": "Percent",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "unit": "%",
+            "default": 90
+          },
+          {
+            "type": "richtext",
+            "id": "text",
+            "label": "Body text",
+            "default": "<p>Short description of what this stat measures and why it matters.</p>"
+          },
+          {
+            "type": "checkbox",
+            "id": "weight_enable",
+            "label": "Custom font weight",
+            "default": false,
+            "info": "Off uses the theme's typography weight. Turn on to override."
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Weight",
+            "default": "400",
+            "visible_if": "{{ block.settings.weight_enable }}",
+            "options": [
+              {
+                "value": "300",
+                "label": "Light"
+              },
+              {
+                "value": "400",
+                "label": "Normal"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi-bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "footnote",
+        "name": "Footnote",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Text",
+            "default": "Results are based on 20,000+ orders"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#7B5BA0"
+          },
+          {
+            "type": "checkbox",
+            "id": "weight_enable",
+            "label": "Custom font weight",
+            "default": false,
+            "info": "Off uses the theme's typography weight. Turn on to override."
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Weight",
+            "default": "400",
+            "visible_if": "{{ block.settings.weight_enable }}",
+            "options": [
+              {
+                "value": "300",
+                "label": "Light"
+              },
+              {
+                "value": "400",
+                "label": "Normal"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi-bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "label": "Font size",
+            "min": 10,
+            "max": 18,
+            "step": 1,
+            "unit": "px",
+            "default": 13
+          },
+          {
+            "type": "range",
+            "id": "margin_top",
+            "label": "Top margin",
+            "min": 0,
+            "max": 40,
+            "step": 2,
+            "unit": "px",
+            "default": 12
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Image With Text Stats",
+        "category": "Image With Text",
+        "blocks": [
+          {
+            "type": "media",
+            "settings": {
+              "media_type": "image"
+            }
+          },
+          {
+            "type": "media",
+            "settings": {
+              "media_type": "image"
+            }
+          },
+          {
+            "type": "heading",
+            "settings": {
+              "text": "INCREDIBLE RESULTS"
+            }
+          },
+          {
+            "type": "stats_group"
+          },
+          {
+            "type": "stat",
+            "settings": {
+              "percent": 94,
+              "text": "<p>of our customers noticed a visible boost in skin firmness after using our cream daily, feeling more radiant and refreshed in their everyday routine.</p>"
+            }
+          },
+          {
+            "type": "stat",
+            "settings": {
+              "percent": 87,
+              "text": "<p>of users experienced a clear improvement in hydration, citing our cream as a major factor in restoring their skin's softness and natural glow.</p>"
+            }
+          },
+          {
+            "type": "stat",
+            "settings": {
+              "percent": 98,
+              "text": "<p>of our clientele observed that our deeply nourishing formula helped them maintain smoother, healthier skin all day long, making every touch feel special.</p>"
+            }
+          },
+          {
+            "type": "footnote",
+            "settings": {
+              "text": "Results are based on 20,000+ orders"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

@@ -1,0 +1,1795 @@
+<template compat="shopify">
+{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- comment -%}
+  Section background colour wiring. Painted on the section wrapper so
+  the colour fills edge-to-edge regardless of inner section width.
+{%- endcomment -%}
+{%- if section.settings.section_bg != blank -%}
+  <style>
+    #shopify-section-{{ section.id }} {
+      background-color: {{ section.settings.section_bg }};
+    }
+{% comment %}{% endcomment %}  </style>
+{%- endif -%}
+{%- liquid
+  assign __ti_scroll_animation = settings.scroll_animation | default: 'none'
+  assign __ti_reveal = section.settings.reveal
+-%}
+<style>
+  /* Section isolation — prevent CSS/JS bleed between sections */
+  #shopify-section-{{ section.id }} {
+    isolation: isolate;
+    position: relative;
+    /* Pin to the page's base stacking layer so this section never paints over
+       the sticky header (header/navigation is z-index: 11). Same fix the hero
+       section uses. */
+    z-index: 0;
+  }
+  /* Aggressive theme typography */
+  :where(#shopify-section-{{ section.id }}) {
+    font-family: var(--body-font, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :where(button, input, textarea, select, optgroup) {
+    font-family: inherit;
+  }
+  /* Theme font-weight inheritance — sections inherit theme weights by default.
+     Specific font-weight rules in section CSS still override these. */
+  #shopify-section-{{ section.id }} {
+    font-weight: var(--body-weight, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
+    font-weight: var(--heading-weight, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
+    font-family: var(--heading-font, inherit);
+  }
+  /* Section margin sliders (mobile-first) */
+  #shopify-section-{{ section.id }} {
+    margin-top: {{ section.settings.section_margin_top_mobile | default: 0 }}px;
+    margin-bottom: {{ section.settings.section_margin_bottom_mobile | default: 0 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ section.id }} {
+      margin-top: {{ section.settings.section_margin_top_desktop | default: 0 }}px;
+      margin-bottom: {{ section.settings.section_margin_bottom_desktop | default: 0 }}px;
+    }
+  }
+  /* Section wrapper spans its parent's full width without breaking out of
+     the editor preview. The section + first child span 100% so backgrounds
+     reach edge-to-edge but the editor inspector outline stays inside the
+     iframe viewport. */
+  #shopify-section-{{ section.id }} {
+    max-width: none !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    position: relative !important;
+    box-sizing: border-box !important;
+  }
+  #shopify-section-{{ section.id }} > :where(div, section, header, footer, aside, main, article):first-child {
+    max-width: none !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Section width — universal selector that works regardless of inner
+     markup. Targets both:
+       1) Theme container classes (.container/.fluid_container/etc.) — for
+          sections that have an inner wrapper with that class
+       2) The section's first-child div — for sections that don't have a
+          named inner wrapper. The padding-inline sets the max content
+          area while the wrapper itself stays 100% wide so any background
+          stays edge-to-edge. */
+  {%- case section.settings.section_width -%}
+    {%- when 'container' -%}
+      #shopify-section-{{ section.id }} .container,
+      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+        max-width: calc(var(--page-width, 1300px) + 3rem) !important;
+        margin-inline: auto !important;
+        box-sizing: border-box !important;
+      }
+    {%- when 'fluid_container' -%}
+      #shopify-section-{{ section.id }} .fluid_container,
+      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+        max-width: calc(var(--fluid-container-width, 1500px) + 3rem) !important;
+        margin-inline: auto !important;
+        box-sizing: border-box !important;
+      }
+    {%- when 'stretch_width' -%}
+      /* Stretched: no max-width; tighter side padding handled below */
+      @media (min-width: 1200px) {
+        #shopify-section-{{ section.id }} .stretch_width,
+        #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+          padding-inline: 3rem;
+        }
+      }
+    {%- when 'full_width' -%}
+      /* full bleed — no constraints */
+  {%- endcase -%}
+  /* Reset spacing */
+  {%- if section.settings.reset_spacing -%}
+    #shopify-section-{{ section.id }} { margin-bottom: 0 !important; margin-top: 0 !important; }
+    #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+<!-- ti-theme:start -->
+
+
+{% style %}
+  .why-we-are-better-section {
+    text-align: center;
+    padding: {{ section.settings.padding_top_desktop | default: 60 }}px 20px {{ section.settings.padding_bottom_desktop | default: 60 }}px;
+    width: 100%;
+    background-color: {{ settings.background_color | default: 'transparent' }};
+    box-sizing: border-box;
+  }
+
+  @media (max-width: 768px) {
+    .why-we-are-better-section {
+      padding: {{ section.settings.padding_top_mobile | default: 20 }}px 10px {{ section.settings.padding_bottom_mobile | default: 20 }}px;
+    }
+  }
+
+  .why-we-are-better-section .content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .why-we-are-better-section h1 {
+    font-size: 2.5em;
+    margin-bottom: 20px;
+    color: {{ section.settings.heading_color | default: '#000000' }};
+  }
+
+  /* Features Container */
+  .why-we-are-better-section .features {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    align-items: center;
+    width: 40%;
+    padding: 25px;
+  }
+
+  /* Individual Feature */
+  .why-we-are-better-section .feature {
+    margin: 20px 0;
+    text-align: center;
+    background-color: transparent;
+    padding: 15px;
+    border-radius: 8px;
+    width: 100%;
+  }
+
+  .why-we-are-better-section .feature h2 {
+    font-size: {{ section.settings.feature_title_font_size | default: 20 }}px !important;
+    color: {{ section.settings.feature_title_color | default: '#000000' }} !important;
+    font-weight: {{ section.settings.feature_title_font_weight | default: 'normal' }} !important;
+    {% if section.settings.enable_custom_fonts %}
+      font-family: '{{ section.settings.custom_font }}', sans-serif !important;
+    {% else %}
+      font-family: 'Arial', sans-serif !important;
+    {% endif %}
+    margin-bottom: 10px;
+  }
+
+  .why-we-are-better-section .feature p {
+    font-size: {{ section.settings.feature_description_font_size | default: 14 }}px !important;
+    color: {{ section.settings.feature_description_color | default: '#666666' }} !important;
+    {% if section.settings.enable_custom_fonts %}
+      font-family: '{{ section.settings.custom_font }}', sans-serif !important;
+    {% else %}
+      font-family: 'Arial', sans-serif !important;
+    {% endif %}
+    margin-top: 10px;
+  }
+
+  /* Center Image/Video Container */
+  .why-we-are-better-section .image-container {
+    text-align: center;
+    width: 60%;
+  }
+
+  .why-we-are-better-section .image-container img {
+    max-width: 100%;
+    height: 600px;
+    width: 500px;
+    object-fit: cover;
+    border-radius: {{ section.settings.image_border_radius | default: 10 }}px;
+    transition: all 0.3s ease;
+    box-shadow: {% case section.settings.image_shadow %}
+      {% when 'none' %} none;
+      {% when 'low' %} 0 1px 3px rgba(0,0,0,0.1);
+      {% when 'medium' %} 0 4px 6px rgba(0,0,0,0.1);
+      {% when 'high' %} 0 10px 20px rgba(0,0,0,0.2);
+      {% else %} none;
+    {% endcase %}
+  }
+
+  .why-we-are-better-section .image-container img:hover {
+    {% case section.settings.image_hover_animation %}
+      {% when 'fade-in' %}
+        opacity: 0.8;
+      {% when 'zoom-in' %}
+        transform: scale(1.1);
+      {% when 'scale-in' %}
+        transform: scale(1.1);
+      {% when 'fade-in-up' %}
+        transform: translateY(-10px);
+        opacity: 0.8;
+      {% when 'rotate-in' %}
+        transform: rotate(10deg);
+      {% when 'slide-in-left' %}
+        transform: translateX(-10px);
+      {% when 'flip-in' %}
+        transform: rotateY(180deg);
+      {% else %}
+        /* No hover effect */
+    {% endcase %}
+  }
+
+  /* If a video is used, match the same style as image */
+  .why-we-are-better-section .image-container video {
+    max-width: 100%;
+    height: 600px;
+    width: 500px;
+    object-fit: cover;
+    border-radius: {{ section.settings.image_border_radius | default: 10 }}px;
+    transition: all 0.3s ease;
+    box-shadow: {% case section.settings.image_shadow %}
+      {% when 'none' %} none;
+      {% when 'low' %} 0 1px 3px rgba(0,0,0,0.1);
+      {% when 'medium' %} 0 4px 6px rgba(0,0,0,0.1);
+      {% when 'high' %} 0 10px 20px rgba(0,0,0,0.2);
+      {% else %} none;
+    {% endcase %}
+  }
+
+  .why-we-are-better-section .image-container video:hover {
+    {% case section.settings.image_hover_animation %}
+      {% when 'fade-in' %}
+        opacity: 0.8;
+      {% when 'zoom-in' %}
+        transform: scale(1.1);
+      {% when 'scale-in' %}
+        transform: scale(1.1);
+      {% when 'fade-in-up' %}
+        transform: translateY(-10px);
+        opacity: 0.8;
+      {% when 'rotate-in' %}
+        transform: rotate(10deg);
+      {% when 'slide-in-left' %}
+        transform: translateX(-10px);
+      {% when 'flip-in' %}
+        transform: rotateY(180deg);
+      {% else %}
+        /* No hover effect */
+    {% endcase %}
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .why-we-are-better-section .content {
+      flex-direction: column;
+    }
+
+    .why-we-are-better-section .features {
+      width: 100%;
+      flex-direction: row;
+      flex-wrap: wrap;
+      padding: 5px;
+    }
+
+    .why-we-are-better-section .feature {
+      flex: 1 1 65%;
+      max-width: 100%;
+      margin: 10px;
+      padding: 5px;
+    }
+
+    .why-we-are-better-section .image-container {
+      width: 100%;
+      margin: 20px 0;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .why-we-are-better-section .image-container img {
+      max-width: 100%;
+      height: 300px;
+      width: 300px;
+      object-fit: cover;
+      border-radius: {{ section.settings.image_border_radius | default: 10 }}px;
+      transition: all 0.3s ease;
+      box-shadow: {% case section.settings.image_shadow %}
+        {% when 'none' %} none;
+        {% when 'low' %} 0 1px 3px rgba(0,0,0,0.1);
+        {% when 'medium' %} 0 4px 6px rgba(0,0,0,0.1);
+        {% when 'high' %} 0 10px 20px rgba(0,0,0,0.2);
+        {% else %} none;
+      {% endcase %}
+    }
+
+    .why-we-are-better-section .image-container img:hover {
+      {% case section.settings.image_hover_animation %}
+        {% when 'fade-in' %}
+          opacity: 0.8;
+        {% when 'zoom-in' %}
+          transform: scale(1.1);
+        {% when 'scale-in' %}
+          transform: scale(1.1);
+        {% when 'fade-in-up' %}
+          transform: translateY(-10px);
+          opacity: 0.8;
+        {% when 'rotate-in' %}
+          transform: rotate(10deg);
+        {% when 'slide-in-left' %}
+          transform: translateX(-10px);
+        {% when 'flip-in' %}
+          transform: rotateY(180deg);
+        {% else %}
+          /* No hover effect */
+      {% endcase %}
+    }
+
+    .why-we-are-better-section .image-container video {
+      max-width: 100%;
+      height: 300px;
+      width: 300px;
+      object-fit: cover;
+      border-radius: {{ section.settings.image_border_radius | default: 10 }}px;
+      transition: all 0.3s ease;
+      box-shadow: {% case section.settings.image_shadow %}
+        {% when 'none' %} none;
+        {% when 'low' %} 0 1px 3px rgba(0,0,0,0.1);
+        {% when 'medium' %} 0 4px 6px rgba(0,0,0,0.1);
+        {% when 'high' %} 0 10px 20px rgba(0,0,0,0.2);
+        {% else %} none;
+      {% endcase %}
+    }
+
+    .why-we-are-better-section .image-container video:hover {
+      {% case section.settings.image_hover_animation %}
+        {% when 'fade-in' %}
+          opacity: 0.8;
+        {% when 'zoom-in' %}
+          transform: scale(1.1);
+        {% when 'scale-in' %}
+          transform: scale(1.1);
+        {% when 'fade-in-up' %}
+          transform: translateY(-10px);
+          opacity: 0.8;
+        {% when 'rotate-in' %}
+          transform: rotate(10deg);
+        {% when 'slide-in-left' %}
+          transform: translateX(-10px);
+        {% when 'flip-in' %}
+          transform: rotateY(180deg);
+        {% else %}
+          /* No hover effect */
+      {% endcase %}
+    }
+  }
+{% endstyle %}
+
+{% if section.settings.enable_custom_fonts %}
+  <link
+    href="https://fonts.googleapis.com/css2?family={{ section.settings.custom_font | replace: ' ', '+' }}&display=swap"
+    rel="stylesheet"
+  >
+{% endif %}
+
+<!-- Load FontAwesome CSS -->
+<link
+  rel="stylesheet"
+  href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css"
+  integrity="sha512-iBBXm8fW90+nuLcSKVBsIA7GfFv1Z7IoQ/..."
+  crossorigin="anonymous"
+  referrerpolicy="no-referrer"
+/>
+
+<div class="why-we-are-better-section">
+  <div class="content">
+    <!-- Left Features -->
+    <div class="features">
+      {% for block in section.blocks %}
+        {% if forloop.index <= 3 %}
+          <div class="feature">
+            <!-- Icon wrapper (applies circle background if enabled) -->
+            <div
+              class="icon-wrapper"
+              style="
+                {% if block.settings.enable_icon_circle_bg %}
+                  background-color: {{ block.settings.icon_circle_bg_color }} !important;
+                  width: {{ block.settings.icon_circle_bg_size }}px;
+                  height: {{ block.settings.icon_circle_bg_size }}px;
+                  border-radius: {{ block.settings.icon_circle_border_radius }}%;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  margin: 0 auto 10px auto;
+                {% endif %}
+              "
+            >
+              {% if block.settings.svg_icon_code != blank %}
+                <div
+                  class="svg-icon"
+                  style="width: {{ block.settings.svg_icon_size }}px; height: {{ block.settings.svg_icon_size }}px;"
+                >
+                  {{ block.settings.svg_icon_code }}
+                </div>
+              {% else %}
+                <span style="display:inline-flex;color:{{ block.settings.icon_color }};">
+                  {%- render 'benefits-icon',
+                     icon: block.settings.icon,
+                     size: section.settings.icon_size | default: 30,
+                     color: block.settings.icon_color
+                  -%}
+                </span>
+              {% endif %}
+            </div>
+
+            <h2>{{ block.settings.title }}</h2>
+            <p>{{ block.settings.description }}</p>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+
+    <!-- Center Image or Video -->
+    <div class="image-container">
+      {% if section.settings.enable_centered_video and section.settings.video_url != blank %}
+        <video
+          autoplay
+          muted
+          loop
+          playsinline
+        >
+          <source src="{{ section.settings.video_url }}" type="video/mp4" />
+          {{ 'accessibility.video_unsupported' | t }}
+        </video>
+      {% elsif section.settings.center_image %}
+        <img alt="{{ 'accessibility.placeholder_image' | t }}" src="{{ section.settings.center_image | img_url: '600x' }}">
+      {% else %}
+        <img
+          alt="{{ 'accessibility.placeholder_image' | t }}"
+          src="https://2dbags.co/wp-content/uploads/revslider/lookbook1-demo_slider/placeholder.jpg"
+        >
+      {% endif %}
+    </div>
+
+    <!-- Right Features -->
+    <div class="features">
+      {% for block in section.blocks %}
+        {% if forloop.index > 3 and forloop.index <= 6 %}
+          <div class="feature">
+            <!-- Icon wrapper (applies circle background if enabled) -->
+            <div
+              class="icon-wrapper"
+              style="
+                {% if block.settings.enable_icon_circle_bg %}
+                  background-color: {{ block.settings.icon_circle_bg_color }} !important;
+                  width: {{ block.settings.icon_circle_bg_size }}px;
+                  height: {{ block.settings.icon_circle_bg_size }}px;
+                  border-radius: {{ block.settings.icon_circle_border_radius }}%;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  margin: 0 auto 10px auto;
+                {% endif %}
+              "
+            >
+              {% if block.settings.svg_icon_code != blank %}
+                <div
+                  class="svg-icon"
+                  style="width: {{ block.settings.svg_icon_size }}px; height: {{ block.settings.svg_icon_size }}px;"
+                >
+                  {{ block.settings.svg_icon_code }}
+                </div>
+              {% else %}
+                <span style="display:inline-flex;color:{{ block.settings.icon_color }};">
+                  {%- render 'benefits-icon',
+                     icon: block.settings.icon,
+                     size: section.settings.icon_size | default: 30,
+                     color: block.settings.icon_color
+                  -%}
+                </span>
+              {% endif %}
+            </div>
+
+            <h2>{{ block.settings.title }}</h2>
+            <p>{{ block.settings.description }}</p>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% javascript %}
+  <script>
+    // Add any JS here if needed
+{% comment %}{% endcomment %}  </script>
+{% endjavascript %}
+
+</template>
+
+<schema>
+{
+  "type": "benefits2",
+  "name": "Product Benefits Pro",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "General"
+    },
+    {
+      "type": "select",
+      "id": "section_width",
+      "label": "Section width",
+      "default": "full_width",
+      "options": [
+        {
+          "value": "container",
+          "label": "Default"
+        },
+        {
+          "value": "fluid_container",
+          "label": "Fluid container"
+        },
+        {
+          "value": "stretch_width",
+          "label": "Stretched"
+        },
+        {
+          "value": "full_width",
+          "label": "Full width"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_4",
+      "label": "Image Settings"
+    },
+    {
+      "type": "image_picker",
+      "id": "center_image",
+      "label": "Centered Image",
+      "info": "Select the image to be displayed at the center of the section."
+    },
+    {
+      "type": "range",
+      "id": "image_border_radius",
+      "label": "Image Border Radius",
+      "min": 0,
+      "max": 50,
+      "step": 1,
+      "unit": "px",
+      "default": 10,
+      "info": "Adjust the border radius of the centered image."
+    },
+    {
+      "type": "select",
+      "id": "image_shadow",
+      "label": "Image Shadow",
+      "options": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "low",
+          "label": "Low Shadow"
+        },
+        {
+          "value": "medium",
+          "label": "Medium Shadow"
+        },
+        {
+          "value": "high",
+          "label": "High Shadow"
+        }
+      ],
+      "default": "none",
+      "info": "Select the shadow intensity for the image."
+    },
+    {
+      "type": "select",
+      "id": "image_hover_animation",
+      "label": "Image Hover Animation",
+      "options": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "fade-in",
+          "label": "Fade In"
+        },
+        {
+          "value": "zoom-in",
+          "label": "Zoom In"
+        },
+        {
+          "value": "scale-in",
+          "label": "Scale In"
+        },
+        {
+          "value": "fade-in-up",
+          "label": "Fade In Up"
+        },
+        {
+          "value": "rotate-in",
+          "label": "Rotate In"
+        },
+        {
+          "value": "slide-in-left",
+          "label": "Slide In Left"
+        },
+        {
+          "value": "flip-in",
+          "label": "Flip In"
+        }
+      ],
+      "default": "fade-in-up",
+      "info": "Choose an animation effect when hovering over the image."
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_centered_video",
+      "label": "Enable Centered Video",
+      "default": false,
+      "info": "Toggle to enable a centered video instead of the image."
+    },
+    {
+      "type": "text",
+      "id": "video_url",
+      "label": "Video URL",
+      "info": "Enter the video URL (MP4 or WebM) to display if the video is enabled."
+    },
+    {
+      "type": "color",
+      "id": "feature_title_color",
+      "label": "Feature Title Color",
+      "default": "#000000",
+      "info": "Choose the color for all feature titles."
+    },
+    {
+      "type": "color",
+      "id": "feature_description_color",
+      "label": "Feature Description Color",
+      "default": "#666666",
+      "info": "Choose the color for all feature descriptions."
+    },
+    {
+      "type": "select",
+      "id": "feature_title_font_weight",
+      "label": "Feature Title Font Weight",
+      "options": [
+        {
+          "value": "lighter",
+          "label": "Light"
+        },
+        {
+          "value": "normal",
+          "label": "Normal"
+        },
+        {
+          "value": "bold",
+          "label": "Bold"
+        }
+      ],
+      "default": "normal",
+      "info": "Select the font weight for the feature titles."
+    },
+    {
+      "type": "range",
+      "id": "feature_title_font_size",
+      "label": "Feature Title Font Size",
+      "min": 10,
+      "max": 50,
+      "step": 1,
+      "unit": "px",
+      "default": 20,
+      "info": "Adjust the font size of the feature titles."
+    },
+    {
+      "type": "range",
+      "id": "feature_description_font_size",
+      "label": "Feature Description Font Size",
+      "min": 10,
+      "max": 30,
+      "step": 1,
+      "unit": "px",
+      "default": 14,
+      "info": "Adjust the font size of the feature descriptions."
+    },
+    {
+      "type": "header",
+      "id": "hdr_16",
+      "label": "Animation & Behavior"
+    },
+    {
+      "type": "checkbox",
+      "id": "reveal",
+      "label": "Reveal on scroll",
+      "default": true,
+      "info": "Uses your global Animations & motion setting."
+    },
+    {
+      "type": "header",
+      "id": "hdr_18",
+      "label": "Layout & Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top_desktop",
+      "label": "Top padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 60
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_desktop",
+      "label": "Bottom padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 60
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_desktop",
+      "label": "Top margin (desktop px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_desktop",
+      "label": "Bottom margin (desktop px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "header",
+      "id": "hdr_23",
+      "label": "Mobile"
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "label": "Top padding (mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 20
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "label": "Bottom padding (mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 20
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_mobile",
+      "label": "Top margin (mobile px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_mobile",
+      "label": "Bottom margin (mobile px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "color",
+      "id": "section_bg",
+      "label": "Section background color",
+      "info": "Background colour of the whole section. Painted edge-to-edge.",
+      "default": "#FFFFFF"
+    }
+  ],
+  "blocks": [
+    {
+      "type": "feature",
+      "name": "Feature",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content"
+        },
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "options": [
+            {
+              "value": "none",
+              "label": "None"
+            },
+            {
+              "value": "truck",
+              "label": "Truck"
+            },
+            {
+              "value": "shipping",
+              "label": "Shipping arrow"
+            },
+            {
+              "value": "shield",
+              "label": "Shield (security)"
+            },
+            {
+              "value": "lock",
+              "label": "Lock (privacy)"
+            },
+            {
+              "value": "heart",
+              "label": "Heart"
+            },
+            {
+              "value": "star",
+              "label": "Star"
+            },
+            {
+              "value": "check",
+              "label": "Check (guarantee)"
+            },
+            {
+              "value": "headphones",
+              "label": "Headphones (support)"
+            },
+            {
+              "value": "envelope",
+              "label": "Envelope (email)"
+            },
+            {
+              "value": "chat",
+              "label": "Chat bubble"
+            },
+            {
+              "value": "tag",
+              "label": "Tag (price)"
+            },
+            {
+              "value": "gift",
+              "label": "Gift box"
+            },
+            {
+              "value": "globe",
+              "label": "Globe (worldwide)"
+            },
+            {
+              "value": "leaf",
+              "label": "Leaf (eco)"
+            },
+            {
+              "value": "award",
+              "label": "Award"
+            },
+            {
+              "value": "clock",
+              "label": "Clock (24/7)"
+            },
+            {
+              "value": "card",
+              "label": "Card (payment)"
+            },
+            {
+              "value": "wallet",
+              "label": "Wallet"
+            },
+            {
+              "value": "lightning",
+              "label": "Lightning (fast)"
+            },
+            {
+              "value": "recycle",
+              "label": "Recycle"
+            },
+            {
+              "value": "sparkle",
+              "label": "Sparkle (new)"
+            },
+            {
+              "value": "box",
+              "label": "Box (package)"
+            },
+            {
+              "value": "refresh",
+              "label": "Refresh (returns)"
+            },
+            {
+              "value": "user",
+              "label": "User (account)"
+            },
+            {
+              "value": "calendar",
+              "label": "Calendar"
+            },
+            {
+              "value": "handshake",
+              "label": "Handshake (trust)"
+            },
+            {
+              "value": "gem",
+              "label": "Gem (premium)"
+            },
+            {
+              "value": "organic",
+              "label": "Organic (natural)"
+            },
+            {
+              "value": "fire",
+              "label": "Fire (hot)"
+            },
+            {
+              "value": "crown",
+              "label": "Crown (luxury)"
+            }
+          ],
+          "default": "sparkle",
+          "info": "Select an icon to represent the feature."
+        },
+        {
+          "type": "textarea",
+          "id": "svg_icon_code",
+          "label": "SVG Icon Code",
+          "info": "Paste your SVG code here to display a custom SVG icon."
+        },
+        {
+          "type": "inline_richtext",
+          "id": "title",
+          "label": "Feature Title",
+          "default": "Feature Title",
+          "info": "Enter the title for the feature."
+        },
+        {
+          "type": "textarea",
+          "id": "description",
+          "label": "Feature Description",
+          "default": "Feature Description.",
+          "info": "Provide a brief description for the feature."
+        },
+        {
+          "type": "header",
+          "id": "hdr_6",
+          "label": "Style"
+        },
+        {
+          "type": "color",
+          "id": "icon_color",
+          "label": "Icon Color",
+          "default": "#000000",
+          "info": "Choose the color for the feature icon."
+        },
+        {
+          "type": "range",
+          "id": "svg_icon_size",
+          "label": "SVG Icon Size",
+          "min": 10,
+          "max": 200,
+          "step": 10,
+          "unit": "px",
+          "default": 40,
+          "info": "Adjust the size of the SVG icon."
+        },
+        {
+          "type": "checkbox",
+          "id": "enable_icon_circle_bg",
+          "label": "Enable Icon Circle Background",
+          "default": false,
+          "info": "Toggle to enable or disable the background color circle for the icon."
+        },
+        {
+          "type": "color",
+          "id": "icon_circle_bg_color",
+          "label": "Icon Circle Background Color",
+          "default": "#f5f5f5",
+          "info": "Choose the background color for the icon circle."
+        },
+        {
+          "type": "range",
+          "id": "icon_circle_bg_size",
+          "label": "Icon Circle Size",
+          "min": 10,
+          "max": 200,
+          "step": 10,
+          "unit": "px",
+          "default": 50,
+          "info": "Adjust the size (width and height) of the icon circle."
+        },
+        {
+          "type": "range",
+          "id": "icon_circle_border_radius",
+          "label": "Icon Circle Border Radius",
+          "min": 0,
+          "max": 50,
+          "step": 10,
+          "unit": "%",
+          "default": 50,
+          "info": "Adjust the border radius of the icon circle. Set to 50% for a perfect circle."
+        }
+      ]
+    }
+  ],
+  "max_blocks": 6,
+  "presets": [
+    {
+      "name": "Product Benefits Pro",
+      "category": "Benefits",
+      "blocks": [
+        {
+          "type": "feature",
+          "settings": {
+            "icon": "fas fa-mobile-alt",
+            "icon_color": "#4368FF",
+            "enable_icon_circle_bg": true,
+            "icon_circle_bg_color": "#F5F5F5",
+            "icon_circle_bg_size": 70,
+            "icon_circle_border_radius": 50,
+            "svg_icon_size": 40,
+            "title": "Crisp Display",
+            "description": "Delivers stunning visuals with vibrant colors and deep contrast, making every detail come to life."
+          }
+        },
+        {
+          "type": "feature",
+          "settings": {
+            "icon": "fas fa-battery-full",
+            "icon_color": "#F723FF",
+            "enable_icon_circle_bg": true,
+            "icon_circle_bg_color": "#F5F5F5",
+            "icon_circle_bg_size": 70,
+            "icon_circle_border_radius": 50,
+            "svg_icon_size": 40,
+            "title": "Longer Battery Life",
+            "description": "Keeps you powered throughout the day with optimized energy efficiency, ensuring you stay connected."
+          }
+        },
+        {
+          "type": "feature",
+          "settings": {
+            "icon": "fas fa-pencil-alt",
+            "icon_color": "#FF2F1E",
+            "enable_icon_circle_bg": true,
+            "icon_circle_bg_color": "#F5F5F5",
+            "icon_circle_bg_size": 70,
+            "icon_circle_border_radius": 50,
+            "svg_icon_size": 40,
+            "title": "Durable Design",
+            "description": "Built with premium materials to withstand daily use, extending the longevity of your device."
+          }
+        },
+        {
+          "type": "feature",
+          "settings": {
+            "icon": "fas fa-lock",
+            "icon_color": "#DFBC00",
+            "enable_icon_circle_bg": true,
+            "icon_circle_bg_color": "#F5F5F5",
+            "icon_circle_bg_size": 70,
+            "icon_circle_border_radius": 50,
+            "svg_icon_size": 40,
+            "title": "Seamless Integration",
+            "description": "Pairs effortlessly with all your Apple devices, providing a smooth and synchronized experience."
+          }
+        },
+        {
+          "type": "feature",
+          "settings": {
+            "icon": "fas fa-eye",
+            "icon_color": "#45A5FF",
+            "enable_icon_circle_bg": true,
+            "icon_circle_bg_color": "#F5F5F5",
+            "icon_circle_bg_size": 70,
+            "icon_circle_border_radius": 50,
+            "svg_icon_size": 40,
+            "title": "Sunlight Visibility",
+            "description": "Optimized screen technology ensures clear visuals, even in bright outdoor conditions."
+          }
+        },
+        {
+          "type": "feature",
+          "settings": {
+            "icon": "fas fa-star",
+            "icon_color": "#6B6B6B",
+            "enable_icon_circle_bg": true,
+            "icon_circle_bg_color": "#F5F5F5",
+            "icon_circle_bg_size": 70,
+            "icon_circle_border_radius": 50,
+            "svg_icon_size": 40,
+            "title": "Responsive Touch",
+            "description": "Offers ultra-fast touch sensitivity, making navigation fluid and incredibly intuitive."
+          }
+        }
+      ]
+    }
+  ],
+  "shopify": {
+    "name": "Product Benefits Pro",
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "full_width",
+        "options": [
+          {
+            "value": "container",
+            "label": "Default"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Image Settings",
+        "info": "Configure the image, its appearance, and positioning."
+      },
+      {
+        "type": "image_picker",
+        "id": "center_image",
+        "label": "Centered Image",
+        "info": "Select the image to be displayed at the center of the section."
+      },
+      {
+        "type": "range",
+        "id": "image_border_radius",
+        "label": "Image Border Radius",
+        "min": 0,
+        "max": 50,
+        "step": 1,
+        "unit": "px",
+        "default": 10,
+        "info": "Adjust the border radius of the centered image."
+      },
+      {
+        "type": "select",
+        "id": "image_shadow",
+        "label": "Image Shadow",
+        "options": [
+          {
+            "value": "none",
+            "label": "None"
+          },
+          {
+            "value": "low",
+            "label": "Low Shadow"
+          },
+          {
+            "value": "medium",
+            "label": "Medium Shadow"
+          },
+          {
+            "value": "high",
+            "label": "High Shadow"
+          }
+        ],
+        "default": "none",
+        "info": "Select the shadow intensity for the image."
+      },
+      {
+        "type": "select",
+        "id": "image_hover_animation",
+        "label": "Image Hover Animation",
+        "options": [
+          {
+            "value": "none",
+            "label": "None"
+          },
+          {
+            "value": "fade-in",
+            "label": "Fade In"
+          },
+          {
+            "value": "zoom-in",
+            "label": "Zoom In"
+          },
+          {
+            "value": "scale-in",
+            "label": "Scale In"
+          },
+          {
+            "value": "fade-in-up",
+            "label": "Fade In Up"
+          },
+          {
+            "value": "rotate-in",
+            "label": "Rotate In"
+          },
+          {
+            "value": "slide-in-left",
+            "label": "Slide In Left"
+          },
+          {
+            "value": "flip-in",
+            "label": "Flip In"
+          }
+        ],
+        "default": "fade-in-up",
+        "info": "Choose an animation effect when hovering over the image."
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_centered_video",
+        "label": "Enable Centered Video",
+        "default": false,
+        "info": "Toggle to enable a centered video instead of the image."
+      },
+      {
+        "type": "text",
+        "id": "video_url",
+        "label": "Video URL",
+        "info": "Enter the video URL (MP4 or WebM) to display if the video is enabled."
+      },
+      {
+        "type": "color",
+        "id": "feature_title_color",
+        "label": "Feature Title Color",
+        "default": "#000000",
+        "info": "Choose the color for all feature titles."
+      },
+      {
+        "type": "color",
+        "id": "feature_description_color",
+        "label": "Feature Description Color",
+        "default": "#666666",
+        "info": "Choose the color for all feature descriptions."
+      },
+      {
+        "type": "select",
+        "id": "feature_title_font_weight",
+        "label": "Feature Title Font Weight",
+        "options": [
+          {
+            "value": "lighter",
+            "label": "Light"
+          },
+          {
+            "value": "normal",
+            "label": "Normal"
+          },
+          {
+            "value": "bold",
+            "label": "Bold"
+          }
+        ],
+        "default": "normal",
+        "info": "Select the font weight for the feature titles."
+      },
+      {
+        "type": "range",
+        "id": "feature_title_font_size",
+        "label": "Feature Title Font Size",
+        "min": 10,
+        "max": 50,
+        "step": 1,
+        "unit": "px",
+        "default": 20,
+        "info": "Adjust the font size of the feature titles."
+      },
+      {
+        "type": "range",
+        "id": "feature_description_font_size",
+        "label": "Feature Description Font Size",
+        "min": 10,
+        "max": 30,
+        "step": 1,
+        "unit": "px",
+        "default": 14,
+        "info": "Adjust the font size of the feature descriptions."
+      },
+      {
+        "type": "header",
+        "content": "Animation & Behavior"
+      },
+      {
+        "type": "checkbox",
+        "id": "reveal",
+        "label": "Reveal on scroll",
+        "default": true,
+        "info": "Uses your global Animations & motion setting."
+      },
+      {
+        "type": "header",
+        "content": "Layout & Spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top_desktop",
+        "label": "Top padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_desktop",
+        "label": "Bottom padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin (desktop px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin (desktop px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "range",
+        "id": "padding_top_mobile",
+        "label": "Top padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 20
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_mobile",
+        "label": "Bottom padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 20
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_mobile",
+        "label": "Top margin (mobile px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_mobile",
+        "label": "Bottom margin (mobile px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Section background color",
+        "info": "Background colour of the whole section. Painted edge-to-edge.",
+        "default": "#FFFFFF"
+      }
+    ],
+    "blocks": [
+      {
+        "type": "feature",
+        "name": "Feature",
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "select",
+            "id": "icon",
+            "label": "Icon",
+            "options": [
+              {
+                "value": "none",
+                "label": "None"
+              },
+              {
+                "value": "truck",
+                "label": "Truck"
+              },
+              {
+                "value": "shipping",
+                "label": "Shipping arrow"
+              },
+              {
+                "value": "shield",
+                "label": "Shield (security)"
+              },
+              {
+                "value": "lock",
+                "label": "Lock (privacy)"
+              },
+              {
+                "value": "heart",
+                "label": "Heart"
+              },
+              {
+                "value": "star",
+                "label": "Star"
+              },
+              {
+                "value": "check",
+                "label": "Check (guarantee)"
+              },
+              {
+                "value": "headphones",
+                "label": "Headphones (support)"
+              },
+              {
+                "value": "envelope",
+                "label": "Envelope (email)"
+              },
+              {
+                "value": "chat",
+                "label": "Chat bubble"
+              },
+              {
+                "value": "tag",
+                "label": "Tag (price)"
+              },
+              {
+                "value": "gift",
+                "label": "Gift box"
+              },
+              {
+                "value": "globe",
+                "label": "Globe (worldwide)"
+              },
+              {
+                "value": "leaf",
+                "label": "Leaf (eco)"
+              },
+              {
+                "value": "award",
+                "label": "Award"
+              },
+              {
+                "value": "clock",
+                "label": "Clock (24/7)"
+              },
+              {
+                "value": "card",
+                "label": "Card (payment)"
+              },
+              {
+                "value": "wallet",
+                "label": "Wallet"
+              },
+              {
+                "value": "lightning",
+                "label": "Lightning (fast)"
+              },
+              {
+                "value": "recycle",
+                "label": "Recycle"
+              },
+              {
+                "value": "sparkle",
+                "label": "Sparkle (new)"
+              },
+              {
+                "value": "box",
+                "label": "Box (package)"
+              },
+              {
+                "value": "refresh",
+                "label": "Refresh (returns)"
+              },
+              {
+                "value": "user",
+                "label": "User (account)"
+              },
+              {
+                "value": "calendar",
+                "label": "Calendar"
+              },
+              {
+                "value": "handshake",
+                "label": "Handshake (trust)"
+              },
+              {
+                "value": "gem",
+                "label": "Gem (premium)"
+              },
+              {
+                "value": "organic",
+                "label": "Organic (natural)"
+              },
+              {
+                "value": "fire",
+                "label": "Fire (hot)"
+              },
+              {
+                "value": "crown",
+                "label": "Crown (luxury)"
+              }
+            ],
+            "default": "sparkle",
+            "info": "Select an icon to represent the feature."
+          },
+          {
+            "type": "textarea",
+            "id": "svg_icon_code",
+            "label": "SVG Icon Code",
+            "info": "Paste your SVG code here to display a custom SVG icon."
+          },
+          {
+            "type": "inline_richtext",
+            "id": "title",
+            "label": "Feature Title",
+            "default": "Feature Title",
+            "info": "Enter the title for the feature."
+          },
+          {
+            "type": "textarea",
+            "id": "description",
+            "label": "Feature Description",
+            "default": "Feature Description.",
+            "info": "Provide a brief description for the feature."
+          },
+          {
+            "type": "header",
+            "content": "Style"
+          },
+          {
+            "type": "color",
+            "id": "icon_color",
+            "label": "Icon Color",
+            "default": "#000000",
+            "info": "Choose the color for the feature icon."
+          },
+          {
+            "type": "range",
+            "id": "svg_icon_size",
+            "label": "SVG Icon Size",
+            "min": 10,
+            "max": 200,
+            "step": 10,
+            "unit": "px",
+            "default": 40,
+            "info": "Adjust the size of the SVG icon."
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_icon_circle_bg",
+            "label": "Enable Icon Circle Background",
+            "default": false,
+            "info": "Toggle to enable or disable the background color circle for the icon."
+          },
+          {
+            "type": "color",
+            "id": "icon_circle_bg_color",
+            "label": "Icon Circle Background Color",
+            "default": "#f5f5f5",
+            "info": "Choose the background color for the icon circle."
+          },
+          {
+            "type": "range",
+            "id": "icon_circle_bg_size",
+            "label": "Icon Circle Size",
+            "min": 10,
+            "max": 200,
+            "step": 10,
+            "unit": "px",
+            "default": 50,
+            "info": "Adjust the size (width and height) of the icon circle."
+          },
+          {
+            "type": "range",
+            "id": "icon_circle_border_radius",
+            "label": "Icon Circle Border Radius",
+            "min": 0,
+            "max": 50,
+            "step": 10,
+            "unit": "%",
+            "default": 50,
+            "info": "Adjust the border radius of the icon circle. Set to 50% for a perfect circle."
+          }
+        ]
+      }
+    ],
+    "max_blocks": 6,
+    "presets": [
+      {
+        "name": "Product Benefits Pro",
+        "category": "Benefits",
+        "blocks": [
+          {
+            "type": "feature",
+            "settings": {
+              "icon": "fas fa-mobile-alt",
+              "icon_color": "#4368FF",
+              "enable_icon_circle_bg": true,
+              "icon_circle_bg_color": "#F5F5F5",
+              "icon_circle_bg_size": 70,
+              "icon_circle_border_radius": 50,
+              "svg_icon_size": 40,
+              "title": "Crisp Display",
+              "description": "Delivers stunning visuals with vibrant colors and deep contrast, making every detail come to life."
+            }
+          },
+          {
+            "type": "feature",
+            "settings": {
+              "icon": "fas fa-battery-full",
+              "icon_color": "#F723FF",
+              "enable_icon_circle_bg": true,
+              "icon_circle_bg_color": "#F5F5F5",
+              "icon_circle_bg_size": 70,
+              "icon_circle_border_radius": 50,
+              "svg_icon_size": 40,
+              "title": "Longer Battery Life",
+              "description": "Keeps you powered throughout the day with optimized energy efficiency, ensuring you stay connected."
+            }
+          },
+          {
+            "type": "feature",
+            "settings": {
+              "icon": "fas fa-pencil-alt",
+              "icon_color": "#FF2F1E",
+              "enable_icon_circle_bg": true,
+              "icon_circle_bg_color": "#F5F5F5",
+              "icon_circle_bg_size": 70,
+              "icon_circle_border_radius": 50,
+              "svg_icon_size": 40,
+              "title": "Durable Design",
+              "description": "Built with premium materials to withstand daily use, extending the longevity of your device."
+            }
+          },
+          {
+            "type": "feature",
+            "settings": {
+              "icon": "fas fa-lock",
+              "icon_color": "#DFBC00",
+              "enable_icon_circle_bg": true,
+              "icon_circle_bg_color": "#F5F5F5",
+              "icon_circle_bg_size": 70,
+              "icon_circle_border_radius": 50,
+              "svg_icon_size": 40,
+              "title": "Seamless Integration",
+              "description": "Pairs effortlessly with all your Apple devices, providing a smooth and synchronized experience."
+            }
+          },
+          {
+            "type": "feature",
+            "settings": {
+              "icon": "fas fa-eye",
+              "icon_color": "#45A5FF",
+              "enable_icon_circle_bg": true,
+              "icon_circle_bg_color": "#F5F5F5",
+              "icon_circle_bg_size": 70,
+              "icon_circle_border_radius": 50,
+              "svg_icon_size": 40,
+              "title": "Sunlight Visibility",
+              "description": "Optimized screen technology ensures clear visuals, even in bright outdoor conditions."
+            }
+          },
+          {
+            "type": "feature",
+            "settings": {
+              "icon": "fas fa-star",
+              "icon_color": "#6B6B6B",
+              "enable_icon_circle_bg": true,
+              "icon_circle_bg_color": "#F5F5F5",
+              "icon_circle_bg_size": 70,
+              "icon_circle_border_radius": 50,
+              "svg_icon_size": 40,
+              "title": "Responsive Touch",
+              "description": "Offers ultra-fast touch sensitivity, making navigation fluid and incredibly intuitive."
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

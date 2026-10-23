@@ -1,0 +1,2401 @@
+<template compat="shopify">
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- liquid
+  assign __ti_scroll_animation = settings.scroll_animation | default: 'none'
+  assign __ti_reveal = section.settings.reveal
+-%}
+<style>
+  /* Section isolation — prevent CSS/JS bleed between sections */
+  #shopify-section-{{ section.id }} {
+    isolation: isolate;
+    position: relative;
+  }
+  /* Aggressive theme typography */
+  :where(#shopify-section-{{ section.id }}) {
+    font-family: var(--body-font, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :where(button, input, textarea, select, optgroup) {
+    font-family: inherit;
+  }
+  /* Theme font-weight inheritance — sections inherit theme weights by default.
+     Specific font-weight rules in section CSS still override these. */
+  #shopify-section-{{ section.id }} {
+    font-weight: var(--body-weight, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
+    font-weight: var(--heading-weight, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
+    font-family: var(--heading-font, inherit);
+  }
+  /* Section margin sliders (mobile-first) */
+  #shopify-section-{{ section.id }} {
+    margin-top: {{ section.settings.section_margin_top_mobile | default: 0 }}px;
+    margin-bottom: {{ section.settings.section_margin_bottom_mobile | default: 0 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ section.id }} {
+      margin-top: {{ section.settings.section_margin_top_desktop | default: 0 }}px;
+      margin-bottom: {{ section.settings.section_margin_bottom_desktop | default: 0 }}px;
+    }
+  }
+  /* Section wrapper spans its parent's full width without breaking out of
+     the editor preview. */
+  #shopify-section-{{ section.id }} {
+    max-width: none !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    position: relative !important;
+    box-sizing: border-box !important;
+  }
+  #shopify-section-{{ section.id }} > :where(div, section, header, footer, aside, main, article):first-child {
+    max-width: none !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Section width */
+  {%- case section.settings.section_width -%}
+    {%- when 'container' -%}
+      #shopify-section-{{ section.id }} .container,
+      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+        max-width: calc(var(--page-width, 1300px) + 3rem) !important;
+        margin-inline: auto !important;
+        box-sizing: border-box !important;
+      }
+    {%- when 'fluid_container' -%}
+      #shopify-section-{{ section.id }} .fluid_container,
+      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+        max-width: calc(var(--fluid-container-width, 1500px) + 3rem) !important;
+        margin-inline: auto !important;
+        box-sizing: border-box !important;
+      }
+    {%- when 'stretch_width' -%}
+      @media (min-width: 1200px) {
+        #shopify-section-{{ section.id }} .stretch_width,
+        #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+          padding-inline: 3rem;
+        }
+      }
+    {%- when 'full_width' -%}
+      /* full bleed — no constraints */
+  {%- endcase -%}
+  /* Reset spacing */
+  {%- if section.settings.reset_spacing -%}
+    #shopify-section-{{ section.id }} { margin-bottom: 0 !important; margin-top: 0 !important; }
+    #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+<!-- ti-theme:start -->
+{%- comment -%}
+  Materia Themes — Testimonials section (modern).
+  Header is built from blocks (eyebrow / heading / subheading), each with its own
+  font size (desktop + mobile), font weight, on/off toggle and optional custom font.
+  Carousel or Grid layout, optional star ratings, customer photo, three card styles.
+{%- endcomment -%}
+{%- liquid
+  assign s = section.settings
+  assign section_width = s.section_width | default: 'container'
+  assign color_scheme = s.color_scheme | default: 'scheme-1'
+  if s.reset_spacing
+    assign reset_spacing = ' remove_spacing'
+  endif
+  assign display_mode = s.display_mode | default: 'carousel'
+  assign card_style = s.card_style | default: 'boxed'
+  assign card_align = s.card_align | default: 'left'
+  assign columns = s.columns | default: 3
+  assign columns_mobile = s.columns_mobile | default: 1
+  comment
+    Carousel uses the raw decimal (1.5 = next card peeks in). Grid needs a whole
+    number because grid-template-columns: repeat() rejects fractions.
+  endcomment
+  assign columns_mobile_int = columns_mobile | floor | at_least: 1
+  assign column_gap = s.column_gap | default: 24
+  assign show_arrow = s.show_arrow
+  assign carousel_pagination = s.carousel_pagination | default: 'show'
+  assign pagination_style = s.pagination_style | default: 'pill'
+
+  comment
+    Single source of truth for the progress look. Progress is active when the
+    style is "progress" OR a legacy theme still has the old "show_progress_bar"
+    visibility value saved. Native swiper progressbar = true growing fill.
+  endcomment
+  assign is_progress = false
+  if pagination_style == 'progress' or carousel_pagination == 'show_progress_bar'
+    assign is_progress = true
+    assign pagination_style = 'progress'
+  endif
+
+  comment
+    Visibility is its own thing now: disable / show / mobile-only.
+    Map the legacy "show_progress_bar" value to a normal visible state.
+  endcomment
+  assign pagination_visible = carousel_pagination
+  if carousel_pagination == 'show_progress_bar' or carousel_pagination == 'show_dots'
+    assign pagination_visible = 'show'
+  endif
+  if carousel_pagination == 'show_dots_on_mobile'
+    assign pagination_visible = 'mobile'
+  endif
+
+  assign infinite = s.infinite
+  assign autoplay = s.autoplay
+  assign autorotate_speed = s.autorotate_speed | default: 5
+  assign show_rating = s.show_rating
+  assign show_quote_mark = s.show_quote_mark
+  assign avatar_shape = s.avatar_shape | default: 'circle'
+  assign avatar_size = s.avatar_size | default: 56
+  assign reveal = s.reveal
+  assign scroll_animation = settings.scroll_animation
+
+  comment
+    Detect whether any header block is present and turned on, and count the
+    actual testimonial blocks separately so the two never get mixed up.
+  endcomment
+  assign has_header = false
+  assign testimonial_count = 0
+  for block in section.blocks
+    case block.type
+      when 'eyebrow', 'heading', 'subheading'
+        if block.settings.enabled
+          assign has_header = true
+        endif
+      when 'testimonial'
+        assign testimonial_count = testimonial_count | plus: 1
+    endcase
+  endfor
+-%}
+{%- capture style -%}
+  --section-pt: {{ s.padding_top }};
+  --section-pb: {{ s.padding_bottom }};
+  --tm-col-gap: {{ column_gap }}px;
+  --tm-card-bg: {{ s.card_bg | default: 'rgba(0,0,0,0.03)' }};
+  --tm-card-radius: {{ s.card_radius | default: 16 }}px;
+  --tm-card-border: {{ s.card_border_color | default: 'rgba(0,0,0,0.08)' }};
+  --tm-quote-color: {{ s.quote_color | default: 'currentColor' }} !important;
+  --tm-cols: {{ columns }};
+  --tm-cols-mb: {{ columns_mobile_int }};
+  --tm-avatar-size: {{ avatar_size }}px;
+{%- endcapture -%}
+{%- style -%}
+  /* ── Custom fonts emitted for any header block that opts in ── */
+  {%- for block in section.blocks -%}
+    {%- if block.settings.custom_font and block.settings.font -%}
+      {{ block.settings.font | font_face: font_display: 'swap' }}
+    {%- endif -%}
+  {%- endfor -%}
+
+  /* ── Header layout ── */
+  #shopify-section-{{ section.id }} .tm-header {
+    margin-bottom: {{ s.header_spacing_mobile | default: 24 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ section.id }} .tm-header {
+      margin-bottom: {{ s.header_spacing_desktop | default: 36 }}px;
+    }
+  }
+  #shopify-section-{{ section.id }} .tm-head { margin: 0; }
+  #shopify-section-{{ section.id }} .tm-head--eyebrow { margin-bottom: 6px; }
+  #shopify-section-{{ section.id }} .tm-head--heading { margin-bottom: 10px; letter-spacing: -0.01em; }
+
+  /* ── Per-block typography (literal values + high specificity so the
+        editor live-updates reliably) ── */
+  {%- for block in section.blocks -%}
+    {%- assign hb = block.settings -%}
+    {%- case block.type -%}
+      {%- when 'eyebrow', 'heading', 'subheading' -%}
+        {%- comment -%}
+          Compound (no-space) double ID = same element, doubled specificity.
+          Also target inner nodes so richtext subheadings (which wrap text in
+          <p>) inherit the exact size / weight / font.
+        {%- endcomment -%}
+        #shopify-section-{{ section.id }}#shopify-section-{{ section.id }} .tm-head-{{ block.id }},
+        #shopify-section-{{ section.id }}#shopify-section-{{ section.id }} .tm-head-{{ block.id }} p,
+        #shopify-section-{{ section.id }}#shopify-section-{{ section.id }} .tm-head-{{ block.id }} span,
+        #shopify-section-{{ section.id }}#shopify-section-{{ section.id }} .tm-head-{{ block.id }} a {
+          font-size: {{ hb.font_size_mobile }}px !important;
+          {%- if hb.font_weight != 'default' %}
+          font-weight: {{ hb.font_weight }} !important;
+          {%- endif %}
+          {%- if hb.custom_font and hb.font %}
+          font-family: {{ hb.font.family }}, {{ hb.font.fallback_families }} !important;
+          {%- endif %}
+        }
+        @media (min-width: 768px) {
+          #shopify-section-{{ section.id }}#shopify-section-{{ section.id }} .tm-head-{{ block.id }},
+          #shopify-section-{{ section.id }}#shopify-section-{{ section.id }} .tm-head-{{ block.id }} p,
+          #shopify-section-{{ section.id }}#shopify-section-{{ section.id }} .tm-head-{{ block.id }} span,
+          #shopify-section-{{ section.id }}#shopify-section-{{ section.id }} .tm-head-{{ block.id }} a {
+            font-size: {{ hb.font_size_desktop }}px !important;
+          }
+        }
+    {%- endcase -%}
+  {%- endfor -%}
+
+  /* ── Cards ── */
+  #shopify-section-{{ section.id }} .tm-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--tm-cols-mb), minmax(0, 1fr));
+    gap: var(--tm-col-gap);
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ section.id }} .tm-grid {
+      grid-template-columns: repeat(var(--tm-cols), minmax(0, 1fr));
+    }
+  }
+  #shopify-section-{{ section.id }} .tm-card {
+    text-align: {{ card_align }};
+    padding: {{ s.card_padding | default: 24 }}px;
+    border-radius: var(--tm-card-radius);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: {{ s.card_content_gap | default: 14 }}px;
+    height: 100%;
+    {%- case card_style -%}
+      {%- when 'boxed' -%}background: var(--tm-card-bg);
+      {%- when 'outline' -%}background: transparent; border: 1px solid var(--tm-card-border);
+      {%- when 'clean' -%}background: transparent; padding: 0;
+    {%- endcase -%}
+  }
+  #shopify-section-{{ section.id }} .tm-card__rating {
+    display: inline-flex;
+    gap: 2px;
+    color: var(--tm-quote-color);
+  }
+  #shopify-section-{{ section.id }} .tm-card__rating svg { width: 16px; height: 16px; }
+  #shopify-section-{{ section.id }} .tm-card__rating .star--off { opacity: 0.25; }
+  #shopify-section-{{ section.id }} .tm-card__quote {
+    font-size: {{ s.quote_size | default: 16 }}px;
+    line-height: 1.55;
+    margin: 0;
+    flex: 1;
+  }
+  #shopify-section-{{ section.id }} .tm-card__quote-mark {
+    font-family: Georgia, serif;
+    font-size: 56px;
+    line-height: 1;
+    color: var(--tm-quote-color);
+    opacity: 0.18;
+    margin-bottom: -8px;
+    display: inline-block;
+  }
+  #shopify-section-{{ section.id }} .tm-card__author {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: auto;
+    {%- if card_align == 'center' -%}justify-content: center;
+    {%- elsif card_align == 'right' -%}justify-content: flex-end;{%- endif -%}
+  }
+  #shopify-section-{{ section.id }} .tm-card__avatar {
+    width: var(--tm-avatar-size);
+    height: var(--tm-avatar-size);
+    object-fit: cover;
+    flex-shrink: 0;
+    {%- if avatar_shape == 'circle' -%}border-radius: 50%;
+    {%- elsif avatar_shape == 'rounded' -%}border-radius: 12px;
+    {%- else -%}border-radius: 0;{%- endif -%}
+  }
+  #shopify-section-{{ section.id }} .tm-card__name {
+    font-weight: 600;
+    line-height: 1.2;
+    margin: 0;
+  }
+  #shopify-section-{{ section.id }} .tm-card__role {
+    font-size: 13px;
+    opacity: 0.7;
+    margin: 2px 0 0;
+  }
+
+  /* ── Space below the cards block (before pagination / section end) ── */
+  #shopify-section-{{ section.id }} .tm-cards-wrap {
+    margin-bottom: {{ s.space_below_cards_mobile | default: 0 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ section.id }} .tm-cards-wrap {
+      margin-bottom: {{ s.space_below_cards_desktop | default: 0 }}px;
+    }
+  }
+
+  /* ── Pagination ──
+        Every style is emitted inline and scoped to THIS section so it never
+        depends on an external lazy-loaded stylesheet (which was why dot / pill
+        / line / square / ring / number rendered as plain default bullets). We
+        only emit the CSS for the style that is actually selected. ── */
+  {%- liquid
+    assign pag_color = 'var(--color-heading, currentColor)'
+    case s.pagination_position | default: 'center'
+      when 'left'
+        assign pag_justify = 'flex-start'
+      when 'right'
+        assign pag_justify = 'flex-end'
+      else
+        assign pag_justify = 'center'
+    endcase
+  -%}
+
+  {%- if is_progress -%}
+    /* Progress fill: rebuild swiper's native progressbar into a clean, centered
+       pill that works on desktop AND mobile. The native bar defaults to a
+       full-width strip pinned to the top of the slider, which looked broken. */
+    #shopify-section-{{ section.id }} .swiper-pagination.swiper-pagination-progressbar {
+      position: relative !important;
+      top: auto !important;
+      bottom: auto !important;
+      left: auto !important;
+      right: auto !important;
+      transform: none !important;
+      width: clamp(140px, 32vw, 280px) !important;
+      height: 3px !important;
+      margin: {{ s.pagination_spacing | default: 30 }}px auto 0 !important;
+      padding: 0 !important;
+      background: color-mix(in srgb, {{ pag_color }} 16%, transparent) !important;
+      border-radius: 999px !important;
+      overflow: hidden !important;
+      display: block !important;
+      flex-wrap: nowrap !important;
+    }
+    #shopify-section-{{ section.id }} .swiper-pagination.swiper-pagination-progressbar .swiper-pagination-progressbar-fill {
+      background: {{ pag_color }} !important;
+      border-radius: 999px !important;
+      transform-origin: left center;
+    }
+    @media (max-width: 767.98px) {
+      #shopify-section-{{ section.id }} .swiper-pagination.swiper-pagination-progressbar {
+        width: min(62vw, 190px) !important;
+      }
+    }
+  {%- else -%}
+    /* Bullet container (shared by all bullet styles) */
+    #shopify-section-{{ section.id }} .swiper-pagination {
+      display: flex !important;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: {{ pag_justify }} !important;
+      gap: 8px;
+      margin-top: {{ s.pagination_spacing | default: 30 }}px;
+      line-height: 1;
+      padding: 0 !important;
+    }
+    #shopify-section-{{ section.id }} .swiper-pagination-bullet {
+      transition: all 0.3s cubic-bezier(0.2, 0.7, 0.2, 1);
+      background: transparent;
+      margin: 0 !important;
+      padding: 0 !important;
+      flex-shrink: 0;
+      position: relative;
+      opacity: 1;
+    }
+    #shopify-section-{{ section.id }} .swiper-pagination-bullet::before,
+    #shopify-section-{{ section.id }} .swiper-pagination-bullet::after {
+      content: none !important;
+      display: none !important;
+    }
+
+    {%- case pagination_style -%}
+      {%- when 'dot' -%}
+        #shopify-section-{{ section.id }} .swiper-pagination-bullet {
+          width: 9px !important; height: 9px !important; border-radius: 50%;
+          background: color-mix(in srgb, {{ pag_color }} 38%, transparent);
+        }
+        #shopify-section-{{ section.id }} .swiper-pagination-bullet-active {
+          background: {{ pag_color }}; transform: scale(1.25);
+        }
+        @media (max-width: 767.98px) {
+          #shopify-section-{{ section.id }} .swiper-pagination-bullet { width: 7px !important; height: 7px !important; }
+        }
+      {%- when 'pill' -%}
+        #shopify-section-{{ section.id }} .swiper-pagination-bullet {
+          width: 10px !important; height: 10px !important; border-radius: 999px;
+          background: color-mix(in srgb, {{ pag_color }} 35%, transparent);
+        }
+        #shopify-section-{{ section.id }} .swiper-pagination-bullet-active {
+          width: 34px !important; background: {{ pag_color }};
+        }
+        @media (max-width: 767.98px) {
+          #shopify-section-{{ section.id }} .swiper-pagination-bullet { width: 7px !important; height: 7px !important; }
+          #shopify-section-{{ section.id }} .swiper-pagination-bullet-active { width: 22px !important; }
+        }
+      {%- when 'line' -%}
+        #shopify-section-{{ section.id }} .swiper-pagination-bullet {
+          width: 28px !important; height: 3px !important; border-radius: 2px;
+          background: color-mix(in srgb, {{ pag_color }} 35%, transparent);
+        }
+        #shopify-section-{{ section.id }} .swiper-pagination-bullet-active {
+          background: {{ pag_color }}; height: 4px !important;
+        }
+        @media (max-width: 767.98px) {
+          #shopify-section-{{ section.id }} .swiper-pagination-bullet { width: 18px !important; height: 2px !important; }
+          #shopify-section-{{ section.id }} .swiper-pagination-bullet-active { height: 3px !important; }
+        }
+      {%- when 'square' -%}
+        #shopify-section-{{ section.id }} .swiper-pagination-bullet {
+          width: 10px !important; height: 10px !important; border-radius: 2px;
+          background: color-mix(in srgb, {{ pag_color }} 38%, transparent);
+        }
+        #shopify-section-{{ section.id }} .swiper-pagination-bullet-active {
+          background: {{ pag_color }}; transform: rotate(45deg);
+        }
+        @media (max-width: 767.98px) {
+          #shopify-section-{{ section.id }} .swiper-pagination-bullet { width: 8px !important; height: 8px !important; }
+        }
+      {%- when 'ring' -%}
+        #shopify-section-{{ section.id }} .swiper-pagination-bullet {
+          width: 12px !important; height: 12px !important; border-radius: 50%;
+          background: transparent;
+          border: 2px solid color-mix(in srgb, {{ pag_color }} 55%, transparent);
+        }
+        #shopify-section-{{ section.id }} .swiper-pagination-bullet-active {
+          background: {{ pag_color }}; border-color: {{ pag_color }};
+        }
+        @media (max-width: 767.98px) {
+          #shopify-section-{{ section.id }} .swiper-pagination-bullet { width: 9px !important; height: 9px !important; border-width: 1.5px; }
+        }
+      {%- when 'number' -%}
+        #shopify-section-{{ section.id }} .swiper-pagination { gap: 14px; counter-reset: tm-bullet; }
+        #shopify-section-{{ section.id }} .swiper-pagination-bullet {
+          width: auto !important; height: auto !important; min-width: 22px;
+          border-radius: 0; background: transparent;
+          color: color-mix(in srgb, {{ pag_color }} 55%, transparent);
+          font-size: 13px; font-weight: 500; line-height: 1;
+          padding: 4px 2px !important; counter-increment: tm-bullet;
+        }
+        #shopify-section-{{ section.id }} .swiper-pagination-bullet::after {
+          content: counter(tm-bullet, decimal-leading-zero) !important;
+          display: inline-block !important;
+        }
+        #shopify-section-{{ section.id }} .swiper-pagination-bullet-active { color: {{ pag_color }}; }
+        #shopify-section-{{ section.id }} .swiper-pagination-bullet-active::after {
+          text-decoration: underline; text-underline-offset: 4px;
+        }
+        @media (max-width: 767.98px) {
+          #shopify-section-{{ section.id }} .swiper-pagination { gap: 10px; }
+          #shopify-section-{{ section.id }} .swiper-pagination-bullet { font-size: 11px; min-width: 18px; }
+        }
+    {%- endcase -%}
+  {%- endif -%}
+{%- endstyle -%}
+
+<div
+  class="section{% if s.padding_top < 30 %} pt-min{% endif %}{% if s.padding_bottom < 30 %} pb-min{% endif %} color-{{ color_scheme }} gradient{{ reset_spacing }}{% if reveal %} overflow-hidden{% endif %}"
+  style="{{ style | strip | strip_newlines }}"
+>
+  <div class="{{ section_width }}">
+    {%- if has_header -%}
+      <div class="tm-header section__header text-{{ s.header_alignment | default: 'center' }}">
+        {%- for block in section.blocks -%}
+          {%- assign hb = block.settings -%}
+          {%- case block.type -%}
+            {%- when 'eyebrow' -%}
+              {%- if hb.enabled and hb.text != blank -%}
+                <p class="tm-head tm-head--eyebrow tm-head-{{ block.id }} fs-custom" {{ block.shopify_attributes }}>{{ hb.text }}</p>
+              {%- endif -%}
+            {%- when 'heading' -%}
+              {%- if hb.enabled and hb.text != blank -%}
+                <h2 class="tm-head tm-head--heading tm-head-{{ block.id }} heading-letter-spacing" {{ block.shopify_attributes }}>{{ hb.text }}</h2>
+              {%- endif -%}
+            {%- when 'subheading' -%}
+              {%- if hb.enabled and hb.text != blank -%}
+                <div class="tm-head tm-head--sub tm-head-{{ block.id }} rich__text-m0" {{ block.shopify_attributes }}>{{ hb.text }}</div>
+              {%- endif -%}
+          {%- endcase -%}
+        {%- endfor -%}
+      </div>
+    {%- endif -%}
+
+    {% if testimonial_count > 0 %}
+      <div class="tm-cards-wrap">
+        {%- if display_mode == 'carousel' -%}
+          <slide-section
+            class="swiper{% if reveal %} reveal_on_scroll{% endif %} lazy-loading-swiper-before"
+            data-section-id="{{ section.id }}"
+            data-autoplay="{{ autoplay }}"
+            data-effect="slide"
+            data-loop="{{ infinite }}"
+            data-speed="500"
+            data-autoplay-speed="{{ autorotate_speed }}"
+            data-spacing="{{ column_gap }}"
+            data-mobile="{{ columns_mobile }}"
+            data-desktop="{{ columns }}"
+            data-tablet="{% if columns > 3 %}3{% else %}{{ columns }}{% endif %}"
+            data-pagination-progressbar="{% if is_progress %}true{% else %}false{% endif %}"
+            data-pagination-style="{{ pagination_style }}"
+          >
+            {% if show_arrow %}{%- render 'swiper-navigation' -%}{% endif %}
+            <div class="swiper-wrapper">
+              {%- for block in section.blocks -%}
+                {%- if block.type == 'testimonial' -%}
+                  {%- assign b = block.settings -%}
+                  <div class="swiper-slide" {{ block.shopify_attributes }}>
+                    {% render 'tm-card', b: b, show_rating: show_rating, show_quote_mark: show_quote_mark, block_id: block.id %}
+                  </div>
+                {%- endif -%}
+              {%- endfor -%}
+            </div>
+            {%- if pagination_visible != 'disable' -%}
+              <div
+                class="swiper-pagination tm-pagination{% if pagination_visible == 'mobile' %} hidden-md{% endif %}"
+                style="--swiper-pagination-position: static;"
+              ></div>
+            {%- endif -%}
+          </slide-section>
+        {%- else -%}
+          <div class="tm-grid">
+            {%- for block in section.blocks -%}
+              {%- if block.type == 'testimonial' -%}
+                {%- assign b = block.settings -%}
+                <motion-element
+                  data-motion="fade-up-sm"
+                  data-motion-delay="{{ forloop.index0 | times: 80 }}"
+                  {% if scroll_animation != 'slide_in' %}hold{% endif %}
+                  {{ block.shopify_attributes }}
+                  class="{% if scroll_animation != 'none' %} scroll-trigger {{ scroll_animation }}{% endif %}"
+                  style="--animation-order: {{ forloop.index }};"
+                >
+                  {% render 'tm-card', b: b, show_rating: show_rating, show_quote_mark: show_quote_mark, block_id: block.id %}
+                </motion-element>
+              {%- endif -%}
+            {%- endfor -%}
+          </div>
+        {%- endif -%}
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "testimonials",
+  "name": "Testimonials Grid",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "General"
+    },
+    {
+      "type": "color_scheme",
+      "id": "color_scheme",
+      "label": "Color scheme",
+      "default": "scheme-1"
+    },
+    {
+      "type": "select",
+      "id": "section_width",
+      "label": "Section width",
+      "default": "fluid_container",
+      "options": [
+        {
+          "value": "container",
+          "label": "Container"
+        },
+        {
+          "value": "fluid_container",
+          "label": "Fluid container"
+        },
+        {
+          "value": "stretch_width",
+          "label": "Stretched"
+        },
+        {
+          "value": "full_width",
+          "label": "Full width"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "header_alignment",
+      "label": "Header alignment",
+      "default": "center",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Centered"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "card_align",
+      "label": "Text alignment",
+      "default": "left",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Centered"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "checkbox",
+      "id": "reveal",
+      "label": "Reveal on scroll",
+      "info": "Uses the theme's global scroll animation (Theme settings → Animations).",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_8",
+      "label": "Header spacing"
+    },
+    {
+      "type": "range",
+      "id": "header_spacing_desktop",
+      "label": "Space below header (desktop)",
+      "min": 0,
+      "max": 100,
+      "step": 2,
+      "unit": "px",
+      "default": 36
+    },
+    {
+      "type": "range",
+      "id": "header_spacing_mobile",
+      "label": "Space below header (mobile)",
+      "min": 0,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "paragraph",
+      "id": "para_11",
+      "label": "Add the eyebrow, heading and subheading using the blocks below. Each one has its own font size, weight and optional custom font.",
+      "content": "Add the eyebrow, heading and subheading using the blocks below. Each one has its own font size, weight and optional custom font."
+    },
+    {
+      "type": "header",
+      "id": "hdr_12",
+      "label": "Layout"
+    },
+    {
+      "type": "select",
+      "id": "display_mode",
+      "label": "Display as",
+      "default": "carousel",
+      "options": [
+        {
+          "value": "carousel",
+          "label": "Carousel"
+        },
+        {
+          "value": "grid",
+          "label": "Grid"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "card_style",
+      "label": "Card style",
+      "default": "boxed",
+      "options": [
+        {
+          "value": "clean",
+          "label": "Clean (no card)"
+        },
+        {
+          "value": "boxed",
+          "label": "Filled card"
+        },
+        {
+          "value": "outline",
+          "label": "Outlined card"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "columns",
+      "label": "Items per row (desktop)",
+      "min": 1,
+      "max": 5,
+      "step": 1,
+      "default": 3
+    },
+    {
+      "type": "range",
+      "id": "columns_mobile",
+      "label": "Items per row (mobile)",
+      "info": "Use a decimal like 1.2 in carousel mode to let the next card peek in.",
+      "min": 1,
+      "max": 1.5,
+      "step": 0.1,
+      "default": 1
+    },
+    {
+      "type": "range",
+      "id": "column_gap",
+      "label": "Gap between items",
+      "min": 0,
+      "max": 60,
+      "step": 2,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "range",
+      "id": "space_below_cards_desktop",
+      "label": "Space below cards (desktop)",
+      "min": 0,
+      "max": 120,
+      "step": 2,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "space_below_cards_mobile",
+      "label": "Space below cards (mobile)",
+      "min": 0,
+      "max": 100,
+      "step": 2,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "header",
+      "id": "hdr_20",
+      "label": "Card"
+    },
+    {
+      "type": "range",
+      "id": "card_padding",
+      "label": "Card inner padding",
+      "info": "Ignored when card style is Clean.",
+      "min": 0,
+      "max": 60,
+      "step": 2,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "range",
+      "id": "card_content_gap",
+      "label": "Space between items inside card",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "default": 14
+    },
+    {
+      "type": "range",
+      "id": "quote_size",
+      "label": "Quote text size",
+      "min": 12,
+      "max": 28,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "header",
+      "id": "hdr_24",
+      "label": "Item Content"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_quote_mark",
+      "label": "Show big quote mark",
+      "default": true
+    },
+    {
+      "type": "select",
+      "id": "avatar_shape",
+      "label": "Avatar shape",
+      "default": "circle",
+      "options": [
+        {
+          "value": "circle",
+          "label": "Circle"
+        },
+        {
+          "value": "rounded",
+          "label": "Rounded square"
+        },
+        {
+          "value": "square",
+          "label": "Square"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "avatar_size",
+      "label": "Avatar size",
+      "min": 36,
+      "max": 96,
+      "step": 2,
+      "unit": "px",
+      "default": 56
+    },
+    {
+      "type": "header",
+      "id": "hdr_28",
+      "label": "Star Rating"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_rating",
+      "label": "Show star ratings",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_30",
+      "label": "Style & Colors"
+    },
+    {
+      "type": "color",
+      "id": "card_bg",
+      "label": "Card background"
+    },
+    {
+      "type": "color",
+      "id": "card_border_color",
+      "label": "Outline / border color"
+    },
+    {
+      "type": "color",
+      "id": "quote_color",
+      "label": "Stars / quote mark color"
+    },
+    {
+      "type": "range",
+      "id": "card_radius",
+      "label": "Card corner radius",
+      "min": 0,
+      "max": 30,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "header",
+      "id": "hdr_35",
+      "label": "Carousel Options"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_arrow",
+      "label": "Show next / previous arrows",
+      "default": false,
+      "visible_if": "{{ section.settings.display_mode == 'carousel' }}"
+    },
+    {
+      "type": "select",
+      "id": "carousel_pagination",
+      "label": "Pagination visibility",
+      "default": "show",
+      "options": [
+        {
+          "value": "disable",
+          "label": "Hide"
+        },
+        {
+          "value": "show",
+          "label": "Show"
+        },
+        {
+          "value": "show_dots_on_mobile",
+          "label": "Mobile only"
+        }
+      ],
+      "visible_if": "{{ section.settings.display_mode == 'carousel' }}"
+    },
+    {
+      "type": "select",
+      "id": "pagination_style",
+      "label": "Pagination style",
+      "default": "pill",
+      "options": [
+        {
+          "value": "dot",
+          "label": "Dot"
+        },
+        {
+          "value": "pill",
+          "label": "Pill (active expands)"
+        },
+        {
+          "value": "line",
+          "label": "Line / bar"
+        },
+        {
+          "value": "square",
+          "label": "Square"
+        },
+        {
+          "value": "ring",
+          "label": "Ring (hollow)"
+        },
+        {
+          "value": "number",
+          "label": "Numbers"
+        },
+        {
+          "value": "progress",
+          "label": "Progress fill"
+        }
+      ],
+      "visible_if": "{{ section.settings.display_mode == 'carousel' }}"
+    },
+    {
+      "type": "select",
+      "id": "pagination_position",
+      "label": "Pagination position",
+      "info": "Ignored for the Progress fill style, which always centers.",
+      "default": "center",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ],
+      "visible_if": "{{ section.settings.display_mode == 'carousel' }}"
+    },
+    {
+      "type": "range",
+      "id": "pagination_spacing",
+      "label": "Space above pagination",
+      "min": 0,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 30,
+      "visible_if": "{{ section.settings.display_mode == 'carousel' }}"
+    },
+    {
+      "type": "checkbox",
+      "id": "infinite",
+      "label": "Infinite loop",
+      "default": false,
+      "visible_if": "{{ section.settings.display_mode == 'carousel' }}"
+    },
+    {
+      "type": "checkbox",
+      "id": "autoplay",
+      "label": "Auto-rotate",
+      "default": false,
+      "visible_if": "{{ section.settings.display_mode == 'carousel' }}"
+    },
+    {
+      "type": "range",
+      "id": "autorotate_speed",
+      "label": "Change every",
+      "min": 2,
+      "max": 10,
+      "step": 1,
+      "unit": "s",
+      "default": 5,
+      "visible_if": "{{ section.settings.display_mode == 'carousel' and section.settings.autoplay }}"
+    },
+    {
+      "type": "header",
+      "id": "hdr_44",
+      "label": "Layout & Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "label": "Top padding",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 40
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "label": "Bottom padding",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 40
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_desktop",
+      "label": "Top margin (desktop px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_desktop",
+      "label": "Bottom margin (desktop px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "header",
+      "id": "hdr_49",
+      "label": "Mobile"
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_mobile",
+      "label": "Top margin (mobile px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_mobile",
+      "label": "Bottom margin (mobile px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    }
+  ],
+  "blocks": [
+    {
+      "type": "eyebrow",
+      "name": "Eyebrow",
+      "settings": [
+        {
+          "type": "checkbox",
+          "id": "enabled",
+          "label": "Show this block",
+          "default": true
+        },
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Eyebrow text",
+          "default": "Reviews"
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Typography"
+        },
+        {
+          "type": "range",
+          "id": "font_size_desktop",
+          "label": "Font size (desktop)",
+          "min": 10,
+          "max": 40,
+          "step": 1,
+          "unit": "px",
+          "default": 14
+        },
+        {
+          "type": "range",
+          "id": "font_size_mobile",
+          "label": "Font size (mobile)",
+          "min": 10,
+          "max": 32,
+          "step": 1,
+          "unit": "px",
+          "default": 12
+        },
+        {
+          "type": "select",
+          "id": "font_weight",
+          "label": "Font weight",
+          "default": "600",
+          "options": [
+            {
+              "value": "default",
+              "label": "Theme default"
+            },
+            {
+              "value": "300",
+              "label": "Light (300)"
+            },
+            {
+              "value": "400",
+              "label": "Regular (400)"
+            },
+            {
+              "value": "500",
+              "label": "Medium (500)"
+            },
+            {
+              "value": "600",
+              "label": "Semibold (600)"
+            },
+            {
+              "value": "700",
+              "label": "Bold (700)"
+            },
+            {
+              "value": "800",
+              "label": "Extra bold (800)"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "custom_font",
+          "label": "Use a custom font",
+          "default": false
+        },
+        {
+          "type": "font_picker",
+          "id": "font",
+          "label": "Custom font",
+          "default": "sans-serif",
+          "visible_if": "{{ block.settings.custom_font }}"
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "heading",
+      "name": "Heading",
+      "settings": [
+        {
+          "type": "checkbox",
+          "id": "enabled",
+          "label": "Show this block",
+          "default": true
+        },
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Heading",
+          "default": "What our customers say"
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Typography"
+        },
+        {
+          "type": "range",
+          "id": "font_size_desktop",
+          "label": "Font size (desktop)",
+          "min": 18,
+          "max": 80,
+          "step": 1,
+          "unit": "px",
+          "default": 36
+        },
+        {
+          "type": "range",
+          "id": "font_size_mobile",
+          "label": "Font size (mobile)",
+          "min": 16,
+          "max": 56,
+          "step": 1,
+          "unit": "px",
+          "default": 26
+        },
+        {
+          "type": "select",
+          "id": "font_weight",
+          "label": "Font weight",
+          "default": "700",
+          "options": [
+            {
+              "value": "default",
+              "label": "Theme default"
+            },
+            {
+              "value": "300",
+              "label": "Light (300)"
+            },
+            {
+              "value": "400",
+              "label": "Regular (400)"
+            },
+            {
+              "value": "500",
+              "label": "Medium (500)"
+            },
+            {
+              "value": "600",
+              "label": "Semibold (600)"
+            },
+            {
+              "value": "700",
+              "label": "Bold (700)"
+            },
+            {
+              "value": "800",
+              "label": "Extra bold (800)"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "custom_font",
+          "label": "Use a custom font",
+          "default": false
+        },
+        {
+          "type": "font_picker",
+          "id": "font",
+          "label": "Custom font",
+          "default": "sans-serif",
+          "visible_if": "{{ block.settings.custom_font }}"
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "subheading",
+      "name": "Subheading",
+      "settings": [
+        {
+          "type": "checkbox",
+          "id": "enabled",
+          "label": "Show this block",
+          "default": true
+        },
+        {
+          "type": "richtext",
+          "id": "text",
+          "label": "Subheading",
+          "default": "<p>Real words from real shoppers.</p>"
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Typography"
+        },
+        {
+          "type": "range",
+          "id": "font_size_desktop",
+          "label": "Font size (desktop)",
+          "min": 12,
+          "max": 40,
+          "step": 1,
+          "unit": "px",
+          "default": 17
+        },
+        {
+          "type": "range",
+          "id": "font_size_mobile",
+          "label": "Font size (mobile)",
+          "min": 12,
+          "max": 32,
+          "step": 1,
+          "unit": "px",
+          "default": 15
+        },
+        {
+          "type": "select",
+          "id": "font_weight",
+          "label": "Font weight",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Theme default"
+            },
+            {
+              "value": "300",
+              "label": "Light (300)"
+            },
+            {
+              "value": "400",
+              "label": "Regular (400)"
+            },
+            {
+              "value": "500",
+              "label": "Medium (500)"
+            },
+            {
+              "value": "600",
+              "label": "Semibold (600)"
+            },
+            {
+              "value": "700",
+              "label": "Bold (700)"
+            },
+            {
+              "value": "800",
+              "label": "Extra bold (800)"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "custom_font",
+          "label": "Use a custom font",
+          "default": false
+        },
+        {
+          "type": "font_picker",
+          "id": "font",
+          "label": "Custom font",
+          "default": "sans-serif",
+          "visible_if": "{{ block.settings.custom_font }}"
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "testimonial",
+      "name": "Testimonial",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content"
+        },
+        {
+          "type": "richtext",
+          "id": "quote",
+          "label": "Quote",
+          "default": "<p>This is hands-down the best purchase I've made all year. Quality is incredible and shipping was so fast.</p>"
+        },
+        {
+          "type": "range",
+          "id": "rating",
+          "label": "Star rating",
+          "min": 0,
+          "max": 5,
+          "step": 1,
+          "default": 5
+        },
+        {
+          "type": "text",
+          "id": "name",
+          "label": "Name",
+          "default": "Sarah K."
+        },
+        {
+          "type": "text",
+          "id": "role",
+          "label": "Role / location",
+          "default": "Verified buyer"
+        },
+        {
+          "type": "header",
+          "id": "hdr_6",
+          "label": "Image"
+        },
+        {
+          "type": "image_picker",
+          "id": "avatar",
+          "label": "Avatar"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Testimonials Grid",
+      "category": "Testimonials",
+      "blocks": [
+        {
+          "type": "eyebrow",
+          "settings": {
+            "text": "Reviews"
+          }
+        },
+        {
+          "type": "heading",
+          "settings": {
+            "text": "What our customers say"
+          }
+        },
+        {
+          "type": "subheading",
+          "settings": {
+            "text": "<p>Real words from real shoppers.</p>"
+          }
+        },
+        {
+          "type": "testimonial",
+          "settings": {
+            "name": "Sarah K.",
+            "role": "Verified buyer",
+            "quote": "<p>Honestly the best thing I've bought all year. Quality is unreal.</p>"
+          }
+        },
+        {
+          "type": "testimonial",
+          "settings": {
+            "name": "Marcus T.",
+            "role": "London, UK",
+            "quote": "<p>Fast shipping, packaging was beautiful, and the product is even better in person.</p>"
+          }
+        },
+        {
+          "type": "testimonial",
+          "settings": {
+            "name": "Aria L.",
+            "role": "Repeat customer",
+            "quote": "<p>I've ordered three times now. Customer service is the cherry on top.</p>"
+          }
+        }
+      ]
+    }
+  ],
+  "disabled_on": {
+    "groups": [
+      "header",
+      "footer"
+    ]
+  },
+  "shopify": {
+    "name": "Testimonials Grid",
+    "tag": "section",
+    "disabled_on": {
+      "groups": [
+        "header",
+        "footer"
+      ]
+    },
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "scheme-1"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "fluid_container",
+        "options": [
+          {
+            "value": "container",
+            "label": "Container"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "header_alignment",
+        "label": "Header alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Centered"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "card_align",
+        "label": "Text alignment",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Centered"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "checkbox",
+        "id": "reveal",
+        "label": "Reveal on scroll",
+        "info": "Uses the theme's global scroll animation (Theme settings → Animations).",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Header spacing"
+      },
+      {
+        "type": "range",
+        "id": "header_spacing_desktop",
+        "label": "Space below header (desktop)",
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "unit": "px",
+        "default": 36
+      },
+      {
+        "type": "range",
+        "id": "header_spacing_mobile",
+        "label": "Space below header (mobile)",
+        "min": 0,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "paragraph",
+        "content": "Add the eyebrow, heading and subheading using the blocks below. Each one has its own font size, weight and optional custom font."
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "display_mode",
+        "label": "Display as",
+        "default": "carousel",
+        "options": [
+          {
+            "value": "carousel",
+            "label": "Carousel"
+          },
+          {
+            "value": "grid",
+            "label": "Grid"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "card_style",
+        "label": "Card style",
+        "default": "boxed",
+        "options": [
+          {
+            "value": "clean",
+            "label": "Clean (no card)"
+          },
+          {
+            "value": "boxed",
+            "label": "Filled card"
+          },
+          {
+            "value": "outline",
+            "label": "Outlined card"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "columns",
+        "label": "Items per row (desktop)",
+        "min": 1,
+        "max": 5,
+        "step": 1,
+        "default": 3
+      },
+      {
+        "type": "range",
+        "id": "columns_mobile",
+        "label": "Items per row (mobile)",
+        "info": "Use a decimal like 1.2 in carousel mode to let the next card peek in.",
+        "min": 1,
+        "max": 1.5,
+        "step": 0.1,
+        "default": 1
+      },
+      {
+        "type": "range",
+        "id": "column_gap",
+        "label": "Gap between items",
+        "min": 0,
+        "max": 60,
+        "step": 2,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "range",
+        "id": "space_below_cards_desktop",
+        "label": "Space below cards (desktop)",
+        "min": 0,
+        "max": 120,
+        "step": 2,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "space_below_cards_mobile",
+        "label": "Space below cards (mobile)",
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Card"
+      },
+      {
+        "type": "range",
+        "id": "card_padding",
+        "label": "Card inner padding",
+        "info": "Ignored when card style is Clean.",
+        "min": 0,
+        "max": 60,
+        "step": 2,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "range",
+        "id": "card_content_gap",
+        "label": "Space between items inside card",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "range",
+        "id": "quote_size",
+        "label": "Quote text size",
+        "min": 12,
+        "max": 28,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "header",
+        "content": "Item Content"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_quote_mark",
+        "label": "Show big quote mark",
+        "default": true
+      },
+      {
+        "type": "select",
+        "id": "avatar_shape",
+        "label": "Avatar shape",
+        "default": "circle",
+        "options": [
+          {
+            "value": "circle",
+            "label": "Circle"
+          },
+          {
+            "value": "rounded",
+            "label": "Rounded square"
+          },
+          {
+            "value": "square",
+            "label": "Square"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "avatar_size",
+        "label": "Avatar size",
+        "min": 36,
+        "max": 96,
+        "step": 2,
+        "unit": "px",
+        "default": 56
+      },
+      {
+        "type": "header",
+        "content": "Star Rating"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_rating",
+        "label": "Show star ratings",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Style & Colors"
+      },
+      {
+        "type": "color",
+        "id": "card_bg",
+        "label": "Card background"
+      },
+      {
+        "type": "color",
+        "id": "card_border_color",
+        "label": "Outline / border color"
+      },
+      {
+        "type": "color",
+        "id": "quote_color",
+        "label": "Stars / quote mark color"
+      },
+      {
+        "type": "range",
+        "id": "card_radius",
+        "label": "Card corner radius",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "header",
+        "content": "Carousel Options"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_arrow",
+        "label": "Show next / previous arrows",
+        "default": false,
+        "visible_if": "{{ section.settings.display_mode == 'carousel' }}"
+      },
+      {
+        "type": "select",
+        "id": "carousel_pagination",
+        "label": "Pagination visibility",
+        "default": "show",
+        "options": [
+          {
+            "value": "disable",
+            "label": "Hide"
+          },
+          {
+            "value": "show",
+            "label": "Show"
+          },
+          {
+            "value": "show_dots_on_mobile",
+            "label": "Mobile only"
+          }
+        ],
+        "visible_if": "{{ section.settings.display_mode == 'carousel' }}"
+      },
+      {
+        "type": "select",
+        "id": "pagination_style",
+        "label": "Pagination style",
+        "default": "pill",
+        "options": [
+          {
+            "value": "dot",
+            "label": "Dot"
+          },
+          {
+            "value": "pill",
+            "label": "Pill (active expands)"
+          },
+          {
+            "value": "line",
+            "label": "Line / bar"
+          },
+          {
+            "value": "square",
+            "label": "Square"
+          },
+          {
+            "value": "ring",
+            "label": "Ring (hollow)"
+          },
+          {
+            "value": "number",
+            "label": "Numbers"
+          },
+          {
+            "value": "progress",
+            "label": "Progress fill"
+          }
+        ],
+        "visible_if": "{{ section.settings.display_mode == 'carousel' }}"
+      },
+      {
+        "type": "select",
+        "id": "pagination_position",
+        "label": "Pagination position",
+        "info": "Ignored for the Progress fill style, which always centers.",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ],
+        "visible_if": "{{ section.settings.display_mode == 'carousel' }}"
+      },
+      {
+        "type": "range",
+        "id": "pagination_spacing",
+        "label": "Space above pagination",
+        "min": 0,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 30,
+        "visible_if": "{{ section.settings.display_mode == 'carousel' }}"
+      },
+      {
+        "type": "checkbox",
+        "id": "infinite",
+        "label": "Infinite loop",
+        "default": false,
+        "visible_if": "{{ section.settings.display_mode == 'carousel' }}"
+      },
+      {
+        "type": "checkbox",
+        "id": "autoplay",
+        "label": "Auto-rotate",
+        "default": false,
+        "visible_if": "{{ section.settings.display_mode == 'carousel' }}"
+      },
+      {
+        "type": "range",
+        "id": "autorotate_speed",
+        "label": "Change every",
+        "min": 2,
+        "max": 10,
+        "step": 1,
+        "unit": "s",
+        "default": 5,
+        "visible_if": "{{ section.settings.display_mode == 'carousel' and section.settings.autoplay }}"
+      },
+      {
+        "type": "header",
+        "content": "Layout & Spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top padding",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 40
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom padding",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 40
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin (desktop px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin (desktop px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_mobile",
+        "label": "Top margin (mobile px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_mobile",
+        "label": "Bottom margin (mobile px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      }
+    ],
+    "blocks": [
+      {
+        "type": "eyebrow",
+        "name": "Eyebrow",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "checkbox",
+            "id": "enabled",
+            "label": "Show this block",
+            "default": true
+          },
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Eyebrow text",
+            "default": "Reviews"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "range",
+            "id": "font_size_desktop",
+            "label": "Font size (desktop)",
+            "min": 10,
+            "max": 40,
+            "step": 1,
+            "unit": "px",
+            "default": 14
+          },
+          {
+            "type": "range",
+            "id": "font_size_mobile",
+            "label": "Font size (mobile)",
+            "min": 10,
+            "max": 32,
+            "step": 1,
+            "unit": "px",
+            "default": 12
+          },
+          {
+            "type": "select",
+            "id": "font_weight",
+            "label": "Font weight",
+            "default": "600",
+            "options": [
+              {
+                "value": "default",
+                "label": "Theme default"
+              },
+              {
+                "value": "300",
+                "label": "Light (300)"
+              },
+              {
+                "value": "400",
+                "label": "Regular (400)"
+              },
+              {
+                "value": "500",
+                "label": "Medium (500)"
+              },
+              {
+                "value": "600",
+                "label": "Semibold (600)"
+              },
+              {
+                "value": "700",
+                "label": "Bold (700)"
+              },
+              {
+                "value": "800",
+                "label": "Extra bold (800)"
+              }
+            ]
+          },
+          {
+            "type": "checkbox",
+            "id": "custom_font",
+            "label": "Use a custom font",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Custom font",
+            "default": "sans-serif",
+            "visible_if": "{{ block.settings.custom_font }}"
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "checkbox",
+            "id": "enabled",
+            "label": "Show this block",
+            "default": true
+          },
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Heading",
+            "default": "What our customers say"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "range",
+            "id": "font_size_desktop",
+            "label": "Font size (desktop)",
+            "min": 18,
+            "max": 80,
+            "step": 1,
+            "unit": "px",
+            "default": 36
+          },
+          {
+            "type": "range",
+            "id": "font_size_mobile",
+            "label": "Font size (mobile)",
+            "min": 16,
+            "max": 56,
+            "step": 1,
+            "unit": "px",
+            "default": 26
+          },
+          {
+            "type": "select",
+            "id": "font_weight",
+            "label": "Font weight",
+            "default": "700",
+            "options": [
+              {
+                "value": "default",
+                "label": "Theme default"
+              },
+              {
+                "value": "300",
+                "label": "Light (300)"
+              },
+              {
+                "value": "400",
+                "label": "Regular (400)"
+              },
+              {
+                "value": "500",
+                "label": "Medium (500)"
+              },
+              {
+                "value": "600",
+                "label": "Semibold (600)"
+              },
+              {
+                "value": "700",
+                "label": "Bold (700)"
+              },
+              {
+                "value": "800",
+                "label": "Extra bold (800)"
+              }
+            ]
+          },
+          {
+            "type": "checkbox",
+            "id": "custom_font",
+            "label": "Use a custom font",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Custom font",
+            "default": "sans-serif",
+            "visible_if": "{{ block.settings.custom_font }}"
+          }
+        ]
+      },
+      {
+        "type": "subheading",
+        "name": "Subheading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "checkbox",
+            "id": "enabled",
+            "label": "Show this block",
+            "default": true
+          },
+          {
+            "type": "richtext",
+            "id": "text",
+            "label": "Subheading",
+            "default": "<p>Real words from real shoppers.</p>"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "range",
+            "id": "font_size_desktop",
+            "label": "Font size (desktop)",
+            "min": 12,
+            "max": 40,
+            "step": 1,
+            "unit": "px",
+            "default": 17
+          },
+          {
+            "type": "range",
+            "id": "font_size_mobile",
+            "label": "Font size (mobile)",
+            "min": 12,
+            "max": 32,
+            "step": 1,
+            "unit": "px",
+            "default": 15
+          },
+          {
+            "type": "select",
+            "id": "font_weight",
+            "label": "Font weight",
+            "default": "default",
+            "options": [
+              {
+                "value": "default",
+                "label": "Theme default"
+              },
+              {
+                "value": "300",
+                "label": "Light (300)"
+              },
+              {
+                "value": "400",
+                "label": "Regular (400)"
+              },
+              {
+                "value": "500",
+                "label": "Medium (500)"
+              },
+              {
+                "value": "600",
+                "label": "Semibold (600)"
+              },
+              {
+                "value": "700",
+                "label": "Bold (700)"
+              },
+              {
+                "value": "800",
+                "label": "Extra bold (800)"
+              }
+            ]
+          },
+          {
+            "type": "checkbox",
+            "id": "custom_font",
+            "label": "Use a custom font",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Custom font",
+            "default": "sans-serif",
+            "visible_if": "{{ block.settings.custom_font }}"
+          }
+        ]
+      },
+      {
+        "type": "testimonial",
+        "name": "Testimonial",
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "richtext",
+            "id": "quote",
+            "label": "Quote",
+            "default": "<p>This is hands-down the best purchase I've made all year. Quality is incredible and shipping was so fast.</p>"
+          },
+          {
+            "type": "range",
+            "id": "rating",
+            "label": "Star rating",
+            "min": 0,
+            "max": 5,
+            "step": 1,
+            "default": 5
+          },
+          {
+            "type": "text",
+            "id": "name",
+            "label": "Name",
+            "default": "Sarah K."
+          },
+          {
+            "type": "text",
+            "id": "role",
+            "label": "Role / location",
+            "default": "Verified buyer"
+          },
+          {
+            "type": "header",
+            "content": "Image"
+          },
+          {
+            "type": "image_picker",
+            "id": "avatar",
+            "label": "Avatar"
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Testimonials Grid",
+        "category": "Testimonials",
+        "blocks": [
+          {
+            "type": "eyebrow",
+            "settings": {
+              "text": "Reviews"
+            }
+          },
+          {
+            "type": "heading",
+            "settings": {
+              "text": "What our customers say"
+            }
+          },
+          {
+            "type": "subheading",
+            "settings": {
+              "text": "<p>Real words from real shoppers.</p>"
+            }
+          },
+          {
+            "type": "testimonial",
+            "settings": {
+              "name": "Sarah K.",
+              "role": "Verified buyer",
+              "quote": "<p>Honestly the best thing I've bought all year. Quality is unreal.</p>"
+            }
+          },
+          {
+            "type": "testimonial",
+            "settings": {
+              "name": "Marcus T.",
+              "role": "London, UK",
+              "quote": "<p>Fast shipping, packaging was beautiful, and the product is even better in person.</p>"
+            }
+          },
+          {
+            "type": "testimonial",
+            "settings": {
+              "name": "Aria L.",
+              "role": "Repeat customer",
+              "quote": "<p>I've ordered three times now. Customer service is the cherry on top.</p>"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

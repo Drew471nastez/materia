@@ -1,0 +1,1859 @@
+<template compat="shopify">
+{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- comment -%}
+  Materia Themes — FAQ Tabs
+  Centered FAQ with category tab pills and a + / – accordion list.
+  Tab switching is CSS-only (hidden radio inputs + :checked sibling
+  selectors), so the section renders without JavaScript and generates
+  preview thumbnails correctly.
+
+  Categories live in section settings (up to 5 tab labels) — no
+  block-ID juggling. Each FAQ item picks its tab via a simple Tab 1-5
+  select. Empty tab labels don't render. On mobile, the tab strip
+  scrolls horizontally for narrow viewports.
+{%- endcomment -%}
+
+{%- liquid
+  assign st  = section.settings
+  assign sid = section.id
+  assign items = section.blocks | where: 'type', 'faq_item'
+
+  comment
+    Build the active tab list by walking labels 1..5, keeping only
+    the ones with non-blank labels.
+  endcomment
+  assign tab_labels = '' | split: ','
+  assign tab_keys   = '' | split: ','
+  for i in (1..5)
+    assign key = 'tab_' | append: i | append: '_label'
+    assign value = st[key]
+    if value != blank
+      assign tab_labels = tab_labels | concat: value | split: '||MATERIA||'
+      assign tab_keys   = tab_keys | concat: i | split: '||MATERIA||'
+    endif
+  endfor
+  comment
+    Above produces oddly-split arrays because Shopify's `concat` only
+    accepts arrays, not scalars. Rebuild as plain arrays via splits.
+  endcomment
+  assign tab_count = 0
+  for i in (1..5)
+    assign key = 'tab_' | append: i | append: '_label'
+    if st[key] != blank
+      assign tab_count = tab_count | plus: 1
+    endif
+  endfor
+
+  assign align = st.header_align | default: 'center'
+  case align
+    when 'left'
+      assign flex_align = 'flex-start'
+    when 'right'
+      assign flex_align = 'flex-end'
+    else
+      assign flex_align = 'center'
+  endcase
+-%}
+
+<style>
+  /* Section isolation */
+  #shopify-section-{{ sid }} { isolation: isolate; position: relative; }
+  :where(#shopify-section-{{ sid }}) { font-family: var(--body-font, inherit); }
+  :where(#shopify-section-{{ sid }}) :is(h1, h2, h3, h4, h5, h6) { font-family: var(--heading-font, inherit); }
+  #shopify-section-{{ sid }} *, #shopify-section-{{ sid }} *:before, #shopify-section-{{ sid }} *:after { box-sizing: border-box; }
+
+  /* Margins */
+  #shopify-section-{{ sid }} {
+    margin-top: {{ st.section_margin_top_mobile | default: 0 }}px;
+    margin-bottom: {{ st.section_margin_bottom_mobile | default: 0 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} {
+      margin-top: {{ st.section_margin_top_desktop | default: 0 }}px;
+      margin-bottom: {{ st.section_margin_bottom_desktop | default: 0 }}px;
+    }
+  }
+  {%- if st.reset_spacing -%}
+    #shopify-section-{{ sid }} { margin-top: 0 !important; margin-bottom: 0 !important; }
+    #shopify-section-{{ sid }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif -%}
+
+  /* Outer */
+  #shopify-section-{{ sid }} .fqt {
+    background: {{ st.section_bg | default: '#F8F8F8' }} !important;
+    padding-top: {{ st.padding_top_mobile | default: 56 }}px;
+    padding-bottom: {{ st.padding_bottom_mobile | default: 56 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .fqt {
+      padding-top: {{ st.padding_top_desktop | default: 96 }}px;
+      padding-bottom: {{ st.padding_bottom_desktop | default: 96 }}px;
+    }
+  }
+
+  /* Section width */
+  #shopify-section-{{ sid }} .fqt__inner {
+    max-width: {{ st.section_max_width_mobile | default: 560 }}px;
+    margin-inline: auto;
+    padding-inline: 1.25rem;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .fqt__inner {
+      max-width: {{ st.section_max_width_tablet | default: 800 }}px;
+      padding-inline: 1.5rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    #shopify-section-{{ sid }} .fqt__inner {
+      max-width: {{ st.section_max_width_desktop | default: 920 }}px;
+    }
+  }
+
+  /* Header */
+  #shopify-section-{{ sid }} .fqt__header {
+    display: flex;
+    flex-direction: column;
+    align-items: {{ flex_align }};
+    text-align: {{ align }};
+    margin: 0 auto {{ st.gap_subheading_tabs_mobile | default: 24 }}px;
+    gap: {{ st.heading_sub_gap_mobile | default: 12 }}px;
+    width: 100%;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .fqt__header {
+      margin-bottom: {{ st.gap_subheading_tabs | default: 32 }}px;
+      gap: {{ st.heading_sub_gap_desktop | default: 16 }}px;
+    }
+  }
+  #shopify-section-{{ sid }} .fqt__header > *,
+  #shopify-section-{{ sid }} .fqt__header :is(h1, h2, h3, h4, h5, h6, p, div, span) {
+    margin-block: 0 !important;
+    margin-block-start: 0 !important;
+    margin-block-end: 0 !important;
+    padding-block: 0 !important;
+  }
+
+  /* Tab strip — CSS-only via radio inputs. Three-layer structure:
+       .fqt__tabs-wrap → horizontal scroll viewport (full bleed)
+       .fqt__tabs-row  → flex row that centers the pill when room,
+                         falls back to start-aligned when content
+                         overflows (min-width: max-content)
+       .fqt__tabs      → the white pill itself
+     This guarantees the pill is centered on desktop and never gets
+     clipped on mobile — overflow simply scrolls horizontally. */
+  #shopify-section-{{ sid }} .fqt__tab-radio {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  #shopify-section-{{ sid }} .fqt__tabs-wrap {
+    position: relative;
+    width: 100%;
+    margin: 0 0 {{ st.gap_tabs_list | default: 32 }}px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    /* Negative margins + matching padding so the scrollable area runs
+       edge-to-edge while the pill stays inside the section padding when
+       not overflowing. */
+    margin-left: -1.25rem;
+    margin-right: -1.25rem;
+    padding: 4px 1.25rem;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .fqt__tabs-wrap {
+      margin-left: -1.5rem;
+      margin-right: -1.5rem;
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+  }
+  #shopify-section-{{ sid }} .fqt__tabs-wrap::-webkit-scrollbar { display: none; }
+
+  #shopify-section-{{ sid }} .fqt__tabs-row {
+    display: flex;
+    justify-content: center;
+    min-width: max-content;
+  }
+
+  /* The pill itself. */
+  #shopify-section-{{ sid }} .fqt__tabs {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    gap: 6px;
+    background: {{ st.tabs_track_bg | default: '#FFFFFF' }};
+    padding: 6px;
+    border-radius: 999px;
+    box-shadow: {{ st.tabs_shadow | default: '0 4px 16px -8px rgba(15, 23, 42, .08)' }};
+  }
+  #shopify-section-{{ sid }} .fqt__tab {
+    cursor: pointer;
+    user-select: none;
+    padding: 10px 22px;
+    border-radius: 999px;
+    font-weight: {{ st.tab_weight | default: 600 }};
+    font-size: {{ st.tab_size | default: 15 }}px;
+    color: {{ st.tab_inactive_color | default: '#475569' }};
+    transition: background .25s ease, color .25s ease;
+    white-space: nowrap;
+  }
+  @media (max-width: 600px) {
+    #shopify-section-{{ sid }} .fqt__tab { padding: 8px 12px; font-size: 12px; }
+    #shopify-section-{{ sid }} .fqt__tabs { padding: 4px; gap: 4px; }
+  }
+  @media (max-width: 360px) {
+    #shopify-section-{{ sid }} .fqt__tab { padding: 7px 10px; font-size: 11px; }
+  }
+
+  /* Per-tab active styles, generated for tabs 1..5 */
+  {%- for i in (1..5) -%}
+    #shopify-section-{{ sid }} .fqt__r--{{ i }}:checked ~ .fqt__shell .fqt__tab--{{ i }} {
+      background: {{ st.tab_active_bg | default: '#000000' }};
+      color: {{ st.tab_active_color | default: '#FFFFFF' }};
+    }
+    #shopify-section-{{ sid }} .fqt__r--{{ i }}:checked ~ .fqt__shell .fqt__panel--{{ i }} {
+      display: block;
+    }
+  {%- endfor -%}
+
+  /* List of FAQ items */
+  #shopify-section-{{ sid }} .fqt__list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* FAQ item — div-based (not <details>) so the close animation runs
+     smoothly. Native <details> hides children abruptly when closing,
+     which kills the grid-template-rows transition. */
+  #shopify-section-{{ sid }} .fqt__item {
+    border-top: 1px solid {{ st.divider_color | default: '#CBD5E1' }};
+    padding: {{ st.item_padding_y | default: 22 }}px 0;
+  }
+  #shopify-section-{{ sid }} .fqt__item:last-of-type {
+    border-bottom: 1px solid {{ st.divider_color | default: '#CBD5E1' }};
+  }
+  #shopify-section-{{ sid }} .fqt__summary {
+    cursor: pointer;
+    list-style: none;
+    display: grid;
+    grid-template-columns: 1fr 24px;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    text-align: left;
+    font-family: inherit;
+    font-weight: {{ st.q_weight | default: 700 }};
+    font-size: {{ st.q_size | default: 18 }}px;
+    color: {{ st.q_color | default: '#0F172A' }};
+    line-height: 1.4;
+  }
+  #shopify-section-{{ sid }} .fqt__plus {
+    width: 24px; height: 24px;
+    position: relative;
+    flex-shrink: 0;
+  }
+  #shopify-section-{{ sid }} .fqt__plus::before,
+  #shopify-section-{{ sid }} .fqt__plus::after {
+    content: '';
+    position: absolute;
+    left: 50%; top: 50%;
+    background: {{ st.plus_color | default: '#0F172A' }};
+    transform-origin: center;
+    transition: transform .35s cubic-bezier(0.4, 0, 0.2, 1), opacity .25s ease;
+  }
+  #shopify-section-{{ sid }} .fqt__plus::before {
+    width: 16px; height: 2px;
+    transform: translate(-50%, -50%);
+  }
+  #shopify-section-{{ sid }} .fqt__plus::after {
+    width: 2px; height: 16px;
+    transform: translate(-50%, -50%);
+  }
+  #shopify-section-{{ sid }} .fqt__item[data-open="1"] .fqt__plus::after {
+    transform: translate(-50%, -50%) rotate(90deg);
+    opacity: 0;
+  }
+
+  /* Smooth open/close using the same 3-level grid-template-rows pattern
+     as Faq1 / info-box. Because we own the open state via a data attr,
+     the wrap stays in the layout in both states so the height can
+     transition both ways. */
+  #shopify-section-{{ sid }} .fqt__item .fqt__answer-wrap {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows .42s cubic-bezier(.4, 0, .2, 1);
+  }
+  #shopify-section-{{ sid }} .fqt__item[data-open="1"] .fqt__answer-wrap {
+    grid-template-rows: 1fr;
+  }
+  #shopify-section-{{ sid }} .fqt__answer-inner { overflow: hidden; }
+  #shopify-section-{{ sid }} .fqt__answer {
+    margin: 0;
+    padding-top: 14px;
+    color: {{ st.a_color | default: '#475569' }};
+    font-size: {{ st.a_size | default: 16 }}px;
+    line-height: 1.6;
+    max-width: 720px;
+  }
+  #shopify-section-{{ sid }} .fqt__answer > * { margin: 0; }
+  #shopify-section-{{ sid }} .fqt__answer > * + * { margin-top: 8px; }
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ sid }} .fqt__answer-wrap,
+    #shopify-section-{{ sid }} .fqt__plus::before,
+    #shopify-section-{{ sid }} .fqt__plus::after { transition: none !important; }
+  }
+
+  /* Category panels — only the matching one is :displayed */
+  #shopify-section-{{ sid }} .fqt__panel { display: none; }
+
+  /* Show / hide by device */
+  {%- if st.show_section_on == 'mobile' -%}
+    #shopify-section-{{ sid }} .fqt { display: none; }
+    @media (max-width: 767px) { #shopify-section-{{ sid }} .fqt { display: block; } }
+  {%- elsif st.show_section_on == 'desktop' -%}
+    #shopify-section-{{ sid }} .fqt { display: none; }
+    @media (min-width: 768px) { #shopify-section-{{ sid }} .fqt { display: block; } }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+
+<section class="fqt" id="fqt-{{ sid }}">
+  <div class="fqt__inner">
+
+    {%- comment -%}========== HEADER ==========={%- endcomment -%}
+    <div class="fqt__header">
+      {%- for block in section.blocks -%}
+        {%- assign bs = block.settings -%}
+        {%- case block.type -%}
+
+          {%- when 'heading' -%}
+            {%- if bs.text != blank -%}
+              <{{ bs.tag | default: 'h2' }} id="block-{{ block.id }}" class="fqt__heading" {{ block.shopify_attributes }}>{{ bs.text }}</{{ bs.tag | default: 'h2' }}>
+              <style>
+                #shopify-section-{{ sid }} #block-{{ block.id }} {
+                  margin: 0 !important;
+                  margin-block: 0 !important;
+                  padding: 0 !important;
+                  color: {{ bs.color | default: '#0F172A' }} !important;
+                  font-weight: {{ bs.weight | default: 700 }};
+                  line-height: {{ bs.line_height | default: 1.2 }};
+                  font-size: {{ bs.size_mobile | default: 36 }}px !important;
+                }
+                @media (min-width: 768px) {
+                  #shopify-section-{{ sid }} #block-{{ block.id }} { font-size: {{ bs.size_desktop | default: 56 }}px !important; }
+                }
+{% comment %}{% endcomment %}              </style>
+            {%- endif -%}
+
+          {%- when 'subheading' -%}
+            {%- if bs.text != blank -%}
+              <div id="block-{{ block.id }}" class="fqt__sub" {{ block.shopify_attributes }}>{{ bs.text }}</div>
+              <style>
+                #shopify-section-{{ sid }} #block-{{ block.id }} {
+                  margin: 0 !important;
+                  margin-block: 0 !important;
+                  padding: 0 !important;
+                  color: {{ bs.color | default: '#0F172A' }} !important;
+                  font-size: {{ bs.size | default: 16 }}px;
+                  line-height: 1.55;
+                  max-width: {{ bs.max_width | default: 540 }}px;
+                }
+                #shopify-section-{{ sid }} #block-{{ block.id }} > * { margin: 0 !important; padding: 0 !important; }
+{% comment %}{% endcomment %}              </style>
+            {%- endif -%}
+
+        {%- endcase -%}
+      {%- endfor -%}
+    </div>
+
+    {%- comment -%}========== TABS + PANELS ==========={%- endcomment -%}
+    {%- if tab_count > 0 -%}
+      {%- comment -%}Hidden radios that drive the CSS-only tab toggle.{%- endcomment -%}
+      {%- assign first_tab = 0 -%}
+      {%- for i in (1..5) -%}
+        {%- assign label_key = 'tab_' | append: i | append: '_label' -%}
+        {%- if st[label_key] != blank -%}
+          {%- if first_tab == 0 -%}{%- assign first_tab = i -%}{%- endif -%}
+          <input
+            class="fqt__tab-radio fqt__r--{{ i }}"
+            type="radio"
+            name="fqt-{{ sid }}"
+            id="fqt-{{ sid }}-{{ i }}"
+            {% if i == first_tab %}checked{% endif %}>
+        {%- endif -%}
+      {%- endfor -%}
+
+      <div class="fqt__shell">
+        <div class="fqt__tabs-wrap">
+          <div class="fqt__tabs-row">
+            <div class="fqt__tabs" role="tablist">
+              {%- for i in (1..5) -%}
+                {%- assign label_key = 'tab_' | append: i | append: '_label' -%}
+                {%- assign label_value = st[label_key] -%}
+                {%- if label_value != blank -%}
+                  <label
+                    class="fqt__tab fqt__tab--{{ i }}"
+                    for="fqt-{{ sid }}-{{ i }}">{{ label_value }}</label>
+                {%- endif -%}
+              {%- endfor -%}
+            </div>
+          </div>
+        </div>
+
+        {%- comment -%}One panel per tab — visibility driven via :checked CSS{%- endcomment -%}
+        {%- for i in (1..5) -%}
+          {%- assign label_key = 'tab_' | append: i | append: '_label' -%}
+          {%- if st[label_key] != blank -%}
+            {%- assign tab_str = i | append: '' -%}
+            <div class="fqt__panel fqt__panel--{{ i }}" role="tabpanel">
+              <div class="fqt__list">
+                {%- for item in items -%}
+                  {%- if item.settings.tab == tab_str -%}
+                    {%- assign open_first = false -%}
+                    {%- if forloop.first and st.open_first -%}{%- assign open_first = true -%}{%- endif -%}
+                    <div class="fqt__item" id="block-{{ item.id }}" data-fqt-item {% if open_first %}data-open="1"{% endif %} {{ item.shopify_attributes }}>
+                      <button type="button" class="fqt__summary" data-fqt-toggle aria-expanded="{% if open_first %}true{% else %}false{% endif %}" aria-controls="fqt-a-{{ sid }}-{{ item.id }}">
+                        <span>{{ item.settings.question }}</span>
+                        <span class="fqt__plus" aria-hidden="true"></span>
+                      </button>
+                      <div class="fqt__answer-wrap" id="fqt-a-{{ sid }}-{{ item.id }}"><div class="fqt__answer-inner"><div class="fqt__answer">{{ item.settings.answer }}</div></div></div>
+                    </div>
+                  {%- endif -%}
+                {%- endfor -%}
+              </div>
+            </div>
+          {%- endif -%}
+        {%- endfor -%}
+      </div>
+    {%- else -%}
+      {%- comment -%}No categories configured — flat list of items.{%- endcomment -%}
+      <div class="fqt__list">
+        {%- for item in items -%}
+          {%- assign open_first = false -%}
+          {%- if forloop.first and st.open_first -%}{%- assign open_first = true -%}{%- endif -%}
+          <div class="fqt__item" id="block-{{ item.id }}" data-fqt-item {% if open_first %}data-open="1"{% endif %} {{ item.shopify_attributes }}>
+            <button type="button" class="fqt__summary" data-fqt-toggle aria-expanded="{% if open_first %}true{% else %}false{% endif %}" aria-controls="fqt-a-{{ sid }}-{{ item.id }}">
+              <span>{{ item.settings.question }}</span>
+              <span class="fqt__plus" aria-hidden="true"></span>
+            </button>
+            <div class="fqt__answer-wrap" id="fqt-a-{{ sid }}-{{ item.id }}"><div class="fqt__answer-inner"><div class="fqt__answer">{{ item.settings.answer }}</div></div></div>
+          </div>
+        {%- endfor -%}
+      </div>
+    {%- endif -%}
+
+  </div>
+</section>
+
+<script>
+  (function () {
+    var section = document.getElementById('shopify-section-{{ sid }}');
+    if (!section || section.__fqtInit) return;
+    section.__fqtInit = true;
+    section.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-fqt-toggle]');
+      if (!btn || !section.contains(btn)) return;
+      var item = btn.closest('[data-fqt-item]');
+      if (!item) return;
+      var isOpen = item.getAttribute('data-open') === '1';
+      if (isOpen) {
+        item.removeAttribute('data-open');
+        btn.setAttribute('aria-expanded', 'false');
+      } else {
+        item.setAttribute('data-open', '1');
+        btn.setAttribute('aria-expanded', 'true');
+      }
+    });
+  })();
+{% comment %}{% endcomment %}</script>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "faq-tabs",
+  "name": "FAQ Tabs",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "General"
+    },
+    {
+      "type": "select",
+      "id": "show_section_on",
+      "label": "Show section on",
+      "default": "all",
+      "options": [
+        {
+          "value": "all",
+          "label": "All Devices"
+        },
+        {
+          "value": "mobile",
+          "label": "Only Mobile"
+        },
+        {
+          "value": "desktop",
+          "label": "Only Desktop"
+        }
+      ]
+    },
+    {
+      "type": "checkbox",
+      "id": "open_first",
+      "label": "Open the first FAQ in each tab by default",
+      "default": false
+    },
+    {
+      "type": "header",
+      "id": "hdr_5",
+      "label": "Section width"
+    },
+    {
+      "type": "range",
+      "id": "section_max_width_desktop",
+      "label": "Section width (desktop ≥1024px)",
+      "min": 600,
+      "max": 1500,
+      "step": 10,
+      "unit": "px",
+      "default": 920
+    },
+    {
+      "type": "range",
+      "id": "section_max_width_tablet",
+      "label": "Section width (tablet ≥768px)",
+      "min": 500,
+      "max": 1100,
+      "step": 10,
+      "unit": "px",
+      "default": 800
+    },
+    {
+      "type": "range",
+      "id": "section_max_width_mobile",
+      "label": "Section width (mobile)",
+      "min": 280,
+      "max": 800,
+      "step": 10,
+      "unit": "px",
+      "default": 560
+    },
+    {
+      "type": "header",
+      "id": "hdr_9",
+      "label": "Header layout"
+    },
+    {
+      "type": "select",
+      "id": "header_align",
+      "label": "Header alignment",
+      "default": "center",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ],
+      "info": "Aligns heading, subheading, and tab strip."
+    },
+    {
+      "type": "range",
+      "id": "heading_sub_gap_desktop",
+      "label": "Gap heading → subheading (desktop)",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "heading_sub_gap_mobile",
+      "label": "Gap heading → subheading (mobile)",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "range",
+      "id": "gap_subheading_tabs",
+      "label": "Gap subheading → tabs (desktop)",
+      "min": 0,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 32
+    },
+    {
+      "type": "range",
+      "id": "gap_subheading_tabs_mobile",
+      "label": "Gap subheading → tabs (mobile)",
+      "min": 0,
+      "max": 60,
+      "step": 2,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "range",
+      "id": "gap_tabs_list",
+      "label": "Gap tabs → list",
+      "min": 0,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 32
+    },
+    {
+      "type": "header",
+      "id": "hdr_16",
+      "label": "Tabs"
+    },
+    {
+      "type": "text",
+      "id": "tab_1_label",
+      "label": "Tab 1 label",
+      "default": "General information"
+    },
+    {
+      "type": "text",
+      "id": "tab_2_label",
+      "label": "Tab 2 label",
+      "default": "Shipping & Delivery"
+    },
+    {
+      "type": "text",
+      "id": "tab_3_label",
+      "label": "Tab 3 label",
+      "default": "Returns & Exchanges"
+    },
+    {
+      "type": "text",
+      "id": "tab_4_label",
+      "label": "Tab 4 label",
+      "info": "Leave blank to hide this tab."
+    },
+    {
+      "type": "text",
+      "id": "tab_5_label",
+      "label": "Tab 5 label",
+      "info": "Leave blank to hide this tab."
+    },
+    {
+      "type": "header",
+      "id": "hdr_22",
+      "label": "Tab strip style"
+    },
+    {
+      "type": "color",
+      "id": "tabs_track_bg",
+      "label": "Tab strip background",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "text",
+      "id": "tabs_shadow",
+      "label": "Tab strip shadow",
+      "default": "0 4px 16px -8px rgba(15, 23, 42, .08)"
+    },
+    {
+      "type": "color",
+      "id": "tab_active_bg",
+      "label": "Active tab background",
+      "default": "#000000"
+    },
+    {
+      "type": "color",
+      "id": "tab_active_color",
+      "label": "Active tab text color",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "color",
+      "id": "tab_inactive_color",
+      "label": "Inactive tab text color",
+      "default": "#475569"
+    },
+    {
+      "type": "select",
+      "id": "tab_weight",
+      "label": "Tab text weight",
+      "default": "600",
+      "options": [
+        {
+          "value": "500",
+          "label": "Medium"
+        },
+        {
+          "value": "600",
+          "label": "Semi-bold"
+        },
+        {
+          "value": "700",
+          "label": "Bold"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "tab_size",
+      "label": "Tab text size",
+      "min": 12,
+      "max": 22,
+      "step": 1,
+      "unit": "px",
+      "default": 15
+    },
+    {
+      "type": "header",
+      "id": "hdr_30",
+      "label": "FAQ list"
+    },
+    {
+      "type": "color",
+      "id": "divider_color",
+      "label": "Divider line color",
+      "default": "#CBD5E1"
+    },
+    {
+      "type": "range",
+      "id": "item_padding_y",
+      "label": "Item padding y",
+      "min": 8,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 22
+    },
+    {
+      "type": "color",
+      "id": "plus_color",
+      "label": "Plus icon color",
+      "default": "#0F172A"
+    },
+    {
+      "type": "header",
+      "id": "hdr_34",
+      "label": "Question typography"
+    },
+    {
+      "type": "color",
+      "id": "q_color",
+      "label": "Question color",
+      "default": "#0F172A"
+    },
+    {
+      "type": "select",
+      "id": "q_weight",
+      "label": "Question weight",
+      "default": "700",
+      "options": [
+        {
+          "value": "500",
+          "label": "Medium"
+        },
+        {
+          "value": "600",
+          "label": "Semi-bold"
+        },
+        {
+          "value": "700",
+          "label": "Bold"
+        },
+        {
+          "value": "800",
+          "label": "Extra-bold"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "q_size",
+      "label": "Question size",
+      "min": 13,
+      "max": 24,
+      "step": 1,
+      "unit": "px",
+      "default": 18
+    },
+    {
+      "type": "header",
+      "id": "hdr_38",
+      "label": "Answer typography"
+    },
+    {
+      "type": "color",
+      "id": "a_color",
+      "label": "Answer color",
+      "default": "#475569"
+    },
+    {
+      "type": "range",
+      "id": "a_size",
+      "label": "Answer size",
+      "min": 12,
+      "max": 20,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "header",
+      "id": "hdr_41",
+      "label": "Style"
+    },
+    {
+      "type": "color",
+      "id": "section_bg",
+      "label": "Section background",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "header",
+      "id": "hdr_43",
+      "label": "Layout & Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top_desktop",
+      "label": "Top padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 96
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_desktop",
+      "label": "Bottom padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 96
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_desktop",
+      "label": "Top margin (desktop px)",
+      "min": -200,
+      "max": 300,
+      "step": 5,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_desktop",
+      "label": "Bottom margin (desktop px)",
+      "min": -200,
+      "max": 300,
+      "step": 5,
+      "default": 0
+    },
+    {
+      "type": "header",
+      "id": "hdr_48",
+      "label": "Mobile"
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "label": "Top padding (mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "label": "Bottom padding (mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 56
+    }
+  ],
+  "blocks": [
+    {
+      "type": "heading",
+      "name": "Heading",
+      "settings": [
+        {
+          "type": "inline_richtext",
+          "id": "text",
+          "label": "Heading",
+          "default": "Frequently Asked Questions"
+        },
+        {
+          "type": "select",
+          "id": "tag",
+          "label": "HTML tag",
+          "default": "h2",
+          "options": [
+            {
+              "value": "h1",
+              "label": "H1"
+            },
+            {
+              "value": "h2",
+              "label": "H2"
+            },
+            {
+              "value": "h3",
+              "label": "H3"
+            },
+            {
+              "value": "h4",
+              "label": "H4"
+            }
+          ]
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#0F172A"
+        },
+        {
+          "type": "select",
+          "id": "weight",
+          "label": "Weight",
+          "default": "700",
+          "options": [
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semi-bold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            },
+            {
+              "value": "800",
+              "label": "Extra-bold"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "size_desktop",
+          "label": "Size (desktop)",
+          "min": 18,
+          "max": 80,
+          "step": 1,
+          "unit": "px",
+          "default": 56
+        },
+        {
+          "type": "range",
+          "id": "size_mobile",
+          "label": "Size (mobile)",
+          "min": 16,
+          "max": 60,
+          "step": 1,
+          "unit": "px",
+          "default": 36
+        },
+        {
+          "type": "range",
+          "id": "line_height",
+          "label": "Line height",
+          "min": 0.9,
+          "max": 2,
+          "step": 0.1,
+          "default": 1.2
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "subheading",
+      "name": "Subheading",
+      "settings": [
+        {
+          "type": "richtext",
+          "id": "text",
+          "label": "Text",
+          "default": "<p>Need more help? Contact our support team for personal answers.</p>"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#0F172A"
+        },
+        {
+          "type": "range",
+          "id": "size",
+          "label": "Size",
+          "min": 12,
+          "max": 22,
+          "step": 1,
+          "unit": "px",
+          "default": 16
+        },
+        {
+          "type": "range",
+          "id": "max_width",
+          "label": "Max width",
+          "min": 200,
+          "max": 700,
+          "step": 10,
+          "unit": "px",
+          "default": 540
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "faq_item",
+      "name": "FAQ item",
+      "settings": [
+        {
+          "type": "select",
+          "id": "tab",
+          "label": "Show under tab",
+          "default": "1",
+          "options": [
+            {
+              "value": "1",
+              "label": "Tab 1"
+            },
+            {
+              "value": "2",
+              "label": "Tab 2"
+            },
+            {
+              "value": "3",
+              "label": "Tab 3"
+            },
+            {
+              "value": "4",
+              "label": "Tab 4"
+            },
+            {
+              "value": "5",
+              "label": "Tab 5"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "question",
+          "label": "Question",
+          "default": "Frequently asked question?"
+        },
+        {
+          "type": "richtext",
+          "id": "answer",
+          "label": "Answer",
+          "default": "<p>Write a clear, concise answer that addresses the question fully.</p>"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "FAQ Tabs",
+      "category": "FAQ",
+      "blocks": [
+        {
+          "type": "heading"
+        },
+        {
+          "type": "subheading"
+        },
+        {
+          "type": "faq_item",
+          "settings": {
+            "tab": "1",
+            "question": "Where is my order?",
+            "answer": "<p>Sign in to your account → Orders to see real-time status. You'll also get a tracking link by email when it ships.</p>"
+          }
+        },
+        {
+          "type": "faq_item",
+          "settings": {
+            "tab": "1",
+            "question": "How do I sign in?",
+            "answer": "<p>Use the account icon in the header. New customers can create an account in under a minute.</p>"
+          }
+        },
+        {
+          "type": "faq_item",
+          "settings": {
+            "tab": "1",
+            "question": "Where can I find a store?",
+            "answer": "<p>Use the store locator in the footer to find the nearest physical retailer.</p>"
+          }
+        },
+        {
+          "type": "faq_item",
+          "settings": {
+            "tab": "2",
+            "question": "How long does shipping take?",
+            "answer": "<p>Standard: 3–5 business days. Faster options available at checkout.</p>"
+          }
+        },
+        {
+          "type": "faq_item",
+          "settings": {
+            "tab": "2",
+            "question": "Do you ship internationally?",
+            "answer": "<p>We ship to 40+ countries. Rates and times vary by destination.</p>"
+          }
+        },
+        {
+          "type": "faq_item",
+          "settings": {
+            "tab": "3",
+            "question": "What is your return policy?",
+            "answer": "<p>Free returns within 30 days of delivery. Item must be unused.</p>"
+          }
+        },
+        {
+          "type": "faq_item",
+          "settings": {
+            "tab": "3",
+            "question": "Can I exchange an item?",
+            "answer": "<p>Yes — start an exchange from your order page. We'll cover the return shipping.</p>"
+          }
+        }
+      ]
+    }
+  ],
+  "shopify": {
+    "name": "FAQ Tabs",
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "select",
+        "id": "show_section_on",
+        "label": "Show section on",
+        "default": "all",
+        "options": [
+          {
+            "value": "all",
+            "label": "All Devices"
+          },
+          {
+            "value": "mobile",
+            "label": "Only Mobile"
+          },
+          {
+            "value": "desktop",
+            "label": "Only Desktop"
+          }
+        ]
+      },
+      {
+        "type": "checkbox",
+        "id": "open_first",
+        "label": "Open the first FAQ in each tab by default",
+        "default": false
+      },
+      {
+        "type": "header",
+        "content": "Section width"
+      },
+      {
+        "type": "range",
+        "id": "section_max_width_desktop",
+        "label": "Section width (desktop ≥1024px)",
+        "min": 600,
+        "max": 1500,
+        "step": 10,
+        "unit": "px",
+        "default": 920
+      },
+      {
+        "type": "range",
+        "id": "section_max_width_tablet",
+        "label": "Section width (tablet ≥768px)",
+        "min": 500,
+        "max": 1100,
+        "step": 10,
+        "unit": "px",
+        "default": 800
+      },
+      {
+        "type": "range",
+        "id": "section_max_width_mobile",
+        "label": "Section width (mobile)",
+        "min": 280,
+        "max": 800,
+        "step": 10,
+        "unit": "px",
+        "default": 560
+      },
+      {
+        "type": "header",
+        "content": "Header layout"
+      },
+      {
+        "type": "select",
+        "id": "header_align",
+        "label": "Header alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ],
+        "info": "Aligns heading, subheading, and tab strip."
+      },
+      {
+        "type": "range",
+        "id": "heading_sub_gap_desktop",
+        "label": "Gap heading → subheading (desktop)",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "heading_sub_gap_mobile",
+        "label": "Gap heading → subheading (mobile)",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 12
+      },
+      {
+        "type": "range",
+        "id": "gap_subheading_tabs",
+        "label": "Gap subheading → tabs (desktop)",
+        "min": 0,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 32
+      },
+      {
+        "type": "range",
+        "id": "gap_subheading_tabs_mobile",
+        "label": "Gap subheading → tabs (mobile)",
+        "min": 0,
+        "max": 60,
+        "step": 2,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "range",
+        "id": "gap_tabs_list",
+        "label": "Gap tabs → list",
+        "min": 0,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 32
+      },
+      {
+        "type": "header",
+        "content": "Tabs",
+        "info": "Add up to 5 tab labels. Empty tabs are not rendered. Each FAQ item picks which tab it shows under."
+      },
+      {
+        "type": "text",
+        "id": "tab_1_label",
+        "label": "Tab 1 label",
+        "default": "General information"
+      },
+      {
+        "type": "text",
+        "id": "tab_2_label",
+        "label": "Tab 2 label",
+        "default": "Shipping & Delivery"
+      },
+      {
+        "type": "text",
+        "id": "tab_3_label",
+        "label": "Tab 3 label",
+        "default": "Returns & Exchanges"
+      },
+      {
+        "type": "text",
+        "id": "tab_4_label",
+        "label": "Tab 4 label",
+        "info": "Leave blank to hide this tab."
+      },
+      {
+        "type": "text",
+        "id": "tab_5_label",
+        "label": "Tab 5 label",
+        "info": "Leave blank to hide this tab."
+      },
+      {
+        "type": "header",
+        "content": "Tab strip style"
+      },
+      {
+        "type": "color",
+        "id": "tabs_track_bg",
+        "label": "Tab strip background",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "text",
+        "id": "tabs_shadow",
+        "label": "Tab strip shadow",
+        "default": "0 4px 16px -8px rgba(15, 23, 42, .08)"
+      },
+      {
+        "type": "color",
+        "id": "tab_active_bg",
+        "label": "Active tab background",
+        "default": "#000000"
+      },
+      {
+        "type": "color",
+        "id": "tab_active_color",
+        "label": "Active tab text color",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "tab_inactive_color",
+        "label": "Inactive tab text color",
+        "default": "#475569"
+      },
+      {
+        "type": "select",
+        "id": "tab_weight",
+        "label": "Tab text weight",
+        "default": "600",
+        "options": [
+          {
+            "value": "500",
+            "label": "Medium"
+          },
+          {
+            "value": "600",
+            "label": "Semi-bold"
+          },
+          {
+            "value": "700",
+            "label": "Bold"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "tab_size",
+        "label": "Tab text size",
+        "min": 12,
+        "max": 22,
+        "step": 1,
+        "unit": "px",
+        "default": 15
+      },
+      {
+        "type": "header",
+        "content": "FAQ list"
+      },
+      {
+        "type": "color",
+        "id": "divider_color",
+        "label": "Divider line color",
+        "default": "#CBD5E1"
+      },
+      {
+        "type": "range",
+        "id": "item_padding_y",
+        "label": "Item padding y",
+        "min": 8,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 22
+      },
+      {
+        "type": "color",
+        "id": "plus_color",
+        "label": "Plus icon color",
+        "default": "#0F172A"
+      },
+      {
+        "type": "header",
+        "content": "Question typography"
+      },
+      {
+        "type": "color",
+        "id": "q_color",
+        "label": "Question color",
+        "default": "#0F172A"
+      },
+      {
+        "type": "select",
+        "id": "q_weight",
+        "label": "Question weight",
+        "default": "700",
+        "options": [
+          {
+            "value": "500",
+            "label": "Medium"
+          },
+          {
+            "value": "600",
+            "label": "Semi-bold"
+          },
+          {
+            "value": "700",
+            "label": "Bold"
+          },
+          {
+            "value": "800",
+            "label": "Extra-bold"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "q_size",
+        "label": "Question size",
+        "min": 13,
+        "max": 24,
+        "step": 1,
+        "unit": "px",
+        "default": 18
+      },
+      {
+        "type": "header",
+        "content": "Answer typography"
+      },
+      {
+        "type": "color",
+        "id": "a_color",
+        "label": "Answer color",
+        "default": "#475569"
+      },
+      {
+        "type": "range",
+        "id": "a_size",
+        "label": "Answer size",
+        "min": 12,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "header",
+        "content": "Style"
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Section background",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "header",
+        "content": "Layout & Spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top_desktop",
+        "label": "Top padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 96
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_desktop",
+        "label": "Bottom padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 96
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin (desktop px)",
+        "min": -200,
+        "max": 300,
+        "step": 5,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin (desktop px)",
+        "min": -200,
+        "max": 300,
+        "step": 5,
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "range",
+        "id": "padding_top_mobile",
+        "label": "Top padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 56
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_mobile",
+        "label": "Bottom padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 56
+      }
+    ],
+    "blocks": [
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "inline_richtext",
+            "id": "text",
+            "label": "Heading",
+            "default": "Frequently Asked Questions"
+          },
+          {
+            "type": "select",
+            "id": "tag",
+            "label": "HTML tag",
+            "default": "h2",
+            "options": [
+              {
+                "value": "h1",
+                "label": "H1"
+              },
+              {
+                "value": "h2",
+                "label": "H2"
+              },
+              {
+                "value": "h3",
+                "label": "H3"
+              },
+              {
+                "value": "h4",
+                "label": "H4"
+              }
+            ]
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#0F172A"
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Weight",
+            "default": "700",
+            "options": [
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi-bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              },
+              {
+                "value": "800",
+                "label": "Extra-bold"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "size_desktop",
+            "label": "Size (desktop)",
+            "min": 18,
+            "max": 80,
+            "step": 1,
+            "unit": "px",
+            "default": 56
+          },
+          {
+            "type": "range",
+            "id": "size_mobile",
+            "label": "Size (mobile)",
+            "min": 16,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 36
+          },
+          {
+            "type": "range",
+            "id": "line_height",
+            "label": "Line height",
+            "min": 0.9,
+            "max": 2,
+            "step": 0.1,
+            "default": 1.2
+          }
+        ]
+      },
+      {
+        "type": "subheading",
+        "name": "Subheading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "richtext",
+            "id": "text",
+            "label": "Text",
+            "default": "<p>Need more help? Contact our support team for personal answers.</p>"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#0F172A"
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "label": "Size",
+            "min": 12,
+            "max": 22,
+            "step": 1,
+            "unit": "px",
+            "default": 16
+          },
+          {
+            "type": "range",
+            "id": "max_width",
+            "label": "Max width",
+            "min": 200,
+            "max": 700,
+            "step": 10,
+            "unit": "px",
+            "default": 540
+          }
+        ]
+      },
+      {
+        "type": "faq_item",
+        "name": "FAQ item",
+        "settings": [
+          {
+            "type": "select",
+            "id": "tab",
+            "label": "Show under tab",
+            "default": "1",
+            "options": [
+              {
+                "value": "1",
+                "label": "Tab 1"
+              },
+              {
+                "value": "2",
+                "label": "Tab 2"
+              },
+              {
+                "value": "3",
+                "label": "Tab 3"
+              },
+              {
+                "value": "4",
+                "label": "Tab 4"
+              },
+              {
+                "value": "5",
+                "label": "Tab 5"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "id": "question",
+            "label": "Question",
+            "default": "Frequently asked question?"
+          },
+          {
+            "type": "richtext",
+            "id": "answer",
+            "label": "Answer",
+            "default": "<p>Write a clear, concise answer that addresses the question fully.</p>"
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "FAQ Tabs",
+        "category": "FAQ",
+        "blocks": [
+          {
+            "type": "heading"
+          },
+          {
+            "type": "subheading"
+          },
+          {
+            "type": "faq_item",
+            "settings": {
+              "tab": "1",
+              "question": "Where is my order?",
+              "answer": "<p>Sign in to your account → Orders to see real-time status. You'll also get a tracking link by email when it ships.</p>"
+            }
+          },
+          {
+            "type": "faq_item",
+            "settings": {
+              "tab": "1",
+              "question": "How do I sign in?",
+              "answer": "<p>Use the account icon in the header. New customers can create an account in under a minute.</p>"
+            }
+          },
+          {
+            "type": "faq_item",
+            "settings": {
+              "tab": "1",
+              "question": "Where can I find a store?",
+              "answer": "<p>Use the store locator in the footer to find the nearest physical retailer.</p>"
+            }
+          },
+          {
+            "type": "faq_item",
+            "settings": {
+              "tab": "2",
+              "question": "How long does shipping take?",
+              "answer": "<p>Standard: 3–5 business days. Faster options available at checkout.</p>"
+            }
+          },
+          {
+            "type": "faq_item",
+            "settings": {
+              "tab": "2",
+              "question": "Do you ship internationally?",
+              "answer": "<p>We ship to 40+ countries. Rates and times vary by destination.</p>"
+            }
+          },
+          {
+            "type": "faq_item",
+            "settings": {
+              "tab": "3",
+              "question": "What is your return policy?",
+              "answer": "<p>Free returns within 30 days of delivery. Item must be unused.</p>"
+            }
+          },
+          {
+            "type": "faq_item",
+            "settings": {
+              "tab": "3",
+              "question": "Can I exchange an item?",
+              "answer": "<p>Yes — start an exchange from your order page. We'll cover the return shipping.</p>"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

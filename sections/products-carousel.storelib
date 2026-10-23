@@ -1,0 +1,2216 @@
+<template compat="shopify">
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- liquid
+  assign __ti_scroll_animation = settings.scroll_animation | default: 'none'
+  assign __ti_reveal = section.settings.reveal
+
+  assign view_all_block = nil
+  for blk in section.blocks
+    if blk.type == 'view_all' and view_all_block == nil
+      assign view_all_block = blk
+    endif
+  endfor
+
+  assign cs = section.settings.color_scheme
+  assign cs_bg = ''
+  assign cs_bg_gradient = ''
+  assign cs_text = ''
+  assign cs_heading = ''
+  assign cs_primary = ''
+  assign cs_border = ''
+  if cs.settings
+    assign cs_bg = cs.settings.background
+    assign cs_bg_gradient = cs.settings.background_gradient
+    assign cs_text = cs.settings.text_color
+    assign cs_heading = cs.settings.heading_color
+    assign cs_primary = cs.settings.primary_color
+    assign cs_border = cs.settings.border_color
+  endif
+  assign cs_bg_applied = cs_bg
+  if cs_bg_gradient != blank
+    assign cs_bg_applied = cs_bg_gradient
+  endif
+
+  assign bg_override_raw = section.settings.section_bg_override
+  assign bg_override_active = false
+  if bg_override_raw != blank
+    assign bg_override_test = bg_override_raw | strip | downcase | replace: ' ', ''
+    if bg_override_test != 'rgba(0,0,0,0)' and bg_override_test != 'transparent' and bg_override_test != 'rgba(0,0,0,0.0)'
+      assign bg_override_active = true
+    endif
+  endif
+-%}
+<style>
+  /* Section isolation — prevent CSS/JS bleed between sections */
+  #shopify-section-{{ section.id }} {
+    isolation: isolate;
+    position: relative;
+  }
+  /* Aggressive theme typography */
+  :where(#shopify-section-{{ section.id }}) {
+    font-family: var(--body-font, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :where(button, input, textarea, select, optgroup) {
+    font-family: inherit;
+  }
+  /* Theme font-weight inheritance — sections inherit theme weights by default.
+     Specific font-weight rules in section CSS still override these. */
+  #shopify-section-{{ section.id }} {
+    font-weight: var(--body-weight, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
+    font-weight: var(--heading-weight, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
+    font-family: var(--heading-font, inherit);
+  }
+  /* Section margin sliders (mobile-first) */
+  #shopify-section-{{ section.id }} {
+    margin-top: {{ section.settings.section_margin_top_mobile | default: 0 }}px;
+    margin-bottom: {{ section.settings.section_margin_bottom_mobile | default: 0 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ section.id }} {
+      margin-top: {{ section.settings.section_margin_top_desktop | default: 0 }}px;
+      margin-bottom: {{ section.settings.section_margin_bottom_desktop | default: 0 }}px;
+    }
+  }
+  /* Section wrapper spans its parent's full width without breaking out of
+     the editor preview. The section + first child span 100% so backgrounds
+     reach edge-to-edge but the editor inspector outline stays inside the
+     iframe viewport. */
+  #shopify-section-{{ section.id }} {
+    max-width: none !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    position: relative !important;
+    box-sizing: border-box !important;
+  }
+  #shopify-section-{{ section.id }} > :where(div, section, header, footer, aside, main, article):first-child {
+    max-width: none !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Section width — universal selector that works regardless of inner
+     markup. Targets both:
+       1) Theme container classes (.container/.fluid_container/etc.) — for
+          sections that have an inner wrapper with that class
+       2) The section's first-child div — for sections that don't have a
+          named inner wrapper. The padding-inline sets the max content
+          area while the wrapper itself stays 100% wide so any background
+          stays edge-to-edge. */
+  {%- case section.settings.section_width -%}
+    {%- when 'container' -%}
+      #shopify-section-{{ section.id }} .container,
+      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+        max-width: calc(var(--page-width, 1300px) + 3rem) !important;
+        margin-inline: auto !important;
+        box-sizing: border-box !important;
+      }
+    {%- when 'fluid_container' -%}
+      #shopify-section-{{ section.id }} .fluid_container,
+      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+        max-width: calc(var(--fluid-container-width, 1500px) + 3rem) !important;
+        margin-inline: auto !important;
+        box-sizing: border-box !important;
+      }
+    {%- when 'stretch_width' -%}
+      /* Stretched: no max-width; tighter side padding handled below */
+      @media (min-width: 1200px) {
+        #shopify-section-{{ section.id }} .stretch_width,
+        #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+          padding-inline: 3rem;
+        }
+      }
+    {%- when 'full_width' -%}
+      /* full bleed — no constraints */
+  {%- endcase -%}
+  /* Reset spacing */
+  {%- if section.settings.reset_spacing -%}
+    #shopify-section-{{ section.id }} { margin-bottom: 0 !important; margin-top: 0 !important; }
+    #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif -%}
+
+  /* === COLOR SCHEME ENFORCEMENT ===
+     Variables cs_bg, cs_text, cs_heading, cs_primary, cs_border, cs_bg_gradient
+     are pre-resolved at the top of this file (Liquid block #1) by reading
+     section.settings.color_scheme.settings directly. We hardcode them into the
+     inline CSS so the chosen scheme's colors win without depending on CSS var
+     inheritance from the .color-X class (which only sits on the inner div). */
+  {%- if cs_bg != blank -%}
+    #shopify-section-{{ section.id }} {
+      background-color: {{ cs_bg }} !important;
+      {% if cs_bg_gradient != blank %}background: {{ cs_bg_gradient }} !important;{% endif %}
+    }
+    #shopify-section-{{ section.id }} .sec__products-carousel,
+    #shopify-section-{{ section.id }} .sec__products-carousel.gradient {
+      background-color: {{ cs_bg }} !important;
+      {% if cs_bg_gradient != blank %}background: {{ cs_bg_gradient }} !important;{% else %}background: {{ cs_bg }} !important;{% endif %}
+      background-attachment: scroll !important;
+      color: {{ cs_text }};
+    }
+    /* Re-declare the scheme CSS vars at the section wrapper level so descendant
+       components (cards, prices, etc.) reading var(--color-...) get the
+       chosen scheme's values even if their .color-X ancestor is the inner div. */
+    #shopify-section-{{ section.id }} {
+      --color-background: {{ cs_bg }};
+      --gradient-background: {% if cs_bg_gradient != blank %}{{ cs_bg_gradient }}{% else %}{{ cs_bg }}{% endif %};
+      --color-text: {{ cs_text }};
+      --color-heading: {{ cs_heading }};
+      --color-primary: {{ cs_primary }};
+      --color-link: {{ cs_text }};
+      --color-link-hover: {{ cs_primary }};
+      --color-border: {{ cs_border }};
+    }
+    #shopify-section-{{ section.id }} .sec__products-carousel :is(h1, h2, h3, h4, h5, h6) {
+      color: {{ cs_heading }};
+    }
+    #shopify-section-{{ section.id }} .sec__products-carousel :is(p, span, li, label, div):not(.btn):not([class*="badge"]):not([class*="label-set"]) {
+      color: inherit;
+    }
+    #shopify-section-{{ section.id }} .sec__products-carousel a:not(.btn):not(.pc__view-all):not([class*="badge"]) {
+      color: {{ cs_text }};
+    }
+    #shopify-section-{{ section.id }} .sec__products-carousel a:not(.btn):not(.pc__view-all):hover {
+      color: {{ cs_primary }};
+    }
+  {%- endif -%}
+
+  /* Section background override — wins over the color scheme background only.
+     Only applied when the override is a real opaque/visible color (not blank,
+     not transparent rgba(0,0,0,0) which is the default from the color picker). */
+  {%- if bg_override_active -%}
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} .sec__products-carousel,
+    #shopify-section-{{ section.id }} .sec__products-carousel.gradient {
+      background-color: {{ bg_override_raw }} !important;
+      background: {{ bg_override_raw }} !important;
+    }
+  {%- endif -%}
+
+  /* === VIEW ALL BUTTON (block-driven styling) ===
+     The View All button is now a section block. Customizable bg/text/border
+     colors, hover colors, padding, radius, font size/weight, uppercase, and
+     full-width are read from the block's settings and emitted as scoped CSS. */
+  {%- if view_all_block -%}
+    {%- assign vab = view_all_block.settings -%}
+    #shopify-section-{{ section.id }} .pc__view-all[data-block-id="{{ view_all_block.id }}"],
+    #shopify-section-{{ section.id }} a.pc__view-all[data-block-id="{{ view_all_block.id }}"] {
+      display: {% if vab.full_width %}flex{% else %}inline-flex{% endif %} !important;
+      align-items: center !important;
+      justify-content: center !important;
+      text-decoration: none !important;
+      cursor: pointer !important;
+      line-height: 1 !important;
+      background-color: {{ vab.bg | default: '#111111' }} !important;
+      background: {{ vab.bg | default: '#111111' }} !important;
+      color: {{ vab.color | default: '#FFFFFF' }} !important;
+      border: {{ vab.border_width | default: 1 }}px solid {{ vab.border_color | default: vab.bg | default: '#111111' }} !important;
+      padding: {{ vab.padding_y | default: 14 }}px {{ vab.padding_x | default: 26 }}px !important;
+      border-radius: {{ vab.radius | default: 6 }}px !important;
+      font-size: {{ vab.font_size | default: 14 }}px !important;
+      font-weight: {{ vab.font_weight | default: '600' }} !important;
+      text-transform: {% if vab.uppercase %}uppercase{% else %}none{% endif %} !important;
+      letter-spacing: {% if vab.uppercase %}0.04em{% else %}normal{% endif %} !important;
+      width: {% if vab.full_width %}100%{% else %}auto{% endif %} !important;
+      max-width: {% if vab.full_width %}100%{% else %}max-content{% endif %} !important;
+      white-space: nowrap !important;
+      transition: background-color .25s ease, color .25s ease, border-color .25s ease, transform .15s ease !important;
+    }
+    /* Force text color on any descendant span/text node inside the button too,
+       in case the theme's link/heading styles try to reach into it. */
+    #shopify-section-{{ section.id }} .pc__view-all[data-block-id="{{ view_all_block.id }}"] *,
+    #shopify-section-{{ section.id }} a.pc__view-all[data-block-id="{{ view_all_block.id }}"] * {
+      color: {{ vab.color | default: '#FFFFFF' }} !important;
+    }
+    #shopify-section-{{ section.id }} .pc__view-all[data-block-id="{{ view_all_block.id }}"]:hover,
+    #shopify-section-{{ section.id }} .pc__view-all[data-block-id="{{ view_all_block.id }}"]:focus-visible,
+    #shopify-section-{{ section.id }} a.pc__view-all[data-block-id="{{ view_all_block.id }}"]:hover,
+    #shopify-section-{{ section.id }} a.pc__view-all[data-block-id="{{ view_all_block.id }}"]:focus-visible {
+      background-color: {{ vab.bg_hover | default: '#FFFFFF' }} !important;
+      background: {{ vab.bg_hover | default: '#FFFFFF' }} !important;
+      color: {{ vab.color_hover | default: '#111111' }} !important;
+      border-color: {{ vab.border_color_hover | default: vab.bg_hover | default: '#111111' }} !important;
+      transform: translateY(-1px) !important;
+    }
+    #shopify-section-{{ section.id }} .pc__view-all[data-block-id="{{ view_all_block.id }}"]:hover *,
+    #shopify-section-{{ section.id }} .pc__view-all[data-block-id="{{ view_all_block.id }}"]:focus-visible *,
+    #shopify-section-{{ section.id }} a.pc__view-all[data-block-id="{{ view_all_block.id }}"]:hover *,
+    #shopify-section-{{ section.id }} a.pc__view-all[data-block-id="{{ view_all_block.id }}"]:focus-visible * {
+      color: {{ vab.color_hover | default: '#111111' }} !important;
+    }
+  {%- endif -%}
+  /* Bottom-position view-all wrapper — make sure it's not absolutely positioned
+     or hidden by the swiper. Margin is driven by the gap_pagination_to_button
+     setting (when pagination is shown) OR gap_products_to_button (when it isn't). */
+  #shopify-section-{{ section.id }} .products-carousel__view-all-bottom {
+    position: relative;
+    z-index: 3;
+    width: 100%;
+    text-align: center;
+    margin-top: {{ section.settings.gap_products_to_button | default: 32 }}px;
+    clear: both;
+  }
+  /* When pagination dots/bar exist above the button, the button uses a separate
+     gap value (pagination → button) instead. */
+  #shopify-section-{{ section.id }} .products-carousel__pagination + .products-carousel__view-all-bottom,
+  #shopify-section-{{ section.id }} .products-carousel__pagination ~ .products-carousel__view-all-bottom {
+    margin-top: {{ section.settings.gap_pagination_to_button | default: 24 }}px;
+  }
+
+  /* === PAGINATION POSITIONING ===
+     Swiper's default CSS absolutely-positions .swiper-pagination at the bottom
+     of the swiper container, which overlaps product prices. Force it to sit
+     BELOW the swiper-wrapper instead by making it relative + adding spacing.
+     The gap above pagination (products → pagination) is driven by the
+     gap_products_to_pagination setting. */
+  #shopify-section-{{ section.id }} .products-carousel__pagination {
+    position: relative !important;
+    bottom: auto !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    transform: none !important;
+    width: 100% !important;
+    margin-top: {{ section.settings.gap_products_to_pagination | default: 24 }}px !important;
+    margin-bottom: 0 !important;
+    z-index: 2;
+  }
+  /* Progress pagination needs its own positioning (it's a fixed-width centered
+     bar, not full-width). Reset the width 100% from above and recenter. */
+  #shopify-section-{{ section.id }} [data-pagination-style='progress'].products-carousel__pagination,
+  #shopify-section-{{ section.id }} .products-carousel__pagination[data-pagination-style='progress'] {
+    width: clamp(140px, 32vw, 280px) !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    left: 0 !important;
+    transform: none !important;
+  }
+  /* The carousel track is wider than the viewport by design (that's how it
+     scrolls). Swiper normally clips it with overflow:hidden, but the pagination
+     is forced into normal flow BELOW the slides, so a plain overflow:hidden
+     would clip the dots. Clip ONLY the horizontal axis so the track can never
+     spill past the viewport and widen the page on mobile, and keep the vertical
+     axis visible so the pagination underneath still shows. max-width:100% is a
+     belt-and-braces guard so the container itself never exceeds its column. */
+  #shopify-section-{{ section.id }} slide-section {
+    overflow-x: clip;
+    overflow-y: visible;
+    max-width: 100%;
+    padding-bottom: 0 !important;
+  }
+
+  /* === CARD HEIGHT & TOP ALIGNMENT (BULLETPROOF) ===
+     The issue: slides were rendering at different heights because the image
+     aspect ratios weren't being forced consistent, AND content inside slides
+     wasn't being top-anchored. This block fixes both:
+
+     1. All slides share the wrapper's tallest height (align-items: stretch).
+     2. All slides are forced to start at the TOP (align-self: flex-start +
+        the inner wrapper uses justify-content: flex-start so the image is
+        anchored to the top of the card, never the middle).
+     3. The image container is forced to a consistent aspect ratio so the
+        first card can't render at a different height than the others.
+     4. Title/price/actions get pushed to share the remaining space below
+        the image consistently across all cards.
+
+     CRITICAL: Only apply flex to visible content children. Setting
+     `display: flex` on <script>, <noscript>, <style>, or <template> elements
+     overrides their user-agent `display: none`, making their text content
+     visible on the page (e.g. product variant JSON dumps from product-item.liquid). */
+  #shopify-section-{{ section.id }} .swiper-wrapper {
+    align-items: stretch !important;
+  }
+  #shopify-section-{{ section.id }} .swiper-slide {
+    height: auto !important;
+    display: flex !important;
+    flex-direction: column;
+    align-self: flex-start !important;
+    justify-content: flex-start !important;
+    vertical-align: top !important;
+  }
+  #shopify-section-{{ section.id }} .swiper-slide > *:not(script):not(noscript):not(style):not(template):not(link):not(meta) {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    width: 100%;
+  }
+  /* Explicitly keep script/template-type elements hidden even inside the flex
+     parent — defensive in case the browser/user-agent stylesheet is overridden. */
+  #shopify-section-{{ section.id }} .swiper-slide script,
+  #shopify-section-{{ section.id }} .swiper-slide noscript,
+  #shopify-section-{{ section.id }} .swiper-slide template,
+  #shopify-section-{{ section.id }} .swiper-slide style,
+  #shopify-section-{{ section.id }} .swiper-slide link,
+  #shopify-section-{{ section.id }} .swiper-slide meta {
+    display: none !important;
+  }
+  /* The product-item inner wrapper anchors the image to the top and pushes
+     vendor / title / price / actions to share the remaining height. */
+  #shopify-section-{{ section.id }} .swiper-slide .product-item__wrapper,
+  #shopify-section-{{ section.id }} .swiper-slide .product-card,
+  #shopify-section-{{ section.id }} .swiper-slide .card-wrapper,
+  #shopify-section-{{ section.id }} .swiper-slide .product-item {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    height: 100%;
+    width: 100%;
+  }
+  /* Force the image / media wrapper to share a consistent aspect ratio at the
+     top of every card. Without this, placeholders and real images can render
+     at different heights (which is exactly what's happening in the screenshot —
+     the first card's image area is taller than the others). */
+  #shopify-section-{{ section.id }} .swiper-slide .product-item__image,
+  #shopify-section-{{ section.id }} .swiper-slide .product-item__media,
+  #shopify-section-{{ section.id }} .swiper-slide .pcard__image,
+  #shopify-section-{{ section.id }} .swiper-slide .product-card__media,
+  #shopify-section-{{ section.id }} .swiper-slide .card__media,
+  #shopify-section-{{ section.id }} .swiper-slide .media,
+  #shopify-section-{{ section.id }} .swiper-slide .placeholder-svg-wrapper,
+  #shopify-section-{{ section.id }} .swiper-slide .placeholder {
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    align-self: stretch !important;
+    margin-top: 0 !important;
+  }
+  /* Specifically make sure the placeholder SVG and any direct img/video in the
+     card's media slot stretch to 100% width and don't push the card down. */
+  #shopify-section-{{ section.id }} .swiper-slide .product-item > a:first-child,
+  #shopify-section-{{ section.id }} .swiper-slide .product-item__wrapper > a:first-child,
+  #shopify-section-{{ section.id }} .swiper-slide .product-card > a:first-child {
+    display: block !important;
+    width: 100% !important;
+    margin-top: 0 !important;
+  }
+  /* The text/info area below the image gets the remaining flex space so the
+     bottoms align even when titles wrap to different line counts. */
+  #shopify-section-{{ section.id }} .swiper-slide .product-item__info,
+  #shopify-section-{{ section.id }} .swiper-slide .product-card__info,
+  #shopify-section-{{ section.id }} .swiper-slide .card__content,
+  #shopify-section-{{ section.id }} .swiper-slide .product-item__content {
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    width: 100% !important;
+  }
+{% comment %}{% endcomment %}</style>
+<!-- ti-theme:start -->
+{%- comment -%}
+  Materia Themes. Developed By Materia Themes.
+{%- endcomment -%}
+{{ 'pagination-styles.css' | asset_url | stylesheet_tag }}
+{%- liquid
+  assign section_st = section.settings
+  assign section_width = section_st.section_width
+  assign color_scheme = section_st.color_scheme.id | default: section_st.color_scheme
+  if section_st.reset_spacing
+    assign reset_spacing = ' remove_spacing'
+  endif
+  assign column_gap = section_st.column_gap
+  assign items_per_row = section_st.items_per_row
+  assign items_to_show = section_st.items_to_show
+
+  assign render_view_all_in_header = false
+  assign render_view_all_in_bottom = false
+  assign view_all_label = ''
+  assign view_all_url = ''
+  if view_all_block
+    assign vab_st = view_all_block.settings
+    if vab_st.enabled
+      assign view_all_label_raw = vab_st.label | strip
+      if view_all_label_raw != blank
+        assign view_all_label = view_all_label_raw
+      else
+        assign view_all_label = 'general.view_all' | t
+      endif
+      assign view_all_url = vab_st.link
+      if view_all_url == blank
+        assign view_all_url = section_st.collection.url
+      endif
+      if view_all_url == blank
+        assign view_all_url = routes.collections_url | append: '/all'
+      endif
+      assign view_all_position = vab_st.position | default: 'header'
+      if view_all_position == 'bottom'
+        assign render_view_all_in_bottom = true
+      else
+        assign render_view_all_in_header = true
+      endif
+    endif
+  endif
+  assign show_banner = section_st.show_banner
+  assign sticky_banner = section_st.sticky_banner
+  assign banner_width = section_st.banner_width
+  assign banner_link = section_st.banner_link
+  assign banner_type = section_st.banner_type
+  assign banner_image = section_st.banner_image
+  assign video_url = section_st.video_url
+  assign local_video = section_st.local_video
+  assign heading = section_st.heading
+  assign description = section_st.description
+  assign header_size = ''
+  if section_st.header_size == 'small'
+    assign header_size = 'h3'
+  elsif section_st.header_size == 'large'
+    assign header_size = 'h1-size'
+  endif
+  if section_st.items_per_row_mobile > 1 and section_st.items_per_row_mobile < 2
+    assign data_free_scroll = 'true'
+  endif
+  assign show_arrow = section_st.show_arrow
+  assign carousel_pagination = section_st.carousel_pagination
+  assign infinite = section_st.infinite
+  assign autoplay = section_st.autoplay
+  assign autorotate_speed = section_st.autorotate_speed
+  assign reveal = section_st.reveal
+  assign scroll_animation = settings.scroll_animation
+-%}
+{%- capture style -%}
+  --section-pt: {{ section_st.padding_top }}; --section-pb: {{ section_st.padding_bottom }};{% if bg_override_active %} background-color: {{ bg_override_raw }} !important; background: {{ bg_override_raw }} !important;{% elsif cs_bg != blank %} background-color: {{ cs_bg }} !important; background: {% if cs_bg_gradient != blank %}{{ cs_bg_gradient }}{% else %}{{ cs_bg }}{% endif %} !important;{% endif %}{% if cs_text != blank %} color: {{ cs_text }};{% endif %}
+{%- endcapture -%}
+{%- capture col_style -%}
+{% if column_gap < 15 %}--col-gap: {{ column_gap }}px;{% else %}--col-gap: 15px;--col-gap-desktop: {{  column_gap }}px;{% endif %}
+{%- endcapture -%}
+<div
+  class="section{% if section_st.padding_top < 30 %} pt-min{% endif %}{% if section_st.padding_bottom < 30 %} pb-min{% endif %} sec__products-carousel color-{{ color_scheme }} gradient{{ reset_spacing }}{% if reveal %} overflow-hidden{% endif %}"
+  style="{{ style | strip | strip_newlines }}"
+>
+  <div class="{{ section_width }}">
+    {%- if heading != blank or description != blank or render_view_all_in_header -%}
+      <div
+        class="
+          section__header mb-33 mb-sm-20 text-{{ section_st.header_alignment }}{% if section_st.section_width == 'full_width' %} px-20{% endif %}
+          {% if render_view_all_in_header %} flex gap-15 gap-md-30 flex-wrap {% if section_st.header_alignment == 'center'  %} justify-content-{{ section_st.header_alignment }} {% else %} justify-between {% endif %} align-center{% if section_st.header_alignment == 'right' %} flex-row-reverse{% endif %}{% endif %}
+        "
+      >
+        {%- if heading != blank or description != blank -%}
+          <div class="secion__header-inner">
+            {%- if section_st.heading != blank -%}
+              <motion-element
+                data-motion="fade-up"           
+                {% if scroll_animation != 'slide_in' %}
+                  hold
+                {% endif %}
+                data-motion-delay="50"
+                class="block  {% if scroll_animation != 'none' %} scroll-trigger {{ scroll_animation }} {% endif %}"
+                style="
+                {%- if scroll_animation != 'none' -%}
+                  --animation-order: 0;
+                {% endif %}
+              "
+              >
+              <h2
+                class="section__header-heading heading-letter-spacing  {{ header_size  }} mt-0{% if section_st.description != blank %} mb-10{% else %} mb-0{% endif %}"
+                {%- if scroll_animation != 'none' -%}
+                  style="--animation-order: 0"
+                {% endif %}
+              >
+                {{ section_st.heading }}
+              </h2>
+            </motion-element>
+            {% endif %}
+            {%- if section_st.description != blank -%}
+              <motion-element
+                data-motion="fade-up"
+                data-motion-delay="150"
+                {% if scroll_animation != 'slide_in' %}
+                  hold
+                {% endif %}
+                class="block {% if scroll_animation != 'none' -%} scroll-trigger {{ scroll_animation }}{% endif %} "
+                style="
+                {%- if scroll_animation != 'none' -%}
+                  --animation-order: 1;
+                {% endif %}
+              "
+              >
+              <div
+                class="section__header-des  rich__text-m0"
+                {%- if scroll_animation != 'none' -%}
+                  style="--animation-order: 1"
+                {% endif %}
+              >
+                {{ section_st.description }}
+              </div>
+            </motion-element>
+            {% endif %}
+          </div>
+        {% endif %}
+        {% if render_view_all_in_header %}
+          <a
+            class="pc__view-all no-underline"
+            data-block-id="{{ view_all_block.id }}"
+            href="{{ view_all_url }}"
+            aria-label="{{ view_all_label | escape }}"
+            {{ view_all_block.shopify_attributes }}
+          >
+            {{- view_all_label -}}
+          </a>
+        {% endif %}
+      </div>
+    {% endif %}
+    {% if section_st.items_per_row_mobile > 1 and section_st.items_per_row_mobile < 2 %}
+      <div class="free-scroll">
+    {% endif %}
+    {% if show_banner %}
+      <div
+        class="flex flex-wrap gap product_with-banner{% if section_st.position == 'left' %} flex-row-reverse{% endif %}"
+        style="{% if column_gap < 15 %}--col-gap: {{ column_gap }}px;{% else %}--col-gap: 15px;--col-gap-desktop: {{  column_gap }}px;{% endif %}--col-width: {{ banner_width }}%"
+      >
+    {% endif %}
+    {% if show_banner %}<div class="w-full col-1025-remaining">{% endif %}
+    {% if section_st.collection.products.size > 0 %}
+      <slide-section
+        class="swiper{% if reveal %} reveal_on_scroll{% endif %}"
+        data-section-id="{{ section.id }}"
+        data-autoplay="{{ autoplay }}"
+        data-effect="slide"
+        data-loop="{{ infinite }}"
+        data-speed="500"
+        data-autoplay-speed="{{ autorotate_speed }}"
+        data-spacing="{{ column_gap }}"
+        data-mobile="{{ section_st.items_per_row_mobile }}"
+        data-desktop="{{ items_per_row }}"
+        data-free-scroll="{{ data_free_scroll }}"
+        data-pagination-progressbar="{% if carousel_pagination == 'show_progress_bar' or section_st.pagination_style == 'progress' %}true{% else %}false{% endif %}"
+        data-pagination-style="{{ section_st.pagination_style | default: 'dot' }}"
+        style="{{ col_style | strip | strip_newlines }}"
+        data-arrow-centerimage="1"
+      >
+        {% if show_arrow %}
+          {%- render 'swiper-navigation' -%}
+        {% endif %}
+        <div class="swiper-wrapper">
+          {% for product in section_st.collection.products limit: items_to_show %}
+            {% render 'product-item',
+              card_product: product,
+              section_id: section.id,
+              container: section_width,
+              colunm: items_per_row,
+              colunm_mobile: section_st.items_per_row_mobile,
+              padding: column_gap,
+              class: ' swiper-slide',
+              template_enable_action: true,
+              template_enable_product_vendor: true,
+              template_enable_rate: true,
+              template_enable_product_short_description: true,
+              template_enable_color_swatches: true,
+              template_enable_price: true,
+              template_enable_add_cart: true,
+              scroll_animation: scroll_animation,
+              indexFor: forloop.index,
+              template_enable_product_badges: true
+            %}
+          {% endfor %}
+        </div>
+        {%- if carousel_pagination == 'show_dots'
+          or carousel_pagination == 'show_dots_on_mobile'
+          or carousel_pagination == 'show_progress_bar'
+        -%}
+      <div
+        class="swiper-pagination products-carousel__pagination flex flex-wrap px-15 lh-1 bottom-30 {% if carousel_pagination == 'show_dots_on_mobile' %} hidden-md{% endif %} justify-content-{{ section_st.pagination_position | default: 'center' }}{% if section_st.content_below_image %} absolute-md-impo{% endif %}"
+        style="--swiper-pagination-bottom: 3rem;--swiper-pagination-position: static;z-index: 2"
+        data-pagination-style="{{ section_st.pagination_style | default: 'dot' }}"
+      >
+      </div>
+        {% endif %}
+      </slide-section>
+      {% if render_view_all_in_bottom %}
+        <div class="products-carousel__view-all-bottom">
+          <a
+            class="pc__view-all no-underline"
+            data-block-id="{{ view_all_block.id }}"
+            href="{{ view_all_url }}"
+            aria-label="{{ view_all_label | escape }}"
+            {{ view_all_block.shopify_attributes }}
+          >
+            {{- view_all_label -}}
+          </a>
+        </div>
+      {% endif %}
+    {% else %}
+      <slide-section
+        class="swiper{% if reveal %} reveal_on_scroll{% endif %}"
+        data-section-id="{{ section.id }}"
+        data-autoplay="{{ autoplay }}"
+        data-effect="slide"
+        data-loop="{{ infinite }}"
+        data-speed="500"
+        data-autoplay-speed="{{ autorotate_speed }}"
+        data-spacing="{{ column_gap }}"
+        data-mobile="{{ section_st.items_per_row_mobile }}"
+        data-desktop="{{ items_per_row }}"
+        data-pagination-progressbar="{% if carousel_pagination == 'show_progress_bar' or section_st.pagination_style == 'progress' %}true{% else %}false{% endif %}"
+        data-pagination-style="{{ section_st.pagination_style | default: 'dot' }}"
+        style="{{ col_style | strip | strip_newlines }}"
+        data-arrow-centerimage="1"
+        data-free-scroll="{{ data_free_scroll }}"
+      >
+        {% if show_arrow %}
+          {%- render 'swiper-navigation' -%}
+        {% endif %}
+        <div class="swiper-wrapper">
+          {% for i in (1..items_to_show) %}
+            {% render 'product-item',
+              section_id: section.id,
+              container: section_width,
+              colunm: items_per_row,
+              colunm_mobile: section_st.items_per_row_mobile,
+              padding: column_gap,
+              class: ' swiper-slide',
+              template_enable_action: true,
+              template_enable_product_vendor: true,
+              template_enable_rate: true,
+              template_enable_product_short_description: true,
+              template_enable_color_swatches: true,
+              template_enable_price: true,
+              scroll_animation: scroll_animation,
+              indexFor: forloop.index,
+              template_enable_product_badges: true
+            %}
+          {% endfor %}
+        </div>
+        {%- if carousel_pagination == 'show_dots'
+          or carousel_pagination == 'show_dots_on_mobile'
+          or carousel_pagination == 'show_progress_bar'
+        -%}
+      <div
+        class="swiper-pagination products-carousel__pagination flex flex-wrap px-15 lh-1 bottom-30 {% if carousel_pagination == 'show_dots_on_mobile' %} hidden-md{% endif %} justify-content-{{ section_st.pagination_position | default: 'center' }}{% if section_st.content_below_image %} absolute-md-impo{% endif %}"
+        style="--swiper-pagination-bottom: 3rem;--swiper-pagination-position: static;z-index: 2"
+        data-pagination-style="{{ section_st.pagination_style | default: 'dot' }}"
+      >
+      </div>
+        {% endif %}
+      </slide-section>
+      {% if render_view_all_in_bottom %}
+        <div class="products-carousel__view-all-bottom">
+          <a
+            class="pc__view-all no-underline"
+            data-block-id="{{ view_all_block.id }}"
+            href="{{ view_all_url }}"
+            aria-label="{{ view_all_label | escape }}"
+            {{ view_all_block.shopify_attributes }}
+          >
+            {{- view_all_label -}}
+          </a>
+        </div>
+      {% endif %}
+    {% endif %}
+    {% if show_banner %}</div>{% endif %}
+    {% if show_banner %}
+      <a
+        class="hidden block-1025 products-grid__banner fs-0 align-self-baseline w-full col-md-w-custom rounded overflow-hidden{% if sticky_banner %} sticky top-30{% endif %}"
+        aria-label="{{- 'general.banner' | t -}}"
+        {% if banner_link == blank or banner_type != 'image' %}
+          role="link" aria-disabled="true"
+        {% else %}
+          href="{{ banner_link }}"
+        {% endif %}
+      >
+        {% if banner_image == blank and video_url == blank and local_video == blank %}
+          {% render 'placeholder-render', class: 'rounded' %}
+        {% else %}
+          {% if banner_type == 'image' %}
+            {% if banner_image != blank %}
+              {%- assign image_alt = banner_image.alt | default: 'product' | escape -%}
+              {% render 'responsive-image',
+                type: 'other',
+                class: 'rounded',
+                image: banner_image,
+                image_alt: image_alt,
+                container: section_width,
+                colunm: items_per_row,
+                colunm_mobile: section_st.items_per_row_mobile,
+                padding: column_gap,
+              %}
+            {% else %}
+              {% render 'placeholder-render', class: 'rounded' %}
+            {% endif %}
+          {% else %}
+            {% if local_video != blank %}
+              {%- liquid
+                assign source = local_video.sources
+                assign source_url = ''
+                for s in source
+                  if s.format == 'mp4'
+                    assign source_url = s.url
+                    break
+                  endif
+                endfor
+              -%}
+              {%- capture video_attribute -%}
+              {% if section_st.video_autoplay -%}
+                      muted autoplay
+                  {% endif %}
+              {%- endcapture -%}
+              <video
+                class="rounded w-full"
+                controls="true"
+                playsinline="true"
+                preload="none"
+                {{ video_attribute }}
+                src="{{ source_url }}"
+                poster="{{ local_video.preview_image | image_url: width: 1100 }}"
+              ></video>
+            {% else %}
+              {% if video_url != blank %}
+                {%- if video_url.type == 'youtube' -%}
+                  <div style="--aspect-ratio: 16/9">
+                    <iframe
+                      src="https://www.youtube.com/embed/{{ video_url.id }}?enablejsapi=1&autoplay=0&mute=0&loop=0"
+                      class="js-youtube rounded w-full"
+                    ></iframe>
+                  </div>
+                {%- else -%}
+                  <div style="--aspect-ratio: 16/9">
+                    <iframe
+                      class="js-vimeo rounded w-full"
+                      src="https://player.vimeo.com/video/{{ video_url.id }}?autoplay=0&muted=0&loop=0"
+                      frameborder="0"
+                      allowfullscreen
+                    ></iframe>
+                  </div>
+                {% endif %}
+              {% else %}
+                {% render 'placeholder-render', class: 'rounded' %}
+              {% endif %}
+            {% endif %}
+          {% endif %}
+        {% endif %}
+      </a>
+    {% endif %}
+    {% if show_banner %}
+      </div>
+    {% endif %}
+    {% if section_st.items_per_row_mobile > 1 and section_st.items_per_row_mobile < 2 %}</div>{% endif %}
+  </div>
+</div>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "products-carousel",
+  "name": "Products carousel",
+  "settings": [
+    {
+      "type": "header",
+      "id": "hdr_1",
+      "label": "Style & Colors"
+    },
+    {
+      "type": "color_scheme",
+      "id": "color_scheme",
+      "label": "Color scheme",
+      "default": "scheme-1"
+    },
+    {
+      "type": "color",
+      "id": "section_bg_override",
+      "label": "Section background (override)",
+      "info": "Optional. Leave blank to inherit from the color scheme."
+    },
+    {
+      "type": "header",
+      "id": "hdr_4",
+      "label": "Section padding"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "label": "Top padding",
+      "default": 50,
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px"
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "label": "Bottom padding",
+      "default": 50,
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px"
+    },
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_8",
+      "label": "Vertical gaps (inside section)"
+    },
+    {
+      "type": "range",
+      "id": "gap_products_to_pagination",
+      "label": "Gap: products → pagination",
+      "min": 0,
+      "max": 100,
+      "step": 2,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "range",
+      "id": "gap_pagination_to_button",
+      "label": "Gap: pagination → View All button",
+      "min": 0,
+      "max": 100,
+      "step": 2,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "range",
+      "id": "gap_products_to_button",
+      "label": "Gap: products → View All button (no pagination)",
+      "info": "Used when no pagination dots/bar are shown above the View All button.",
+      "min": 0,
+      "max": 100,
+      "step": 2,
+      "unit": "px",
+      "default": 32
+    },
+    {
+      "type": "header",
+      "id": "hdr_12",
+      "label": "General"
+    },
+    {
+      "type": "select",
+      "id": "section_width",
+      "label": "Section width",
+      "default": "fluid_container",
+      "options": [
+        {
+          "value": "container",
+          "label": "Container"
+        },
+        {
+          "value": "fluid_container",
+          "label": "Fluid container"
+        },
+        {
+          "value": "stretch_width",
+          "label": "Stretch width"
+        },
+        {
+          "value": "full_width",
+          "label": "Full width"
+        }
+      ]
+    },
+    {
+      "type": "checkbox",
+      "id": "show_banner",
+      "label": "Show banner",
+      "info": "Banner is automatically hidden on tablet and mobile."
+    },
+    {
+      "type": "checkbox",
+      "id": "show_arrow",
+      "label": "Show next / previous arrows",
+      "default": false
+    },
+    {
+      "type": "header",
+      "id": "hdr_16",
+      "label": "Content"
+    },
+    {
+      "type": "collection",
+      "id": "collection",
+      "label": "Source collection"
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Best Selling"
+    },
+    {
+      "type": "inline_richtext",
+      "id": "description",
+      "label": "Description"
+    },
+    {
+      "type": "checkbox",
+      "id": "heading_underline",
+      "label": "Show short underline accent under heading",
+      "default": false
+    },
+    {
+      "type": "header",
+      "id": "hdr_21",
+      "label": "Image / Media"
+    },
+    {
+      "type": "checkbox",
+      "id": "sticky_banner",
+      "label": "Sticky banner"
+    },
+    {
+      "type": "range",
+      "id": "banner_width",
+      "label": "Banner width",
+      "min": 20,
+      "max": 50,
+      "step": 1,
+      "default": 30,
+      "unit": "%"
+    },
+    {
+      "type": "select",
+      "id": "position",
+      "label": "Banner position",
+      "default": "left",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "url",
+      "id": "banner_link",
+      "label": "Banner link"
+    },
+    {
+      "type": "select",
+      "id": "banner_type",
+      "label": "Banner type",
+      "default": "image",
+      "options": [
+        {
+          "value": "image",
+          "label": "Image"
+        },
+        {
+          "value": "video",
+          "label": "Video"
+        }
+      ]
+    },
+    {
+      "type": "image_picker",
+      "id": "banner_image",
+      "label": "Banner image"
+    },
+    {
+      "type": "video_url",
+      "id": "video_url",
+      "accept": [
+        "youtube",
+        "vimeo"
+      ],
+      "label": "Video URL",
+      "info": "Accepts YouTube or Vimeo links."
+    },
+    {
+      "type": "video",
+      "id": "local_video",
+      "label": "Local video",
+      "info": "If both Video URL and Local video are set, the local video is used."
+    },
+    {
+      "type": "header",
+      "id": "hdr_30",
+      "label": "Typography"
+    },
+    {
+      "type": "select",
+      "id": "header_size",
+      "label": "Header size",
+      "default": "medium",
+      "options": [
+        {
+          "value": "small",
+          "label": "Small"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "large",
+          "label": "Large"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "header_alignment",
+      "label": "Header alignment",
+      "default": "left",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_33",
+      "label": "Display & Grid"
+    },
+    {
+      "type": "range",
+      "id": "items_to_show",
+      "label": "Items to show",
+      "min": 2,
+      "max": 25,
+      "step": 1,
+      "default": 5
+    },
+    {
+      "type": "range",
+      "id": "items_per_row",
+      "label": "Items per row (desktop)",
+      "min": 1,
+      "max": 5,
+      "step": 1,
+      "default": 4
+    },
+    {
+      "type": "header",
+      "id": "hdr_36",
+      "label": "Carousel Options"
+    },
+    {
+      "type": "checkbox",
+      "id": "video_autoplay",
+      "label": "Autoplay video (muted)",
+      "info": "Videos are muted automatically to allow autoplay.",
+      "default": true
+    },
+    {
+      "type": "select",
+      "id": "carousel_pagination",
+      "label": "Pagination dots",
+      "default": "show_dots_on_mobile",
+      "options": [
+        {
+          "value": "disable",
+          "label": "Disable"
+        },
+        {
+          "value": "show_dots",
+          "label": "Show dots"
+        },
+        {
+          "value": "show_dots_on_mobile",
+          "label": "Mobile only"
+        },
+        {
+          "value": "show_progress_bar",
+          "label": "Progress bar"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "pagination_style",
+      "label": "Pagination style",
+      "default": "dot",
+      "info": "Visual style of the pagination indicators (matches Slideshow).",
+      "options": [
+        {
+          "value": "dot",
+          "label": "Dot (default)"
+        },
+        {
+          "value": "pill",
+          "label": "Pill (active expands)"
+        },
+        {
+          "value": "line",
+          "label": "Line / bar"
+        },
+        {
+          "value": "square",
+          "label": "Square"
+        },
+        {
+          "value": "ring",
+          "label": "Ring (hollow)"
+        },
+        {
+          "value": "number",
+          "label": "Numbers"
+        },
+        {
+          "value": "progress",
+          "label": "Progress fill"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "pagination_position",
+      "label": "Pagination position (desktop)",
+      "default": "center",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "checkbox",
+      "id": "infinite",
+      "label": "Infinite loop",
+      "default": false
+    },
+    {
+      "type": "checkbox",
+      "id": "autoplay",
+      "label": "Auto-rotate slides",
+      "default": false
+    },
+    {
+      "type": "range",
+      "id": "autorotate_speed",
+      "label": "Change slide every",
+      "max": 6,
+      "min": 2,
+      "step": 1,
+      "unit": "s",
+      "default": 5
+    },
+    {
+      "type": "header",
+      "id": "hdr_44",
+      "label": "Animation & Behavior"
+    },
+    {
+      "type": "checkbox",
+      "id": "reveal",
+      "label": "Reveal next slide",
+      "info": "Show a peek of the upcoming slide.",
+      "default": false
+    },
+    {
+      "type": "header",
+      "id": "hdr_46",
+      "label": "Layout & Spacing"
+    },
+    {
+      "type": "range",
+      "id": "column_gap",
+      "label": "Column gap",
+      "min": 0,
+      "max": 50,
+      "step": 5,
+      "default": 30,
+      "unit": "px"
+    },
+    {
+      "type": "range",
+      "id": "header_spacing",
+      "label": "Space between header and grid",
+      "min": 0,
+      "max": 80,
+      "step": 4,
+      "unit": "px",
+      "default": 32
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_desktop",
+      "label": "Top margin (desktop px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_desktop",
+      "label": "Bottom margin (desktop px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_mobile",
+      "label": "Top margin (mobile px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_mobile",
+      "label": "Bottom margin (mobile px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "header",
+      "id": "hdr_53",
+      "label": "Mobile"
+    },
+    {
+      "type": "range",
+      "id": "items_per_row_mobile",
+      "label": "Items per row (mobile)",
+      "min": 1,
+      "max": 2,
+      "step": 0.5,
+      "default": 2
+    }
+  ],
+  "blocks": [
+    {
+      "type": "view_all",
+      "name": "View All button",
+      "settings": [
+        {
+          "type": "checkbox",
+          "id": "enabled",
+          "label": "Enable View All button",
+          "default": true
+        },
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Label",
+          "default": "View all",
+          "info": "The text shown on the button."
+        },
+        {
+          "type": "url",
+          "id": "link",
+          "label": "Link",
+          "info": "Leave blank to use the source collection's URL (or /collections/all)."
+        },
+        {
+          "type": "select",
+          "id": "position",
+          "label": "Position",
+          "default": "header",
+          "options": [
+            {
+              "value": "header",
+              "label": "In section header"
+            },
+            {
+              "value": "bottom",
+              "label": "Below the grid (centered)"
+            }
+          ]
+        },
+        {
+          "type": "header",
+          "id": "hdr_5",
+          "label": "Default colors"
+        },
+        {
+          "type": "color",
+          "id": "bg",
+          "label": "Background",
+          "default": "#111111"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Text color",
+          "default": "#FFFFFF"
+        },
+        {
+          "type": "color",
+          "id": "border_color",
+          "label": "Border color",
+          "default": "#111111"
+        },
+        {
+          "type": "header",
+          "id": "hdr_9",
+          "label": "Hover colors"
+        },
+        {
+          "type": "color",
+          "id": "bg_hover",
+          "label": "Background on hover",
+          "default": "#FFFFFF"
+        },
+        {
+          "type": "color",
+          "id": "color_hover",
+          "label": "Text color on hover",
+          "default": "#111111"
+        },
+        {
+          "type": "color",
+          "id": "border_color_hover",
+          "label": "Border color on hover",
+          "default": "#111111"
+        },
+        {
+          "type": "header",
+          "id": "hdr_13",
+          "label": "Style"
+        },
+        {
+          "type": "range",
+          "id": "padding_x",
+          "label": "Horizontal padding",
+          "min": 8,
+          "max": 60,
+          "step": 1,
+          "unit": "px",
+          "default": 26
+        },
+        {
+          "type": "range",
+          "id": "padding_y",
+          "label": "Vertical padding",
+          "min": 6,
+          "max": 40,
+          "step": 1,
+          "unit": "px",
+          "default": 14
+        },
+        {
+          "type": "range",
+          "id": "radius",
+          "label": "Corner radius",
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "unit": "px",
+          "default": 6
+        },
+        {
+          "type": "range",
+          "id": "border_width",
+          "label": "Border width",
+          "min": 0,
+          "max": 4,
+          "step": 1,
+          "unit": "px",
+          "default": 1
+        },
+        {
+          "type": "range",
+          "id": "font_size",
+          "label": "Font size",
+          "min": 11,
+          "max": 22,
+          "step": 1,
+          "unit": "px",
+          "default": 14
+        },
+        {
+          "type": "select",
+          "id": "font_weight",
+          "label": "Font weight",
+          "default": "600",
+          "options": [
+            {
+              "value": "500",
+              "label": "Medium (500)"
+            },
+            {
+              "value": "600",
+              "label": "Semibold (600)"
+            },
+            {
+              "value": "700",
+              "label": "Bold (700)"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "uppercase",
+          "label": "UPPERCASE",
+          "default": false
+        },
+        {
+          "type": "checkbox",
+          "id": "full_width",
+          "label": "Full-width button",
+          "default": false
+        }
+      ],
+      "limit": 1
+    }
+  ],
+  "presets": [
+    {
+      "name": "Product — Products Carousel",
+      "category": "Products",
+      "blocks": [
+        {
+          "type": "view_all",
+          "settings": {
+            "label": "View all",
+            "position": "header"
+          }
+        }
+      ]
+    }
+  ],
+  "disabled_on": {
+    "groups": [
+      "header",
+      "footer",
+      "overlay"
+    ]
+  },
+  "shopify": {
+    "name": "t:sections.products-carousel.name",
+    "tag": "section",
+    "disabled_on": {
+      "groups": [
+        "header",
+        "footer",
+        "custom.overlay"
+      ]
+    },
+    "settings": [
+      {
+        "type": "header",
+        "content": "Style & Colors"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "scheme-1"
+      },
+      {
+        "type": "color",
+        "id": "section_bg_override",
+        "label": "Section background (override)",
+        "info": "Optional. Leave blank to inherit from the color scheme."
+      },
+      {
+        "type": "header",
+        "content": "Section padding"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top padding",
+        "default": 50,
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px"
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom padding",
+        "default": 50,
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px"
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Vertical gaps (inside section)"
+      },
+      {
+        "type": "range",
+        "id": "gap_products_to_pagination",
+        "label": "Gap: products → pagination",
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "range",
+        "id": "gap_pagination_to_button",
+        "label": "Gap: pagination → View All button",
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "range",
+        "id": "gap_products_to_button",
+        "label": "Gap: products → View All button (no pagination)",
+        "info": "Used when no pagination dots/bar are shown above the View All button.",
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "unit": "px",
+        "default": 32
+      },
+      {
+        "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "fluid_container",
+        "options": [
+          {
+            "value": "container",
+            "label": "Container"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretch width"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "checkbox",
+        "id": "show_banner",
+        "label": "Show banner",
+        "info": "Banner is automatically hidden on tablet and mobile."
+      },
+      {
+        "type": "checkbox",
+        "id": "show_arrow",
+        "label": "Show next / previous arrows",
+        "default": false
+      },
+      {
+        "type": "header",
+        "content": "Content"
+      },
+      {
+        "type": "collection",
+        "id": "collection",
+        "label": "Source collection"
+      },
+      {
+        "type": "text",
+        "id": "heading",
+        "label": "Heading",
+        "default": "Best Selling"
+      },
+      {
+        "type": "inline_richtext",
+        "id": "description",
+        "label": "Description"
+      },
+      {
+        "type": "checkbox",
+        "id": "heading_underline",
+        "label": "Show short underline accent under heading",
+        "default": false
+      },
+      {
+        "type": "header",
+        "content": "Image / Media"
+      },
+      {
+        "type": "checkbox",
+        "id": "sticky_banner",
+        "label": "Sticky banner"
+      },
+      {
+        "type": "range",
+        "id": "banner_width",
+        "label": "Banner width",
+        "min": 20,
+        "max": 50,
+        "step": 1,
+        "default": 30,
+        "unit": "%"
+      },
+      {
+        "type": "select",
+        "id": "position",
+        "label": "Banner position",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "url",
+        "id": "banner_link",
+        "label": "Banner link"
+      },
+      {
+        "type": "select",
+        "id": "banner_type",
+        "label": "Banner type",
+        "default": "image",
+        "options": [
+          {
+            "value": "image",
+            "label": "Image"
+          },
+          {
+            "value": "video",
+            "label": "Video"
+          }
+        ]
+      },
+      {
+        "type": "image_picker",
+        "id": "banner_image",
+        "label": "Banner image"
+      },
+      {
+        "type": "video_url",
+        "id": "video_url",
+        "accept": [
+          "youtube",
+          "vimeo"
+        ],
+        "label": "Video URL",
+        "info": "Accepts YouTube or Vimeo links."
+      },
+      {
+        "type": "video",
+        "id": "local_video",
+        "label": "Local video",
+        "info": "If both Video URL and Local video are set, the local video is used."
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "select",
+        "id": "header_size",
+        "label": "Header size",
+        "default": "medium",
+        "options": [
+          {
+            "value": "small",
+            "label": "Small"
+          },
+          {
+            "value": "medium",
+            "label": "Medium"
+          },
+          {
+            "value": "large",
+            "label": "Large"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "header_alignment",
+        "label": "Header alignment",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Display & Grid"
+      },
+      {
+        "type": "range",
+        "id": "items_to_show",
+        "label": "Items to show",
+        "min": 2,
+        "max": 25,
+        "step": 1,
+        "default": 5
+      },
+      {
+        "type": "range",
+        "id": "items_per_row",
+        "label": "Items per row (desktop)",
+        "min": 1,
+        "max": 5,
+        "step": 1,
+        "default": 4
+      },
+      {
+        "type": "header",
+        "content": "Carousel Options"
+      },
+      {
+        "type": "checkbox",
+        "id": "video_autoplay",
+        "label": "Autoplay video (muted)",
+        "info": "Videos are muted automatically to allow autoplay.",
+        "default": true
+      },
+      {
+        "type": "select",
+        "id": "carousel_pagination",
+        "label": "Pagination dots",
+        "default": "show_dots_on_mobile",
+        "options": [
+          {
+            "value": "disable",
+            "label": "Disable"
+          },
+          {
+            "value": "show_dots",
+            "label": "Show dots"
+          },
+          {
+            "value": "show_dots_on_mobile",
+            "label": "Mobile only"
+          },
+          {
+            "value": "show_progress_bar",
+            "label": "Progress bar"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "pagination_style",
+        "label": "Pagination style",
+        "default": "dot",
+        "info": "Visual style of the pagination indicators (matches Slideshow).",
+        "options": [
+          {
+            "value": "dot",
+            "label": "Dot (default)"
+          },
+          {
+            "value": "pill",
+            "label": "Pill (active expands)"
+          },
+          {
+            "value": "line",
+            "label": "Line / bar"
+          },
+          {
+            "value": "square",
+            "label": "Square"
+          },
+          {
+            "value": "ring",
+            "label": "Ring (hollow)"
+          },
+          {
+            "value": "number",
+            "label": "Numbers"
+          },
+          {
+            "value": "progress",
+            "label": "Progress fill"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "pagination_position",
+        "label": "Pagination position (desktop)",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "checkbox",
+        "id": "infinite",
+        "label": "Infinite loop",
+        "default": false
+      },
+      {
+        "type": "checkbox",
+        "id": "autoplay",
+        "label": "Auto-rotate slides",
+        "default": false
+      },
+      {
+        "type": "range",
+        "id": "autorotate_speed",
+        "label": "Change slide every",
+        "max": 6,
+        "min": 2,
+        "step": 1,
+        "unit": "s",
+        "default": 5
+      },
+      {
+        "type": "header",
+        "content": "Animation & Behavior"
+      },
+      {
+        "type": "checkbox",
+        "id": "reveal",
+        "label": "Reveal next slide",
+        "info": "Show a peek of the upcoming slide.",
+        "default": false
+      },
+      {
+        "type": "header",
+        "content": "Layout & Spacing"
+      },
+      {
+        "type": "range",
+        "id": "column_gap",
+        "label": "Column gap",
+        "min": 0,
+        "max": 50,
+        "step": 5,
+        "default": 30,
+        "unit": "px"
+      },
+      {
+        "type": "range",
+        "id": "header_spacing",
+        "label": "Space between header and grid",
+        "min": 0,
+        "max": 80,
+        "step": 4,
+        "unit": "px",
+        "default": 32
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin (desktop px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin (desktop px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_mobile",
+        "label": "Top margin (mobile px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_mobile",
+        "label": "Bottom margin (mobile px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "range",
+        "id": "items_per_row_mobile",
+        "label": "Items per row (mobile)",
+        "min": 1,
+        "max": 2,
+        "step": 0.5,
+        "default": 2
+      }
+    ],
+    "blocks": [
+      {
+        "type": "view_all",
+        "name": "View All button",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "checkbox",
+            "id": "enabled",
+            "label": "Enable View All button",
+            "default": true
+          },
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Label",
+            "default": "View all",
+            "info": "The text shown on the button."
+          },
+          {
+            "type": "url",
+            "id": "link",
+            "label": "Link",
+            "info": "Leave blank to use the source collection's URL (or /collections/all)."
+          },
+          {
+            "type": "select",
+            "id": "position",
+            "label": "Position",
+            "default": "header",
+            "options": [
+              {
+                "value": "header",
+                "label": "In section header"
+              },
+              {
+                "value": "bottom",
+                "label": "Below the grid (centered)"
+              }
+            ]
+          },
+          {
+            "type": "header",
+            "content": "Default colors"
+          },
+          {
+            "type": "color",
+            "id": "bg",
+            "label": "Background",
+            "default": "#111111"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Text color",
+            "default": "#FFFFFF"
+          },
+          {
+            "type": "color",
+            "id": "border_color",
+            "label": "Border color",
+            "default": "#111111"
+          },
+          {
+            "type": "header",
+            "content": "Hover colors"
+          },
+          {
+            "type": "color",
+            "id": "bg_hover",
+            "label": "Background on hover",
+            "default": "#FFFFFF"
+          },
+          {
+            "type": "color",
+            "id": "color_hover",
+            "label": "Text color on hover",
+            "default": "#111111"
+          },
+          {
+            "type": "color",
+            "id": "border_color_hover",
+            "label": "Border color on hover",
+            "default": "#111111"
+          },
+          {
+            "type": "header",
+            "content": "Style"
+          },
+          {
+            "type": "range",
+            "id": "padding_x",
+            "label": "Horizontal padding",
+            "min": 8,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 26
+          },
+          {
+            "type": "range",
+            "id": "padding_y",
+            "label": "Vertical padding",
+            "min": 6,
+            "max": 40,
+            "step": 1,
+            "unit": "px",
+            "default": 14
+          },
+          {
+            "type": "range",
+            "id": "radius",
+            "label": "Corner radius",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "unit": "px",
+            "default": 6
+          },
+          {
+            "type": "range",
+            "id": "border_width",
+            "label": "Border width",
+            "min": 0,
+            "max": 4,
+            "step": 1,
+            "unit": "px",
+            "default": 1
+          },
+          {
+            "type": "range",
+            "id": "font_size",
+            "label": "Font size",
+            "min": 11,
+            "max": 22,
+            "step": 1,
+            "unit": "px",
+            "default": 14
+          },
+          {
+            "type": "select",
+            "id": "font_weight",
+            "label": "Font weight",
+            "default": "600",
+            "options": [
+              {
+                "value": "500",
+                "label": "Medium (500)"
+              },
+              {
+                "value": "600",
+                "label": "Semibold (600)"
+              },
+              {
+                "value": "700",
+                "label": "Bold (700)"
+              }
+            ]
+          },
+          {
+            "type": "checkbox",
+            "id": "uppercase",
+            "label": "UPPERCASE",
+            "default": false
+          },
+          {
+            "type": "checkbox",
+            "id": "full_width",
+            "label": "Full-width button",
+            "default": false
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Product — Products Carousel",
+        "category": "Products",
+        "blocks": [
+          {
+            "type": "view_all",
+            "settings": {
+              "label": "View all",
+              "position": "header"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

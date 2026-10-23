@@ -1,0 +1,1301 @@
+<template compat="shopify">
+{%- assign fb_accessibility_question_goes_here = 'accessibility.question_goes_here' | t -%}
+{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- comment -%}
+  Materia Themes — FAQ 5 (Floating cards)
+  Marketing-style FAQ where Q&A cards float around a centered product
+  image. Each card picks its own anchor (top-left, top-right, middle-
+  left/right, bottom-left/right) and its own colors. On narrow screens
+  the layout collapses into a clean single-column stack.
+{%- endcomment -%}
+
+{%- liquid
+  assign st  = section.settings
+  assign sid = section.id
+
+  assign image_block = nil
+  for b in section.blocks
+    if b.type == 'product_image' and image_block == nil
+      assign image_block = b
+    endif
+  endfor
+
+  assign card_blocks = section.blocks | where: 'type', 'faq_card'
+
+  assign h_align = st.header_align | default: 'center'
+  assign h_flex = 'center'
+  if h_align == 'left'
+    assign h_flex = 'flex-start'
+  elsif h_align == 'right'
+    assign h_flex = 'flex-end'
+  endif
+-%}
+
+<style>
+  #shopify-section-{{ sid }} { isolation: isolate; position: relative; }
+  #shopify-section-{{ sid }} *,
+  #shopify-section-{{ sid }} *::before,
+  #shopify-section-{{ sid }} *::after { box-sizing: border-box; }
+  :where(#shopify-section-{{ sid }}) { font-family: var(--body-font, inherit); }
+  :where(#shopify-section-{{ sid }}) :is(h1,h2,h3,h4,h5,h6) { font-family: var(--heading-font, inherit); }
+
+  #shopify-section-{{ sid }} {
+    margin-top: {{ st.section_margin_top | default: 0 }}px;
+    margin-bottom: {{ st.section_margin_bottom | default: 0 }}px;
+  }
+  {%- if st.reset_spacing -%}
+    #shopify-section-{{ sid }} { margin-top: 0 !important; margin-bottom: 0 !important; }
+    #shopify-section-{{ sid }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif -%}
+
+  #shopify-section-{{ sid }} .ffq {
+    background: {{ st.section_bg | default: '#EFEFEF' }} !important;
+    padding: {{ st.padding_top_mobile | default: 56 }}px 1.25rem {{ st.padding_bottom_mobile | default: 56 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .ffq {
+      padding: {{ st.padding_top_desktop | default: 96 }}px 1.5rem {{ st.padding_bottom_desktop | default: 96 }}px;
+    }
+  }
+  #shopify-section-{{ sid }} .ffq__inner {
+    max-width: {{ st.max_width | default: 1200 }}px;
+    margin-inline: auto;
+  }
+
+  /* Heading */
+  #shopify-section-{{ sid }} .ffq__header {
+    display: flex;
+    flex-direction: column;
+    align-items: {{ h_flex }};
+    text-align: {{ h_align }};
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  #shopify-section-{{ sid }} .ffq__header > * { margin: 0 !important; }
+  #shopify-section-{{ sid }} .ffq__heading {
+    color: {{ st.heading_color | default: '#0F172A' }};
+    font-size: {{ st.heading_size_mobile | default: 30 }}px;
+    line-height: 1.15;
+    font-weight: {{ st.heading_weight | default: 700 }};
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .ffq__heading { font-size: {{ st.heading_size_desktop | default: 48 }}px; }
+  }
+  #shopify-section-{{ sid }} .ffq__sub {
+    color: {{ st.sub_color | default: '#374151' }};
+    font-size: 16px;
+    line-height: 1.55;
+    max-width: 600px;
+  }
+
+  /* Stage — desktop floats cards around a centered image; mobile stacks
+     in the layout the merchant picks. */
+  #shopify-section-{{ sid }} .ffq__stage {
+    display: grid;
+    gap: 18px;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "img"
+      "tl"
+      "tr"
+      "ml"
+      "mr"
+      "bl"
+      "br";
+  }
+  #shopify-section-{{ sid }} .ffq__stage .ffq__pos--top-left     { grid-area: tl; }
+  #shopify-section-{{ sid }} .ffq__stage .ffq__pos--top-right    { grid-area: tr; }
+  #shopify-section-{{ sid }} .ffq__stage .ffq__pos--middle-left  { grid-area: ml; }
+  #shopify-section-{{ sid }} .ffq__stage .ffq__pos--middle-right { grid-area: mr; }
+  #shopify-section-{{ sid }} .ffq__stage .ffq__pos--bottom-left  { grid-area: bl; }
+  #shopify-section-{{ sid }} .ffq__stage .ffq__pos--bottom-right { grid-area: br; }
+  #shopify-section-{{ sid }} .ffq__stage .ffq__image-wrap        { grid-area: img; justify-self: center; }
+
+  /* Mobile layout: zigzag (alternate left / right) — matches the
+     reference design where the second card sits flush to the right
+     side and slightly inset, the others to the left. Cards are also
+     a touch narrower than the column so the offset is visible. */
+  {%- assign mlayout = st.mobile_layout | default: 'zigzag' -%}
+  {%- if mlayout == 'zigzag' -%}
+    #shopify-section-{{ sid }} .ffq__stage .ffq__card {
+      width: min(86%, {{ st.card_max_width | default: 320 }}px);
+    }
+    #shopify-section-{{ sid }} .ffq__pos--top-left,
+    #shopify-section-{{ sid }} .ffq__pos--middle-left,
+    #shopify-section-{{ sid }} .ffq__pos--bottom-left  { justify-self: start; }
+    #shopify-section-{{ sid }} .ffq__pos--top-right,
+    #shopify-section-{{ sid }} .ffq__pos--middle-right,
+    #shopify-section-{{ sid }} .ffq__pos--bottom-right { justify-self: end; }
+  {%- elsif mlayout == 'left' -%}
+    #shopify-section-{{ sid }} .ffq__stage .ffq__card { justify-self: start; }
+  {%- elsif mlayout == 'right' -%}
+    #shopify-section-{{ sid }} .ffq__stage .ffq__card { justify-self: end; }
+  {%- else -%}
+    #shopify-section-{{ sid }} .ffq__stage .ffq__card { justify-self: center; }
+  {%- endif -%}
+
+  @media (min-width: 900px) {
+    #shopify-section-{{ sid }} .ffq__stage {
+      grid-template-columns: 1fr {{ st.image_width | default: 360 }}px 1fr;
+      grid-template-rows: auto auto auto;
+      grid-template-areas:
+        "tl  img tr"
+        "ml  img mr"
+        "bl  img br";
+      column-gap: clamp(8px, 1.5vw, 24px);
+      row-gap: clamp(20px, 3vw, 36px);
+      align-items: start;
+    }
+    #shopify-section-{{ sid }} .ffq__stage .ffq__card { width: auto; }
+    #shopify-section-{{ sid }} .ffq__stage .ffq__image-wrap {
+      grid-row: 1 / span 3;
+      align-self: center;
+      justify-self: center;
+      position: relative;
+      z-index: 1;
+    }
+    /* Cards overlap the product image slightly so the layout reads as
+       a single composition (controlled by the "Card overlap" setting). */
+    {%- assign overlap = st.card_overlap | default: 36 -%}
+    #shopify-section-{{ sid }} .ffq__pos--top-left,
+    #shopify-section-{{ sid }} .ffq__pos--middle-left,
+    #shopify-section-{{ sid }} .ffq__pos--bottom-left {
+      justify-self: end;
+      text-align: left;
+      transform: translateX({{ overlap }}px);
+      position: relative;
+      z-index: 2;
+    }
+    #shopify-section-{{ sid }} .ffq__pos--top-right,
+    #shopify-section-{{ sid }} .ffq__pos--middle-right,
+    #shopify-section-{{ sid }} .ffq__pos--bottom-right {
+      justify-self: start;
+      text-align: left;
+      transform: translateX(-{{ overlap }}px);
+      position: relative;
+      z-index: 2;
+    }
+  }
+
+  /* Cards */
+  #shopify-section-{{ sid }} .ffq__card {
+    --ffq-card-bg: #FFFFFF;
+    --ffq-card-fg: #0F172A;
+    --ffq-card-q:  #0F172A;
+    background: var(--ffq-card-bg);
+    color: var(--ffq-card-fg);
+    border-radius: {{ st.card_radius | default: 18 }}px;
+    padding: {{ st.card_padding | default: 22 }}px {{ st.card_padding | default: 22 }}px;
+    max-width: {{ st.card_max_width | default: 320 }}px;
+    box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px rgba(15,23,42,.06);
+  }
+  #shopify-section-{{ sid }} .ffq__card-q {
+    margin: 0 0 8px;
+    color: var(--ffq-card-q);
+    font-family: var(--heading-font, inherit);
+    font-size: {{ st.q_size | default: 19 }}px;
+    line-height: 1.25;
+    font-weight: {{ st.q_weight | default: 700 }};
+  }
+  #shopify-section-{{ sid }} .ffq__card-a {
+    margin: 0;
+    color: var(--ffq-card-fg);
+    font-size: {{ st.a_size | default: 14 }}px;
+    line-height: 1.55;
+  }
+  #shopify-section-{{ sid }} .ffq__card-a > * { margin: 0; }
+  #shopify-section-{{ sid }} .ffq__card-a > * + * { margin-top: 8px; }
+
+  /* Image */
+  #shopify-section-{{ sid }} .ffq__image-wrap {
+    width: 100%;
+    max-width: {{ st.image_width | default: 360 }}px;
+    aspect-ratio: 1 / 1;
+    border-radius: {{ st.image_radius | default: 24 }}px;
+    overflow: hidden;
+    background: {{ st.image_bg | default: 'transparent' }};
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #shopify-section-{{ sid }} .ffq__image-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: {{ st.image_fit | default: 'contain' }};
+    display: block;
+  }
+  #shopify-section-{{ sid }} .ffq__image-placeholder {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    place-items: center;
+    color: rgba(15,23,42,.35);
+    background: rgba(15,23,42,.06);
+    font-size: 13px;
+  }
+{% comment %}{% endcomment %}</style>
+
+<section class="ffq" id="ffq-{{ sid }}">
+  <div class="ffq__inner">
+    {%- if st.heading != blank or st.subheading != blank -%}
+      <div class="ffq__header">
+        {%- if st.heading != blank -%}
+          <h2 class="ffq__heading">{{ st.heading }}</h2>
+        {%- endif -%}
+        {%- if st.subheading != blank -%}
+          <div class="ffq__sub">{{ st.subheading }}</div>
+        {%- endif -%}
+      </div>
+    {%- endif -%}
+
+    <div class="ffq__stage">
+      {%- for card in card_blocks -%}
+        {%- assign cs = card.settings -%}
+        {%- assign pos = cs.position | default: 'top-left' -%}
+        <div class="ffq__card ffq__pos--{{ pos }}"
+             id="block-{{ card.id }}"
+             {{ card.shopify_attributes }}
+             style="
+               --ffq-card-bg: {{ cs.bg_color | default: '#FFFFFF' }};
+               --ffq-card-fg: {{ cs.text_color | default: '#0F172A' }};
+               --ffq-card-q:  {{ cs.q_color | default: cs.text_color | default: '#0F172A' }};
+             ">
+          <h3 class="ffq__card-q">{{ cs.question | default: fb_accessibility_question_goes_here }}</h3>
+          <div class="ffq__card-a">{{ cs.answer }}</div>
+        </div>
+      {%- endfor -%}
+
+      <div class="ffq__image-wrap"
+           {% if image_block %}id="block-{{ image_block.id }}" {{ image_block.shopify_attributes }}{% endif %}>
+        {%- if image_block and image_block.settings.image != blank -%}
+          {{ image_block.settings.image | image_url: width: 1000 | image_tag:
+              alt: image_block.settings.image.alt | default: st.heading,
+              loading: 'lazy',
+              widths: '320,480,640,800,1000' }}
+        {%- else -%}
+          <div class="ffq__image-placeholder">{{ 'accessibility.add_product_image_block' | t }}</div>
+        {%- endif -%}
+      </div>
+    </div>
+  </div>
+</section>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "faq-floating",
+  "name": "FAQ 5",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "General"
+    },
+    {
+      "type": "color",
+      "id": "section_bg",
+      "label": "Section background",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "range",
+      "id": "max_width",
+      "label": "Max content width",
+      "min": 800,
+      "max": 1600,
+      "step": 20,
+      "unit": "px",
+      "default": 1200
+    },
+    {
+      "type": "select",
+      "id": "mobile_layout",
+      "label": "Mobile layout",
+      "default": "zigzag",
+      "info": "Controls how cards stack on phones. Zigzag matches the reference design.",
+      "options": [
+        {
+          "value": "zigzag",
+          "label": "Zigzag (alternate left / right)"
+        },
+        {
+          "value": "left",
+          "label": "All aligned left"
+        },
+        {
+          "value": "right",
+          "label": "All aligned right"
+        },
+        {
+          "value": "center",
+          "label": "Centered (full width)"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_6",
+      "label": "Heading"
+    },
+    {
+      "type": "select",
+      "id": "header_align",
+      "label": "Alignment",
+      "default": "center",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "FAQ"
+    },
+    {
+      "type": "richtext",
+      "id": "subheading",
+      "label": "Subheading"
+    },
+    {
+      "type": "color",
+      "id": "heading_color",
+      "label": "Heading color",
+      "default": "#0F172A"
+    },
+    {
+      "type": "color",
+      "id": "sub_color",
+      "label": "Subheading color",
+      "default": "#374151"
+    },
+    {
+      "type": "range",
+      "id": "heading_size_desktop",
+      "label": "Heading size (desktop)",
+      "min": 20,
+      "max": 80,
+      "step": 1,
+      "unit": "px",
+      "default": 48
+    },
+    {
+      "type": "range",
+      "id": "heading_size_mobile",
+      "label": "Heading size (mobile)",
+      "min": 16,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 30
+    },
+    {
+      "type": "select",
+      "id": "heading_weight",
+      "label": "Heading weight",
+      "default": "700",
+      "options": [
+        {
+          "value": "500",
+          "label": "Medium"
+        },
+        {
+          "value": "600",
+          "label": "Semi-bold"
+        },
+        {
+          "value": "700",
+          "label": "Bold"
+        },
+        {
+          "value": "800",
+          "label": "Extra bold"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_15",
+      "label": "Product image"
+    },
+    {
+      "type": "range",
+      "id": "image_width",
+      "label": "Image width (desktop)",
+      "min": 200,
+      "max": 600,
+      "step": 10,
+      "unit": "px",
+      "default": 360
+    },
+    {
+      "type": "range",
+      "id": "image_radius",
+      "label": "Image corner radius",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "color",
+      "id": "image_bg",
+      "label": "Image background"
+    },
+    {
+      "type": "select",
+      "id": "image_fit",
+      "label": "Image fit",
+      "default": "cover",
+      "options": [
+        {
+          "value": "contain",
+          "label": "Contain"
+        },
+        {
+          "value": "cover",
+          "label": "Cover"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_20",
+      "label": "Card defaults"
+    },
+    {
+      "type": "range",
+      "id": "card_radius",
+      "label": "Card corner radius",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 18
+    },
+    {
+      "type": "range",
+      "id": "card_padding",
+      "label": "Card padding",
+      "min": 12,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 22
+    },
+    {
+      "type": "range",
+      "id": "card_max_width",
+      "label": "Card max width",
+      "min": 220,
+      "max": 480,
+      "step": 5,
+      "unit": "px",
+      "default": 320
+    },
+    {
+      "type": "range",
+      "id": "card_overlap",
+      "label": "Card overlap (desktop)",
+      "min": 0,
+      "max": 100,
+      "step": 2,
+      "unit": "px",
+      "default": 36,
+      "info": "How far cards slide over the product image. Set to 0 for no overlap."
+    },
+    {
+      "type": "range",
+      "id": "q_size",
+      "label": "Question size",
+      "min": 14,
+      "max": 28,
+      "step": 1,
+      "unit": "px",
+      "default": 19
+    },
+    {
+      "type": "select",
+      "id": "q_weight",
+      "label": "Question weight",
+      "default": "700",
+      "options": [
+        {
+          "value": "500",
+          "label": "Medium"
+        },
+        {
+          "value": "600",
+          "label": "Semi-bold"
+        },
+        {
+          "value": "700",
+          "label": "Bold"
+        },
+        {
+          "value": "800",
+          "label": "Extra bold"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "a_size",
+      "label": "Answer size",
+      "min": 11,
+      "max": 18,
+      "step": 1,
+      "unit": "px",
+      "default": 14
+    },
+    {
+      "type": "header",
+      "id": "hdr_28",
+      "label": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top_desktop",
+      "label": "Top padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 96
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_desktop",
+      "label": "Bottom padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 96
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "label": "Top padding (mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "label": "Bottom padding (mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top",
+      "label": "Section margin top",
+      "min": -100,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom",
+      "label": "Section margin bottom",
+      "min": -100,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 0
+    }
+  ],
+  "blocks": [
+    {
+      "type": "product_image",
+      "name": "Product image",
+      "settings": [
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Image"
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "faq_card",
+      "name": "FAQ card",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content"
+        },
+        {
+          "type": "text",
+          "id": "question",
+          "label": "Question",
+          "default": "Is it gluten free?"
+        },
+        {
+          "type": "richtext",
+          "id": "answer",
+          "label": "Answer",
+          "default": "<p>Yes, the pure oats in our products are gluten-free (safe for those with a gluten intolerance).</p>"
+        },
+        {
+          "type": "header",
+          "id": "hdr_4",
+          "label": "Position"
+        },
+        {
+          "type": "select",
+          "id": "position",
+          "label": "Position on desktop",
+          "default": "top-left",
+          "info": "On mobile, cards stack vertically in the order they are added.",
+          "options": [
+            {
+              "value": "top-left",
+              "label": "Top left"
+            },
+            {
+              "value": "top-right",
+              "label": "Top right"
+            },
+            {
+              "value": "middle-left",
+              "label": "Middle left"
+            },
+            {
+              "value": "middle-right",
+              "label": "Middle right"
+            },
+            {
+              "value": "bottom-left",
+              "label": "Bottom left"
+            },
+            {
+              "value": "bottom-right",
+              "label": "Bottom right"
+            }
+          ]
+        },
+        {
+          "type": "header",
+          "id": "hdr_6",
+          "label": "Colors"
+        },
+        {
+          "type": "color",
+          "id": "bg_color",
+          "label": "Card background",
+          "default": "#FFFFFF"
+        },
+        {
+          "type": "color",
+          "id": "q_color",
+          "label": "Question color",
+          "default": "#0F172A"
+        },
+        {
+          "type": "color",
+          "id": "text_color",
+          "label": "Answer color",
+          "default": "#374151"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "FAQ 5",
+      "category": "FAQ",
+      "blocks": [
+        {
+          "type": "product_image"
+        },
+        {
+          "type": "faq_card",
+          "settings": {
+            "position": "top-left",
+            "bg_color": "#E6E2FF",
+            "q_color": "#0F172A",
+            "text_color": "#374151",
+            "question": "How long does shipping take?",
+            "answer": "<p>Most orders arrive in 3–5 business days. You'll get a tracking link the moment it leaves the warehouse.</p>"
+          }
+        },
+        {
+          "type": "faq_card",
+          "settings": {
+            "position": "middle-right",
+            "bg_color": "#FFF6CF",
+            "q_color": "#0F172A",
+            "text_color": "#374151",
+            "question": "What's your return policy?",
+            "answer": "<p>30 days, no questions asked. If it isn't a fit we'll refund you in full and cover the return label.</p>"
+          }
+        },
+        {
+          "type": "faq_card",
+          "settings": {
+            "position": "bottom-left",
+            "bg_color": "#FFFFFF",
+            "q_color": "#0F172A",
+            "text_color": "#374151",
+            "question": "Where is it made?",
+            "answer": "<p>Designed in-house and produced in small batches with suppliers we've worked with for years.</p>"
+          }
+        }
+      ]
+    }
+  ],
+  "shopify": {
+    "name": "FAQ 5",
+    "class": "section-faq5-floating",
+    "tag": "section",
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Section background",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "range",
+        "id": "max_width",
+        "label": "Max content width",
+        "min": 800,
+        "max": 1600,
+        "step": 20,
+        "unit": "px",
+        "default": 1200
+      },
+      {
+        "type": "select",
+        "id": "mobile_layout",
+        "label": "Mobile layout",
+        "default": "zigzag",
+        "info": "Controls how cards stack on phones. Zigzag matches the reference design.",
+        "options": [
+          {
+            "value": "zigzag",
+            "label": "Zigzag (alternate left / right)"
+          },
+          {
+            "value": "left",
+            "label": "All aligned left"
+          },
+          {
+            "value": "right",
+            "label": "All aligned right"
+          },
+          {
+            "value": "center",
+            "label": "Centered (full width)"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Heading"
+      },
+      {
+        "type": "select",
+        "id": "header_align",
+        "label": "Alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "id": "heading",
+        "label": "Heading",
+        "default": "FAQ"
+      },
+      {
+        "type": "richtext",
+        "id": "subheading",
+        "label": "Subheading"
+      },
+      {
+        "type": "color",
+        "id": "heading_color",
+        "label": "Heading color",
+        "default": "#0F172A"
+      },
+      {
+        "type": "color",
+        "id": "sub_color",
+        "label": "Subheading color",
+        "default": "#374151"
+      },
+      {
+        "type": "range",
+        "id": "heading_size_desktop",
+        "label": "Heading size (desktop)",
+        "min": 20,
+        "max": 80,
+        "step": 1,
+        "unit": "px",
+        "default": 48
+      },
+      {
+        "type": "range",
+        "id": "heading_size_mobile",
+        "label": "Heading size (mobile)",
+        "min": 16,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 30
+      },
+      {
+        "type": "select",
+        "id": "heading_weight",
+        "label": "Heading weight",
+        "default": "700",
+        "options": [
+          {
+            "value": "500",
+            "label": "Medium"
+          },
+          {
+            "value": "600",
+            "label": "Semi-bold"
+          },
+          {
+            "value": "700",
+            "label": "Bold"
+          },
+          {
+            "value": "800",
+            "label": "Extra bold"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Product image"
+      },
+      {
+        "type": "range",
+        "id": "image_width",
+        "label": "Image width (desktop)",
+        "min": 200,
+        "max": 600,
+        "step": 10,
+        "unit": "px",
+        "default": 360
+      },
+      {
+        "type": "range",
+        "id": "image_radius",
+        "label": "Image corner radius",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "color",
+        "id": "image_bg",
+        "label": "Image background",
+        "default": "rgba(0,0,0,0)"
+      },
+      {
+        "type": "select",
+        "id": "image_fit",
+        "label": "Image fit",
+        "default": "cover",
+        "options": [
+          {
+            "value": "contain",
+            "label": "Contain"
+          },
+          {
+            "value": "cover",
+            "label": "Cover"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Card defaults"
+      },
+      {
+        "type": "range",
+        "id": "card_radius",
+        "label": "Card corner radius",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 18
+      },
+      {
+        "type": "range",
+        "id": "card_padding",
+        "label": "Card padding",
+        "min": 12,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 22
+      },
+      {
+        "type": "range",
+        "id": "card_max_width",
+        "label": "Card max width",
+        "min": 220,
+        "max": 480,
+        "step": 5,
+        "unit": "px",
+        "default": 320
+      },
+      {
+        "type": "range",
+        "id": "card_overlap",
+        "label": "Card overlap (desktop)",
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "unit": "px",
+        "default": 36,
+        "info": "How far cards slide over the product image. Set to 0 for no overlap."
+      },
+      {
+        "type": "range",
+        "id": "q_size",
+        "label": "Question size",
+        "min": 14,
+        "max": 28,
+        "step": 1,
+        "unit": "px",
+        "default": 19
+      },
+      {
+        "type": "select",
+        "id": "q_weight",
+        "label": "Question weight",
+        "default": "700",
+        "options": [
+          {
+            "value": "500",
+            "label": "Medium"
+          },
+          {
+            "value": "600",
+            "label": "Semi-bold"
+          },
+          {
+            "value": "700",
+            "label": "Bold"
+          },
+          {
+            "value": "800",
+            "label": "Extra bold"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "a_size",
+        "label": "Answer size",
+        "min": 11,
+        "max": 18,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "header",
+        "content": "Spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top_desktop",
+        "label": "Top padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 96
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_desktop",
+        "label": "Bottom padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 96
+      },
+      {
+        "type": "range",
+        "id": "padding_top_mobile",
+        "label": "Top padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 56
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_mobile",
+        "label": "Bottom padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 56
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top",
+        "label": "Section margin top",
+        "min": -100,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom",
+        "label": "Section margin bottom",
+        "min": -100,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 0
+      }
+    ],
+    "blocks": [
+      {
+        "type": "product_image",
+        "name": "Product image",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "image_picker",
+            "id": "image",
+            "label": "Image"
+          }
+        ]
+      },
+      {
+        "type": "faq_card",
+        "name": "FAQ card",
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "text",
+            "id": "question",
+            "label": "Question",
+            "default": "Is it gluten free?"
+          },
+          {
+            "type": "richtext",
+            "id": "answer",
+            "label": "Answer",
+            "default": "<p>Yes, the pure oats in our products are gluten-free (safe for those with a gluten intolerance).</p>"
+          },
+          {
+            "type": "header",
+            "content": "Position"
+          },
+          {
+            "type": "select",
+            "id": "position",
+            "label": "Position on desktop",
+            "default": "top-left",
+            "info": "On mobile, cards stack vertically in the order they are added.",
+            "options": [
+              {
+                "value": "top-left",
+                "label": "Top left"
+              },
+              {
+                "value": "top-right",
+                "label": "Top right"
+              },
+              {
+                "value": "middle-left",
+                "label": "Middle left"
+              },
+              {
+                "value": "middle-right",
+                "label": "Middle right"
+              },
+              {
+                "value": "bottom-left",
+                "label": "Bottom left"
+              },
+              {
+                "value": "bottom-right",
+                "label": "Bottom right"
+              }
+            ]
+          },
+          {
+            "type": "header",
+            "content": "Colors"
+          },
+          {
+            "type": "color",
+            "id": "bg_color",
+            "label": "Card background",
+            "default": "#FFFFFF"
+          },
+          {
+            "type": "color",
+            "id": "q_color",
+            "label": "Question color",
+            "default": "#0F172A"
+          },
+          {
+            "type": "color",
+            "id": "text_color",
+            "label": "Answer color",
+            "default": "#374151"
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "FAQ 5",
+        "category": "FAQ",
+        "blocks": [
+          {
+            "type": "product_image"
+          },
+          {
+            "type": "faq_card",
+            "settings": {
+              "position": "top-left",
+              "bg_color": "#E6E2FF",
+              "q_color": "#0F172A",
+              "text_color": "#374151",
+              "question": "How long does shipping take?",
+              "answer": "<p>Most orders arrive in 3–5 business days. You'll get a tracking link the moment it leaves the warehouse.</p>"
+            }
+          },
+          {
+            "type": "faq_card",
+            "settings": {
+              "position": "middle-right",
+              "bg_color": "#FFF6CF",
+              "q_color": "#0F172A",
+              "text_color": "#374151",
+              "question": "What's your return policy?",
+              "answer": "<p>30 days, no questions asked. If it isn't a fit we'll refund you in full and cover the return label.</p>"
+            }
+          },
+          {
+            "type": "faq_card",
+            "settings": {
+              "position": "bottom-left",
+              "bg_color": "#FFFFFF",
+              "q_color": "#0F172A",
+              "text_color": "#374151",
+              "question": "Where is it made?",
+              "answer": "<p>Designed in-house and produced in small batches with suppliers we've worked with for years.</p>"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

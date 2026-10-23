@@ -1,0 +1,1878 @@
+<template compat="shopify">
+{%- comment -%}
+  Product Showcase — a scoped, block-driven product carousel.
+
+  Architecture (mirrors Materia's Hero Pro 1 conventions):
+   • Everything is scoped to #shopify-section-{{ section.id }} so multiple
+     instances on one page never collide and no other section can bleed
+     styles or JS into this one. `isolation: isolate` creates its own
+     stacking context.
+   • Content lives in repeatable "Slide" blocks (one product each). The
+     arrows page between slides.
+   • Every style setting is emitted as a LITERAL value into a scoped
+     <style> block (no CSS-var indirection) so each control applies
+     reliably and updates live in the editor.
+   • Typography is connected to the theme. Headings use --heading-font,
+     body text uses --body-font, the button uses --btn-font. Font WEIGHT
+     follows the theme by default (--heading-weight / --body-weight). The
+     heading weight only changes when "Use custom heading font weight" is
+     toggled on, then the section weight applies instead.
+   • Connected to the theme's scroll-animation and speed settings, same as
+     Hero Pro 1.
+{%- endcomment -%}
+
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function () {
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+
+{%- comment -%} Section-level style locals {%- endcomment -%}
+{%- assign s = section.settings -%}
+
+{%- comment -%}
+  Heading weight: off by default. When the toggle is off we inherit the
+  theme's heading weight; only when it's on do we apply the section value.
+{%- endcomment -%}
+{%- if s.heading_use_custom_weight -%}
+  {%- assign ps_heading_weight = s.heading_weight -%}
+{%- else -%}
+  {%- assign ps_heading_weight = 'var(--heading-weight, 700)' -%}
+{%- endif -%}
+
+{%- comment -%} Speed: honour the theme's global performance settings. {%- endcomment -%}
+{%- liquid
+  assign sp_quality = 'balanced'
+  if sp_quality == 'max'
+    assign ps_img_max = 1800
+  elsif sp_quality == 'fast'
+    assign ps_img_max = 1000
+  else
+    assign ps_img_max = 1400
+  endif
+  assign sp_lazy = settings.perf_images
+  assign sp_preload = settings.perf_images
+  assign sp_decode = settings.perf_images
+-%}
+
+{%- comment -%} Selectable benefit/check icon (rendered once, reused per benefit). {%- endcomment -%}
+{%- capture ps_check_svg -%}
+  {%- case s.check_icon_style -%}
+    {%- when 'check_circle' -%}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="16.5 8.8 10.5 15.2 7.5 12.2"/></svg>
+    {%- when 'check_circle_filled' -%}
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="11"/><path d="M17 8.5 L10.4 15.4 L7 12.1" fill="none" stroke="{{ s.background_color }}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    {%- when 'arrow' -%}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    {%- when 'star' -%}
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 14.7 8.6 21.8 9.2 16.4 13.9 18.1 20.8 12 17.1 5.9 20.8 7.6 13.9 2.2 9.2 9.3 8.6"/></svg>
+    {%- when 'plus' -%}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    {%- else -%}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+  {%- endcase -%}
+{%- endcapture -%}
+
+<style>
+  /* ============================================================
+     SCOPING — every rule is prefixed with the section wrapper id.
+     ============================================================ */
+  #shopify-section-{{ section.id }} {
+    isolation: isolate;
+    position: relative;
+    z-index: 0;
+  }
+  #shopify-section-{{ section.id }} .ps-section {
+    font-family: var(--body-font, inherit);
+    box-sizing: border-box;
+    position: relative;
+    width: 100%;
+    padding-top: {{ s.padding_top }}px;
+    padding-bottom: {{ s.padding_bottom }}px;
+    {% if s.enable_gradient %}
+      background: linear-gradient({{ s.gradient_degrees }}, {{ s.gradient_color_1 }}, {{ s.gradient_color_2 }});
+    {% else %}
+      background-color: {{ s.background_color }};
+    {% endif %}
+  }
+  #shopify-section-{{ section.id }} .ps-section *,
+  #shopify-section-{{ section.id }} .ps-section *::before,
+  #shopify-section-{{ section.id }} .ps-section *::after { box-sizing: border-box; }
+
+  /* Width container */
+  #shopify-section-{{ section.id }} .ps-inner {
+    {% case s.section_width %}
+      {% when 'container' %}max-width: calc(var(--page-width, 1300px) + 3rem);
+      {% when 'fluid_container' %}max-width: calc(var(--fluid-container-width, 1500px) + 3rem);
+      {% when 'stretch_width' %}max-width: none; padding-inline: 3rem;
+      {% else %}max-width: {{ s.content_max_width }}px;
+    {% endcase %}
+    margin-inline: auto;
+    padding-inline: 24px;
+  }
+
+  /* Viewport + sliding track */
+  #shopify-section-{{ section.id }} .ps-viewport { overflow: hidden; width: 100%; }
+  #shopify-section-{{ section.id }} .ps-track {
+    display: flex;
+    width: 100%;
+    transition: transform .55s cubic-bezier(.4, 0, .2, 1);
+    will-change: transform;
+  }
+  #shopify-section-{{ section.id }} .ps-slide {
+    flex: 0 0 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 1.05fr 0.95fr 1.05fr;
+    gap: 48px;
+    align-items: center;
+  }
+
+  /* Columns */
+  #shopify-section-{{ section.id }} .ps-col-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 22px;
+    min-height: 100%;
+    align-self: {{ s.left_vertical_align }};
+  }
+  #shopify-section-{{ section.id }} .ps-col-center { display: flex; justify-content: center; align-items: center; }
+  #shopify-section-{{ section.id }} .ps-col-right { display: flex; flex-direction: column; gap: 18px; }
+
+  /* Heading + description — typography connected to the theme.
+     Family always follows the theme. Weight follows the theme unless the
+     "Use custom heading font weight" toggle is on. */
+  #shopify-section-{{ section.id }} .ps-heading {
+    font-family: var(--heading-font, var(--body-font, inherit));
+    margin: 0;
+    color: {{ s.heading_color }};
+    font-size: {{ s.heading_size_desktop }}px;
+    font-weight: {{ ps_heading_weight }};
+    line-height: 1.05;
+    letter-spacing: {{ s.heading_letter_spacing }}px;
+    text-transform: {{ s.heading_uppercase }};
+  }
+  #shopify-section-{{ section.id }} .ps-desc {
+    font-family: var(--body-font, inherit);
+    margin: 0;
+    color: {{ s.description_color }};
+    font-size: {{ s.description_size_desktop }}px;
+    font-weight: var(--body-weight, 400);
+    line-height: 1.55;
+  }
+
+  /* Arrows */
+  #shopify-section-{{ section.id }} .ps-arrows { display: flex; gap: 14px; margin-top: auto; padding-top: 8px; }
+  #shopify-section-{{ section.id }} .ps-arrow {
+    width: {{ s.arrow_size }}px;
+    height: {{ s.arrow_size }}px;
+    border-radius: 9999px;
+    border: 1.5px solid {{ s.arrow_border_color }};
+    background: transparent;
+    color: {{ s.arrow_color }};
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    transition: background-color .2s ease, color .2s ease, border-color .2s ease, transform .2s ease;
+  }
+  #shopify-section-{{ section.id }} .ps-arrow:hover { background: {{ s.arrow_color }}; color: {{ s.background_color }}; transform: translateY(-1px); }
+  #shopify-section-{{ section.id }} .ps-arrow svg { width: 45%; height: 45%; display: block; }
+
+  /* Product image */
+  #shopify-section-{{ section.id }} .ps-image { width: 100%; display: flex; justify-content: center; }
+  #shopify-section-{{ section.id }} .ps-image img {
+    max-width: 100%;
+    max-height: {{ s.image_max_height }}px;
+    height: auto;
+    width: auto;
+    object-fit: contain;
+    display: block;
+    border-radius: {{ s.image_border_radius }}px;
+  }
+  /* Placeholder shows as a 4:3 framed image (Instagram-ish) until a
+     real product image is uploaded. */
+  #shopify-section-{{ section.id }} .ps-image img.ps-placeholder-img {
+    width: 100%;
+    max-width: 460px;
+    aspect-ratio: 4 / 3;
+    max-height: none;
+    object-fit: cover;
+  }
+
+  /* Rating + reviews */
+  #shopify-section-{{ section.id }} .ps-rating { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  #shopify-section-{{ section.id }} .ps-stars {
+    position: relative;
+    display: inline-block;
+    line-height: 1;
+    font-size: {{ s.star_size }}px;
+    white-space: nowrap;
+  }
+  #shopify-section-{{ section.id }} .ps-stars .ps-stars-base,
+  #shopify-section-{{ section.id }} .ps-stars .ps-stars-fill { letter-spacing: 2px; }
+  #shopify-section-{{ section.id }} .ps-stars .ps-stars-base { color: {{ s.star_unfilled_color }}; }
+  #shopify-section-{{ section.id }} .ps-stars .ps-stars-fill {
+    color: {{ s.star_filled_color }};
+    position: absolute; top: 0; left: 0; overflow: hidden;
+  }
+  #shopify-section-{{ section.id }} .ps-reviews {
+    font-family: var(--body-font, inherit);
+    color: {{ s.reviews_color }};
+    font-size: {{ s.reviews_size }}px;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  #shopify-section-{{ section.id }} a.ps-reviews:hover { opacity: .8; }
+
+  /* Benefits */
+  #shopify-section-{{ section.id }} .ps-benefits { display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 0; list-style: none; }
+  #shopify-section-{{ section.id }} .ps-benefit {
+    font-family: var(--body-font, inherit);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: {{ s.benefit_color }};
+    font-size: {{ s.benefit_size }}px;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+  #shopify-section-{{ section.id }} .ps-check {
+    flex: 0 0 auto;
+    width: {{ s.benefit_size | plus: 6 }}px;
+    height: {{ s.benefit_size | plus: 6 }}px;
+    color: {{ s.check_color }};
+  }
+  #shopify-section-{{ section.id }} .ps-check svg { width: 100%; height: 100%; display: block; }
+
+  /* Button — family + weight follow the theme button settings */
+  #shopify-section-{{ section.id }} .ps-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: flex-start;
+    margin-top: 6px;
+    font-family: var(--btn-font, var(--body-font, inherit));
+    background: {{ s.button_bg_color }};
+    color: {{ s.button_text_color }};
+    padding: {{ s.button_padding_v }}px {{ s.button_padding_h }}px;
+    border-radius: {{ s.button_radius }}px;
+    font-size: {{ s.button_font_size }}px;
+    font-weight: var(--btn-font-weight, 700);
+    letter-spacing: .03em;
+    text-decoration: none;
+    border: 0;
+    cursor: pointer;
+    transition: background-color .25s ease, color .25s ease, transform .2s ease;
+  }
+  #shopify-section-{{ section.id }} .ps-btn:hover {
+    background: {{ s.button_bg_hover_color }};
+    color: {{ s.button_text_hover_color }};
+    transform: translateY(-1px);
+  }
+
+  /* Reveal (uses theme scroll-trigger if present; gentle local fallback) */
+  #shopify-section-{{ section.id }} .ps-slide.is-active .ps-col-left,
+  #shopify-section-{{ section.id }} .ps-slide.is-active .ps-col-center,
+  #shopify-section-{{ section.id }} .ps-slide.is-active .ps-col-right { animation: ps-fade-{{ section.id }} .6s ease both; }
+  @keyframes ps-fade-{{ section.id }} { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ===================== MOBILE ===================== */
+  @media (max-width: 749px) {
+    #shopify-section-{{ section.id }} .ps-section {
+      padding-top: {{ s.padding_top_mobile }}px;
+      padding-bottom: {{ s.padding_bottom_mobile }}px;
+    }
+    #shopify-section-{{ section.id }} .ps-slide {
+      grid-template-columns: 1fr;
+      gap: 22px;
+      text-align: center;
+    }
+    #shopify-section-{{ section.id }} .ps-col-center { order: 1; }
+    #shopify-section-{{ section.id }} .ps-col-left { order: 2; align-items: center; }
+    #shopify-section-{{ section.id }} .ps-col-right { order: 3; align-items: center; }
+    #shopify-section-{{ section.id }} .ps-rating,
+    #shopify-section-{{ section.id }} .ps-arrows { justify-content: center; }
+    #shopify-section-{{ section.id }} .ps-btn { align-self: center; }
+    #shopify-section-{{ section.id }} .ps-benefit { text-align: left; }
+    #shopify-section-{{ section.id }} .ps-heading { font-size: {{ s.heading_size_mobile }}px; }
+    #shopify-section-{{ section.id }} .ps-desc { font-size: {{ s.description_size_mobile }}px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ section.id }} .ps-track { transition: none; }
+    #shopify-section-{{ section.id }} .ps-slide.is-active .ps-col-left,
+    #shopify-section-{{ section.id }} .ps-slide.is-active .ps-col-center,
+    #shopify-section-{{ section.id }} .ps-slide.is-active .ps-col-right { animation: none; }
+  }
+{% comment %}{% endcomment %}</style>
+
+<div class="ps-section">
+  <div class="ps-inner">
+    <div class="ps-viewport">
+      <div class="ps-track" data-ps-track>
+        {%- for block in section.blocks -%}
+          {%- assign b = block.settings -%}
+          <div class="ps-slide{% if forloop.first %} is-active{% endif %}" data-ps-slide {{ block.shopify_attributes }}>
+
+            {%- comment -%} LEFT: heading, description, arrows {%- endcomment -%}
+            <div class="ps-col-left">
+              {%- if b.heading != blank -%}
+                <h2 class="ps-heading">{{ b.heading }}</h2>
+              {%- endif -%}
+              {%- if b.description != blank -%}
+                <p class="ps-desc">{{ b.description }}</p>
+              {%- endif -%}
+
+              {%- if section.blocks.size > 1 and s.show_arrows -%}
+                <div class="ps-arrows">
+                  <button type="button" class="ps-arrow" data-ps-prev aria-label="Previous">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                  </button>
+                  <button type="button" class="ps-arrow" data-ps-next aria-label="Next">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                  </button>
+                </div>
+              {%- endif -%}
+            </div>
+
+            {%- comment -%} CENTER: product image {%- endcomment -%}
+            <div class="ps-col-center">
+              <div class="ps-image">
+                {%- if b.image != blank -%}
+                  {%- liquid
+                    if forloop.first
+                      assign ps_loading = 'eager'
+                      unless sp_preload
+                        assign ps_loading = 'lazy'
+                      endunless
+                    else
+                      assign ps_loading = 'lazy'
+                      unless sp_lazy
+                        assign ps_loading = 'eager'
+                      endunless
+                    endif
+                  -%}
+                  <img
+                    src="{{ b.image | image_url: width: ps_img_max }}"
+                    srcset="{{ b.image | image_url: width: 360 }} 360w,
+                            {{ b.image | image_url: width: 540 }} 540w,
+                            {{ b.image | image_url: width: 720 }} 720w,
+                            {{ b.image | image_url: width: 960 }} 960w,
+                            {{ b.image | image_url: width: 1200 }} 1200w,
+                            {{ b.image | image_url: width: ps_img_max }} {{ ps_img_max }}w"
+                    sizes="(max-width: 749px) 90vw, 33vw"
+                    width="{{ b.image.width }}"
+                    height="{{ b.image.height }}"
+                    alt="{{ b.image.alt | default: b.heading | escape }}"
+                    loading="{{ ps_loading }}"
+                    {% if forloop.first and sp_preload %}fetchpriority="high"{% endif %}
+                    {% if sp_decode %}decoding="async"{% endif %}>
+                {%- else -%}
+                  <img class="ps-placeholder-img"
+                    src="https://2dbags.co/wp-content/uploads/revslider/lookbook1-demo_slider/placeholder.jpg"
+                    alt="{{ b.heading | escape }}"
+                    width="1200" height="900"
+                    loading="{% if forloop.first %}eager{% else %}lazy{% endif %}"
+                    {% if sp_decode %}decoding="async"{% endif %}>
+                {%- endif -%}
+              </div>
+            </div>
+
+            {%- comment -%} RIGHT: rating, benefits, button {%- endcomment -%}
+            <div class="ps-col-right">
+              {%- if b.star_rating > 0 or b.reviews_text != blank -%}
+                <div class="ps-rating">
+                  {%- if b.star_rating > 0 -%}
+                    <span class="ps-stars" role="img" aria-label="{{ b.star_rating }} out of 5 stars">
+                      <span class="ps-stars-base" aria-hidden="true">★★★★★</span>
+                      <span class="ps-stars-fill" aria-hidden="true" style="width: {{ b.star_rating | times: 20 }}%;">★★★★★</span>
+                    </span>
+                  {%- endif -%}
+                  {%- if b.reviews_text != blank -%}
+                    {%- if b.reviews_link != blank -%}
+                      <a class="ps-reviews" href="{{ b.reviews_link }}">{{ b.reviews_text }}</a>
+                    {%- else -%}
+                      <span class="ps-reviews">{{ b.reviews_text }}</span>
+                    {%- endif -%}
+                  {%- endif -%}
+                </div>
+              {%- endif -%}
+
+              {%- assign has_benefit = false -%}
+              {%- for i in (1..5) -%}
+                {%- assign key = 'benefit_' | append: i -%}
+                {%- if b[key] != blank -%}{%- assign has_benefit = true -%}{%- endif -%}
+              {%- endfor -%}
+              {%- if has_benefit -%}
+                <ul class="ps-benefits">
+                  {%- for i in (1..5) -%}
+                    {%- assign key = 'benefit_' | append: i -%}
+                    {%- if b[key] != blank -%}
+                      <li class="ps-benefit">
+                        <span class="ps-check">{{ ps_check_svg }}</span>
+                        <span>{{ b[key] }}</span>
+                      </li>
+                    {%- endif -%}
+                  {%- endfor -%}
+                </ul>
+              {%- endif -%}
+
+              {%- if b.button_text != blank -%}
+                <a class="ps-btn" href="{{ b.button_link | default: '#' }}">{{ b.button_text }}</a>
+              {%- endif -%}
+            </div>
+
+          </div>
+        {%- endfor -%}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var root = document.getElementById('shopify-section-{{ section.id }}');
+    if (!root) return;
+    var track = root.querySelector('[data-ps-track]');
+    if (!track) return;
+    var slides = track.querySelectorAll('[data-ps-slide]');
+    var count = slides.length;
+    if (count <= 1) return;
+
+    var index = 0;
+    var autoplay = {{ s.autoplay | json }};
+    var speed = {{ s.autoplay_speed | default: 6 }} * 1000;
+    var timer = null;
+
+    function render() {
+      track.style.transform = 'translateX(' + (-index * 100) + '%)';
+      for (var k = 0; k < slides.length; k++) {
+        slides[k].classList.toggle('is-active', k === index);
+      }
+    }
+    function go(to) { index = (to + count) % count; render(); }
+
+    root.querySelectorAll('[data-ps-prev]').forEach(function (el) {
+      el.addEventListener('click', function () { go(index - 1); restart(); });
+    });
+    root.querySelectorAll('[data-ps-next]').forEach(function (el) {
+      el.addEventListener('click', function () { go(index + 1); restart(); });
+    });
+
+    /* ---- Real-time touch swipe (mobile) ---- */
+    var viewport = root.querySelector('.ps-viewport');
+    var startX = 0, startY = 0, dx = 0, dragging = false, locked = false, vw = 0;
+    if (viewport) {
+      viewport.addEventListener('touchstart', function (e) {
+        if (count <= 1) return;
+        dragging = true; locked = false; dx = 0;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        vw = viewport.clientWidth || 1;
+        track.style.transition = 'none';
+        stop();
+      }, { passive: true });
+
+      viewport.addEventListener('touchmove', function (e) {
+        if (!dragging) return;
+        var mx = e.touches[0].clientX - startX;
+        var my = e.touches[0].clientY - startY;
+        /* Decide intent once: horizontal => drive the slider, vertical
+           => let the page scroll and bail out of the swipe. */
+        if (!locked) {
+          if (Math.abs(mx) < 6 && Math.abs(my) < 6) return;
+          if (Math.abs(my) > Math.abs(mx)) { dragging = false; track.style.transition = ''; render(); start(); return; }
+          locked = true;
+        }
+        dx = mx;
+        /* resist past the first/last edge so it feels natural */
+        if ((index === 0 && dx > 0) || (index === count - 1 && dx < 0)) dx *= 0.35;
+        track.style.transform = 'translateX(calc(' + (-index * 100) + '% + ' + dx + 'px))';
+      }, { passive: true });
+
+      function endSwipe() {
+        if (!dragging) return;
+        dragging = false;
+        track.style.transition = '';
+        var threshold = vw * 0.18;
+        if (dx <= -threshold) go(index + 1);
+        else if (dx >= threshold) go(index - 1);
+        else render();
+        dx = 0;
+        start();
+      }
+      viewport.addEventListener('touchend', endSwipe);
+      viewport.addEventListener('touchcancel', endSwipe);
+    }
+
+    function start() { if (autoplay && !timer) { timer = setInterval(function () { go(index + 1); }, speed); } }
+    function stop() { if (timer) { clearInterval(timer); timer = null; } }
+    function restart() { stop(); start(); }
+
+    root.addEventListener('mouseenter', stop);
+    root.addEventListener('mouseleave', start);
+
+    render();
+    start();
+  })();
+{% comment %}{% endcomment %}</script>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "product-showcase",
+  "name": "Product Showcase",
+  "settings": [
+    {
+      "type": "header",
+      "id": "hdr_1",
+      "label": "Layout"
+    },
+    {
+      "type": "select",
+      "id": "section_width",
+      "label": "Section width",
+      "default": "fluid_container",
+      "options": [
+        {
+          "value": "container",
+          "label": "Default"
+        },
+        {
+          "value": "fluid_container",
+          "label": "Fluid container"
+        },
+        {
+          "value": "stretch_width",
+          "label": "Stretched"
+        },
+        {
+          "value": "custom",
+          "label": "Custom max width"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "content_max_width",
+      "label": "Custom Max Width (px)",
+      "min": 800,
+      "max": 1800,
+      "default": 1300,
+      "step": 10,
+      "info": "Used when Section width is set to Custom."
+    },
+    {
+      "type": "range",
+      "id": "image_max_height",
+      "label": "Product Image Max Height (px)",
+      "min": 200,
+      "max": 900,
+      "default": 560,
+      "step": 10
+    },
+    {
+      "type": "range",
+      "id": "image_border_radius",
+      "label": "Image Corner Radius (px)",
+      "min": 0,
+      "max": 60,
+      "default": 12,
+      "step": 1
+    },
+    {
+      "type": "select",
+      "id": "left_vertical_align",
+      "label": "Heading & Description Vertical Position (Desktop)",
+      "default": "center",
+      "options": [
+        {
+          "value": "start",
+          "label": "Top"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "end",
+          "label": "Bottom"
+        }
+      ],
+      "info": "Vertical alignment of the left text column relative to the product image."
+    },
+    {
+      "type": "header",
+      "id": "hdr_7",
+      "label": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "label": "Top Padding (Desktop)",
+      "min": 0,
+      "max": 100,
+      "default": 80,
+      "step": 1
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "label": "Bottom Padding (Desktop)",
+      "min": 0,
+      "max": 100,
+      "default": 80,
+      "step": 1
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "label": "Top Padding (Mobile)",
+      "min": 0,
+      "max": 100,
+      "default": 48,
+      "step": 1
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "label": "Bottom Padding (Mobile)",
+      "min": 0,
+      "max": 100,
+      "default": 48,
+      "step": 1
+    },
+    {
+      "type": "header",
+      "id": "hdr_12",
+      "label": "Background"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background Color",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_gradient",
+      "label": "Use Background Gradient",
+      "default": false
+    },
+    {
+      "type": "color",
+      "id": "gradient_color_1",
+      "label": "Gradient Color 1",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "color",
+      "id": "gradient_color_2",
+      "label": "Gradient Color 2",
+      "default": "#F2F2F2"
+    },
+    {
+      "type": "select",
+      "id": "gradient_degrees",
+      "label": "Gradient Direction",
+      "default": "135deg",
+      "options": [
+        {
+          "value": "45deg",
+          "label": "45°"
+        },
+        {
+          "value": "90deg",
+          "label": "90°"
+        },
+        {
+          "value": "135deg",
+          "label": "135°"
+        },
+        {
+          "value": "180deg",
+          "label": "180°"
+        },
+        {
+          "value": "225deg",
+          "label": "225°"
+        },
+        {
+          "value": "270deg",
+          "label": "270°"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_18",
+      "label": "Heading"
+    },
+    {
+      "type": "paragraph",
+      "id": "para_19",
+      "label": "Fonts follow your theme automatically. The heading uses your theme heading font, the description and benefits use your theme body font, and the button uses your theme button font.",
+      "content": "Fonts follow your theme automatically. The heading uses your theme heading font, the description and benefits use your theme body font, and the button uses your theme button font."
+    },
+    {
+      "type": "color",
+      "id": "heading_color",
+      "label": "Heading Color",
+      "default": "#000000"
+    },
+    {
+      "type": "range",
+      "id": "heading_size_desktop",
+      "label": "Heading Size (Desktop, px)",
+      "min": 20,
+      "max": 120,
+      "default": 56,
+      "step": 1
+    },
+    {
+      "type": "range",
+      "id": "heading_size_mobile",
+      "label": "Heading Size (Mobile, px)",
+      "min": 16,
+      "max": 80,
+      "default": 34,
+      "step": 1
+    },
+    {
+      "type": "checkbox",
+      "id": "heading_use_custom_weight",
+      "label": "Use custom heading font weight",
+      "default": false,
+      "info": "When off, the heading uses your theme's heading font weight. Turn on to override it with the weight below."
+    },
+    {
+      "type": "select",
+      "id": "heading_weight",
+      "label": "Heading Font Weight",
+      "default": "800",
+      "info": "Only applies when 'Use custom heading font weight' is on.",
+      "options": [
+        {
+          "value": "400",
+          "label": "Normal"
+        },
+        {
+          "value": "500",
+          "label": "Medium"
+        },
+        {
+          "value": "600",
+          "label": "Semi Bold"
+        },
+        {
+          "value": "700",
+          "label": "Bold"
+        },
+        {
+          "value": "800",
+          "label": "Extra Bold"
+        },
+        {
+          "value": "900",
+          "label": "Black"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "heading_letter_spacing",
+      "label": "Heading Letter Spacing (px)",
+      "min": -2,
+      "max": 10,
+      "default": 0,
+      "step": 1
+    },
+    {
+      "type": "select",
+      "id": "heading_uppercase",
+      "label": "Heading Case",
+      "default": "none",
+      "options": [
+        {
+          "value": "none",
+          "label": "As typed"
+        },
+        {
+          "value": "uppercase",
+          "label": "UPPERCASE"
+        },
+        {
+          "value": "capitalize",
+          "label": "Capitalize"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_27",
+      "label": "Description"
+    },
+    {
+      "type": "color",
+      "id": "description_color",
+      "label": "Description Color",
+      "default": "#000000"
+    },
+    {
+      "type": "range",
+      "id": "description_size_desktop",
+      "label": "Description Size (Desktop, px)",
+      "min": 12,
+      "max": 36,
+      "default": 19,
+      "step": 1
+    },
+    {
+      "type": "range",
+      "id": "description_size_mobile",
+      "label": "Description Size (Mobile, px)",
+      "min": 11,
+      "max": 28,
+      "default": 16,
+      "step": 1
+    },
+    {
+      "type": "header",
+      "id": "hdr_31",
+      "label": "Stars & Reviews"
+    },
+    {
+      "type": "color",
+      "id": "star_filled_color",
+      "label": "Filled Star Color",
+      "default": "#FFC107"
+    },
+    {
+      "type": "color",
+      "id": "star_unfilled_color",
+      "label": "Unfilled Star Color",
+      "default": "#D1D1D1"
+    },
+    {
+      "type": "range",
+      "id": "star_size",
+      "label": "Star Size (px)",
+      "min": 12,
+      "max": 48,
+      "default": 26,
+      "step": 1
+    },
+    {
+      "type": "color",
+      "id": "reviews_color",
+      "label": "Reviews Text Color",
+      "default": "#000000"
+    },
+    {
+      "type": "range",
+      "id": "reviews_size",
+      "label": "Reviews Text Size (px)",
+      "min": 10,
+      "max": 30,
+      "default": 17,
+      "step": 1
+    },
+    {
+      "type": "header",
+      "id": "hdr_37",
+      "label": "Benefits"
+    },
+    {
+      "type": "select",
+      "id": "check_icon_style",
+      "label": "Benefit Icon Style",
+      "default": "check",
+      "options": [
+        {
+          "value": "check",
+          "label": "Checkmark"
+        },
+        {
+          "value": "check_circle",
+          "label": "Check in circle"
+        },
+        {
+          "value": "check_circle_filled",
+          "label": "Check in filled circle"
+        },
+        {
+          "value": "arrow",
+          "label": "Arrow"
+        },
+        {
+          "value": "star",
+          "label": "Star"
+        },
+        {
+          "value": "plus",
+          "label": "Plus"
+        }
+      ]
+    },
+    {
+      "type": "color",
+      "id": "benefit_color",
+      "label": "Benefit Text Color",
+      "default": "#000000"
+    },
+    {
+      "type": "range",
+      "id": "benefit_size",
+      "label": "Benefit Text Size (px)",
+      "min": 12,
+      "max": 32,
+      "default": 18,
+      "step": 1
+    },
+    {
+      "type": "color",
+      "id": "check_color",
+      "label": "Checkmark Color",
+      "default": "#000000"
+    },
+    {
+      "type": "header",
+      "id": "hdr_42",
+      "label": "Button"
+    },
+    {
+      "type": "color",
+      "id": "button_bg_color",
+      "label": "Button Background",
+      "default": "#000000"
+    },
+    {
+      "type": "color",
+      "id": "button_text_color",
+      "label": "Button Text",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "color",
+      "id": "button_bg_hover_color",
+      "label": "Button Background (Hover)",
+      "default": "#1A1A1A"
+    },
+    {
+      "type": "color",
+      "id": "button_text_hover_color",
+      "label": "Button Text (Hover)",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "range",
+      "id": "button_radius",
+      "label": "Button Corner Radius (px)",
+      "min": 0,
+      "max": 40,
+      "default": 8,
+      "step": 1
+    },
+    {
+      "type": "range",
+      "id": "button_padding_v",
+      "label": "Button Padding Vertical (px)",
+      "min": 6,
+      "max": 40,
+      "default": 18,
+      "step": 1
+    },
+    {
+      "type": "range",
+      "id": "button_padding_h",
+      "label": "Button Padding Horizontal (px)",
+      "min": 12,
+      "max": 90,
+      "default": 44,
+      "step": 1
+    },
+    {
+      "type": "range",
+      "id": "button_font_size",
+      "label": "Button Text Size (px)",
+      "min": 10,
+      "max": 30,
+      "default": 17,
+      "step": 1
+    },
+    {
+      "type": "header",
+      "id": "hdr_51",
+      "label": "Slider"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_arrows",
+      "label": "Show Navigation Arrows",
+      "default": true,
+      "info": "Arrows appear only when there is more than one slide."
+    },
+    {
+      "type": "range",
+      "id": "arrow_size",
+      "label": "Arrow Button Size (px)",
+      "min": 30,
+      "max": 80,
+      "default": 48,
+      "step": 1
+    },
+    {
+      "type": "color",
+      "id": "arrow_color",
+      "label": "Arrow Color",
+      "default": "#000000"
+    },
+    {
+      "type": "color",
+      "id": "arrow_border_color",
+      "label": "Arrow Border Color",
+      "default": "#000000"
+    },
+    {
+      "type": "checkbox",
+      "id": "autoplay",
+      "label": "Autoplay Slides",
+      "default": false
+    },
+    {
+      "type": "range",
+      "id": "autoplay_speed",
+      "label": "Autoplay Speed (seconds)",
+      "min": 3,
+      "max": 15,
+      "default": 6,
+      "step": 1
+    }
+  ],
+  "blocks": [
+    {
+      "type": "slide",
+      "name": "Slide",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Image"
+        },
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Product Image"
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Text"
+        },
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Heading",
+          "default": "Your Product Name"
+        },
+        {
+          "type": "textarea",
+          "id": "description",
+          "label": "Description",
+          "default": "Describe your product in a sentence or two. Highlight what makes it different and why customers keep coming back for it."
+        },
+        {
+          "type": "header",
+          "id": "hdr_6",
+          "label": "Rating"
+        },
+        {
+          "type": "range",
+          "id": "star_rating",
+          "label": "Star Rating",
+          "min": 0,
+          "max": 5,
+          "default": 4.5,
+          "step": 0.5,
+          "info": "Supports half stars (e.g. 4.5)."
+        },
+        {
+          "type": "text",
+          "id": "reviews_text",
+          "label": "Reviews Text",
+          "default": "1,200+ Reviews"
+        },
+        {
+          "type": "url",
+          "id": "reviews_link",
+          "label": "Reviews Link"
+        },
+        {
+          "type": "header",
+          "id": "hdr_10",
+          "label": "Benefits"
+        },
+        {
+          "type": "text",
+          "id": "benefit_1",
+          "label": "Benefit 1",
+          "default": "Benefit number one"
+        },
+        {
+          "type": "text",
+          "id": "benefit_2",
+          "label": "Benefit 2",
+          "default": "Benefit number two"
+        },
+        {
+          "type": "text",
+          "id": "benefit_3",
+          "label": "Benefit 3",
+          "default": "Benefit number three"
+        },
+        {
+          "type": "text",
+          "id": "benefit_4",
+          "label": "Benefit 4",
+          "default": "Benefit number four"
+        },
+        {
+          "type": "text",
+          "id": "benefit_5",
+          "label": "Benefit 5"
+        },
+        {
+          "type": "header",
+          "id": "hdr_16",
+          "label": "Button"
+        },
+        {
+          "type": "text",
+          "id": "button_text",
+          "label": "Button Text",
+          "default": "Shop Now"
+        },
+        {
+          "type": "url",
+          "id": "button_link",
+          "label": "Button Link"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Product Showcase",
+      "category": "Products",
+      "blocks": [
+        {
+          "type": "slide",
+          "settings": {
+            "heading": "Your First Product",
+            "description": "Describe your product in a sentence or two. Highlight what makes it different and why customers keep coming back for it.",
+            "star_rating": 4.5,
+            "reviews_text": "1,200+ Reviews",
+            "benefit_1": "Benefit number one",
+            "benefit_2": "Benefit number two",
+            "benefit_3": "Benefit number three",
+            "benefit_4": "Benefit number four",
+            "button_text": "Shop Now"
+          }
+        },
+        {
+          "type": "slide",
+          "settings": {
+            "heading": "Your Second Product",
+            "description": "Swap in your own copy here. Each slide is its own product with its own image, rating, benefits and button.",
+            "star_rating": 5,
+            "reviews_text": "980+ Reviews",
+            "benefit_1": "Highlight a key feature",
+            "benefit_2": "Add a reason to buy",
+            "benefit_3": "Mention a guarantee",
+            "button_text": "Shop Now"
+          }
+        }
+      ]
+    }
+  ],
+  "shopify": {
+    "name": "Product Showcase",
+    "tag": "section",
+    "class": "product-showcase-section",
+    "settings": [
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "fluid_container",
+        "options": [
+          {
+            "value": "container",
+            "label": "Default"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "custom",
+            "label": "Custom max width"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "content_max_width",
+        "label": "Custom Max Width (px)",
+        "min": 800,
+        "max": 1800,
+        "default": 1300,
+        "step": 10,
+        "info": "Used when Section width is set to Custom."
+      },
+      {
+        "type": "range",
+        "id": "image_max_height",
+        "label": "Product Image Max Height (px)",
+        "min": 200,
+        "max": 900,
+        "default": 560,
+        "step": 10
+      },
+      {
+        "type": "range",
+        "id": "image_border_radius",
+        "label": "Image Corner Radius (px)",
+        "min": 0,
+        "max": 60,
+        "default": 12,
+        "step": 1
+      },
+      {
+        "type": "select",
+        "id": "left_vertical_align",
+        "label": "Heading & Description Vertical Position (Desktop)",
+        "default": "center",
+        "options": [
+          {
+            "value": "start",
+            "label": "Top"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "end",
+            "label": "Bottom"
+          }
+        ],
+        "info": "Vertical alignment of the left text column relative to the product image."
+      },
+      {
+        "type": "header",
+        "content": "Spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top Padding (Desktop)",
+        "min": 0,
+        "max": 100,
+        "default": 80,
+        "step": 1
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom Padding (Desktop)",
+        "min": 0,
+        "max": 100,
+        "default": 80,
+        "step": 1
+      },
+      {
+        "type": "range",
+        "id": "padding_top_mobile",
+        "label": "Top Padding (Mobile)",
+        "min": 0,
+        "max": 100,
+        "default": 48,
+        "step": 1
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_mobile",
+        "label": "Bottom Padding (Mobile)",
+        "min": 0,
+        "max": 100,
+        "default": 48,
+        "step": 1
+      },
+      {
+        "type": "header",
+        "content": "Background"
+      },
+      {
+        "type": "color",
+        "id": "background_color",
+        "label": "Background Color",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_gradient",
+        "label": "Use Background Gradient",
+        "default": false
+      },
+      {
+        "type": "color",
+        "id": "gradient_color_1",
+        "label": "Gradient Color 1",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "gradient_color_2",
+        "label": "Gradient Color 2",
+        "default": "#F2F2F2"
+      },
+      {
+        "type": "select",
+        "id": "gradient_degrees",
+        "label": "Gradient Direction",
+        "default": "135deg",
+        "options": [
+          {
+            "value": "45deg",
+            "label": "45°"
+          },
+          {
+            "value": "90deg",
+            "label": "90°"
+          },
+          {
+            "value": "135deg",
+            "label": "135°"
+          },
+          {
+            "value": "180deg",
+            "label": "180°"
+          },
+          {
+            "value": "225deg",
+            "label": "225°"
+          },
+          {
+            "value": "270deg",
+            "label": "270°"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Heading"
+      },
+      {
+        "type": "paragraph",
+        "content": "Fonts follow your theme automatically. The heading uses your theme heading font, the description and benefits use your theme body font, and the button uses your theme button font."
+      },
+      {
+        "type": "color",
+        "id": "heading_color",
+        "label": "Heading Color",
+        "default": "#000000"
+      },
+      {
+        "type": "range",
+        "id": "heading_size_desktop",
+        "label": "Heading Size (Desktop, px)",
+        "min": 20,
+        "max": 120,
+        "default": 56,
+        "step": 1
+      },
+      {
+        "type": "range",
+        "id": "heading_size_mobile",
+        "label": "Heading Size (Mobile, px)",
+        "min": 16,
+        "max": 80,
+        "default": 34,
+        "step": 1
+      },
+      {
+        "type": "checkbox",
+        "id": "heading_use_custom_weight",
+        "label": "Use custom heading font weight",
+        "default": false,
+        "info": "When off, the heading uses your theme's heading font weight. Turn on to override it with the weight below."
+      },
+      {
+        "type": "select",
+        "id": "heading_weight",
+        "label": "Heading Font Weight",
+        "default": "800",
+        "info": "Only applies when 'Use custom heading font weight' is on.",
+        "options": [
+          {
+            "value": "400",
+            "label": "Normal"
+          },
+          {
+            "value": "500",
+            "label": "Medium"
+          },
+          {
+            "value": "600",
+            "label": "Semi Bold"
+          },
+          {
+            "value": "700",
+            "label": "Bold"
+          },
+          {
+            "value": "800",
+            "label": "Extra Bold"
+          },
+          {
+            "value": "900",
+            "label": "Black"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "heading_letter_spacing",
+        "label": "Heading Letter Spacing (px)",
+        "min": -2,
+        "max": 10,
+        "default": 0,
+        "step": 1
+      },
+      {
+        "type": "select",
+        "id": "heading_uppercase",
+        "label": "Heading Case",
+        "default": "none",
+        "options": [
+          {
+            "value": "none",
+            "label": "As typed"
+          },
+          {
+            "value": "uppercase",
+            "label": "UPPERCASE"
+          },
+          {
+            "value": "capitalize",
+            "label": "Capitalize"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Description"
+      },
+      {
+        "type": "color",
+        "id": "description_color",
+        "label": "Description Color",
+        "default": "#000000"
+      },
+      {
+        "type": "range",
+        "id": "description_size_desktop",
+        "label": "Description Size (Desktop, px)",
+        "min": 12,
+        "max": 36,
+        "default": 19,
+        "step": 1
+      },
+      {
+        "type": "range",
+        "id": "description_size_mobile",
+        "label": "Description Size (Mobile, px)",
+        "min": 11,
+        "max": 28,
+        "default": 16,
+        "step": 1
+      },
+      {
+        "type": "header",
+        "content": "Stars & Reviews"
+      },
+      {
+        "type": "color",
+        "id": "star_filled_color",
+        "label": "Filled Star Color",
+        "default": "#FFC107"
+      },
+      {
+        "type": "color",
+        "id": "star_unfilled_color",
+        "label": "Unfilled Star Color",
+        "default": "#D1D1D1"
+      },
+      {
+        "type": "range",
+        "id": "star_size",
+        "label": "Star Size (px)",
+        "min": 12,
+        "max": 48,
+        "default": 26,
+        "step": 1
+      },
+      {
+        "type": "color",
+        "id": "reviews_color",
+        "label": "Reviews Text Color",
+        "default": "#000000"
+      },
+      {
+        "type": "range",
+        "id": "reviews_size",
+        "label": "Reviews Text Size (px)",
+        "min": 10,
+        "max": 30,
+        "default": 17,
+        "step": 1
+      },
+      {
+        "type": "header",
+        "content": "Benefits"
+      },
+      {
+        "type": "select",
+        "id": "check_icon_style",
+        "label": "Benefit Icon Style",
+        "default": "check",
+        "options": [
+          {
+            "value": "check",
+            "label": "Checkmark"
+          },
+          {
+            "value": "check_circle",
+            "label": "Check in circle"
+          },
+          {
+            "value": "check_circle_filled",
+            "label": "Check in filled circle"
+          },
+          {
+            "value": "arrow",
+            "label": "Arrow"
+          },
+          {
+            "value": "star",
+            "label": "Star"
+          },
+          {
+            "value": "plus",
+            "label": "Plus"
+          }
+        ]
+      },
+      {
+        "type": "color",
+        "id": "benefit_color",
+        "label": "Benefit Text Color",
+        "default": "#000000"
+      },
+      {
+        "type": "range",
+        "id": "benefit_size",
+        "label": "Benefit Text Size (px)",
+        "min": 12,
+        "max": 32,
+        "default": 18,
+        "step": 1
+      },
+      {
+        "type": "color",
+        "id": "check_color",
+        "label": "Checkmark Color",
+        "default": "#000000"
+      },
+      {
+        "type": "header",
+        "content": "Button"
+      },
+      {
+        "type": "color",
+        "id": "button_bg_color",
+        "label": "Button Background",
+        "default": "#000000"
+      },
+      {
+        "type": "color",
+        "id": "button_text_color",
+        "label": "Button Text",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "button_bg_hover_color",
+        "label": "Button Background (Hover)",
+        "default": "#1A1A1A"
+      },
+      {
+        "type": "color",
+        "id": "button_text_hover_color",
+        "label": "Button Text (Hover)",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "range",
+        "id": "button_radius",
+        "label": "Button Corner Radius (px)",
+        "min": 0,
+        "max": 40,
+        "default": 8,
+        "step": 1
+      },
+      {
+        "type": "range",
+        "id": "button_padding_v",
+        "label": "Button Padding Vertical (px)",
+        "min": 6,
+        "max": 40,
+        "default": 18,
+        "step": 1
+      },
+      {
+        "type": "range",
+        "id": "button_padding_h",
+        "label": "Button Padding Horizontal (px)",
+        "min": 12,
+        "max": 90,
+        "default": 44,
+        "step": 1
+      },
+      {
+        "type": "range",
+        "id": "button_font_size",
+        "label": "Button Text Size (px)",
+        "min": 10,
+        "max": 30,
+        "default": 17,
+        "step": 1
+      },
+      {
+        "type": "header",
+        "content": "Slider"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_arrows",
+        "label": "Show Navigation Arrows",
+        "default": true,
+        "info": "Arrows appear only when there is more than one slide."
+      },
+      {
+        "type": "range",
+        "id": "arrow_size",
+        "label": "Arrow Button Size (px)",
+        "min": 30,
+        "max": 80,
+        "default": 48,
+        "step": 1
+      },
+      {
+        "type": "color",
+        "id": "arrow_color",
+        "label": "Arrow Color",
+        "default": "#000000"
+      },
+      {
+        "type": "color",
+        "id": "arrow_border_color",
+        "label": "Arrow Border Color",
+        "default": "#000000"
+      },
+      {
+        "type": "checkbox",
+        "id": "autoplay",
+        "label": "Autoplay Slides",
+        "default": false
+      },
+      {
+        "type": "range",
+        "id": "autoplay_speed",
+        "label": "Autoplay Speed (seconds)",
+        "min": 3,
+        "max": 15,
+        "default": 6,
+        "step": 1
+      }
+    ],
+    "blocks": [
+      {
+        "type": "slide",
+        "name": "Slide",
+        "settings": [
+          {
+            "type": "header",
+            "content": "Image"
+          },
+          {
+            "type": "image_picker",
+            "id": "image",
+            "label": "Product Image"
+          },
+          {
+            "type": "header",
+            "content": "Text"
+          },
+          {
+            "type": "text",
+            "id": "heading",
+            "label": "Heading",
+            "default": "Your Product Name"
+          },
+          {
+            "type": "textarea",
+            "id": "description",
+            "label": "Description",
+            "default": "Describe your product in a sentence or two. Highlight what makes it different and why customers keep coming back for it."
+          },
+          {
+            "type": "header",
+            "content": "Rating"
+          },
+          {
+            "type": "range",
+            "id": "star_rating",
+            "label": "Star Rating",
+            "min": 0,
+            "max": 5,
+            "default": 4.5,
+            "step": 0.5,
+            "info": "Supports half stars (e.g. 4.5)."
+          },
+          {
+            "type": "text",
+            "id": "reviews_text",
+            "label": "Reviews Text",
+            "default": "1,200+ Reviews"
+          },
+          {
+            "type": "url",
+            "id": "reviews_link",
+            "label": "Reviews Link"
+          },
+          {
+            "type": "header",
+            "content": "Benefits"
+          },
+          {
+            "type": "text",
+            "id": "benefit_1",
+            "label": "Benefit 1",
+            "default": "Benefit number one"
+          },
+          {
+            "type": "text",
+            "id": "benefit_2",
+            "label": "Benefit 2",
+            "default": "Benefit number two"
+          },
+          {
+            "type": "text",
+            "id": "benefit_3",
+            "label": "Benefit 3",
+            "default": "Benefit number three"
+          },
+          {
+            "type": "text",
+            "id": "benefit_4",
+            "label": "Benefit 4",
+            "default": "Benefit number four"
+          },
+          {
+            "type": "text",
+            "id": "benefit_5",
+            "label": "Benefit 5"
+          },
+          {
+            "type": "header",
+            "content": "Button"
+          },
+          {
+            "type": "text",
+            "id": "button_text",
+            "label": "Button Text",
+            "default": "Shop Now"
+          },
+          {
+            "type": "url",
+            "id": "button_link",
+            "label": "Button Link"
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Product Showcase",
+        "category": "Products",
+        "blocks": [
+          {
+            "type": "slide",
+            "settings": {
+              "heading": "Your First Product",
+              "description": "Describe your product in a sentence or two. Highlight what makes it different and why customers keep coming back for it.",
+              "star_rating": 4.5,
+              "reviews_text": "1,200+ Reviews",
+              "benefit_1": "Benefit number one",
+              "benefit_2": "Benefit number two",
+              "benefit_3": "Benefit number three",
+              "benefit_4": "Benefit number four",
+              "button_text": "Shop Now"
+            }
+          },
+          {
+            "type": "slide",
+            "settings": {
+              "heading": "Your Second Product",
+              "description": "Swap in your own copy here. Each slide is its own product with its own image, rating, benefits and button.",
+              "star_rating": 5,
+              "reviews_text": "980+ Reviews",
+              "benefit_1": "Highlight a key feature",
+              "benefit_2": "Add a reason to buy",
+              "benefit_3": "Mention a guarantee",
+              "button_text": "Shop Now"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

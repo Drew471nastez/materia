@@ -1,0 +1,2146 @@
+<template compat="shopify">
+{%- comment -%}
+  Materia Themes — Countdown Timer Pro 2 (rewritten)
+
+  Two-column countdown block with a circle timer on one side and editable
+  heading + description + button blocks on the other. Fully responsive:
+  side-by-side on desktop, stacked on mobile.
+
+  Implementation notes:
+    • All CSS scoped to `#shopify-section-{{ section.id }}` so multiple
+      instances on the same page render independently.
+    • Theme typography & scroll-animation hook via `settings.scroll_animation`,
+      `settings.animation_duration`, `settings.animation_delay`.
+    • Countdown logic is a small custom element (`ti-cd-countdown`) defined
+      inline so the section is fully self-contained — no external library,
+      no global JS file dependency.
+    • Time-zone: the merchant enters a local `end_date` + `end_time` string
+      (e.g. "2026-12-31 23:59"); we parse with the visitor's browser
+      timezone, which matches their visible store hours expectation.
+{%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+  <style>
+    #shopify-section-{{ section.id }}.scroll-trigger {
+      --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+      --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+    }
+{% comment %}{% endcomment %}  </style>
+  <script>
+    (function(){
+      var el = document.getElementById('shopify-section-{{ section.id }}');
+      if (!el || el.classList.contains('scroll-trigger')) return;
+      el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+    })();
+{% comment %}{% endcomment %}  </script>
+{%- endif -%}
+
+{%- liquid
+  assign st = section.settings
+  assign sid = section.id
+
+  assign section_width = st.section_width
+  assign color_scheme = st.color_scheme
+  assign layout_direction = st.layout_direction | default: 'timer_left'
+  assign vertical_alignment = st.vertical_alignment | default: 'center'
+  assign content_alignment_mobile = st.content_alignment_mobile | default: 'center'
+
+  assign end_date = st.end_date
+  assign end_time = st.end_time | default: '00:00'
+  assign restart_period = st.restart_period | default: 'none'
+
+  assign days_label = st.days_label | default: 'Day(s)'
+  assign hours_label = st.hours_label | default: 'Hour(s)'
+  assign minutes_label = st.minutes_label | default: 'Minute(s)'
+  assign seconds_label = st.seconds_label | default: 'Second(s)'
+
+  assign show_days = st.show_days
+  assign show_hours = st.show_hours
+  assign show_minutes = st.show_minutes
+  assign show_seconds = st.show_seconds
+
+  assign circle_size_d = st.circle_size_desktop | default: 90
+  assign circle_size_m = st.circle_size_mobile | default: 65
+  assign circle_bg_color = st.circle_bg_color | default: '#1b1b1b'
+  assign circle_text_color = st.circle_text_color | default: '#ffffff'
+  assign circle_radius = st.circle_radius | default: 50
+
+  assign number_font_size_d = st.number_font_size_desktop | default: 26
+  assign number_font_size_m = st.number_font_size_mobile | default: 20
+
+  assign label_color = st.label_color | default: ''
+  assign label_font_size_d = st.label_font_size_desktop | default: 14
+  assign label_font_size_m = st.label_font_size_mobile | default: 12
+
+  assign gap_circles_d = st.gap_circles_desktop | default: 18
+  assign gap_circles_m = st.gap_circles_mobile | default: 10
+  assign gap_columns = st.gap_columns | default: 60
+
+  assign reveal = st.reveal
+  assign scroll_animation = st.scroll_animation | default: 'none'
+-%}
+
+<style>
+  /* ===== Section width / margin / padding ===== */
+  #shopify-section-{{ sid }} {
+    margin-top: {{ st.section_margin_top_mobile | default: 0 }}px;
+    margin-bottom: {{ st.section_margin_bottom_mobile | default: 0 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} {
+      margin-top: {{ st.section_margin_top_desktop | default: 0 }}px;
+      margin-bottom: {{ st.section_margin_bottom_desktop | default: 0 }}px;
+    }
+  }
+  {%- if st.reset_spacing -%}
+    #shopify-section-{{ sid }} { margin-top: 0 !important; margin-bottom: 0 !important; }
+    #shopify-section-{{ sid }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif -%}
+  {%- case section_width -%}
+    {%- when 'container' -%}
+      #shopify-section-{{ sid }} .ti-cd__inner { max-width: calc(var(--page-width, 1300px) + 3rem); margin-inline: auto; padding-inline: 1.5rem; box-sizing: border-box; }
+    {%- when 'fluid_container' -%}
+      #shopify-section-{{ sid }} .ti-cd__inner { max-width: calc(var(--fluid-container-width, 1500px) + 3rem); margin-inline: auto; padding-inline: 1.5rem; box-sizing: border-box; }
+    {%- when 'stretch_width' -%}
+      #shopify-section-{{ sid }} .ti-cd__inner { padding-inline: 1.5rem; box-sizing: border-box; }
+      @media (min-width: 1200px) { #shopify-section-{{ sid }} .ti-cd__inner { padding-inline: 3rem; } }
+  {%- endcase -%}
+  #shopify-section-{{ sid }} .pt-section { padding-top: {{ st.padding_top | default: 60 }}px; }
+  #shopify-section-{{ sid }} .pb-section { padding-bottom: {{ st.padding_bottom | default: 60 }}px; }
+  @media (max-width: 767.98px) {
+    #shopify-section-{{ sid }} .pt-section { padding-top: {{ st.padding_top_mobile | default: 40 }}px; }
+    #shopify-section-{{ sid }} .pb-section { padding-bottom: {{ st.padding_bottom_mobile | default: 40 }}px; }
+  }
+
+  /* ===== Theme typography inheritance ===== */
+  :where(#shopify-section-{{ sid }}) { font-family: var(--body-font, inherit); font-weight: var(--body-weight, inherit); }
+  :where(#shopify-section-{{ sid }}) :is(h1, h2, h3, h4, h5, h6) { font-family: var(--heading-font, inherit); font-weight: var(--heading-weight, inherit); }
+
+  /* ===== Layout grid ===== */
+  #shopify-section-{{ sid }} .ti-cd__grid {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    align-items: stretch;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .ti-cd__grid {
+      flex-direction: {% if layout_direction == 'timer_right' %}row-reverse{% else %}row{% endif %};
+      align-items:
+        {%- case vertical_alignment -%}
+          {%- when 'top' -%} flex-start
+          {%- when 'bottom' -%} flex-end
+          {%- else -%} center
+        {%- endcase -%};
+      gap: {{ gap_columns }}px;
+      justify-content: space-between;
+    }
+    #shopify-section-{{ sid }} .ti-cd__timer-col,
+    #shopify-section-{{ sid }} .ti-cd__content-col {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+  }
+
+  #shopify-section-{{ sid }} .ti-cd__content-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
+  }
+  @media (max-width: 767.98px) {
+    #shopify-section-{{ sid }} .ti-cd__content-col {
+      text-align: {{ content_alignment_mobile }};
+      align-items:
+        {%- case content_alignment_mobile -%}
+          {%- when 'left' -%} flex-start
+          {%- when 'right' -%} flex-end
+          {%- else -%} center
+        {%- endcase -%};
+    }
+  }
+
+  /* ===== Timer circles ===== */
+  #shopify-section-{{ sid }} .ti-cd__timer {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: center;
+    gap: {{ gap_circles_m }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .ti-cd__timer {
+      gap: {{ gap_circles_d }}px;
+      justify-content: flex-start;
+    }
+  }
+  #shopify-section-{{ sid }} .ti-cd__unit {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 0 0 auto;
+  }
+  #shopify-section-{{ sid }} .ti-cd__num {
+    width: {{ circle_size_m }}px;
+    height: {{ circle_size_m }}px;
+    border-radius: {{ circle_radius }}%;
+    background-color: {{ circle_bg_color }};
+    color: {{ circle_text_color }};
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: {{ number_font_size_m }}px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+    transition: transform .35s cubic-bezier(.34, 1.4, .64, 1);
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .ti-cd__num {
+      width: {{ circle_size_d }}px;
+      height: {{ circle_size_d }}px;
+      font-size: {{ number_font_size_d }}px;
+    }
+  }
+  /* Subtle pulse each second on the seconds circle so the timer feels alive */
+  #shopify-section-{{ sid }} .ti-cd__num.is-tick { transform: scale(1.06); }
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ sid }} .ti-cd__num,
+    #shopify-section-{{ sid }} .ti-cd__num.is-tick { transition: none; transform: none; }
+  }
+  #shopify-section-{{ sid }} .ti-cd__label {
+    color: {% if label_color != blank %}{{ label_color }}{% else %}inherit{% endif %};
+    font-size: {{ label_font_size_m }}px;
+    line-height: 1.3;
+    text-align: center;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .ti-cd__label { font-size: {{ label_font_size_d }}px; }
+  }
+
+  /* ===== Block content visuals (heading / description / button) ===== */
+  #shopify-section-{{ sid }} .ti-cd__heading,
+  #shopify-section-{{ sid }} .ti-cd__description { margin: 0; }
+  #shopify-section-{{ sid }} .ti-cd__description :is(p, li) { margin: 0 0 .35em; }
+  #shopify-section-{{ sid }} .ti-cd__description :is(p, li):last-child { margin-bottom: 0; }
+  #shopify-section-{{ sid }} .ti-cd__button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    cursor: pointer;
+    user-select: none;
+    border: 0 solid transparent;
+    transition: background-color .25s ease, color .25s ease, border-color .25s ease, transform .2s ease;
+    will-change: transform;
+  }
+  #shopify-section-{{ sid }} .ti-cd__button:hover { transform: translateY(-1px); }
+  #shopify-section-{{ sid }} .ti-cd__button:active { transform: translateY(0); }
+
+  /* ===== Reveal-on-scroll (theme animation hook) ===== */
+  {%- if reveal and scroll_animation != 'none' and request.design_mode != true -%}
+    #shopify-section-{{ sid }} .ti-cd__inner-content { opacity: 0; will-change: opacity, transform; }
+    #shopify-section-{{ sid }} .ti-cd__inner-content.is-revealed { opacity: 1; }
+    {%- case scroll_animation -%}
+      {%- when 'fade', 'fade-in' -%}
+        #shopify-section-{{ sid }} .ti-cd__inner-content { transition: opacity .8s ease; }
+      {%- when 'slide-in' -%}
+        #shopify-section-{{ sid }} .ti-cd__inner-content { transform: translateX(-20px); transition: opacity .8s ease, transform .8s ease; }
+        #shopify-section-{{ sid }} .ti-cd__inner-content.is-revealed { transform: translateX(0); }
+      {%- when 'smooth-fade-up' -%}
+        #shopify-section-{{ sid }} .ti-cd__inner-content { transform: translateY(20px); transition: opacity .8s ease, transform .8s ease; }
+        #shopify-section-{{ sid }} .ti-cd__inner-content.is-revealed { transform: translateY(0); }
+    {%- endcase -%}
+    @media (prefers-reduced-motion: reduce) {
+      #shopify-section-{{ sid }} .ti-cd__inner-content { opacity: 1; transform: none; transition: none; }
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+
+<div
+  id="section-{{ sid }}"
+  class="section ti-cd color-{{ color_scheme }} gradient pt-section pb-section{% if reveal %} overflow-hidden{% endif %}"
+>
+  <div class="ti-cd__inner">
+    <div class="ti-cd__inner-content">
+      <div class="ti-cd__grid">
+
+        {%- comment -%} ===== TIMER COLUMN ===== {%- endcomment -%}
+        <div class="ti-cd__timer-col">
+          <ti-cd-countdown
+            class="ti-cd__timer"
+            data-end-date="{{ end_date }}"
+            data-end-time="{{ end_time }}"
+            data-restart="{{ restart_period }}"
+            data-section-id="{{ sid }}"
+          >
+            {%- if show_days -%}
+              <div class="ti-cd__unit">
+                <div class="ti-cd__num" data-cd-unit="days">00</div>
+                {%- if days_label != blank -%}<span class="ti-cd__label">{{ days_label }}</span>{%- endif -%}
+              </div>
+            {%- endif -%}
+            {%- if show_hours -%}
+              <div class="ti-cd__unit">
+                <div class="ti-cd__num" data-cd-unit="hours">00</div>
+                {%- if hours_label != blank -%}<span class="ti-cd__label">{{ hours_label }}</span>{%- endif -%}
+              </div>
+            {%- endif -%}
+            {%- if show_minutes -%}
+              <div class="ti-cd__unit">
+                <div class="ti-cd__num" data-cd-unit="minutes">00</div>
+                {%- if minutes_label != blank -%}<span class="ti-cd__label">{{ minutes_label }}</span>{%- endif -%}
+              </div>
+            {%- endif -%}
+            {%- if show_seconds -%}
+              <div class="ti-cd__unit">
+                <div class="ti-cd__num" data-cd-unit="seconds">00</div>
+                {%- if seconds_label != blank -%}<span class="ti-cd__label">{{ seconds_label }}</span>{%- endif -%}
+              </div>
+            {%- endif -%}
+          </ti-cd-countdown>
+        </div>
+
+        {%- comment -%} ===== CONTENT COLUMN (blocks) ===== {%- endcomment -%}
+        <div class="ti-cd__content-col">
+          {%- for block in section.blocks -%}
+            {%- liquid
+              assign bs = block.settings
+            -%}
+            {%- case block.type -%}
+
+              {%- comment -%}
+                IMPORTANT: every block-controlled property (font size,
+                color, font-weight, padding, etc.) is emitted via a
+                scoped `<style>` block targeting the wrapper id +
+                element class — NOT via the inline `style` attribute.
+                Inline style attributes have specificity (1, 0, 0, 0)
+                which beats any `<style>` rule including media queries,
+                so a mobile inline `font-size: 28px` would override the
+                desktop `font-size: 44px` from a `@media (min-width: 768px)`
+                rule. That was the actual bug behind "sliders don't work".
+              {%- endcomment -%}
+
+              {%- when 'heading' -%}
+                <h2 class="ti-cd__heading" {{ block.shopify_attributes }}>
+                  {{ bs.heading | default: 'Discount Ends Soon' }}
+                </h2>
+                <style>
+                  #shopify-section-{{ sid }} .ti-cd__heading {
+                    {% if bs.color != blank %}color: {{ bs.color }};{% endif %}
+                    font-size: {{ bs.font_size_mobile | default: 28 }}px;
+                    line-height: 1.15;
+                    {% if bs.enable_custom_font_weight %}font-weight: {{ bs.font_weight | default: 700 }};{% endif %}
+                    margin: 0 0 {{ bs.gap_below | default: 4 }}px;
+                  }
+                  @media (min-width: 768px) {
+                    #shopify-section-{{ sid }} .ti-cd__heading {
+                      font-size: {{ bs.font_size_desktop | default: 44 }}px;
+                    }
+                  }
+{% comment %}{% endcomment %}                </style>
+
+              {%- when 'description' -%}
+                <div class="ti-cd__description rich__text-mt-0" {{ block.shopify_attributes }}>
+                  {{ bs.description }}
+                </div>
+                <style>
+                  #shopify-section-{{ sid }} .ti-cd__description {
+                    {% if bs.color != blank %}color: {{ bs.color }};{% endif %}
+                    font-size: {{ bs.font_size_mobile | default: 14 }}px;
+                    line-height: 1.55;
+                    {% if bs.enable_custom_font_weight %}font-weight: {{ bs.font_weight | default: 400 }};{% endif %}
+                    margin: 0 0 {{ bs.gap_below | default: 8 }}px;
+                  }
+                  @media (min-width: 768px) {
+                    #shopify-section-{{ sid }} .ti-cd__description {
+                      font-size: {{ bs.font_size_desktop | default: 16 }}px;
+                    }
+                  }
+{% comment %}{% endcomment %}                </style>
+
+              {%- when 'button' -%}
+                {%- if bs.button_label != blank -%}
+                  {%- assign bg = bs.button_bg_color | default: '#1b1b1b' -%}
+                  {%- assign tc = bs.button_text_color | default: '#ffffff' -%}
+                  {%- assign hbg = bs.button_hover_bg_color | default: bg -%}
+                  {%- assign htc = bs.button_hover_text_color | default: tc -%}
+                  <a
+                    class="ti-cd__button ti-cd__button-{{ block.id }}"
+                    href="{{ bs.button_url | default: '#' }}"
+                    {{ block.shopify_attributes }}
+                  >
+                    {{ bs.button_label }}
+                  </a>
+                  <style>
+                    #shopify-section-{{ sid }} .ti-cd__button-{{ block.id }} {
+                      background-color: {{ bg }};
+                      color: {{ tc }};
+                      border-radius: {{ bs.button_border_radius | default: 8 }}px;
+                      padding: {{ bs.button_padding_y | default: 14 }}px {{ bs.button_padding_x | default: 28 }}px;
+                      font-size: {{ bs.button_font_size_mobile | default: bs.button_font_size | default: 14 }}px;
+                      {% if bs.enable_custom_font_weight %}font-weight: {{ bs.font_weight | default: 600 }};{% endif %}
+                      {% if bs.button_border_width and bs.button_border_width > 0 %}
+                        border: {{ bs.button_border_width }}px solid {{ bs.button_border_color | default: bg }};
+                      {% endif %}
+                    }
+                    @media (min-width: 768px) {
+                      #shopify-section-{{ sid }} .ti-cd__button-{{ block.id }} {
+                        font-size: {{ bs.button_font_size | default: 15 }}px;
+                      }
+                    }
+                    #shopify-section-{{ sid }} .ti-cd__button-{{ block.id }}:hover {
+                      background-color: {{ hbg }};
+                      color: {{ htc }};
+                      {% if bs.button_border_width and bs.button_border_width > 0 %}border-color: {{ bs.button_hover_border_color | default: hbg }};{% endif %}
+                    }
+{% comment %}{% endcomment %}                  </style>
+                {%- endif -%}
+
+            {%- endcase -%}
+          {%- endfor -%}
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function() {
+    if (window.__tiCdRegistered) return;
+    window.__tiCdRegistered = true;
+
+    /* <ti-cd-countdown> — self-contained countdown custom element.
+         data-end-date  "YYYY-MM-DD"  (merchant local time)
+         data-end-time  "HH:MM" 24h   (merchant local time)
+         data-restart   "none" | "daily" | "weekly" | "monthly"
+       Children: 4 `.ti-cd__num[data-cd-unit]` divs (days/hours/minutes/seconds);
+       any subset may be missing — only present units are updated. */
+    class TiCdCountdown extends HTMLElement {
+      connectedCallback() {
+        this.endDate = (this.dataset.endDate || '').trim();
+        this.endTime = (this.dataset.endTime || '00:00').trim();
+        this.restart = this.dataset.restart || 'none';
+        this.daysEl    = this.querySelector('[data-cd-unit="days"]');
+        this.hoursEl   = this.querySelector('[data-cd-unit="hours"]');
+        this.minutesEl = this.querySelector('[data-cd-unit="minutes"]');
+        this.secondsEl = this.querySelector('[data-cd-unit="seconds"]');
+        this.target = this.computeTarget();
+        if (!this.target) { this.setVals(0, 0, 0, 0); return; }
+        this.update();
+        this.interval = setInterval(this.update.bind(this), 1000);
+      }
+      disconnectedCallback() { if (this.interval) clearInterval(this.interval); }
+
+      computeTarget() {
+        if (!this.endDate) return null;
+        // Visitor-local parse — matches the merchant's "store visible time" expectation
+        var dt = this.endDate + 'T' + this.endTime;
+        var ms = Date.parse(dt);
+        if (isNaN(ms)) return null;
+        return ms;
+      }
+
+      advance() {
+        var period = this.restart;
+        if (period === 'daily')        this.target += 86400000;
+        else if (period === 'weekly')  this.target += 7 * 86400000;
+        else if (period === 'monthly') {
+          var d = new Date(this.target);
+          d.setMonth(d.getMonth() + 1);
+          this.target = d.getTime();
+        } else {
+          return false;
+        }
+        return true;
+      }
+
+      update() {
+        var remaining = this.target - Date.now();
+        while (remaining <= 0) {
+          if (!this.advance()) {
+            this.setVals(0, 0, 0, 0);
+            this.classList.add('is-ended');
+            clearInterval(this.interval);
+            this.dispatchEvent(new CustomEvent('countdown:ended', { bubbles: true }));
+            return;
+          }
+          remaining = this.target - Date.now();
+        }
+        var days    = Math.floor(remaining / 86400000);
+        var hours   = Math.floor((remaining / 3600000) % 24);
+        var minutes = Math.floor((remaining / 60000) % 60);
+        var seconds = Math.floor((remaining / 1000) % 60);
+        this.setVals(days, hours, minutes, seconds);
+        if (this.secondsEl) {
+          this.secondsEl.classList.remove('is-tick');
+          void this.secondsEl.offsetWidth;
+          this.secondsEl.classList.add('is-tick');
+        }
+      }
+
+      setVals(d, h, m, s) {
+        if (this.daysEl)    this.daysEl.textContent    = this.pad(d);
+        if (this.hoursEl)   this.hoursEl.textContent   = this.pad(h);
+        if (this.minutesEl) this.minutesEl.textContent = this.pad(m);
+        if (this.secondsEl) this.secondsEl.textContent = this.pad(s);
+      }
+      pad(n) { return String(Math.max(0, n)).padStart(2, '0'); }
+    }
+    if (!customElements.get('ti-cd-countdown')) {
+      customElements.define('ti-cd-countdown', TiCdCountdown);
+    }
+  })();
+
+  // Reveal-on-scroll: section-scoped so each instance reveals independently
+  (function(){
+    var sectionEl = document.getElementById('section-{{ sid }}');
+    if (!sectionEl) return;
+    var target = sectionEl.querySelector('.ti-cd__inner-content');
+    if (!target) return;
+    var anim = '{{ scroll_animation }}';
+    if (document.body.classList.contains('shopify-design-mode')) {
+      target.classList.add('is-revealed');
+    } else if (anim && anim !== 'none') {
+      var io = new IntersectionObserver(function(entries, obs) {
+        entries.forEach(function(e) {
+          if (e.isIntersecting) { target.classList.add('is-revealed'); obs.unobserve(target); }
+        });
+      }, { threshold: 0.15 });
+      io.observe(target);
+    } else {
+      target.classList.add('is-revealed');
+    }
+  })();
+{% comment %}{% endcomment %}</script>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "countdown-timer2",
+  "name": "Countdown Timer Pro 2",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "General"
+    },
+    {
+      "type": "select",
+      "id": "section_width",
+      "label": "Container Width",
+      "default": "fluid_container",
+      "options": [
+        {
+          "value": "container",
+          "label": "Fixed Container"
+        },
+        {
+          "value": "fluid_container",
+          "label": "Fluid Container"
+        },
+        {
+          "value": "stretch_width",
+          "label": "Stretch to Full"
+        },
+        {
+          "value": "full_width",
+          "label": "Edge to Edge (Full Width)"
+        }
+      ]
+    },
+    {
+      "type": "color_scheme",
+      "id": "color_scheme",
+      "label": "Color Scheme",
+      "default": "scheme-1"
+    },
+    {
+      "type": "select",
+      "id": "layout_direction",
+      "label": "Layout (Desktop)",
+      "default": "timer_left",
+      "options": [
+        {
+          "value": "timer_left",
+          "label": "Timer on left, content on right"
+        },
+        {
+          "value": "timer_right",
+          "label": "Content on left, timer on right"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "vertical_alignment",
+      "label": "Vertical Alignment",
+      "default": "center",
+      "options": [
+        {
+          "value": "top",
+          "label": "Top"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "bottom",
+          "label": "Bottom"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "content_alignment_mobile",
+      "label": "Mobile Content Alignment",
+      "default": "center",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "gap_columns",
+      "label": "Gap between timer and content (Desktop)",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "default": 60
+    },
+    {
+      "type": "header",
+      "id": "hdr_9",
+      "label": "Timer Countdown"
+    },
+    {
+      "type": "text",
+      "id": "end_date",
+      "label": "End Date",
+      "info": "Format: YYYY-MM-DD (e.g. 2026-12-31)",
+      "default": "2026-12-31"
+    },
+    {
+      "type": "text",
+      "id": "end_time",
+      "label": "End Time",
+      "info": "Format: HH:MM in 24-hour (e.g. 23:59)",
+      "default": "23:59"
+    },
+    {
+      "type": "select",
+      "id": "restart_period",
+      "label": "Restart Period",
+      "default": "none",
+      "options": [
+        {
+          "value": "none",
+          "label": "No restart (one-time)"
+        },
+        {
+          "value": "daily",
+          "label": "Daily"
+        },
+        {
+          "value": "weekly",
+          "label": "Weekly"
+        },
+        {
+          "value": "monthly",
+          "label": "Monthly"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_13",
+      "label": "Timer Units & Labels"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_days",
+      "label": "Show days",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_hours",
+      "label": "Show hours",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_minutes",
+      "label": "Show minutes",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_seconds",
+      "label": "Show seconds",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "days_label",
+      "label": "Days label",
+      "default": "Day(s)"
+    },
+    {
+      "type": "text",
+      "id": "hours_label",
+      "label": "Hours label",
+      "default": "Hour(s)"
+    },
+    {
+      "type": "text",
+      "id": "minutes_label",
+      "label": "Minutes label",
+      "default": "Minute(s)"
+    },
+    {
+      "type": "text",
+      "id": "seconds_label",
+      "label": "Seconds label",
+      "default": "Second(s)"
+    },
+    {
+      "type": "header",
+      "id": "hdr_22",
+      "label": "Timer Circle Styling"
+    },
+    {
+      "type": "range",
+      "id": "circle_size_desktop",
+      "label": "Circle size (Desktop)",
+      "min": 50,
+      "max": 160,
+      "step": 2,
+      "unit": "px",
+      "default": 90
+    },
+    {
+      "type": "range",
+      "id": "circle_size_mobile",
+      "label": "Circle size (Mobile)",
+      "min": 40,
+      "max": 100,
+      "step": 2,
+      "unit": "px",
+      "default": 64
+    },
+    {
+      "type": "range",
+      "id": "circle_radius",
+      "label": "Circle roundness",
+      "min": 0,
+      "max": 50,
+      "step": 1,
+      "unit": "%",
+      "default": 50,
+      "info": "50% = perfect circle. 0% = square."
+    },
+    {
+      "type": "color",
+      "id": "circle_bg_color",
+      "label": "Circle background",
+      "default": "#1b1b1b"
+    },
+    {
+      "type": "color",
+      "id": "circle_text_color",
+      "label": "Circle number color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "range",
+      "id": "number_font_size_desktop",
+      "label": "Number font size (Desktop)",
+      "min": 14,
+      "max": 56,
+      "step": 1,
+      "unit": "px",
+      "default": 26
+    },
+    {
+      "type": "range",
+      "id": "number_font_size_mobile",
+      "label": "Number font size (Mobile)",
+      "min": 12,
+      "max": 36,
+      "step": 1,
+      "unit": "px",
+      "default": 20
+    },
+    {
+      "type": "color",
+      "id": "label_color",
+      "label": "Label color",
+      "info": "Leave blank to inherit from color scheme"
+    },
+    {
+      "type": "range",
+      "id": "label_font_size_desktop",
+      "label": "Label font size (Desktop)",
+      "min": 10,
+      "max": 24,
+      "step": 1,
+      "unit": "px",
+      "default": 14
+    },
+    {
+      "type": "range",
+      "id": "label_font_size_mobile",
+      "label": "Label font size (Mobile)",
+      "min": 9,
+      "max": 20,
+      "step": 1,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "range",
+      "id": "gap_circles_desktop",
+      "label": "Gap between circles (Desktop)",
+      "min": 4,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 18
+    },
+    {
+      "type": "range",
+      "id": "gap_circles_mobile",
+      "label": "Gap between circles (Mobile)",
+      "min": 4,
+      "max": 24,
+      "step": 1,
+      "unit": "px",
+      "default": 10
+    },
+    {
+      "type": "header",
+      "id": "hdr_35",
+      "label": "Reveal on Scroll"
+    },
+    {
+      "type": "checkbox",
+      "id": "reveal",
+      "label": "Reveal section on scroll",
+      "default": true
+    },
+    {
+      "type": "select",
+      "id": "scroll_animation",
+      "label": "Scroll Animation",
+      "default": "smooth-fade-up",
+      "options": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "fade-in",
+          "label": "Fade In"
+        },
+        {
+          "value": "fade",
+          "label": "Fade"
+        },
+        {
+          "value": "slide-in",
+          "label": "Slide In"
+        },
+        {
+          "value": "smooth-fade-up",
+          "label": "Smooth Fade Up"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_38",
+      "label": "Section Padding"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "label": "Top Padding (Desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 60
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "label": "Bottom Padding (Desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 60
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "label": "Top Padding (Mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 40
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "label": "Bottom Padding (Mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 40
+    },
+    {
+      "type": "header",
+      "id": "hdr_43",
+      "label": "Section Margin"
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_desktop",
+      "label": "Top Margin (Desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_desktop",
+      "label": "Bottom Margin (Desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_mobile",
+      "label": "Top Margin (Mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_mobile",
+      "label": "Bottom Margin (Mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 0
+    }
+  ],
+  "blocks": [
+    {
+      "type": "heading",
+      "name": "Heading",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Heading text",
+          "default": "Discount Ends Soon"
+        },
+        {
+          "type": "range",
+          "id": "font_size_desktop",
+          "label": "Font size (Desktop)",
+          "min": 16,
+          "max": 80,
+          "step": 1,
+          "unit": "px",
+          "default": 44
+        },
+        {
+          "type": "range",
+          "id": "font_size_mobile",
+          "label": "Font size (Mobile)",
+          "min": 14,
+          "max": 60,
+          "step": 1,
+          "unit": "px",
+          "default": 28
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Text color",
+          "info": "Leave blank to inherit from color scheme"
+        },
+        {
+          "type": "checkbox",
+          "id": "enable_custom_font_weight",
+          "label": "Enable custom font weight",
+          "default": false
+        },
+        {
+          "type": "select",
+          "id": "font_weight",
+          "label": "Font weight",
+          "default": "700",
+          "options": [
+            {
+              "value": "300",
+              "label": "Light"
+            },
+            {
+              "value": "400",
+              "label": "Normal"
+            },
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semi-Bold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            },
+            {
+              "value": "800",
+              "label": "Extra Bold"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "gap_below",
+          "label": "Gap below heading",
+          "min": 0,
+          "max": 60,
+          "step": 1,
+          "unit": "px",
+          "default": 4
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "description",
+      "name": "Description",
+      "settings": [
+        {
+          "type": "richtext",
+          "id": "description",
+          "label": "Description",
+          "default": "<p>Lorem ipsum odor amet, consectetuer adipiscing elit. Class accumsan magnis torquent purus placerat nunc a cubilia primis.</p>"
+        },
+        {
+          "type": "range",
+          "id": "font_size_desktop",
+          "label": "Font size (Desktop)",
+          "min": 10,
+          "max": 28,
+          "step": 1,
+          "unit": "px",
+          "default": 16
+        },
+        {
+          "type": "range",
+          "id": "font_size_mobile",
+          "label": "Font size (Mobile)",
+          "min": 10,
+          "max": 22,
+          "step": 1,
+          "unit": "px",
+          "default": 14
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Text color",
+          "info": "Leave blank to inherit from color scheme"
+        },
+        {
+          "type": "checkbox",
+          "id": "enable_custom_font_weight",
+          "label": "Enable custom font weight",
+          "default": false
+        },
+        {
+          "type": "select",
+          "id": "font_weight",
+          "label": "Font weight",
+          "default": "400",
+          "options": [
+            {
+              "value": "300",
+              "label": "Light"
+            },
+            {
+              "value": "400",
+              "label": "Normal"
+            },
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semi-Bold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "gap_below",
+          "label": "Gap below description",
+          "min": 0,
+          "max": 60,
+          "step": 1,
+          "unit": "px",
+          "default": 8
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "button",
+      "name": "Button",
+      "settings": [
+        {
+          "type": "text",
+          "id": "button_label",
+          "label": "Button label",
+          "default": "Get notified"
+        },
+        {
+          "type": "url",
+          "id": "button_url",
+          "label": "Button link"
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Colors"
+        },
+        {
+          "type": "color",
+          "id": "button_bg_color",
+          "label": "Background",
+          "default": "#1b1b1b"
+        },
+        {
+          "type": "color",
+          "id": "button_text_color",
+          "label": "Text color",
+          "default": "#ffffff"
+        },
+        {
+          "type": "color",
+          "id": "button_hover_bg_color",
+          "label": "Hover background"
+        },
+        {
+          "type": "color",
+          "id": "button_hover_text_color",
+          "label": "Hover text color"
+        },
+        {
+          "type": "header",
+          "id": "hdr_8",
+          "label": "Border"
+        },
+        {
+          "type": "range",
+          "id": "button_border_width",
+          "label": "Border thickness",
+          "min": 0,
+          "max": 4,
+          "step": 1,
+          "unit": "px",
+          "default": 0
+        },
+        {
+          "type": "color",
+          "id": "button_border_color",
+          "label": "Border color"
+        },
+        {
+          "type": "color",
+          "id": "button_hover_border_color",
+          "label": "Hover border color"
+        },
+        {
+          "type": "header",
+          "id": "hdr_12",
+          "label": "Size & Shape"
+        },
+        {
+          "type": "range",
+          "id": "button_padding_x",
+          "label": "Horizontal padding",
+          "min": 10,
+          "max": 60,
+          "step": 1,
+          "unit": "px",
+          "default": 28
+        },
+        {
+          "type": "range",
+          "id": "button_padding_y",
+          "label": "Vertical padding",
+          "min": 6,
+          "max": 30,
+          "step": 1,
+          "unit": "px",
+          "default": 14
+        },
+        {
+          "type": "range",
+          "id": "button_border_radius",
+          "label": "Corner radius",
+          "min": 0,
+          "max": 60,
+          "step": 1,
+          "unit": "px",
+          "default": 8
+        },
+        {
+          "type": "range",
+          "id": "button_font_size",
+          "label": "Font size (Desktop)",
+          "min": 10,
+          "max": 24,
+          "step": 1,
+          "unit": "px",
+          "default": 15
+        },
+        {
+          "type": "range",
+          "id": "button_font_size_mobile",
+          "label": "Font size (Mobile)",
+          "min": 10,
+          "max": 22,
+          "step": 1,
+          "unit": "px",
+          "default": 14
+        },
+        {
+          "type": "header",
+          "id": "hdr_18",
+          "label": "Typography"
+        },
+        {
+          "type": "checkbox",
+          "id": "enable_custom_font_weight",
+          "label": "Enable custom font weight",
+          "default": false
+        },
+        {
+          "type": "select",
+          "id": "font_weight",
+          "label": "Font weight",
+          "default": "600",
+          "options": [
+            {
+              "value": "300",
+              "label": "Light"
+            },
+            {
+              "value": "400",
+              "label": "Normal"
+            },
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semi-Bold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            },
+            {
+              "value": "800",
+              "label": "Extra Bold"
+            }
+          ]
+        }
+      ],
+      "limit": 1
+    }
+  ],
+  "presets": [
+    {
+      "name": "Countdown Timer Pro 2",
+      "category": "Countdown Timers",
+      "blocks": [
+        {
+          "type": "heading"
+        },
+        {
+          "type": "description"
+        },
+        {
+          "type": "button"
+        }
+      ]
+    }
+  ],
+  "disabled_on": {
+    "groups": [
+      "header",
+      "footer",
+      "overlay"
+    ]
+  },
+  "shopify": {
+    "name": "Countdown Timer Pro 2",
+    "tag": "section",
+    "class": "section-countdown-timer-pro-2",
+    "disabled_on": {
+      "groups": [
+        "header",
+        "footer",
+        "custom.overlay"
+      ]
+    },
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Container Width",
+        "default": "fluid_container",
+        "options": [
+          {
+            "value": "container",
+            "label": "Fixed Container"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid Container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretch to Full"
+          },
+          {
+            "value": "full_width",
+            "label": "Edge to Edge (Full Width)"
+          }
+        ]
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color Scheme",
+        "default": "scheme-1"
+      },
+      {
+        "type": "select",
+        "id": "layout_direction",
+        "label": "Layout (Desktop)",
+        "default": "timer_left",
+        "options": [
+          {
+            "value": "timer_left",
+            "label": "Timer on left, content on right"
+          },
+          {
+            "value": "timer_right",
+            "label": "Content on left, timer on right"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "vertical_alignment",
+        "label": "Vertical Alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "top",
+            "label": "Top"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "bottom",
+            "label": "Bottom"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "content_alignment_mobile",
+        "label": "Mobile Content Alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "gap_columns",
+        "label": "Gap between timer and content (Desktop)",
+        "min": 0,
+        "max": 160,
+        "step": 4,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "header",
+        "content": "Timer Countdown"
+      },
+      {
+        "type": "text",
+        "id": "end_date",
+        "label": "End Date",
+        "info": "Format: YYYY-MM-DD (e.g. 2026-12-31)",
+        "default": "2026-12-31"
+      },
+      {
+        "type": "text",
+        "id": "end_time",
+        "label": "End Time",
+        "info": "Format: HH:MM in 24-hour (e.g. 23:59)",
+        "default": "23:59"
+      },
+      {
+        "type": "select",
+        "id": "restart_period",
+        "label": "Restart Period",
+        "default": "none",
+        "options": [
+          {
+            "value": "none",
+            "label": "No restart (one-time)"
+          },
+          {
+            "value": "daily",
+            "label": "Daily"
+          },
+          {
+            "value": "weekly",
+            "label": "Weekly"
+          },
+          {
+            "value": "monthly",
+            "label": "Monthly"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Timer Units & Labels"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_days",
+        "label": "Show days",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_hours",
+        "label": "Show hours",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_minutes",
+        "label": "Show minutes",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_seconds",
+        "label": "Show seconds",
+        "default": true
+      },
+      {
+        "type": "text",
+        "id": "days_label",
+        "label": "Days label",
+        "default": "Day(s)"
+      },
+      {
+        "type": "text",
+        "id": "hours_label",
+        "label": "Hours label",
+        "default": "Hour(s)"
+      },
+      {
+        "type": "text",
+        "id": "minutes_label",
+        "label": "Minutes label",
+        "default": "Minute(s)"
+      },
+      {
+        "type": "text",
+        "id": "seconds_label",
+        "label": "Seconds label",
+        "default": "Second(s)"
+      },
+      {
+        "type": "header",
+        "content": "Timer Circle Styling"
+      },
+      {
+        "type": "range",
+        "id": "circle_size_desktop",
+        "label": "Circle size (Desktop)",
+        "min": 50,
+        "max": 160,
+        "step": 2,
+        "unit": "px",
+        "default": 90
+      },
+      {
+        "type": "range",
+        "id": "circle_size_mobile",
+        "label": "Circle size (Mobile)",
+        "min": 40,
+        "max": 100,
+        "step": 2,
+        "unit": "px",
+        "default": 64
+      },
+      {
+        "type": "range",
+        "id": "circle_radius",
+        "label": "Circle roundness",
+        "min": 0,
+        "max": 50,
+        "step": 1,
+        "unit": "%",
+        "default": 50,
+        "info": "50% = perfect circle. 0% = square."
+      },
+      {
+        "type": "color",
+        "id": "circle_bg_color",
+        "label": "Circle background",
+        "default": "#1b1b1b"
+      },
+      {
+        "type": "color",
+        "id": "circle_text_color",
+        "label": "Circle number color",
+        "default": "#ffffff"
+      },
+      {
+        "type": "range",
+        "id": "number_font_size_desktop",
+        "label": "Number font size (Desktop)",
+        "min": 14,
+        "max": 56,
+        "step": 1,
+        "unit": "px",
+        "default": 26
+      },
+      {
+        "type": "range",
+        "id": "number_font_size_mobile",
+        "label": "Number font size (Mobile)",
+        "min": 12,
+        "max": 36,
+        "step": 1,
+        "unit": "px",
+        "default": 20
+      },
+      {
+        "type": "color",
+        "id": "label_color",
+        "label": "Label color",
+        "info": "Leave blank to inherit from color scheme"
+      },
+      {
+        "type": "range",
+        "id": "label_font_size_desktop",
+        "label": "Label font size (Desktop)",
+        "min": 10,
+        "max": 24,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "range",
+        "id": "label_font_size_mobile",
+        "label": "Label font size (Mobile)",
+        "min": 9,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 12
+      },
+      {
+        "type": "range",
+        "id": "gap_circles_desktop",
+        "label": "Gap between circles (Desktop)",
+        "min": 4,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 18
+      },
+      {
+        "type": "range",
+        "id": "gap_circles_mobile",
+        "label": "Gap between circles (Mobile)",
+        "min": 4,
+        "max": 24,
+        "step": 1,
+        "unit": "px",
+        "default": 10
+      },
+      {
+        "type": "header",
+        "content": "Reveal on Scroll"
+      },
+      {
+        "type": "checkbox",
+        "id": "reveal",
+        "label": "Reveal section on scroll",
+        "default": true
+      },
+      {
+        "type": "select",
+        "id": "scroll_animation",
+        "label": "Scroll Animation",
+        "default": "smooth-fade-up",
+        "options": [
+          {
+            "value": "none",
+            "label": "None"
+          },
+          {
+            "value": "fade-in",
+            "label": "Fade In"
+          },
+          {
+            "value": "fade",
+            "label": "Fade"
+          },
+          {
+            "value": "slide-in",
+            "label": "Slide In"
+          },
+          {
+            "value": "smooth-fade-up",
+            "label": "Smooth Fade Up"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Section Padding"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top Padding (Desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom Padding (Desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "range",
+        "id": "padding_top_mobile",
+        "label": "Top Padding (Mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 40
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_mobile",
+        "label": "Bottom Padding (Mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 40
+      },
+      {
+        "type": "header",
+        "content": "Section Margin"
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top Margin (Desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom Margin (Desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_mobile",
+        "label": "Top Margin (Mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_mobile",
+        "label": "Bottom Margin (Mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 0
+      }
+    ],
+    "blocks": [
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "heading",
+            "label": "Heading text",
+            "default": "Discount Ends Soon"
+          },
+          {
+            "type": "range",
+            "id": "font_size_desktop",
+            "label": "Font size (Desktop)",
+            "min": 16,
+            "max": 80,
+            "step": 1,
+            "unit": "px",
+            "default": 44
+          },
+          {
+            "type": "range",
+            "id": "font_size_mobile",
+            "label": "Font size (Mobile)",
+            "min": 14,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 28
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Text color",
+            "info": "Leave blank to inherit from color scheme"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_font_weight",
+            "label": "Enable custom font weight",
+            "default": false
+          },
+          {
+            "type": "select",
+            "id": "font_weight",
+            "label": "Font weight",
+            "default": "700",
+            "options": [
+              {
+                "value": "300",
+                "label": "Light"
+              },
+              {
+                "value": "400",
+                "label": "Normal"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi-Bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              },
+              {
+                "value": "800",
+                "label": "Extra Bold"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "gap_below",
+            "label": "Gap below heading",
+            "min": 0,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 4
+          }
+        ]
+      },
+      {
+        "type": "description",
+        "name": "Description",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "richtext",
+            "id": "description",
+            "label": "Description",
+            "default": "<p>Lorem ipsum odor amet, consectetuer adipiscing elit. Class accumsan magnis torquent purus placerat nunc a cubilia primis.</p>"
+          },
+          {
+            "type": "range",
+            "id": "font_size_desktop",
+            "label": "Font size (Desktop)",
+            "min": 10,
+            "max": 28,
+            "step": 1,
+            "unit": "px",
+            "default": 16
+          },
+          {
+            "type": "range",
+            "id": "font_size_mobile",
+            "label": "Font size (Mobile)",
+            "min": 10,
+            "max": 22,
+            "step": 1,
+            "unit": "px",
+            "default": 14
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Text color",
+            "info": "Leave blank to inherit from color scheme"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_font_weight",
+            "label": "Enable custom font weight",
+            "default": false
+          },
+          {
+            "type": "select",
+            "id": "font_weight",
+            "label": "Font weight",
+            "default": "400",
+            "options": [
+              {
+                "value": "300",
+                "label": "Light"
+              },
+              {
+                "value": "400",
+                "label": "Normal"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi-Bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "gap_below",
+            "label": "Gap below description",
+            "min": 0,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 8
+          }
+        ]
+      },
+      {
+        "type": "button",
+        "name": "Button",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "button_label",
+            "label": "Button label",
+            "default": "Get notified"
+          },
+          {
+            "type": "url",
+            "id": "button_url",
+            "label": "Button link"
+          },
+          {
+            "type": "header",
+            "content": "Colors"
+          },
+          {
+            "type": "color",
+            "id": "button_bg_color",
+            "label": "Background",
+            "default": "#1b1b1b"
+          },
+          {
+            "type": "color",
+            "id": "button_text_color",
+            "label": "Text color",
+            "default": "#ffffff"
+          },
+          {
+            "type": "color",
+            "id": "button_hover_bg_color",
+            "label": "Hover background"
+          },
+          {
+            "type": "color",
+            "id": "button_hover_text_color",
+            "label": "Hover text color"
+          },
+          {
+            "type": "header",
+            "content": "Border"
+          },
+          {
+            "type": "range",
+            "id": "button_border_width",
+            "label": "Border thickness",
+            "min": 0,
+            "max": 4,
+            "step": 1,
+            "unit": "px",
+            "default": 0
+          },
+          {
+            "type": "color",
+            "id": "button_border_color",
+            "label": "Border color"
+          },
+          {
+            "type": "color",
+            "id": "button_hover_border_color",
+            "label": "Hover border color"
+          },
+          {
+            "type": "header",
+            "content": "Size & Shape"
+          },
+          {
+            "type": "range",
+            "id": "button_padding_x",
+            "label": "Horizontal padding",
+            "min": 10,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 28
+          },
+          {
+            "type": "range",
+            "id": "button_padding_y",
+            "label": "Vertical padding",
+            "min": 6,
+            "max": 30,
+            "step": 1,
+            "unit": "px",
+            "default": 14
+          },
+          {
+            "type": "range",
+            "id": "button_border_radius",
+            "label": "Corner radius",
+            "min": 0,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 8
+          },
+          {
+            "type": "range",
+            "id": "button_font_size",
+            "label": "Font size (Desktop)",
+            "min": 10,
+            "max": 24,
+            "step": 1,
+            "unit": "px",
+            "default": 15
+          },
+          {
+            "type": "range",
+            "id": "button_font_size_mobile",
+            "label": "Font size (Mobile)",
+            "min": 10,
+            "max": 22,
+            "step": 1,
+            "unit": "px",
+            "default": 14
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_font_weight",
+            "label": "Enable custom font weight",
+            "default": false
+          },
+          {
+            "type": "select",
+            "id": "font_weight",
+            "label": "Font weight",
+            "default": "600",
+            "options": [
+              {
+                "value": "300",
+                "label": "Light"
+              },
+              {
+                "value": "400",
+                "label": "Normal"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi-Bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              },
+              {
+                "value": "800",
+                "label": "Extra Bold"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Countdown Timer Pro 2",
+        "category": "Countdown Timers",
+        "blocks": [
+          {
+            "type": "heading"
+          },
+          {
+            "type": "description"
+          },
+          {
+            "type": "button"
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

@@ -1,0 +1,1202 @@
+<template compat="shopify">
+{%- comment -%}
+  Testimonial Logos
+  Press/testimonial section: one large centered quote with a decorative quote
+  mark and a row of brand logos (image only, with a placeholder fallback).
+  The active logo is full opacity; the others are faded (optionally grayscale).
+  Clicking a logo switches the quote with an adjustable text animation.
+  Self-contained, scoped to #shopify-section-{{ section.id }}.
+  Colors come from the chosen theme color scheme (color-{{ scheme }} class
+  + theme CSS vars --color-text / --color-heading / --color-background /
+  --color-border / --color-primary).
+  Note: the theme's critical.css styles bare <blockquote> with a grey
+  background box — explicitly neutralized below so the quote panel stays
+  transparent and only the section wrapper carries the scheme background.
+{%- endcomment -%}
+
+{%- liquid
+  assign s = section.settings
+  assign scheme = s.color_scheme | default: 'scheme-1'
+  assign uid = section.id
+
+  assign pt = s.padding_top | default: 60
+  assign pb = s.padding_bottom | default: 60
+
+  assign qsd = s.quote_size_d | default: 26
+  assign qsm = s.quote_size_m | default: 19
+  assign qmax = s.quote_max_width | default: 900
+
+  assign qfont = 'var(--heading-font, inherit)'
+  if s.quote_font == 'theme-body'
+    assign qfont = 'var(--body-font, inherit)'
+  endif
+
+  assign qcolor = 'var(--color-heading)'
+  if s.quote_color_custom
+    assign qcolor = s.quote_color | default: '#111111'
+  endif
+
+  assign asd = s.author_size_d | default: 13
+  assign asm = s.author_size_m | default: 12
+
+  assign logo_h = s.logo_height | default: 28
+  assign logo_gap = s.logo_gap | default: 40
+  assign logo_gap_m = logo_gap | times: 0.65 | round
+  if logo_gap_m < 12
+    assign logo_gap_m = 12
+  endif
+  assign logos_pos = s.logos_position | default: 'below'
+  assign inactive_o = s.inactive_opacity | default: 35
+  assign inactive_o = inactive_o | divided_by: 100.0
+
+  assign t_style = s.transition_style | default: 'fade_up'
+  assign t_speed = s.transition_speed | default: 400
+
+  assign width = s.width | default: 'fluid_container'
+  case width
+    when 'container'
+      assign maxw = 'calc(var(--page-width, 1300px) + 3rem)'
+      assign padx = '1.5rem'
+    when 'stretch_width'
+      assign maxw = 'none'
+      assign padx = '3rem'
+    when 'full_width'
+      assign maxw = 'none'
+      assign padx = '1.5rem'
+    else
+      assign maxw = 'calc(var(--fluid-container-width, 1500px) + 3rem)'
+      assign padx = '1.5rem'
+  endcase
+-%}
+
+<style>
+  #shopify-section-{{ uid }} .tlg-{{ uid }} {
+    display: block;
+    color: var(--color-text);
+    background: var(--gradient-background, var(--color-background));
+    padding-top: {{ pt }}px;
+    padding-bottom: {{ pb }}px;
+    box-sizing: border-box;
+  }
+
+  #shopify-section-{{ uid }} .tlg__inner {
+    width: 100%;
+    max-width: {{ maxw }};
+    margin-inline: auto;
+    padding-inline: {{ padx }};
+    box-sizing: border-box;
+    text-align: center;
+  }
+
+  /* Static wrapper: holds the decorative mark so it does not animate
+     with the quote swap, and constrains the quote width. */
+  #shopify-section-{{ uid }} .tlg__quotewrap {
+    position: relative;
+    max-width: {{ qmax }}px;
+    margin: 0 auto;
+    background: transparent;
+  }
+
+  {%- if s.show_quote_mark %}
+  #shopify-section-{{ uid }} .tlg__quotewrap::before {
+    content: '\201C';
+    position: absolute;
+    top: -48px;
+    left: -10px;
+    z-index: 0;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 120px;
+    line-height: 1;
+    font-weight: 700;
+    color: var(--color-border, #d8d8d8);
+    pointer-events: none;
+    user-select: none;
+  }
+  {%- endif %}
+
+  /* Quote viewport — the whole container animates out / in.
+     z-index lifts the text above the decorative mark. */
+  #shopify-section-{{ uid }} .tlg__quotes {
+    position: relative;
+    z-index: 1;
+    background: transparent;
+    transition-property: opacity, transform, filter;
+    transition-duration: {{ t_speed }}ms;
+    transition-timing-function: cubic-bezier(0.33, 0, 0.2, 1);
+  }
+
+  #shopify-section-{{ uid }} .tlg__quotes.is-out { opacity: 0; }
+
+  #shopify-section-{{ uid }} .tlg__quotes.is-prep { transition: none !important; opacity: 0; }
+
+  {%- if t_style == 'fade_up' %}
+  #shopify-section-{{ uid }} .tlg__quotes.is-out { transform: translateY(-16px); }
+  #shopify-section-{{ uid }} .tlg__quotes.is-prep { transform: translateY(18px); }
+  {%- elsif t_style == 'blur' %}
+  #shopify-section-{{ uid }} .tlg__quotes.is-out { filter: blur(10px); }
+  #shopify-section-{{ uid }} .tlg__quotes.is-prep { filter: blur(10px); }
+  {%- endif %}
+
+  #shopify-section-{{ uid }} .tlg__quote {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+  }
+
+  #shopify-section-{{ uid }} .tlg__quote[hidden] { display: none !important; }
+
+  /* Transparent quote panel: the theme's critical.css paints bare
+     <blockquote> with a grey background + large padding — kill it here. */
+  #shopify-section-{{ uid }} .tlg__quote-text {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    background-color: transparent;
+    box-shadow: none;
+    font-family: {{ qfont }};
+    font-size: {{ qsd }}px;
+    line-height: 1.45;
+    font-weight: 500;
+    color: {{ qcolor }};
+  }
+
+  #shopify-section-{{ uid }} .tlg__quote-text p { margin: 0 0 0.6em; }
+
+  #shopify-section-{{ uid }} .tlg__quote-text p:last-child { margin-bottom: 0; }
+
+  #shopify-section-{{ uid }} .tlg__author {
+    margin-top: 14px;
+    font-size: {{ asd }}px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.65;
+    color: var(--color-text);
+  }
+
+  /* Logo row */
+  #shopify-section-{{ uid }} .tlg__logos {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 18px {{ logo_gap }}px;
+    {%- if logos_pos == 'above' %}
+    margin-bottom: 38px;
+    {%- else %}
+    margin-top: 38px;
+    {%- endif %}
+  }
+
+  #shopify-section-{{ uid }} .tlg__logo {
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    border: 0;
+    margin: 0;
+    padding: 6px 2px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-heading);
+    opacity: {{ inactive_o }};
+    {%- if s.grayscale_inactive %}
+    filter: grayscale(1);
+    {%- endif %}
+    transition: opacity 0.25s ease, filter 0.25s ease;
+  }
+
+  #shopify-section-{{ uid }} .tlg__logo:not(.is-active):hover { opacity: 0.7; }
+
+  #shopify-section-{{ uid }} .tlg__logo.is-active { opacity: 1; filter: none; }
+
+  #shopify-section-{{ uid }} .tlg__logo:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 4px;
+    border-radius: 4px;
+    opacity: 0.85;
+  }
+
+  #shopify-section-{{ uid }} .tlg__logo.is-active:focus-visible { opacity: 1; }
+
+  #shopify-section-{{ uid }} .tlg__logo img {
+    display: block;
+    height: {{ logo_h }}px;
+    width: auto;
+    max-width: 180px;
+    object-fit: contain;
+  }
+
+  @media (max-width: 749px) {
+    {%- if s.show_quote_mark %}
+    #shopify-section-{{ uid }} .tlg__quotewrap::before {
+      font-size: 64px;
+      top: -26px;
+      left: -4px;
+    }
+    {%- endif %}
+    #shopify-section-{{ uid }} .tlg__quote-text { font-size: {{ qsm }}px; }
+    #shopify-section-{{ uid }} .tlg__author { margin-top: 10px; font-size: {{ asm }}px; }
+    #shopify-section-{{ uid }} .tlg__logos {
+      gap: 14px {{ logo_gap_m }}px;
+      {%- if logos_pos == 'above' %}
+      margin-bottom: 28px;
+      {%- else %}
+      margin-top: 28px;
+      {%- endif %}
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ uid }} .tlg__quotes {
+      transition: none !important;
+      transform: none !important;
+      filter: none !important;
+    }
+    #shopify-section-{{ uid }} .tlg__logo { transition: none; }
+  }
+{% comment %}{% endcomment %}</style>
+
+{%- if section.blocks.size > 0 -%}
+{%- capture logos_html -%}
+  <div class="tlg__logos" role="tablist" aria-label="Testimonial sources">
+    {%- for block in section.blocks -%}
+      {%- liquid
+        assign b = block.settings
+        assign label = ''
+        if b.logo_image != blank
+          assign label = b.logo_image.alt | strip_html | strip
+        endif
+        if label == blank
+          assign label = 'Testimonial ' | append: forloop.index
+        endif
+      -%}
+      <button
+        type="button"
+        class="tlg__logo{% if forloop.first %} is-active{% endif %}"
+        id="tlg-tab-{{ uid }}-{{ forloop.index0 }}"
+        role="tab"
+        aria-label="{{ label | escape }}"
+        aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+        aria-controls="tlg-panel-{{ uid }}-{{ forloop.index0 }}"
+        tabindex="{% if forloop.first %}0{% else %}-1{% endif %}"
+        data-tlg-tab
+        data-index="{{ forloop.index0 }}"
+        {{ block.shopify_attributes }}
+      >
+        {%- if b.logo_image != blank -%}
+          {{ b.logo_image | image_url: height: 128 | image_tag: loading: 'lazy', alt: label }}
+        {%- else -%}
+          <img src="https://2dbags.co/wp-content/uploads/revslider/lookbook1-demo_slider/placeholder.jpg" alt="" loading="lazy">
+        {%- endif -%}
+      </button>
+    {%- endfor -%}
+  </div>
+{%- endcapture -%}
+<testimonial-logos
+  class="tlg-{{ uid }} color-{{ scheme }}"
+  data-transition="{{ t_style }}"
+  data-speed="{{ t_speed }}"
+  {%- if s.autoplay %} data-autoplay="{{ s.autoplay_interval | default: 6 }}"{%- endif %}
+>
+  <div class="tlg__inner">
+    {%- if logos_pos == 'above' -%}
+      {{ logos_html }}
+    {%- endif -%}
+
+    <div class="tlg__quotewrap">
+      <div class="tlg__quotes" data-tlg-quotes aria-live="polite">
+        {%- for block in section.blocks -%}
+          <figure
+            class="tlg__quote"
+            id="tlg-panel-{{ uid }}-{{ forloop.index0 }}"
+            role="tabpanel"
+            aria-labelledby="tlg-tab-{{ uid }}-{{ forloop.index0 }}"
+            data-tlg-panel
+            {% unless forloop.first %}hidden{% endunless %}
+          >
+            <blockquote class="tlg__quote-text">{{ block.settings.quote }}</blockquote>
+            {%- if block.settings.author != blank -%}
+              <figcaption class="tlg__author">{{ block.settings.author | escape }}</figcaption>
+            {%- endif -%}
+          </figure>
+        {%- endfor -%}
+      </div>
+    </div>
+
+    {%- unless logos_pos == 'above' -%}
+      {{ logos_html }}
+    {%- endunless -%}
+  </div>
+</testimonial-logos>
+{%- endif -%}
+
+<script>
+  (function () {
+    'use strict';
+
+    if (customElements.get('testimonial-logos')) return;
+
+    class TestimonialLogos extends HTMLElement {
+      connectedCallback() {
+        this._setup();
+      }
+
+      disconnectedCallback() {
+        this._teardown();
+      }
+
+      refresh() {
+        this._setup();
+      }
+
+      _setup() {
+        this._teardown();
+        this._ready = true;
+
+        this.quotesEl = this.querySelector('[data-tlg-quotes]');
+        this.panels = Array.prototype.slice.call(this.querySelectorAll('[data-tlg-panel]'));
+        this.tabs = Array.prototype.slice.call(this.querySelectorAll('[data-tlg-tab]'));
+        this.speed = parseInt(this.getAttribute('data-speed'), 10) || 400;
+        var secs = parseFloat(this.getAttribute('data-autoplay'));
+        this.autoplayMs = isNaN(secs) ? 0 : secs * 1000;
+        this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+        this.pendingIndex = null;
+        this._swapTimer = null;
+        this._autoTimer = null;
+        this._hover = false;
+        this._focus = false;
+        this._editorHold = false;
+        this._handlers = [];
+
+        var active = 0;
+        for (var i = 0; i < this.tabs.length; i++) {
+          if (this.tabs[i].classList.contains('is-active')) { active = i; break; }
+        }
+        this.current = active;
+
+        var self = this;
+
+        this.tabs.forEach(function (tab, index) {
+          var onClick = function () { self.activate(index, true); };
+          tab.addEventListener('click', onClick);
+          self._handlers.push([tab, 'click', onClick]);
+        });
+
+        var list = this.querySelector('[role="tablist"]');
+        if (list) {
+          var onKey = function (e) { self._onKeydown(e); };
+          list.addEventListener('keydown', onKey);
+          this._handlers.push([list, 'keydown', onKey]);
+        }
+
+        var onEnter = function () { self._hover = true; };
+        var onLeave = function () { self._hover = false; };
+        var onFocusIn = function () { self._focus = true; };
+        var onFocusOut = function (e) {
+          if (!e.relatedTarget || !self.contains(e.relatedTarget)) self._focus = false;
+        };
+        this.addEventListener('mouseenter', onEnter);
+        this.addEventListener('mouseleave', onLeave);
+        this.addEventListener('focusin', onFocusIn);
+        this.addEventListener('focusout', onFocusOut);
+        this._handlers.push(
+          [this, 'mouseenter', onEnter],
+          [this, 'mouseleave', onLeave],
+          [this, 'focusin', onFocusIn],
+          [this, 'focusout', onFocusOut]
+        );
+
+        this._startAutoplay();
+      }
+
+      _teardown() {
+        if (!this._ready) return;
+        this._ready = false;
+        this._stopAutoplay();
+        if (this._swapTimer) { clearTimeout(this._swapTimer); this._swapTimer = null; }
+        (this._handlers || []).forEach(function (h) {
+          h[0].removeEventListener(h[1], h[2]);
+        });
+        this._handlers = [];
+        if (this.quotesEl) this.quotesEl.classList.remove('is-out', 'is-prep');
+        this.pendingIndex = null;
+      }
+
+      activate(index, manual) {
+        if (!this.tabs.length || !this.quotesEl) return;
+        index = Math.max(0, Math.min(index, this.tabs.length - 1));
+        if (manual) this._startAutoplay();
+
+        var target = this.pendingIndex === null ? this.current : this.pendingIndex;
+        if (index === target) return;
+
+        this.pendingIndex = index;
+        this._updateTabs(index);
+
+        if (this._swapTimer) { clearTimeout(this._swapTimer); this._swapTimer = null; }
+
+        var ms = this.reducedMotion.matches ? 0 : this.speed;
+        if (ms <= 0) { this._commit(); return; }
+
+        this.quotesEl.classList.add('is-out');
+        var self = this;
+        this._swapTimer = setTimeout(function () { self._commit(); }, ms);
+      }
+
+      _commit() {
+        this._swapTimer = null;
+        if (this.pendingIndex === null) return;
+        var index = this.pendingIndex;
+        this.pendingIndex = null;
+
+        this.panels.forEach(function (panel, i) {
+          panel.hidden = i !== index;
+        });
+        this.current = index;
+
+        var q = this.quotesEl;
+        q.classList.add('is-prep');
+        q.classList.remove('is-out');
+        void q.offsetWidth;
+        q.classList.remove('is-prep');
+      }
+
+      _updateTabs(index) {
+        this.tabs.forEach(function (tab, i) {
+          var on = i === index;
+          tab.classList.toggle('is-active', on);
+          tab.setAttribute('aria-selected', on ? 'true' : 'false');
+          tab.setAttribute('tabindex', on ? '0' : '-1');
+        });
+      }
+
+      _onKeydown(e) {
+        var key = e.key;
+        if (key !== 'ArrowLeft' && key !== 'ArrowRight' && key !== 'Home' && key !== 'End') return;
+        e.preventDefault();
+        var i = this.pendingIndex === null ? this.current : this.pendingIndex;
+        if (key === 'ArrowRight') i += 1;
+        else if (key === 'ArrowLeft') i -= 1;
+        else if (key === 'Home') i = 0;
+        else i = this.tabs.length - 1;
+        i = (i + this.tabs.length) % this.tabs.length;
+        this.tabs[i].focus();
+        this.activate(i, true);
+      }
+
+      _startAutoplay() {
+        this._stopAutoplay();
+        if (!this.autoplayMs || this.tabs.length < 2) return;
+        if (window.Shopify && window.Shopify.designMode) return;
+        var self = this;
+        this._autoTimer = setInterval(function () {
+          if (self._hover || self._focus || self._editorHold) return;
+          if (document.hidden) return;
+          var base = self.pendingIndex === null ? self.current : self.pendingIndex;
+          self.activate((base + 1) % self.tabs.length, false);
+        }, this.autoplayMs);
+      }
+
+      _stopAutoplay() {
+        if (this._autoTimer) { clearInterval(this._autoTimer); this._autoTimer = null; }
+      }
+    }
+
+    customElements.define('testimonial-logos', TestimonialLogos);
+
+    document.addEventListener('shopify:section:load', function (e) {
+      var els = e.target.querySelectorAll('testimonial-logos');
+      Array.prototype.forEach.call(els, function (el) {
+        if (typeof el.refresh === 'function') el.refresh();
+      });
+    });
+
+    document.addEventListener('shopify:block:select', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+      var host = t.closest('testimonial-logos');
+      if (!host || typeof host.activate !== 'function') return;
+      host._editorHold = true;
+      var idx = parseInt(t.getAttribute('data-index'), 10);
+      if (!isNaN(idx)) host.activate(idx, false);
+    });
+
+    document.addEventListener('shopify:block:deselect', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+      var host = t.closest('testimonial-logos');
+      if (host) host._editorHold = false;
+    });
+  })();
+{% comment %}{% endcomment %}</script>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "testimonial-logos",
+  "name": "Testimonial Logos",
+  "settings": [
+    {
+      "type": "header",
+      "id": "hdr_1",
+      "label": "Layout"
+    },
+    {
+      "type": "color_scheme",
+      "id": "color_scheme",
+      "label": "Color scheme",
+      "default": "scheme-1"
+    },
+    {
+      "type": "select",
+      "id": "width",
+      "label": "Section width",
+      "default": "fluid_container",
+      "options": [
+        {
+          "value": "container",
+          "label": "Container"
+        },
+        {
+          "value": "fluid_container",
+          "label": "Fluid container"
+        },
+        {
+          "value": "stretch_width",
+          "label": "Stretched"
+        },
+        {
+          "value": "full_width",
+          "label": "Full width"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_4",
+      "label": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "label": "Top padding",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "default": 60
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "label": "Bottom padding",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "default": 60
+    },
+    {
+      "type": "header",
+      "id": "hdr_7",
+      "label": "Quote"
+    },
+    {
+      "type": "select",
+      "id": "quote_font",
+      "label": "Quote font",
+      "default": "theme-heading",
+      "options": [
+        {
+          "value": "theme-heading",
+          "label": "Theme heading font"
+        },
+        {
+          "value": "theme-body",
+          "label": "Theme body font"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "quote_size_d",
+      "label": "Quote size (desktop)",
+      "min": 16,
+      "max": 48,
+      "step": 1,
+      "unit": "px",
+      "default": 26
+    },
+    {
+      "type": "range",
+      "id": "quote_size_m",
+      "label": "Quote size (mobile)",
+      "min": 14,
+      "max": 36,
+      "step": 1,
+      "unit": "px",
+      "default": 19
+    },
+    {
+      "type": "range",
+      "id": "quote_max_width",
+      "label": "Quote max width",
+      "min": 500,
+      "max": 1200,
+      "step": 50,
+      "unit": "px",
+      "default": 900
+    },
+    {
+      "type": "checkbox",
+      "id": "quote_color_custom",
+      "label": "Use custom quote color",
+      "default": false,
+      "info": "Overrides the color scheme heading color."
+    },
+    {
+      "type": "color",
+      "id": "quote_color",
+      "label": "Quote color",
+      "default": "#111111",
+      "visible_if": "{{ section.settings.quote_color_custom }}"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_quote_mark",
+      "label": "Show decorative quote mark",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_15",
+      "label": "Author"
+    },
+    {
+      "type": "range",
+      "id": "author_size_d",
+      "label": "Author size (desktop)",
+      "min": 10,
+      "max": 24,
+      "step": 1,
+      "unit": "px",
+      "default": 13
+    },
+    {
+      "type": "range",
+      "id": "author_size_m",
+      "label": "Author size (mobile)",
+      "min": 9,
+      "max": 20,
+      "step": 1,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "header",
+      "id": "hdr_18",
+      "label": "Logos"
+    },
+    {
+      "type": "select",
+      "id": "logos_position",
+      "label": "Logos position",
+      "default": "below",
+      "options": [
+        {
+          "value": "below",
+          "label": "Below quote"
+        },
+        {
+          "value": "above",
+          "label": "Above quote"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "logo_height",
+      "label": "Logo height",
+      "min": 16,
+      "max": 64,
+      "step": 2,
+      "unit": "px",
+      "default": 28
+    },
+    {
+      "type": "range",
+      "id": "logo_gap",
+      "label": "Logo spacing",
+      "min": 12,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 40
+    },
+    {
+      "type": "range",
+      "id": "inactive_opacity",
+      "label": "Inactive logo opacity",
+      "min": 10,
+      "max": 80,
+      "step": 5,
+      "unit": "%",
+      "default": 35
+    },
+    {
+      "type": "checkbox",
+      "id": "grayscale_inactive",
+      "label": "Grayscale inactive logos",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_24",
+      "label": "Animation"
+    },
+    {
+      "type": "select",
+      "id": "transition_style",
+      "label": "Transition style",
+      "default": "fade_up",
+      "options": [
+        {
+          "value": "fade",
+          "label": "Fade"
+        },
+        {
+          "value": "fade_up",
+          "label": "Fade up"
+        },
+        {
+          "value": "blur",
+          "label": "Blur"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "transition_speed",
+      "label": "Transition speed",
+      "min": 150,
+      "max": 1000,
+      "step": 50,
+      "unit": "ms",
+      "default": 400
+    },
+    {
+      "type": "header",
+      "id": "hdr_27",
+      "label": "Autoplay"
+    },
+    {
+      "type": "checkbox",
+      "id": "autoplay",
+      "label": "Auto-rotate testimonials",
+      "default": false
+    },
+    {
+      "type": "range",
+      "id": "autoplay_interval",
+      "label": "Change every",
+      "min": 3,
+      "max": 12,
+      "step": 1,
+      "unit": "s",
+      "default": 6,
+      "visible_if": "{{ section.settings.autoplay }}"
+    }
+  ],
+  "blocks": [
+    {
+      "type": "testimonial",
+      "name": "Testimonial",
+      "settings": [
+        {
+          "type": "image_picker",
+          "id": "logo_image",
+          "label": "Logo image",
+          "info": "Transparent PNG or SVG works best. Leave empty to show a placeholder image."
+        },
+        {
+          "type": "richtext",
+          "id": "quote",
+          "label": "Quote",
+          "default": "<p>“This is the quote your customers and press will remember. Keep it short, confident and easy to read.”</p>"
+        },
+        {
+          "type": "text",
+          "id": "author",
+          "label": "Author / attribution",
+          "info": "Optional. Renders small under the quote."
+        }
+      ],
+      "limit": 8
+    }
+  ],
+  "max_blocks": 8,
+  "presets": [
+    {
+      "name": "Testimonial Logos",
+      "category": "Testimonials",
+      "blocks": [
+        {
+          "type": "testimonial",
+          "settings": {
+            "quote": "<p>“The fit and finish rival brands twice the price. This is the rare piece of gear we reach for every single day.”</p>",
+            "author": "Gear of the Year"
+          }
+        },
+        {
+          "type": "testimonial",
+          "settings": {
+            "quote": "<p>“Effortless, considered and quietly luxurious — proof that everyday essentials can still feel special.”</p>",
+            "author": "Editors’ Pick"
+          }
+        },
+        {
+          "type": "testimonial",
+          "settings": {
+            "quote": "<p>“Smart details where they count and nothing where they don’t. It simply works, beautifully.”</p>",
+            "author": "9/10 — Highly Recommended"
+          }
+        }
+      ]
+    }
+  ],
+  "shopify": {
+    "name": "Testimonial Logos",
+    "tag": "section",
+    "class": "section",
+    "settings": [
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "scheme-1"
+      },
+      {
+        "type": "select",
+        "id": "width",
+        "label": "Section width",
+        "default": "fluid_container",
+        "options": [
+          {
+            "value": "container",
+            "label": "Container"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top padding",
+        "min": 0,
+        "max": 120,
+        "step": 4,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom padding",
+        "min": 0,
+        "max": 120,
+        "step": 4,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "header",
+        "content": "Quote"
+      },
+      {
+        "type": "select",
+        "id": "quote_font",
+        "label": "Quote font",
+        "default": "theme-heading",
+        "options": [
+          {
+            "value": "theme-heading",
+            "label": "Theme heading font"
+          },
+          {
+            "value": "theme-body",
+            "label": "Theme body font"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "quote_size_d",
+        "label": "Quote size (desktop)",
+        "min": 16,
+        "max": 48,
+        "step": 1,
+        "unit": "px",
+        "default": 26
+      },
+      {
+        "type": "range",
+        "id": "quote_size_m",
+        "label": "Quote size (mobile)",
+        "min": 14,
+        "max": 36,
+        "step": 1,
+        "unit": "px",
+        "default": 19
+      },
+      {
+        "type": "range",
+        "id": "quote_max_width",
+        "label": "Quote max width",
+        "min": 500,
+        "max": 1200,
+        "step": 50,
+        "unit": "px",
+        "default": 900
+      },
+      {
+        "type": "checkbox",
+        "id": "quote_color_custom",
+        "label": "Use custom quote color",
+        "default": false,
+        "info": "Overrides the color scheme heading color."
+      },
+      {
+        "type": "color",
+        "id": "quote_color",
+        "label": "Quote color",
+        "default": "#111111",
+        "visible_if": "{{ section.settings.quote_color_custom }}"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_quote_mark",
+        "label": "Show decorative quote mark",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Author"
+      },
+      {
+        "type": "range",
+        "id": "author_size_d",
+        "label": "Author size (desktop)",
+        "min": 10,
+        "max": 24,
+        "step": 1,
+        "unit": "px",
+        "default": 13
+      },
+      {
+        "type": "range",
+        "id": "author_size_m",
+        "label": "Author size (mobile)",
+        "min": 9,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 12
+      },
+      {
+        "type": "header",
+        "content": "Logos"
+      },
+      {
+        "type": "select",
+        "id": "logos_position",
+        "label": "Logos position",
+        "default": "below",
+        "options": [
+          {
+            "value": "below",
+            "label": "Below quote"
+          },
+          {
+            "value": "above",
+            "label": "Above quote"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "logo_height",
+        "label": "Logo height",
+        "min": 16,
+        "max": 64,
+        "step": 2,
+        "unit": "px",
+        "default": 28
+      },
+      {
+        "type": "range",
+        "id": "logo_gap",
+        "label": "Logo spacing",
+        "min": 12,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 40
+      },
+      {
+        "type": "range",
+        "id": "inactive_opacity",
+        "label": "Inactive logo opacity",
+        "min": 10,
+        "max": 80,
+        "step": 5,
+        "unit": "%",
+        "default": 35
+      },
+      {
+        "type": "checkbox",
+        "id": "grayscale_inactive",
+        "label": "Grayscale inactive logos",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Animation"
+      },
+      {
+        "type": "select",
+        "id": "transition_style",
+        "label": "Transition style",
+        "default": "fade_up",
+        "options": [
+          {
+            "value": "fade",
+            "label": "Fade"
+          },
+          {
+            "value": "fade_up",
+            "label": "Fade up"
+          },
+          {
+            "value": "blur",
+            "label": "Blur"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "transition_speed",
+        "label": "Transition speed",
+        "min": 150,
+        "max": 1000,
+        "step": 50,
+        "unit": "ms",
+        "default": 400
+      },
+      {
+        "type": "header",
+        "content": "Autoplay"
+      },
+      {
+        "type": "checkbox",
+        "id": "autoplay",
+        "label": "Auto-rotate testimonials",
+        "default": false
+      },
+      {
+        "type": "range",
+        "id": "autoplay_interval",
+        "label": "Change every",
+        "min": 3,
+        "max": 12,
+        "step": 1,
+        "unit": "s",
+        "default": 6,
+        "visible_if": "{{ section.settings.autoplay }}"
+      }
+    ],
+    "blocks": [
+      {
+        "type": "testimonial",
+        "name": "Testimonial",
+        "limit": 8,
+        "settings": [
+          {
+            "type": "image_picker",
+            "id": "logo_image",
+            "label": "Logo image",
+            "info": "Transparent PNG or SVG works best. Leave empty to show a placeholder image."
+          },
+          {
+            "type": "richtext",
+            "id": "quote",
+            "label": "Quote",
+            "default": "<p>“This is the quote your customers and press will remember. Keep it short, confident and easy to read.”</p>"
+          },
+          {
+            "type": "text",
+            "id": "author",
+            "label": "Author / attribution",
+            "info": "Optional. Renders small under the quote."
+          }
+        ]
+      }
+    ],
+    "max_blocks": 8,
+    "presets": [
+      {
+        "name": "Testimonial Logos",
+        "category": "Testimonials",
+        "blocks": [
+          {
+            "type": "testimonial",
+            "settings": {
+              "quote": "<p>“The fit and finish rival brands twice the price. This is the rare piece of gear we reach for every single day.”</p>",
+              "author": "Gear of the Year"
+            }
+          },
+          {
+            "type": "testimonial",
+            "settings": {
+              "quote": "<p>“Effortless, considered and quietly luxurious — proof that everyday essentials can still feel special.”</p>",
+              "author": "Editors’ Pick"
+            }
+          },
+          {
+            "type": "testimonial",
+            "settings": {
+              "quote": "<p>“Smart details where they count and nothing where they don’t. It simply works, beautifully.”</p>",
+              "author": "9/10 — Highly Recommended"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

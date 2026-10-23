@@ -1,0 +1,1792 @@
+<template compat="shopify">
+{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- comment -%}
+  Materia Themes — Countdown Timer Inline
+  Compact pill-shaped countdown banner. Numbers and labels render
+  inline on a single horizontal line, ideal for top-of-page sale
+  banners, sticky bars, or compact mid-page CTAs. Distinct from the
+  card-based timers (Flip / Pro 1-3) — no boxes around digits, just
+  bold typography on a pill bar with optional eyebrow + CTA.
+
+  Renders fully without JavaScript — server prints initial digits.
+  JS recomputes each second. Block-organized for the eyebrow,
+  message text, and CTA button.
+{%- endcomment -%}
+
+{%- liquid
+  assign st  = section.settings
+  assign sid = section.id
+  assign cta = nil
+  for b in section.blocks
+    if b.type == 'cta' and cta == nil
+      assign cta = b
+    endif
+  endfor
+  assign align = st.align | default: 'center'
+  case align
+    when 'left'
+      assign flex_align = 'flex-start'
+    when 'right'
+      assign flex_align = 'flex-end'
+    else
+      assign flex_align = 'center'
+  endcase
+
+  assign end_iso = st.end_iso | default: ''
+  assign initial_seconds = 86400
+  if end_iso != blank
+    assign end_time_t = end_iso | date: '%s' | plus: 0
+    assign now_t = 'now' | date: '%s' | plus: 0
+    assign initial_seconds = end_time_t | minus: now_t
+    if initial_seconds < 0
+      assign initial_seconds = 0
+    endif
+  endif
+  assign d = initial_seconds | divided_by: 86400
+  assign rem = initial_seconds | modulo: 86400
+  assign h = rem | divided_by: 3600
+  assign rem = rem | modulo: 3600
+  assign m = rem | divided_by: 60
+  assign s = rem | modulo: 60
+-%}
+
+<style>
+  /* Section isolation */
+  #shopify-section-{{ sid }} { isolation: isolate; position: relative; }
+  :where(#shopify-section-{{ sid }}) { font-family: var(--body-font, inherit); }
+  #shopify-section-{{ sid }} *, #shopify-section-{{ sid }} *:before, #shopify-section-{{ sid }} *:after { box-sizing: border-box; }
+
+  /* Margins */
+  #shopify-section-{{ sid }} {
+    margin-top: {{ st.section_margin_top_mobile | default: 0 }}px;
+    margin-bottom: {{ st.section_margin_bottom_mobile | default: 0 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} {
+      margin-top: {{ st.section_margin_top_desktop | default: 0 }}px;
+      margin-bottom: {{ st.section_margin_bottom_desktop | default: 0 }}px;
+    }
+  }
+  {%- if st.reset_spacing -%}
+    #shopify-section-{{ sid }} { margin-top: 0 !important; margin-bottom: 0 !important; }
+    #shopify-section-{{ sid }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif -%}
+
+  /* Outer */
+  #shopify-section-{{ sid }} .cin {
+    background: {{ st.section_bg | default: 'transparent' }} !important;
+    padding-top: {{ st.padding_top_mobile | default: 16 }}px;
+    padding-bottom: {{ st.padding_bottom_mobile | default: 16 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .cin {
+      padding-top: {{ st.padding_top_desktop | default: 24 }}px;
+      padding-bottom: {{ st.padding_bottom_desktop | default: 24 }}px;
+    }
+  }
+
+  #shopify-section-{{ sid }} .cin__inner {
+    max-width: {{ st.section_max_width_mobile | default: 560 }}px;
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .cin__inner {
+      max-width: {{ st.section_max_width_tablet | default: 900 }}px;
+      padding-inline: 1.5rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    #shopify-section-{{ sid }} .cin__inner {
+      max-width: {{ st.section_max_width_desktop | default: 1200 }}px;
+    }
+  }
+
+  /* The pill bar — stacks vertically on narrow mobile, lays out
+     horizontally on tablet+. */
+  #shopify-section-{{ sid }} .cin__bar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: {{ st.gap_inline_mobile | default: 13 }}px;
+    background: {{ st.bar_bg | default: '#0F0F0F' }};
+    color: {{ st.bar_text | default: '#FFFFFF' }};
+    border: {{ st.bar_border_width | default: 0 }}px solid {{ st.bar_border_color | default: '#000000' }};
+    border-radius: {{ st.bar_radius_mobile | default: 24 }}px;
+    padding: {{ st.bar_pad_y_mobile | default: 14 }}px {{ st.bar_pad_x_mobile | default: 22 }}px;
+    text-align: center;
+  }
+  @media (min-width: 600px) {
+    #shopify-section-{{ sid }} .cin__bar {
+      flex-direction: row;
+      flex-wrap: wrap;
+      justify-content: {{ flex_align }};
+      gap: {{ st.gap_inline | default: 16 }}px;
+      text-align: inherit;
+      border-radius: {{ st.bar_radius | default: 100 }}px;
+    }
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .cin__bar {
+      padding: {{ st.bar_pad_y_desktop | default: 18 }}px {{ st.bar_pad_x_desktop | default: 32 }}px;
+    }
+  }
+
+  /* Eyebrow chip (optional) */
+  #shopify-section-{{ sid }} .cin__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: {{ st.eyebrow_bg | default: 'rgba(255,255,255,0.12)' }};
+    color: {{ st.eyebrow_color | default: '#FFFFFF' }};
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  #shopify-section-{{ sid }} .cin__eyebrow-dot {
+    width: 6px; height: 6px;
+    background: {{ st.eyebrow_dot_color | default: '#EF4444' }};
+    border-radius: 999px;
+    animation: cin-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes cin-pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50%     { opacity: 0.5; transform: scale(1.3); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ sid }} .cin__eyebrow-dot { animation: none; }
+  }
+
+  /* Message text */
+  #shopify-section-{{ sid }} .cin__message {
+    font-weight: {{ st.message_weight | default: 600 }};
+    font-size: {{ st.message_size_mobile | default: 14 }}px;
+    line-height: 1.3;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .cin__message {
+      font-size: {{ st.message_size_desktop | default: 16 }}px;
+    }
+  }
+  #shopify-section-{{ sid }} .cin__message > * { margin: 0 !important; }
+
+  /* Inline timer — digits + units on one line */
+  #shopify-section-{{ sid }} .cin__timer {
+    display: inline-flex;
+    align-items: baseline;
+    gap: {{ st.timer_gap | default: 10 }}px;
+    font-variant-numeric: tabular-nums;
+  }
+  #shopify-section-{{ sid }} .cin__unit {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+  }
+  #shopify-section-{{ sid }} .cin__digits {
+    color: {{ st.digit_color | default: '#FFFFFF' }};
+    background: {{ st.digit_bg | default: 'transparent' }};
+    {% if st.digit_bg != blank and st.digit_bg != 'transparent' and st.digit_bg != 'rgba(0,0,0,0)' %}
+    padding: 4px 8px;
+    border-radius: 6px;
+    {% endif %}
+    font-weight: {{ st.digit_weight | default: 800 }};
+    font-size: {{ st.digit_size_mobile | default: 18 }}px;
+    line-height: 1;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .cin__digits {
+      font-size: {{ st.digit_size_desktop | default: 22 }}px;
+    }
+  }
+  #shopify-section-{{ sid }} .cin__unit-label {
+    font-size: {{ st.unit_label_size | default: 12 }}px;
+    font-weight: {{ st.unit_label_weight | default: 600 }};
+    color: {{ st.unit_label_color | default: '#94A3B8' }};
+    text-transform: lowercase;
+    line-height: 1;
+  }
+
+  /* CTA */
+  #shopify-section-{{ sid }} .cin__cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    background: {{ st.cta_bg | default: '#FFFFFF' }};
+    color: {{ st.cta_color | default: '#0F0F0F' }};
+    border: {{ st.cta_border_width | default: 0 }}px solid {{ st.cta_border_color | default: '#FFFFFF' }};
+    padding: {{ st.cta_pad_y | default: 8 }}px {{ st.cta_pad_x | default: 18 }}px;
+    border-radius: {{ st.cta_radius | default: 100 }}px;
+    font-size: {{ st.cta_size | default: 13 }}px;
+    font-weight: 700;
+    transition: background .2s ease, color .2s ease, transform .15s ease;
+    white-space: nowrap;
+  }
+  #shopify-section-{{ sid }} .cin__cta:hover {
+    background: {{ st.cta_bg_hover | default: '#F1F5F9' }};
+    color: {{ st.cta_color_hover | default: '#0F0F0F' }};
+    transform: translateY(-1px);
+  }
+
+  /* Show / hide by device */
+  {%- if st.show_section_on == 'mobile' -%}
+    #shopify-section-{{ sid }} .cin { display: none; }
+    @media (max-width: 767px) { #shopify-section-{{ sid }} .cin { display: block; } }
+  {%- elsif st.show_section_on == 'desktop' -%}
+    #shopify-section-{{ sid }} .cin { display: none; }
+    @media (min-width: 768px) { #shopify-section-{{ sid }} .cin { display: block; } }
+  {%- endif -%}
+
+  /* Expired state */
+  #shopify-section-{{ sid }}.cin-expired .cin__timer,
+  #shopify-section-{{ sid }}.cin-expired .cin__cta { display: none; }
+  #shopify-section-{{ sid }} .cin__expired { display: none; }
+  #shopify-section-{{ sid }}.cin-expired .cin__expired {
+    display: inline-block;
+    color: {{ st.expired_color | default: 'inherit' }};
+  }
+{% comment %}{% endcomment %}</style>
+
+<section class="cin" id="cin-{{ sid }}">
+  <div class="cin__inner">
+    <div class="cin__bar" data-cin-bar data-end="{{ end_iso | escape }}">
+
+      {%- for block in section.blocks -%}
+        {%- assign bs = block.settings -%}
+        {%- case block.type -%}
+
+          {%- when 'eyebrow' -%}
+            {%- if bs.text != blank -%}
+              <span class="cin__eyebrow" id="block-{{ block.id }}" {{ block.shopify_attributes }}>
+                {%- if bs.show_dot -%}<span class="cin__eyebrow-dot" aria-hidden="true"></span>{%- endif -%}
+                <span>{{ bs.text }}</span>
+              </span>
+            {%- endif -%}
+
+          {%- when 'message' -%}
+            {%- if bs.text != blank -%}
+              <div class="cin__message" id="block-{{ block.id }}" {{ block.shopify_attributes }}>{{ bs.text }}</div>
+            {%- endif -%}
+
+        {%- endcase -%}
+      {%- endfor -%}
+
+      {%- comment -%}========== INLINE TIMER ==========={%- endcomment -%}
+      <div class="cin__timer">
+        {%- if st.show_days -%}
+          <span class="cin__unit">
+            <span class="cin__digits" data-cin-d>{%- if d < 10 -%}0{%- endif -%}{{ d }}</span>
+            <span class="cin__unit-label">{{ st.label_days | default: 'd' }}</span>
+          </span>
+        {%- endif -%}
+        {%- if st.show_hours -%}
+          <span class="cin__unit">
+            <span class="cin__digits" data-cin-h>{%- if h < 10 -%}0{%- endif -%}{{ h }}</span>
+            <span class="cin__unit-label">{{ st.label_hours | default: 'h' }}</span>
+          </span>
+        {%- endif -%}
+        {%- if st.show_minutes -%}
+          <span class="cin__unit">
+            <span class="cin__digits" data-cin-m>{%- if m < 10 -%}0{%- endif -%}{{ m }}</span>
+            <span class="cin__unit-label">{{ st.label_minutes | default: 'm' }}</span>
+          </span>
+        {%- endif -%}
+        {%- if st.show_seconds -%}
+          <span class="cin__unit">
+            <span class="cin__digits" data-cin-s>{%- if s < 10 -%}0{%- endif -%}{{ s }}</span>
+            <span class="cin__unit-label">{{ st.label_seconds | default: 's' }}</span>
+          </span>
+        {%- endif -%}
+      </div>
+
+      {%- if st.expired_message != blank -%}
+        <span class="cin__expired">{{ st.expired_message }}</span>
+      {%- endif -%}
+
+      {%- if cta and cta.settings.text != blank -%}
+        <a class="cin__cta" href="{{ cta.settings.link | default: '#' }}" id="block-{{ cta.id }}" {{ cta.shopify_attributes }}>{{ cta.settings.text }}</a>
+      {%- endif -%}
+
+    </div>
+  </div>
+</section>
+
+<script>
+(function(){
+  var root = document.getElementById('shopify-section-{{ sid }}');
+  if (!root || root.__cinInit) return;
+  root.__cinInit = true;
+
+  var bar = root.querySelector('[data-cin-bar]');
+  if (!bar) return;
+  var endRaw = bar.getAttribute('data-end');
+  if (!endRaw) return;
+  var end = Date.parse(endRaw);
+  if (isNaN(end)) return;
+
+  var dEl = bar.querySelector('[data-cin-d]');
+  var hEl = bar.querySelector('[data-cin-h]');
+  var mEl = bar.querySelector('[data-cin-m]');
+  var sEl = bar.querySelector('[data-cin-s]');
+
+  function pad(n){ n = String(Math.max(0, Math.floor(n))); return n.length < 2 ? '0' + n : n; }
+
+  function tick(){
+    var diff = Math.max(0, Math.floor((end - Date.now()) / 1000));
+    var d = Math.floor(diff / 86400);
+    var h = Math.floor((diff % 86400) / 3600);
+    var m = Math.floor((diff % 3600) / 60);
+    var s = diff % 60;
+    if (dEl) dEl.textContent = pad(d);
+    if (hEl) hEl.textContent = pad(h);
+    if (mEl) mEl.textContent = pad(m);
+    if (sEl) sEl.textContent = pad(s);
+    if (diff <= 0) {
+      root.classList.add('cin-expired');
+      clearInterval(iv);
+    }
+  }
+  tick();
+  var iv = setInterval(tick, 1000);
+})();
+{% comment %}{% endcomment %}</script>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "countdown-inline",
+  "name": "Countdown Timer Inline",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "General"
+    },
+    {
+      "type": "select",
+      "id": "show_section_on",
+      "label": "Show section on",
+      "default": "all",
+      "options": [
+        {
+          "value": "all",
+          "label": "All Devices"
+        },
+        {
+          "value": "mobile",
+          "label": "Only Mobile"
+        },
+        {
+          "value": "desktop",
+          "label": "Only Desktop"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_4",
+      "label": "Section width"
+    },
+    {
+      "type": "range",
+      "id": "section_max_width_desktop",
+      "label": "Section width (desktop ≥1024px)",
+      "min": 600,
+      "max": 1500,
+      "step": 10,
+      "unit": "px",
+      "default": 1200
+    },
+    {
+      "type": "range",
+      "id": "section_max_width_tablet",
+      "label": "Section width (tablet ≥768px)",
+      "min": 400,
+      "max": 1100,
+      "step": 10,
+      "unit": "px",
+      "default": 900
+    },
+    {
+      "type": "range",
+      "id": "section_max_width_mobile",
+      "label": "Section width (mobile)",
+      "min": 280,
+      "max": 800,
+      "step": 10,
+      "unit": "px",
+      "default": 560
+    },
+    {
+      "type": "header",
+      "id": "hdr_8",
+      "label": "Layout"
+    },
+    {
+      "type": "select",
+      "id": "align",
+      "label": "Bar alignment",
+      "default": "center",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "gap_inline",
+      "label": "Gap between bar items (desktop)",
+      "min": 4,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "gap_inline_mobile",
+      "label": "Gap between bar items (mobile)",
+      "min": 4,
+      "max": 30,
+      "step": 1,
+      "unit": "px",
+      "default": 13
+    },
+    {
+      "type": "range",
+      "id": "timer_gap",
+      "label": "Gap between timer units",
+      "min": 4,
+      "max": 30,
+      "step": 1,
+      "unit": "px",
+      "default": 10
+    },
+    {
+      "type": "header",
+      "id": "hdr_13",
+      "label": "End time"
+    },
+    {
+      "type": "text",
+      "id": "end_iso",
+      "label": "End date & time (ISO 8601)",
+      "default": "2026-12-31T23:59:00",
+      "info": "Format: YYYY-MM-DDTHH:MM:SS in the visitor's local time."
+    },
+    {
+      "type": "text",
+      "id": "expired_message",
+      "label": "Expired message",
+      "default": "This offer has ended."
+    },
+    {
+      "type": "color",
+      "id": "expired_color",
+      "label": "Expired text color (override)"
+    },
+    {
+      "type": "header",
+      "id": "hdr_17",
+      "label": "Units shown"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_days",
+      "label": "Show days",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_hours",
+      "label": "Show hours",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_minutes",
+      "label": "Show minutes",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_seconds",
+      "label": "Show seconds",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "label_days",
+      "label": "Days suffix",
+      "default": "d"
+    },
+    {
+      "type": "text",
+      "id": "label_hours",
+      "label": "Hours suffix",
+      "default": "h"
+    },
+    {
+      "type": "text",
+      "id": "label_minutes",
+      "label": "Minutes suffix",
+      "default": "m"
+    },
+    {
+      "type": "text",
+      "id": "label_seconds",
+      "label": "Seconds suffix",
+      "default": "s"
+    },
+    {
+      "type": "header",
+      "id": "hdr_26",
+      "label": "Bar style"
+    },
+    {
+      "type": "color",
+      "id": "bar_bg",
+      "label": "Bar background",
+      "default": "#0F0F0F"
+    },
+    {
+      "type": "color",
+      "id": "bar_text",
+      "label": "Bar default text color",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "color",
+      "id": "bar_border_color",
+      "label": "Bar border color",
+      "default": "#000000"
+    },
+    {
+      "type": "range",
+      "id": "bar_border_width",
+      "label": "Bar border width",
+      "min": 0,
+      "max": 4,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "bar_radius",
+      "label": "Bar corner radius (desktop)",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 100
+    },
+    {
+      "type": "range",
+      "id": "bar_radius_mobile",
+      "label": "Bar corner radius (mobile)",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "range",
+      "id": "bar_pad_x_desktop",
+      "label": "Bar padding x (desktop)",
+      "min": 8,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 32
+    },
+    {
+      "type": "range",
+      "id": "bar_pad_y_desktop",
+      "label": "Bar padding y (desktop)",
+      "min": 4,
+      "max": 32,
+      "step": 1,
+      "unit": "px",
+      "default": 18
+    },
+    {
+      "type": "range",
+      "id": "bar_pad_x_mobile",
+      "label": "Bar padding x (mobile)",
+      "min": 8,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 22
+    },
+    {
+      "type": "range",
+      "id": "bar_pad_y_mobile",
+      "label": "Bar padding y (mobile)",
+      "min": 4,
+      "max": 28,
+      "step": 1,
+      "unit": "px",
+      "default": 14
+    },
+    {
+      "type": "header",
+      "id": "hdr_37",
+      "label": "Eyebrow style"
+    },
+    {
+      "type": "color",
+      "id": "eyebrow_bg",
+      "label": "Eyebrow background"
+    },
+    {
+      "type": "color",
+      "id": "eyebrow_color",
+      "label": "Eyebrow text color",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "color",
+      "id": "eyebrow_dot_color",
+      "label": "Eyebrow pulsing dot",
+      "default": "#EF4444"
+    },
+    {
+      "type": "header",
+      "id": "hdr_41",
+      "label": "Message text"
+    },
+    {
+      "type": "select",
+      "id": "message_weight",
+      "label": "Message weight",
+      "default": "600",
+      "options": [
+        {
+          "value": "400",
+          "label": "Normal"
+        },
+        {
+          "value": "500",
+          "label": "Medium"
+        },
+        {
+          "value": "600",
+          "label": "Semi-bold"
+        },
+        {
+          "value": "700",
+          "label": "Bold"
+        },
+        {
+          "value": "800",
+          "label": "Extra-bold"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "message_size_desktop",
+      "label": "Message size (desktop)",
+      "min": 12,
+      "max": 24,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "message_size_mobile",
+      "label": "Message size (mobile)",
+      "min": 11,
+      "max": 20,
+      "step": 1,
+      "unit": "px",
+      "default": 14
+    },
+    {
+      "type": "header",
+      "id": "hdr_45",
+      "label": "Digit style"
+    },
+    {
+      "type": "color",
+      "id": "digit_color",
+      "label": "Digit color",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "color",
+      "id": "digit_bg",
+      "label": "Digit chip background (optional)"
+    },
+    {
+      "type": "select",
+      "id": "digit_weight",
+      "label": "Digit weight",
+      "default": "800",
+      "options": [
+        {
+          "value": "600",
+          "label": "Semi-bold"
+        },
+        {
+          "value": "700",
+          "label": "Bold"
+        },
+        {
+          "value": "800",
+          "label": "Extra-bold"
+        },
+        {
+          "value": "900",
+          "label": "Black"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "digit_size_desktop",
+      "label": "Digit size (desktop)",
+      "min": 14,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 22
+    },
+    {
+      "type": "range",
+      "id": "digit_size_mobile",
+      "label": "Digit size (mobile)",
+      "min": 12,
+      "max": 32,
+      "step": 1,
+      "unit": "px",
+      "default": 18
+    },
+    {
+      "type": "color",
+      "id": "unit_label_color",
+      "label": "Unit suffix color",
+      "default": "#94A3B8"
+    },
+    {
+      "type": "select",
+      "id": "unit_label_weight",
+      "label": "Unit suffix weight",
+      "default": "600",
+      "options": [
+        {
+          "value": "400",
+          "label": "Normal"
+        },
+        {
+          "value": "500",
+          "label": "Medium"
+        },
+        {
+          "value": "600",
+          "label": "Semi-bold"
+        },
+        {
+          "value": "700",
+          "label": "Bold"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "unit_label_size",
+      "label": "Unit suffix size",
+      "min": 9,
+      "max": 16,
+      "step": 1,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "header",
+      "id": "hdr_54",
+      "label": "CTA button"
+    },
+    {
+      "type": "color",
+      "id": "cta_bg",
+      "label": "Background",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "color",
+      "id": "cta_color",
+      "label": "Text color",
+      "default": "#0F0F0F"
+    },
+    {
+      "type": "color",
+      "id": "cta_bg_hover",
+      "label": "Background (hover)",
+      "default": "#F1F5F9"
+    },
+    {
+      "type": "color",
+      "id": "cta_color_hover",
+      "label": "Text color (hover)",
+      "default": "#0F0F0F"
+    },
+    {
+      "type": "color",
+      "id": "cta_border_color",
+      "label": "Border color",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "range",
+      "id": "cta_border_width",
+      "label": "Border width",
+      "min": 0,
+      "max": 4,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "cta_radius",
+      "label": "Corner radius",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 100
+    },
+    {
+      "type": "range",
+      "id": "cta_size",
+      "label": "Text size",
+      "min": 11,
+      "max": 18,
+      "step": 1,
+      "unit": "px",
+      "default": 13
+    },
+    {
+      "type": "range",
+      "id": "cta_pad_x",
+      "label": "Padding x",
+      "min": 8,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 18
+    },
+    {
+      "type": "range",
+      "id": "cta_pad_y",
+      "label": "Padding y",
+      "min": 4,
+      "max": 20,
+      "step": 1,
+      "unit": "px",
+      "default": 8
+    },
+    {
+      "type": "header",
+      "id": "hdr_65",
+      "label": "Style"
+    },
+    {
+      "type": "color",
+      "id": "section_bg",
+      "label": "Section background",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "header",
+      "id": "hdr_67",
+      "label": "Layout & Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top_desktop",
+      "label": "Top padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_desktop",
+      "label": "Bottom padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_desktop",
+      "label": "Top margin (desktop px)",
+      "min": -200,
+      "max": 300,
+      "step": 5,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_desktop",
+      "label": "Bottom margin (desktop px)",
+      "min": -200,
+      "max": 300,
+      "step": 5,
+      "default": 0
+    },
+    {
+      "type": "header",
+      "id": "hdr_72",
+      "label": "Mobile"
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "label": "Top padding (mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "label": "Bottom padding (mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 16
+    }
+  ],
+  "blocks": [
+    {
+      "type": "eyebrow",
+      "name": "Eyebrow chip",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Eyebrow text",
+          "default": "Live now"
+        },
+        {
+          "type": "checkbox",
+          "id": "show_dot",
+          "label": "Show pulsing dot",
+          "default": true
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "message",
+      "name": "Message text",
+      "settings": [
+        {
+          "type": "inline_richtext",
+          "id": "text",
+          "label": "Message",
+          "default": "Sale ends in"
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "cta",
+      "name": "Button",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Button label",
+          "default": "Shop now"
+        },
+        {
+          "type": "url",
+          "id": "link",
+          "label": "Button link"
+        }
+      ],
+      "limit": 1
+    }
+  ],
+  "presets": [
+    {
+      "name": "Countdown Timer Inline",
+      "category": "Countdown Timers",
+      "blocks": [
+        {
+          "type": "eyebrow"
+        },
+        {
+          "type": "message"
+        },
+        {
+          "type": "cta"
+        }
+      ]
+    }
+  ],
+  "shopify": {
+    "name": "Countdown Timer Inline",
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "select",
+        "id": "show_section_on",
+        "label": "Show section on",
+        "default": "all",
+        "options": [
+          {
+            "value": "all",
+            "label": "All Devices"
+          },
+          {
+            "value": "mobile",
+            "label": "Only Mobile"
+          },
+          {
+            "value": "desktop",
+            "label": "Only Desktop"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Section width"
+      },
+      {
+        "type": "range",
+        "id": "section_max_width_desktop",
+        "label": "Section width (desktop ≥1024px)",
+        "min": 600,
+        "max": 1500,
+        "step": 10,
+        "unit": "px",
+        "default": 1200
+      },
+      {
+        "type": "range",
+        "id": "section_max_width_tablet",
+        "label": "Section width (tablet ≥768px)",
+        "min": 400,
+        "max": 1100,
+        "step": 10,
+        "unit": "px",
+        "default": 900
+      },
+      {
+        "type": "range",
+        "id": "section_max_width_mobile",
+        "label": "Section width (mobile)",
+        "min": 280,
+        "max": 800,
+        "step": 10,
+        "unit": "px",
+        "default": 560
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "align",
+        "label": "Bar alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "gap_inline",
+        "label": "Gap between bar items (desktop)",
+        "min": 4,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "gap_inline_mobile",
+        "label": "Gap between bar items (mobile)",
+        "min": 4,
+        "max": 30,
+        "step": 1,
+        "unit": "px",
+        "default": 13
+      },
+      {
+        "type": "range",
+        "id": "timer_gap",
+        "label": "Gap between timer units",
+        "min": 4,
+        "max": 30,
+        "step": 1,
+        "unit": "px",
+        "default": 10
+      },
+      {
+        "type": "header",
+        "content": "End time"
+      },
+      {
+        "type": "text",
+        "id": "end_iso",
+        "label": "End date & time (ISO 8601)",
+        "default": "2026-12-31T23:59:00",
+        "info": "Format: YYYY-MM-DDTHH:MM:SS in the visitor's local time."
+      },
+      {
+        "type": "text",
+        "id": "expired_message",
+        "label": "Expired message",
+        "default": "This offer has ended."
+      },
+      {
+        "type": "color",
+        "id": "expired_color",
+        "label": "Expired text color (override)"
+      },
+      {
+        "type": "header",
+        "content": "Units shown"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_days",
+        "label": "Show days",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_hours",
+        "label": "Show hours",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_minutes",
+        "label": "Show minutes",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_seconds",
+        "label": "Show seconds",
+        "default": true
+      },
+      {
+        "type": "text",
+        "id": "label_days",
+        "label": "Days suffix",
+        "default": "d"
+      },
+      {
+        "type": "text",
+        "id": "label_hours",
+        "label": "Hours suffix",
+        "default": "h"
+      },
+      {
+        "type": "text",
+        "id": "label_minutes",
+        "label": "Minutes suffix",
+        "default": "m"
+      },
+      {
+        "type": "text",
+        "id": "label_seconds",
+        "label": "Seconds suffix",
+        "default": "s"
+      },
+      {
+        "type": "header",
+        "content": "Bar style"
+      },
+      {
+        "type": "color",
+        "id": "bar_bg",
+        "label": "Bar background",
+        "default": "#0F0F0F"
+      },
+      {
+        "type": "color",
+        "id": "bar_text",
+        "label": "Bar default text color",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "bar_border_color",
+        "label": "Bar border color",
+        "default": "#000000"
+      },
+      {
+        "type": "range",
+        "id": "bar_border_width",
+        "label": "Bar border width",
+        "min": 0,
+        "max": 4,
+        "step": 1,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "bar_radius",
+        "label": "Bar corner radius (desktop)",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "default": 100
+      },
+      {
+        "type": "range",
+        "id": "bar_radius_mobile",
+        "label": "Bar corner radius (mobile)",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "range",
+        "id": "bar_pad_x_desktop",
+        "label": "Bar padding x (desktop)",
+        "min": 8,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 32
+      },
+      {
+        "type": "range",
+        "id": "bar_pad_y_desktop",
+        "label": "Bar padding y (desktop)",
+        "min": 4,
+        "max": 32,
+        "step": 1,
+        "unit": "px",
+        "default": 18
+      },
+      {
+        "type": "range",
+        "id": "bar_pad_x_mobile",
+        "label": "Bar padding x (mobile)",
+        "min": 8,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 22
+      },
+      {
+        "type": "range",
+        "id": "bar_pad_y_mobile",
+        "label": "Bar padding y (mobile)",
+        "min": 4,
+        "max": 28,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "header",
+        "content": "Eyebrow style"
+      },
+      {
+        "type": "color",
+        "id": "eyebrow_bg",
+        "label": "Eyebrow background",
+        "default": "rgba(255,255,255,0.12)"
+      },
+      {
+        "type": "color",
+        "id": "eyebrow_color",
+        "label": "Eyebrow text color",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "eyebrow_dot_color",
+        "label": "Eyebrow pulsing dot",
+        "default": "#EF4444"
+      },
+      {
+        "type": "header",
+        "content": "Message text"
+      },
+      {
+        "type": "select",
+        "id": "message_weight",
+        "label": "Message weight",
+        "default": "600",
+        "options": [
+          {
+            "value": "400",
+            "label": "Normal"
+          },
+          {
+            "value": "500",
+            "label": "Medium"
+          },
+          {
+            "value": "600",
+            "label": "Semi-bold"
+          },
+          {
+            "value": "700",
+            "label": "Bold"
+          },
+          {
+            "value": "800",
+            "label": "Extra-bold"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "message_size_desktop",
+        "label": "Message size (desktop)",
+        "min": 12,
+        "max": 24,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "message_size_mobile",
+        "label": "Message size (mobile)",
+        "min": 11,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "header",
+        "content": "Digit style"
+      },
+      {
+        "type": "color",
+        "id": "digit_color",
+        "label": "Digit color",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "digit_bg",
+        "label": "Digit chip background (optional)",
+        "default": "rgba(0,0,0,0)"
+      },
+      {
+        "type": "select",
+        "id": "digit_weight",
+        "label": "Digit weight",
+        "default": "800",
+        "options": [
+          {
+            "value": "600",
+            "label": "Semi-bold"
+          },
+          {
+            "value": "700",
+            "label": "Bold"
+          },
+          {
+            "value": "800",
+            "label": "Extra-bold"
+          },
+          {
+            "value": "900",
+            "label": "Black"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "digit_size_desktop",
+        "label": "Digit size (desktop)",
+        "min": 14,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 22
+      },
+      {
+        "type": "range",
+        "id": "digit_size_mobile",
+        "label": "Digit size (mobile)",
+        "min": 12,
+        "max": 32,
+        "step": 1,
+        "unit": "px",
+        "default": 18
+      },
+      {
+        "type": "color",
+        "id": "unit_label_color",
+        "label": "Unit suffix color",
+        "default": "#94A3B8"
+      },
+      {
+        "type": "select",
+        "id": "unit_label_weight",
+        "label": "Unit suffix weight",
+        "default": "600",
+        "options": [
+          {
+            "value": "400",
+            "label": "Normal"
+          },
+          {
+            "value": "500",
+            "label": "Medium"
+          },
+          {
+            "value": "600",
+            "label": "Semi-bold"
+          },
+          {
+            "value": "700",
+            "label": "Bold"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "unit_label_size",
+        "label": "Unit suffix size",
+        "min": 9,
+        "max": 16,
+        "step": 1,
+        "unit": "px",
+        "default": 12
+      },
+      {
+        "type": "header",
+        "content": "CTA button"
+      },
+      {
+        "type": "color",
+        "id": "cta_bg",
+        "label": "Background",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "cta_color",
+        "label": "Text color",
+        "default": "#0F0F0F"
+      },
+      {
+        "type": "color",
+        "id": "cta_bg_hover",
+        "label": "Background (hover)",
+        "default": "#F1F5F9"
+      },
+      {
+        "type": "color",
+        "id": "cta_color_hover",
+        "label": "Text color (hover)",
+        "default": "#0F0F0F"
+      },
+      {
+        "type": "color",
+        "id": "cta_border_color",
+        "label": "Border color",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "range",
+        "id": "cta_border_width",
+        "label": "Border width",
+        "min": 0,
+        "max": 4,
+        "step": 1,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "cta_radius",
+        "label": "Corner radius",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "default": 100
+      },
+      {
+        "type": "range",
+        "id": "cta_size",
+        "label": "Text size",
+        "min": 11,
+        "max": 18,
+        "step": 1,
+        "unit": "px",
+        "default": 13
+      },
+      {
+        "type": "range",
+        "id": "cta_pad_x",
+        "label": "Padding x",
+        "min": 8,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 18
+      },
+      {
+        "type": "range",
+        "id": "cta_pad_y",
+        "label": "Padding y",
+        "min": 4,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 8
+      },
+      {
+        "type": "header",
+        "content": "Style"
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Section background",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "header",
+        "content": "Layout & Spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top_desktop",
+        "label": "Top padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_desktop",
+        "label": "Bottom padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin (desktop px)",
+        "min": -200,
+        "max": 300,
+        "step": 5,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin (desktop px)",
+        "min": -200,
+        "max": 300,
+        "step": 5,
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "range",
+        "id": "padding_top_mobile",
+        "label": "Top padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_mobile",
+        "label": "Bottom padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 16
+      }
+    ],
+    "blocks": [
+      {
+        "type": "eyebrow",
+        "name": "Eyebrow chip",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Eyebrow text",
+            "default": "Live now"
+          },
+          {
+            "type": "checkbox",
+            "id": "show_dot",
+            "label": "Show pulsing dot",
+            "default": true
+          }
+        ]
+      },
+      {
+        "type": "message",
+        "name": "Message text",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "inline_richtext",
+            "id": "text",
+            "label": "Message",
+            "default": "Sale ends in"
+          }
+        ]
+      },
+      {
+        "type": "cta",
+        "name": "Button",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Button label",
+            "default": "Shop now"
+          },
+          {
+            "type": "url",
+            "id": "link",
+            "label": "Button link"
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Countdown Timer Inline",
+        "category": "Countdown Timers",
+        "blocks": [
+          {
+            "type": "eyebrow"
+          },
+          {
+            "type": "message"
+          },
+          {
+            "type": "cta"
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

@@ -1,0 +1,1621 @@
+<template compat="shopify">
+{%- comment -%}
+  Materia Themes — Promotion Popup Discount (Promotional Popup category).
+  Block-organized popup modal: image + heading + subheading + form +
+  dismiss link, each as its own block with its own settings. Every
+  slider, color, and toggle is wired through to CSS via inline styles.
+{%- endcomment -%}
+
+{%- liquid
+  assign s = section.settings
+  assign sid = section.id
+
+  assign placeholder_src = s.placeholder_url | default: 'https://2dbags.co/wp-content/uploads/revslider/lookbook1-demo_slider/placeholder.jpg'
+
+  assign eyebrow_block  = section.blocks | where: 'type', 'eyebrow'    | first
+  assign heading_block  = section.blocks | where: 'type', 'heading'    | first
+  assign sub_block      = section.blocks | where: 'type', 'subheading' | first
+  assign form_block     = section.blocks | where: 'type', 'form'       | first
+  assign dismiss_block  = section.blocks | where: 'type', 'dismiss'    | first
+-%}
+
+<style>
+  #shopify-section-{{ sid }} {
+    position: relative;
+    z-index: {{ s.z_index | default: 1000 }};
+    isolation: isolate;
+  }
+  #shopify-section-{{ sid }} .ppd-backdrop {
+    position: fixed; inset: 0;
+    background: {{ s.backdrop_color | default: 'rgba(0,0,0,0.55)' }};
+    z-index: {{ s.z_index | default: 1000 }};
+    display: none;
+    opacity: 0;
+    transition: opacity 0.28s ease;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+  }
+  #shopify-section-{{ sid }} .ppd-backdrop[data-open="true"] {
+    display: flex;
+    opacity: 1;
+    align-items: center;
+    justify-content: center;
+    padding: {{ s.backdrop_padding | default: 16 }}px;
+  }
+
+  #shopify-section-{{ sid }} .ppd {
+    position: relative;
+    width: 100%;
+    max-width: {{ s.modal_max_width | default: 760 }}px;
+    background: {{ s.modal_bg | default: '#1A1A1A' }};
+    color: {{ s.modal_text_color | default: '#FFFFFF' }};
+    border-radius: {{ s.modal_radius | default: 18 }}px;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.4);
+    transform: translateY(20px) scale(0.96);
+    transition: transform 0.32s cubic-bezier(0.22, 0.61, 0.36, 1);
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  #shopify-section-{{ sid }} .ppd-backdrop[data-open="true"] .ppd {
+    transform: translateY(0) scale(1);
+  }
+  @media (min-width: 760px) {
+    #shopify-section-{{ sid }} .ppd { grid-template-columns: {{ s.image_width_pct | default: 50 }}fr {{ 100 | minus: s.image_width_pct | default: 50 }}fr; }
+    {%- if s.image_position == 'right' -%}
+      #shopify-section-{{ sid }} .ppd { direction: rtl; }
+      #shopify-section-{{ sid }} .ppd > * { direction: ltr; }
+    {%- endif -%}
+  }
+
+  #shopify-section-{{ sid }} .ppd__media {
+    position: relative;
+    overflow: hidden;
+    background: {{ s.image_bg | default: '#E5DBD0' }};
+    aspect-ratio: 4 / 5;
+  }
+  @media (min-width: 760px) {
+    #shopify-section-{{ sid }} .ppd__media { aspect-ratio: auto; min-height: 100%; }
+  }
+  #shopify-section-{{ sid }} .ppd__media img,
+  #shopify-section-{{ sid }} .ppd__media svg {
+    width: 100%; height: 100%;
+    object-fit: cover; display: block;
+  }
+
+  #shopify-section-{{ sid }} .ppd__content {
+    padding: {{ s.content_padding_mobile | default: 28 }}px {{ s.content_padding_mobile | default: 28 }}px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: {{ s.content_gap | default: 12 }}px;
+    text-align: {{ s.content_align | default: 'center' }};
+    align-items: {% if s.content_align == 'left' %}flex-start{% elsif s.content_align == 'right' %}flex-end{% else %}center{% endif %};
+  }
+  @media (min-width: 760px) {
+    #shopify-section-{{ sid }} .ppd__content { padding: {{ s.content_padding_desktop | default: 36 }}px {{ s.content_padding_desktop | default: 36 }}px; }
+  }
+
+  #shopify-section-{{ sid }} .ppd__close {
+    position: absolute;
+    top: {{ s.close_offset | default: 12 }}px; right: {{ s.close_offset | default: 12 }}px;
+    z-index: 5;
+    width: {{ s.close_size | default: 36 }}px;
+    height: {{ s.close_size | default: 36 }}px;
+    border: 0;
+    background: {{ s.close_bg | default: 'rgba(255,255,255,0.1)' }};
+    color: {{ s.close_color | default: '#FFFFFF' }};
+    border-radius: 999px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.18s ease, transform 0.18s ease;
+  }
+  #shopify-section-{{ sid }} .ppd__close:hover {
+    background: {{ s.close_bg_hover | default: 'rgba(255,255,255,0.2)' }};
+    transform: scale(1.05);
+  }
+  #shopify-section-{{ sid }} .ppd__close svg { width: 16px; height: 16px; }
+
+  /* Block elements (set inline styles per block — defaults below cover unset cases) */
+  #shopify-section-{{ sid }} .ppd__eyebrow { margin: 0; text-transform: uppercase; letter-spacing: 0.18em; }
+  #shopify-section-{{ sid }} .ppd__heading { margin: 0; font-weight: 700; line-height: 1.15; }
+  #shopify-section-{{ sid }} .ppd__sub     { margin: 0; line-height: 1.5; }
+  #shopify-section-{{ sid }} .ppd__sub p   { margin: 0 0 0.4em; }
+  #shopify-section-{{ sid }} .ppd__sub p:last-child { margin: 0; }
+
+  /* Form */
+  #shopify-section-{{ sid }} .ppd__form {
+    display: flex;
+    flex-direction: column;
+    gap: {{ s.form_gap | default: 10 }}px;
+    margin-top: {{ s.form_margin_top | default: 8 }}px;
+    width: 100%;
+  }
+  #shopify-section-{{ sid }} .ppd__field {
+    width: 100%;
+    border: 0;
+    border-radius: var(--ppd-input-radius, 10px);
+    padding: var(--ppd-input-pad-y, 14px) 16px;
+    font-size: var(--ppd-input-size, 15px);
+    background: var(--ppd-input-bg, #FFFFFF);
+    color: var(--ppd-input-color, #111111);
+    outline: none;
+  }
+  #shopify-section-{{ sid }} .ppd__field::placeholder { color: var(--ppd-input-placeholder, rgba(0,0,0,0.45)); }
+  #shopify-section-{{ sid }} .ppd__btn {
+    border: 0; cursor: pointer;
+    width: 100%;
+    padding: var(--ppd-btn-pad-y, 14px) 16px;
+    background: var(--ppd-btn-bg, #E5DBD0);
+    color: var(--ppd-btn-color, #111111);
+    border-radius: var(--ppd-btn-radius, 10px);
+    font-weight: 700;
+    font-size: var(--ppd-btn-size, 14px);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    transition: background 0.18s ease, transform 0.18s ease;
+  }
+  #shopify-section-{{ sid }} .ppd__btn:hover {
+    background: var(--ppd-btn-bg-hover, #D4C7B6);
+    transform: translateY(-1px);
+  }
+  #shopify-section-{{ sid }} .ppd__success {
+    margin: 8px 0 0;
+    font-weight: 600;
+    color: var(--ppd-success-color, #A6FFBA);
+    text-align: center;
+  }
+  #shopify-section-{{ sid }} .ppd__error {
+    margin: 8px 0 0;
+    font-weight: 500;
+    color: var(--ppd-error-color, #FFA6A6);
+    text-align: center;
+  }
+
+  /* Dismiss link */
+  #shopify-section-{{ sid }} .ppd__dismiss {
+    margin-top: {{ s.dismiss_margin_top | default: 6 }}px;
+    background: none; border: 0; cursor: pointer;
+    text-decoration: none;
+    transition: color 0.18s ease, opacity 0.18s ease;
+    align-self: center;
+  }
+  #shopify-section-{{ sid }} .ppd__dismiss:hover { text-decoration: underline; }
+
+  /* Editor preview — show inline (not as fixed modal) when in design mode */
+  .shopify-design-mode #shopify-section-{{ sid }} .ppd-backdrop {
+    position: relative !important;
+    display: flex !important;
+    opacity: 1 !important;
+    inset: auto !important;
+    padding: 24px;
+    background: {{ s.editor_preview_bg | default: '#F4EEE7' }};
+  }
+{% comment %}{% endcomment %}</style>
+
+<div
+  id="ppd-{{ sid }}"
+  class="ppd-backdrop"
+  data-open="false"
+  data-trigger="{{ s.trigger | default: 'load' }}"
+  data-delay="{{ s.delay | default: 3 }}"
+  data-scroll-pct="{{ s.scroll_pct | default: 40 }}"
+  data-frequency="{{ s.frequency | default: 'session' }}"
+  data-section-id="{{ sid }}"
+  role="dialog"
+  aria-modal="true"
+>
+  <div class="ppd" role="document">
+    <button type="button" class="ppd__close" aria-label="{{ 'accessibility.close' | t }}" data-ppd-close>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg>
+    </button>
+
+    <div class="ppd__media">
+      {%- if s.image != blank -%}
+        {{ s.image | image_url: width: 800 | image_tag: alt: '', loading: 'lazy', sizes: '(max-width: 760px) 100vw, 50vw', widths: '320, 480, 640, 800, 1000' }}
+      {%- else -%}
+        <img src="{{ placeholder_src }}" alt="" loading="lazy">
+      {%- endif -%}
+    </div>
+
+    <div class="ppd__content">
+      {%- if eyebrow_block and eyebrow_block.settings.text != blank -%}
+        {%- assign eb = eyebrow_block.settings -%}
+        <p class="ppd__eyebrow"
+           style="color: {{ eb.color | default: 'rgba(255,255,255,0.7)' }}; font-size: {{ eb.size | default: 12 }}px; letter-spacing: {{ eb.letter_spacing | default: 0.18 }}em;"
+           {{ eyebrow_block.shopify_attributes }}>{{ eb.text | escape }}</p>
+      {%- endif -%}
+
+      {%- if heading_block and heading_block.settings.text != blank -%}
+        {%- assign hb = heading_block.settings -%}
+        <{{ hb.tag | default: 'h2' }} class="ppd__heading"
+          data-bid="{{ heading_block.id }}"
+          style="color: {{ hb.color | default: '#F4EEE7' }}; font-size: {{ hb.size_mobile | default: 26 }}px;"
+          {{ heading_block.shopify_attributes }}>{{ hb.text | escape }}</{{ hb.tag | default: 'h2' }}>
+        <style>
+          @media (min-width: 760px) {
+            #shopify-section-{{ sid }} [data-bid="{{ heading_block.id }}"] { font-size: {{ hb.size_desktop | default: 32 }}px !important; }
+          }
+{% comment %}{% endcomment %}        </style>
+      {%- endif -%}
+
+      {%- if sub_block and sub_block.settings.text != blank -%}
+        {%- assign subbs = sub_block.settings -%}
+        <div class="ppd__sub"
+             style="color: {{ subbs.color | default: 'rgba(255,255,255,0.85)' }}; font-size: {{ subbs.size | default: 14 }}px;"
+             {{ sub_block.shopify_attributes }}>{{ subbs.text }}</div>
+      {%- endif -%}
+
+      {%- if form_block -%}
+        {%- assign fbs = form_block.settings -%}
+        {%- assign ppd_form_id = 'ppd-form-' | append: form_block.id -%}
+        <div class="ppd__form-wrap"
+             style="
+               --ppd-input-bg: {{ fbs.input_bg | default: '#FFFFFF' }};
+               --ppd-input-color: {{ fbs.input_color | default: '#111111' }};
+               --ppd-input-placeholder: {{ fbs.input_placeholder_color | default: 'rgba(0,0,0,0.45)' }};
+               --ppd-input-radius: {{ fbs.input_radius | default: 10 }}px;
+               --ppd-input-pad-y: {{ fbs.input_pad_y | default: 14 }}px;
+               --ppd-input-size: {{ fbs.input_size | default: 15 }}px;
+               --ppd-btn-bg: {{ fbs.btn_bg | default: '#E5DBD0' }};
+               --ppd-btn-bg-hover: {{ fbs.btn_bg_hover | default: '#D4C7B6' }};
+               --ppd-btn-color: {{ fbs.btn_color | default: '#111111' }};
+               --ppd-btn-radius: {{ fbs.btn_radius | default: 10 }}px;
+               --ppd-btn-size: {{ fbs.btn_size | default: 14 }}px;
+               --ppd-btn-pad-y: {{ fbs.btn_pad_y | default: 14 }}px;
+               --ppd-success-color: {{ fbs.success_color | default: '#A6FFBA' }};
+               --ppd-error-color: {{ fbs.error_color | default: '#FFA6A6' }};
+             "
+             {{ form_block.shopify_attributes }}>
+          {%- assign email_ph_default = 'accessibility.email_placeholder' | t -%}
+          {%- assign phone_ph_default = 'accessibility.phone_placeholder' | t -%}
+          {%- assign get_coupon_default = 'accessibility.get_my_coupon' | t -%}
+          {%- form 'customer', id: ppd_form_id, class: 'ppd__form' -%}
+            <input type="hidden" name="contact[tags]" value="newsletter,promo-popup">
+            <input type="email" class="ppd__field" name="contact[email]" placeholder="{{ fbs.email_placeholder | default: email_ph_default | escape }}" aria-label="{{ 'accessibility.email_placeholder' | t }}" required>
+            {%- if fbs.show_phone -%}
+              <input type="tel" class="ppd__field" name="contact[phone]" placeholder="{{ fbs.phone_placeholder | default: phone_ph_default | escape }}" aria-label="{{ 'accessibility.phone_placeholder' | t }}">
+            {%- endif -%}
+            <button type="submit" class="ppd__btn">{{ fbs.button_label | default: get_coupon_default | escape }}</button>
+            {%- if form.posted_successfully? -%}
+              <p class="ppd__success">{{ fbs.success_text | default: 'Check your inbox — your coupon is on the way!' | escape }}</p>
+            {%- elsif form.errors -%}
+              <p class="ppd__error">{{ form.errors | default_errors }}</p>
+            {%- endif -%}
+          {%- endform -%}
+        </div>
+      {%- endif -%}
+
+      {%- if dismiss_block and dismiss_block.settings.label != blank -%}
+        {%- assign dbs = dismiss_block.settings -%}
+        <button type="button" class="ppd__dismiss" data-ppd-close
+                style="color: {{ dbs.color | default: 'rgba(255,255,255,0.7)' }}; font-size: {{ dbs.size | default: 13 }}px;"
+                onmouseover="this.style.color='{{ dbs.hover_color | default: '#FFFFFF' }}'"
+                onmouseout="this.style.color='{{ dbs.color | default: 'rgba(255,255,255,0.7)' }}'"
+                {{ dismiss_block.shopify_attributes }}>{{ dbs.label | escape }}</button>
+      {%- endif -%}
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var modal = document.getElementById('ppd-{{ sid }}');
+  if (!modal) return;
+  var inDesignMode = document.documentElement.classList.contains('shopify-design-mode') ||
+                     (window.Shopify && window.Shopify.designMode);
+  var key = 'ppd-dismissed-{{ sid }}';
+  var freq = modal.getAttribute('data-frequency') || 'session';
+  var trigger = modal.getAttribute('data-trigger') || 'load';
+  var delay = parseFloat(modal.getAttribute('data-delay')) || 0;
+  var scrollPct = parseInt(modal.getAttribute('data-scroll-pct'), 10) || 40;
+
+  function alreadySeen() {
+    if (inDesignMode) return false;
+    if (freq === 'always') return false;
+    try {
+      if (freq === 'session') return sessionStorage.getItem(key) === '1';
+      if (freq === 'once')    return localStorage.getItem(key) === '1';
+    } catch(e) { return false; }
+    return false;
+  }
+  function markSeen() {
+    if (inDesignMode) return;
+    try {
+      if (freq === 'session') sessionStorage.setItem(key, '1');
+      if (freq === 'once')    localStorage.setItem(key, '1');
+    } catch(e){}
+  }
+
+  function open() {
+    modal.setAttribute('data-open', 'true');
+    document.body.style.overflow = 'hidden';
+    var firstField = modal.querySelector('input[type="email"]');
+    if (firstField) setTimeout(function(){ firstField.focus(); }, 320);
+  }
+  function close() {
+    modal.setAttribute('data-open', 'false');
+    document.body.style.overflow = '';
+    markSeen();
+  }
+
+  modal.querySelectorAll('[data-ppd-close]').forEach(function(el){
+    el.addEventListener('click', close);
+  });
+  modal.addEventListener('click', function(e){
+    if (e.target === modal) close();
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && modal.getAttribute('data-open') === 'true') close();
+  });
+
+  if (alreadySeen()) return;
+
+  if (trigger === 'load') {
+    setTimeout(open, Math.max(0, delay) * 1000);
+  } else if (trigger === 'scroll') {
+    var fired = false;
+    function onScroll() {
+      var doc = document.documentElement;
+      var scrolled = (window.scrollY + window.innerHeight) / doc.scrollHeight * 100;
+      if (scrolled >= scrollPct && !fired) {
+        fired = true;
+        open();
+        window.removeEventListener('scroll', onScroll);
+      }
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+  } else if (trigger === 'exit') {
+    var fired = false;
+    document.addEventListener('mouseleave', function(e) {
+      if (e.clientY < 0 && !fired) { fired = true; open(); }
+    });
+  } else if (trigger === 'click') {
+    var selector = '[data-ppd-trigger="{{ sid }}"]';
+    document.querySelectorAll(selector).forEach(function(el) {
+      el.addEventListener('click', function(e){ e.preventDefault(); open(); });
+    });
+  }
+
+  if (inDesignMode) modal.setAttribute('data-open', 'true');
+})();
+{% comment %}{% endcomment %}</script>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "promotional-popup",
+  "name": "Promotion Popup Discount",
+  "settings": [
+    {
+      "type": "header",
+      "id": "hdr_1",
+      "label": "When to open"
+    },
+    {
+      "type": "select",
+      "id": "trigger",
+      "label": "Open the popup on",
+      "default": "load",
+      "options": [
+        {
+          "value": "load",
+          "label": "Page load (after delay)"
+        },
+        {
+          "value": "scroll",
+          "label": "Scroll percentage"
+        },
+        {
+          "value": "exit",
+          "label": "Exit intent (mouse leaves window)"
+        },
+        {
+          "value": "click",
+          "label": "Custom button click"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "delay",
+      "label": "Page-load delay",
+      "min": 0,
+      "max": 30,
+      "step": 1,
+      "unit": "s",
+      "default": 3
+    },
+    {
+      "type": "range",
+      "id": "scroll_pct",
+      "label": "Scroll percentage",
+      "min": 10,
+      "max": 100,
+      "step": 5,
+      "unit": "%",
+      "default": 40
+    },
+    {
+      "type": "select",
+      "id": "frequency",
+      "label": "Show frequency",
+      "default": "session",
+      "options": [
+        {
+          "value": "session",
+          "label": "Once per session"
+        },
+        {
+          "value": "once",
+          "label": "Once per visitor (remembered forever)"
+        },
+        {
+          "value": "always",
+          "label": "Every page load"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "z_index",
+      "label": "Z-index (stacking order)",
+      "min": 100,
+      "max": 5000,
+      "step": 50,
+      "default": 1000
+    },
+    {
+      "type": "header",
+      "id": "hdr_7",
+      "label": "Image (left side by default)"
+    },
+    {
+      "type": "image_picker",
+      "id": "image",
+      "label": "Image"
+    },
+    {
+      "type": "url",
+      "id": "placeholder_url",
+      "label": "Fallback image URL"
+    },
+    {
+      "type": "color",
+      "id": "image_bg",
+      "label": "Image placeholder background",
+      "default": "#E5DBD0"
+    },
+    {
+      "type": "range",
+      "id": "image_width_pct",
+      "label": "Image column width (desktop)",
+      "min": 30,
+      "max": 70,
+      "step": 1,
+      "unit": "%",
+      "default": 50
+    },
+    {
+      "type": "select",
+      "id": "image_position",
+      "label": "Image position (desktop)",
+      "default": "left",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_13",
+      "label": "Modal styling"
+    },
+    {
+      "type": "color",
+      "id": "backdrop_color",
+      "label": "Backdrop color"
+    },
+    {
+      "type": "color",
+      "id": "modal_bg",
+      "label": "Modal background",
+      "default": "#1A1A1A"
+    },
+    {
+      "type": "color",
+      "id": "modal_text_color",
+      "label": "Default text color",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "range",
+      "id": "modal_max_width",
+      "label": "Modal max width",
+      "min": 360,
+      "max": 1100,
+      "step": 10,
+      "unit": "px",
+      "default": 760
+    },
+    {
+      "type": "range",
+      "id": "modal_radius",
+      "label": "Modal corner radius",
+      "min": 0,
+      "max": 36,
+      "step": 1,
+      "unit": "px",
+      "default": 18
+    },
+    {
+      "type": "range",
+      "id": "backdrop_padding",
+      "label": "Backdrop padding",
+      "min": 0,
+      "max": 60,
+      "step": 2,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "header",
+      "id": "hdr_20",
+      "label": "Content layout"
+    },
+    {
+      "type": "select",
+      "id": "content_align",
+      "label": "Content alignment",
+      "default": "center",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "content_padding_desktop",
+      "label": "Content padding (desktop)",
+      "min": 12,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 36
+    },
+    {
+      "type": "range",
+      "id": "content_padding_mobile",
+      "label": "Content padding (mobile)",
+      "min": 12,
+      "max": 60,
+      "step": 2,
+      "unit": "px",
+      "default": 28
+    },
+    {
+      "type": "range",
+      "id": "content_gap",
+      "label": "Vertical gap between elements",
+      "min": 4,
+      "max": 36,
+      "step": 1,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "header",
+      "id": "hdr_25",
+      "label": "Close button (X)"
+    },
+    {
+      "type": "color",
+      "id": "close_color",
+      "label": "Close icon color",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "color",
+      "id": "close_bg",
+      "label": "Close button background"
+    },
+    {
+      "type": "color",
+      "id": "close_bg_hover",
+      "label": "Close button bg (hover)"
+    },
+    {
+      "type": "range",
+      "id": "close_size",
+      "label": "Close button size",
+      "min": 24,
+      "max": 56,
+      "step": 1,
+      "unit": "px",
+      "default": 36
+    },
+    {
+      "type": "range",
+      "id": "close_offset",
+      "label": "Close button offset",
+      "min": 4,
+      "max": 32,
+      "step": 1,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "header",
+      "id": "hdr_31",
+      "label": "Editor preview"
+    },
+    {
+      "type": "color",
+      "id": "editor_preview_bg",
+      "label": "Editor backdrop (preview only)",
+      "default": "#F4EEE7"
+    }
+  ],
+  "blocks": [
+    {
+      "type": "eyebrow",
+      "name": "Eyebrow",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Eyebrow text",
+          "default": "Limited time"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color"
+        },
+        {
+          "type": "range",
+          "id": "size",
+          "label": "Font size",
+          "min": 9,
+          "max": 18,
+          "step": 1,
+          "unit": "px",
+          "default": 12
+        },
+        {
+          "type": "range",
+          "id": "letter_spacing",
+          "label": "Letter spacing",
+          "min": 0,
+          "max": 0.4,
+          "step": 0.1,
+          "unit": "em",
+          "default": 0.2
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "heading",
+      "name": "Heading",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Heading text",
+          "default": "Get 20% off your next order"
+        },
+        {
+          "type": "select",
+          "id": "tag",
+          "label": "Heading tag",
+          "default": "h2",
+          "options": [
+            {
+              "value": "h1",
+              "label": "H1"
+            },
+            {
+              "value": "h2",
+              "label": "H2"
+            },
+            {
+              "value": "h3",
+              "label": "H3"
+            }
+          ]
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#F4EEE7"
+        },
+        {
+          "type": "range",
+          "id": "size_desktop",
+          "label": "Size (desktop)",
+          "min": 18,
+          "max": 60,
+          "step": 1,
+          "unit": "px",
+          "default": 32
+        },
+        {
+          "type": "range",
+          "id": "size_mobile",
+          "label": "Size (mobile)",
+          "min": 16,
+          "max": 44,
+          "step": 1,
+          "unit": "px",
+          "default": 26
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "subheading",
+      "name": "Subheading",
+      "settings": [
+        {
+          "type": "richtext",
+          "id": "text",
+          "label": "Subheading text",
+          "default": "<p>Sign up and unlock your instant discount.</p>"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color"
+        },
+        {
+          "type": "range",
+          "id": "size",
+          "label": "Font size",
+          "min": 11,
+          "max": 18,
+          "step": 1,
+          "unit": "px",
+          "default": 14
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "form",
+      "name": "Email signup form",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Form fields"
+        },
+        {
+          "type": "text",
+          "id": "email_placeholder",
+          "label": "Email placeholder",
+          "default": "Email"
+        },
+        {
+          "type": "checkbox",
+          "id": "show_phone",
+          "label": "Show phone field",
+          "default": false
+        },
+        {
+          "type": "text",
+          "id": "phone_placeholder",
+          "label": "Phone placeholder",
+          "default": "Phone (optional)"
+        },
+        {
+          "type": "text",
+          "id": "button_label",
+          "label": "Button label",
+          "default": "Get my coupon"
+        },
+        {
+          "type": "text",
+          "id": "success_text",
+          "label": "Success message",
+          "default": "Check your inbox — your coupon is on the way!"
+        },
+        {
+          "type": "header",
+          "id": "hdr_7",
+          "label": "Input styling"
+        },
+        {
+          "type": "color",
+          "id": "input_bg",
+          "label": "Input background",
+          "default": "#FFFFFF"
+        },
+        {
+          "type": "color",
+          "id": "input_color",
+          "label": "Input text color",
+          "default": "#111111"
+        },
+        {
+          "type": "color",
+          "id": "input_placeholder_color",
+          "label": "Input placeholder color"
+        },
+        {
+          "type": "range",
+          "id": "input_radius",
+          "label": "Input corner radius",
+          "min": 0,
+          "max": 30,
+          "step": 1,
+          "unit": "px",
+          "default": 10
+        },
+        {
+          "type": "range",
+          "id": "input_pad_y",
+          "label": "Input padding Y",
+          "min": 8,
+          "max": 22,
+          "step": 1,
+          "unit": "px",
+          "default": 14
+        },
+        {
+          "type": "range",
+          "id": "input_size",
+          "label": "Input font size",
+          "min": 12,
+          "max": 18,
+          "step": 1,
+          "unit": "px",
+          "default": 15
+        },
+        {
+          "type": "header",
+          "id": "hdr_14",
+          "label": "Button styling"
+        },
+        {
+          "type": "color",
+          "id": "btn_bg",
+          "label": "Button background",
+          "default": "#E5DBD0"
+        },
+        {
+          "type": "color",
+          "id": "btn_bg_hover",
+          "label": "Button background (hover)",
+          "default": "#D4C7B6"
+        },
+        {
+          "type": "color",
+          "id": "btn_color",
+          "label": "Button text color",
+          "default": "#111111"
+        },
+        {
+          "type": "range",
+          "id": "btn_radius",
+          "label": "Button corner radius",
+          "min": 0,
+          "max": 30,
+          "step": 1,
+          "unit": "px",
+          "default": 10
+        },
+        {
+          "type": "range",
+          "id": "btn_size",
+          "label": "Button font size",
+          "min": 11,
+          "max": 18,
+          "step": 1,
+          "unit": "px",
+          "default": 14
+        },
+        {
+          "type": "range",
+          "id": "btn_pad_y",
+          "label": "Button padding Y",
+          "min": 8,
+          "max": 22,
+          "step": 1,
+          "unit": "px",
+          "default": 14
+        },
+        {
+          "type": "header",
+          "id": "hdr_21",
+          "label": "Status colors"
+        },
+        {
+          "type": "color",
+          "id": "success_color",
+          "label": "Success message color",
+          "default": "#A6FFBA"
+        },
+        {
+          "type": "color",
+          "id": "error_color",
+          "label": "Error message color",
+          "default": "#FFA6A6"
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "dismiss",
+      "name": "Dismiss link",
+      "settings": [
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Label",
+          "default": "No, thanks!"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color"
+        },
+        {
+          "type": "color",
+          "id": "hover_color",
+          "label": "Hover color",
+          "default": "#FFFFFF"
+        },
+        {
+          "type": "range",
+          "id": "size",
+          "label": "Font size",
+          "min": 11,
+          "max": 16,
+          "step": 1,
+          "unit": "px",
+          "default": 13
+        }
+      ],
+      "limit": 1
+    }
+  ],
+  "presets": [],
+  "shopify": {
+    "name": "Promotion Popup Discount",
+    "tag": "section",
+    "class": "section sec__promotion-popup",
+    "settings": [
+      {
+        "type": "header",
+        "content": "When to open"
+      },
+      {
+        "type": "select",
+        "id": "trigger",
+        "label": "Open the popup on",
+        "default": "load",
+        "options": [
+          {
+            "value": "load",
+            "label": "Page load (after delay)"
+          },
+          {
+            "value": "scroll",
+            "label": "Scroll percentage"
+          },
+          {
+            "value": "exit",
+            "label": "Exit intent (mouse leaves window)"
+          },
+          {
+            "value": "click",
+            "label": "Custom button click"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "delay",
+        "label": "Page-load delay",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "unit": "s",
+        "default": 3
+      },
+      {
+        "type": "range",
+        "id": "scroll_pct",
+        "label": "Scroll percentage",
+        "min": 10,
+        "max": 100,
+        "step": 5,
+        "unit": "%",
+        "default": 40
+      },
+      {
+        "type": "select",
+        "id": "frequency",
+        "label": "Show frequency",
+        "default": "session",
+        "options": [
+          {
+            "value": "session",
+            "label": "Once per session"
+          },
+          {
+            "value": "once",
+            "label": "Once per visitor (remembered forever)"
+          },
+          {
+            "value": "always",
+            "label": "Every page load"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "z_index",
+        "label": "Z-index (stacking order)",
+        "min": 100,
+        "max": 5000,
+        "step": 50,
+        "default": 1000
+      },
+      {
+        "type": "header",
+        "content": "Image (left side by default)"
+      },
+      {
+        "type": "image_picker",
+        "id": "image",
+        "label": "Image"
+      },
+      {
+        "type": "url",
+        "id": "placeholder_url",
+        "label": "Fallback image URL"
+      },
+      {
+        "type": "color",
+        "id": "image_bg",
+        "label": "Image placeholder background",
+        "default": "#E5DBD0"
+      },
+      {
+        "type": "range",
+        "id": "image_width_pct",
+        "label": "Image column width (desktop)",
+        "min": 30,
+        "max": 70,
+        "step": 1,
+        "unit": "%",
+        "default": 50
+      },
+      {
+        "type": "select",
+        "id": "image_position",
+        "label": "Image position (desktop)",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Modal styling"
+      },
+      {
+        "type": "color",
+        "id": "backdrop_color",
+        "label": "Backdrop color",
+        "default": "rgba(0,0,0,0.55)"
+      },
+      {
+        "type": "color",
+        "id": "modal_bg",
+        "label": "Modal background",
+        "default": "#1A1A1A"
+      },
+      {
+        "type": "color",
+        "id": "modal_text_color",
+        "label": "Default text color",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "range",
+        "id": "modal_max_width",
+        "label": "Modal max width",
+        "min": 360,
+        "max": 1100,
+        "step": 10,
+        "unit": "px",
+        "default": 760
+      },
+      {
+        "type": "range",
+        "id": "modal_radius",
+        "label": "Modal corner radius",
+        "min": 0,
+        "max": 36,
+        "step": 1,
+        "unit": "px",
+        "default": 18
+      },
+      {
+        "type": "range",
+        "id": "backdrop_padding",
+        "label": "Backdrop padding",
+        "min": 0,
+        "max": 60,
+        "step": 2,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "header",
+        "content": "Content layout"
+      },
+      {
+        "type": "select",
+        "id": "content_align",
+        "label": "Content alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "content_padding_desktop",
+        "label": "Content padding (desktop)",
+        "min": 12,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 36
+      },
+      {
+        "type": "range",
+        "id": "content_padding_mobile",
+        "label": "Content padding (mobile)",
+        "min": 12,
+        "max": 60,
+        "step": 2,
+        "unit": "px",
+        "default": 28
+      },
+      {
+        "type": "range",
+        "id": "content_gap",
+        "label": "Vertical gap between elements",
+        "min": 4,
+        "max": 36,
+        "step": 1,
+        "unit": "px",
+        "default": 12
+      },
+      {
+        "type": "header",
+        "content": "Close button (X)"
+      },
+      {
+        "type": "color",
+        "id": "close_color",
+        "label": "Close icon color",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "close_bg",
+        "label": "Close button background",
+        "default": "rgba(255,255,255,0.1)"
+      },
+      {
+        "type": "color",
+        "id": "close_bg_hover",
+        "label": "Close button bg (hover)",
+        "default": "rgba(255,255,255,0.2)"
+      },
+      {
+        "type": "range",
+        "id": "close_size",
+        "label": "Close button size",
+        "min": 24,
+        "max": 56,
+        "step": 1,
+        "unit": "px",
+        "default": 36
+      },
+      {
+        "type": "range",
+        "id": "close_offset",
+        "label": "Close button offset",
+        "min": 4,
+        "max": 32,
+        "step": 1,
+        "unit": "px",
+        "default": 12
+      },
+      {
+        "type": "header",
+        "content": "Editor preview"
+      },
+      {
+        "type": "color",
+        "id": "editor_preview_bg",
+        "label": "Editor backdrop (preview only)",
+        "default": "#F4EEE7"
+      }
+    ],
+    "blocks": [
+      {
+        "type": "eyebrow",
+        "name": "Eyebrow",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Eyebrow text",
+            "default": "Limited time"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "rgba(255,255,255,0.7)"
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "label": "Font size",
+            "min": 9,
+            "max": 18,
+            "step": 1,
+            "unit": "px",
+            "default": 12
+          },
+          {
+            "type": "range",
+            "id": "letter_spacing",
+            "label": "Letter spacing",
+            "min": 0,
+            "max": 0.4,
+            "step": 0.1,
+            "unit": "em",
+            "default": 0.2
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Heading text",
+            "default": "Get 20% off your next order"
+          },
+          {
+            "type": "select",
+            "id": "tag",
+            "label": "Heading tag",
+            "default": "h2",
+            "options": [
+              {
+                "value": "h1",
+                "label": "H1"
+              },
+              {
+                "value": "h2",
+                "label": "H2"
+              },
+              {
+                "value": "h3",
+                "label": "H3"
+              }
+            ]
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#F4EEE7"
+          },
+          {
+            "type": "range",
+            "id": "size_desktop",
+            "label": "Size (desktop)",
+            "min": 18,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 32
+          },
+          {
+            "type": "range",
+            "id": "size_mobile",
+            "label": "Size (mobile)",
+            "min": 16,
+            "max": 44,
+            "step": 1,
+            "unit": "px",
+            "default": 26
+          }
+        ]
+      },
+      {
+        "type": "subheading",
+        "name": "Subheading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "richtext",
+            "id": "text",
+            "label": "Subheading text",
+            "default": "<p>Sign up and unlock your instant discount.</p>"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "rgba(255,255,255,0.85)"
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "label": "Font size",
+            "min": 11,
+            "max": 18,
+            "step": 1,
+            "unit": "px",
+            "default": 14
+          }
+        ]
+      },
+      {
+        "type": "form",
+        "name": "Email signup form",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Form fields"
+          },
+          {
+            "type": "text",
+            "id": "email_placeholder",
+            "label": "Email placeholder",
+            "default": "Email"
+          },
+          {
+            "type": "checkbox",
+            "id": "show_phone",
+            "label": "Show phone field",
+            "default": false
+          },
+          {
+            "type": "text",
+            "id": "phone_placeholder",
+            "label": "Phone placeholder",
+            "default": "Phone (optional)"
+          },
+          {
+            "type": "text",
+            "id": "button_label",
+            "label": "Button label",
+            "default": "Get my coupon"
+          },
+          {
+            "type": "text",
+            "id": "success_text",
+            "label": "Success message",
+            "default": "Check your inbox — your coupon is on the way!"
+          },
+          {
+            "type": "header",
+            "content": "Input styling"
+          },
+          {
+            "type": "color",
+            "id": "input_bg",
+            "label": "Input background",
+            "default": "#FFFFFF"
+          },
+          {
+            "type": "color",
+            "id": "input_color",
+            "label": "Input text color",
+            "default": "#111111"
+          },
+          {
+            "type": "color",
+            "id": "input_placeholder_color",
+            "label": "Input placeholder color",
+            "default": "rgba(0,0,0,0.45)"
+          },
+          {
+            "type": "range",
+            "id": "input_radius",
+            "label": "Input corner radius",
+            "min": 0,
+            "max": 30,
+            "step": 1,
+            "unit": "px",
+            "default": 10
+          },
+          {
+            "type": "range",
+            "id": "input_pad_y",
+            "label": "Input padding Y",
+            "min": 8,
+            "max": 22,
+            "step": 1,
+            "unit": "px",
+            "default": 14
+          },
+          {
+            "type": "range",
+            "id": "input_size",
+            "label": "Input font size",
+            "min": 12,
+            "max": 18,
+            "step": 1,
+            "unit": "px",
+            "default": 15
+          },
+          {
+            "type": "header",
+            "content": "Button styling"
+          },
+          {
+            "type": "color",
+            "id": "btn_bg",
+            "label": "Button background",
+            "default": "#E5DBD0"
+          },
+          {
+            "type": "color",
+            "id": "btn_bg_hover",
+            "label": "Button background (hover)",
+            "default": "#D4C7B6"
+          },
+          {
+            "type": "color",
+            "id": "btn_color",
+            "label": "Button text color",
+            "default": "#111111"
+          },
+          {
+            "type": "range",
+            "id": "btn_radius",
+            "label": "Button corner radius",
+            "min": 0,
+            "max": 30,
+            "step": 1,
+            "unit": "px",
+            "default": 10
+          },
+          {
+            "type": "range",
+            "id": "btn_size",
+            "label": "Button font size",
+            "min": 11,
+            "max": 18,
+            "step": 1,
+            "unit": "px",
+            "default": 14
+          },
+          {
+            "type": "range",
+            "id": "btn_pad_y",
+            "label": "Button padding Y",
+            "min": 8,
+            "max": 22,
+            "step": 1,
+            "unit": "px",
+            "default": 14
+          },
+          {
+            "type": "header",
+            "content": "Status colors"
+          },
+          {
+            "type": "color",
+            "id": "success_color",
+            "label": "Success message color",
+            "default": "#A6FFBA"
+          },
+          {
+            "type": "color",
+            "id": "error_color",
+            "label": "Error message color",
+            "default": "#FFA6A6"
+          }
+        ]
+      },
+      {
+        "type": "dismiss",
+        "name": "Dismiss link",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Label",
+            "default": "No, thanks!"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "rgba(255,255,255,0.7)"
+          },
+          {
+            "type": "color",
+            "id": "hover_color",
+            "label": "Hover color",
+            "default": "#FFFFFF"
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "label": "Font size",
+            "min": 11,
+            "max": 16,
+            "step": 1,
+            "unit": "px",
+            "default": 13
+          }
+        ]
+      }
+    ],
+    "presets": []
+  }
+}
+</schema>

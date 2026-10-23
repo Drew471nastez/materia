@@ -1,0 +1,1154 @@
+<template compat="shopify">
+{%- comment -%}
+  Scrolling Text Reveal
+  A sticky, scroll-driven text reveal banner: the section pins while the
+  visitor scrolls through it and the paragraph's words light up progressively
+  from dim to full as scroll progresses. <strong>/<b> phrases render as
+  highlight pills. Self-contained, scoped to #shopify-section-{{ section.id }}.
+  Colors come from the chosen theme color scheme (color-{{ scheme }} class
+  + theme CSS vars --color-text / --color-heading / --color-background).
+{%- endcomment -%}
+
+{%- liquid
+  assign s = section.settings
+  assign scheme = s.color_scheme | default: 'scheme-1'
+  assign uid = section.id
+
+  assign slen = s.scroll_length | default: 250
+  assign shd = s.stage_height_d | default: 100
+  assign shm = s.stage_height_m | default: 100
+  assign fit_d = s.fit_content_d | default: false
+  assign fit_m = s.fit_content_m
+  if s.fit_content_m == nil
+    assign fit_m = true
+  endif
+  assign fsd = s.font_size_d | default: 40
+  assign fsm = s.font_size_m | default: 24
+  assign lh = s.line_height | default: 1.4
+  assign base_op = s.base_opacity | default: 15
+  assign dim = base_op | divided_by: 100.0
+  assign hl_bg = s.highlight_bg | default: '#ffffff'
+  assign hl_tx = s.highlight_text | default: '#111111'
+  assign hl_rad = s.highlight_radius | default: 6
+
+  assign pt = s.padding_top | default: 0
+  assign pb = s.padding_bottom | default: 0
+  assign ls = s.letter_spacing | default: 0
+  assign talign = s.text_align | default: 'left'
+  assign fstyle = s.font_style | default: 'heading'
+  assign max_w = s.max_width | default: 1100
+  assign speed = s.reveal_speed | default: 0.25
+  assign sticky_off = s.sticky_offset | default: 0
+  assign dimc = s.reveal_dim_color
+
+  assign txc = 'var(--color-heading)'
+  if s.custom_text_color
+    assign txc = s.text_color | default: '#FFFFFF'
+  endif
+
+  assign fw = 400
+  if s.bold
+    assign fw = 700
+  endif
+
+  assign has_button = false
+  for block in section.blocks
+    if block.type == 'button'
+      assign has_button = true
+    endif
+  endfor
+
+  assign width = s.width | default: 'fluid_container'
+  case width
+    when 'container'
+      assign maxw = 'calc(var(--page-width, 1300px) + 3rem)'
+      assign padx = '1.5rem'
+    when 'stretch_width'
+      assign maxw = 'none'
+      assign padx = '3rem'
+    when 'full_width'
+      assign maxw = 'none'
+      assign padx = '1.5rem'
+    else
+      assign maxw = 'calc(var(--fluid-container-width, 1500px) + 3rem)'
+      assign padx = '1.5rem'
+  endcase
+-%}
+
+<style>
+  #shopify-section-{{ uid }} .stw-{{ uid }} {
+    --stw-hl-bg: {{ hl_bg }};
+    --stw-hl-tx: {{ hl_tx }};
+    --stw-dim: {{ dim }};
+    display: block;
+    height: {{ slen }}vh;
+  }
+
+  /* Sticky viewport: pins for the full scroll length of the outer wrapper.
+     The stage keeps filling the viewport (minus the sticky offset); the
+     vertical paddings space the text block within it. */
+  #shopify-section-{{ uid }} .stw__viewport {
+    position: sticky;
+    top: {{ sticky_off }}px;
+    /* Banner height: "Fit height to text" hugs the content (no dead space
+       above/below); otherwise the height slider applies (100 = full screen).
+       The JS measures the stage's real height, so the word-reveal still
+       completes exactly when the section unpins at any height. */
+    {%- if fit_d %}
+    min-height: 0;
+    {%- else %}
+    min-height: calc({{ shd }}vh - {{ sticky_off }}px);
+    {%- endif %}
+    padding-top: {{ pt }}px;
+    padding-bottom: {{ pb }}px;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    color: var(--color-text);
+    background: var(--gradient-background, var(--color-background));
+  }
+  @media (max-width: 749px) {
+    #shopify-section-{{ uid }} .stw__viewport {
+      {%- if fit_m %}
+      min-height: 0;
+      {%- else %}
+      min-height: calc({{ shm }}vh - {{ sticky_off }}px);
+      {%- endif %}
+    }
+  }
+
+  #shopify-section-{{ uid }} .stw__inner {
+    width: 100%;
+    max-width: {{ maxw }};
+    margin-inline: auto;
+    padding-inline: {{ padx }};
+    /* Comfortable breathing only — the Spacing sliders control the rest, so
+       the stage can genuinely hug the text in fit-content mode. */
+    padding-block: 1.5rem;
+    box-sizing: border-box;
+    text-align: {{ talign }};
+  }
+
+  #shopify-section-{{ uid }} .stw__text {
+    max-width: {{ max_w }}px;
+    {%- if talign == 'center' %}
+    margin-inline: auto;
+    {%- endif %}
+  }
+
+  #shopify-section-{{ uid }} .stw__p {
+    margin: 0;
+  }
+
+  #shopify-section-{{ uid }} .stw__p p {
+    margin: 0 0 0.75em;
+    color: {{ txc }};
+    font-size: {{ fsd }}px;
+    font-weight: {{ fw }};
+    line-height: {{ lh }};
+    {%- if fstyle == 'mono' %}
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    {%- endif %}
+    {%- if s.uppercase %}
+    text-transform: uppercase;
+    {%- endif %}
+    {%- if ls > 0 %}
+    letter-spacing: {{ ls }}px;
+    {%- elsif s.uppercase %}
+    letter-spacing: 0.02em;
+    {%- endif %}
+  }
+
+  #shopify-section-{{ uid }} .stw__p:last-of-type p:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Word spans (added by JS). Default state = fully visible (no-JS safe). */
+  #shopify-section-{{ uid }} .stw__w {
+    display: inline-block;
+    white-space: nowrap;
+    border-radius: {{ hl_rad }}px;
+    transition: opacity {{ speed }}s ease, color {{ speed }}s ease, background-color {{ speed }}s ease;
+  }
+
+  /* Highlight pills — default (no-JS / reduced motion): pill on the wrapper. */
+  #shopify-section-{{ uid }} .stw__text strong,
+  #shopify-section-{{ uid }} .stw__text b {
+    font-weight: inherit;
+    padding: 0.05em 0.25em;
+    border-radius: {{ hl_rad }}px;
+    background-color: var(--stw-hl-bg);
+    color: var(--stw-hl-tx);
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  /* Armed (JS running, motion OK): dimming setup + pill moves to word spans
+     so the background fades in per word as it reveals. */
+  #shopify-section-{{ uid }} .stw--armed .stw__w {
+    opacity: var(--stw-dim);
+  }
+
+  #shopify-section-{{ uid }} .stw--armed .stw__w.is-on {
+    opacity: 1;
+  }
+
+  #shopify-section-{{ uid }} .stw--armed .stw__text strong,
+  #shopify-section-{{ uid }} .stw--armed .stw__text b {
+    padding: 0;
+    border-radius: 0;
+    background-color: transparent;
+    color: inherit;
+  }
+
+  #shopify-section-{{ uid }} .stw--armed .stw__text strong .stw__w,
+  #shopify-section-{{ uid }} .stw--armed .stw__text b .stw__w {
+    padding: 0.05em 0.25em;
+  }
+
+  #shopify-section-{{ uid }} .stw--armed .stw__text strong .stw__w.is-on,
+  #shopify-section-{{ uid }} .stw--armed .stw__text b .stw__w.is-on {
+    background-color: var(--stw-hl-bg);
+    color: var(--stw-hl-tx);
+  }
+
+  {%- if dimc != blank %}
+  /* Optional dim color: un-revealed words swap to this color at full opacity
+     instead of fading from the base opacity. */
+  #shopify-section-{{ uid }} .stw--armed .stw__w {
+    opacity: 1;
+    color: {{ dimc }};
+  }
+
+  #shopify-section-{{ uid }} .stw--armed .stw__w.is-on {
+    color: inherit;
+  }
+  {%- endif %}
+
+  /* Button blocks: small underlined uppercase link below the text. */
+  #shopify-section-{{ uid }} .stw__actions {
+    margin-top: 2.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    {%- if talign == 'center' %}
+    justify-content: center;
+    {%- endif %}
+  }
+
+  #shopify-section-{{ uid }} .stw__btn {
+    display: inline-block;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-heading);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.35em;
+    transition: opacity 0.25s ease;
+  }
+
+  #shopify-section-{{ uid }} a.stw__btn:hover {
+    opacity: 0.7;
+  }
+
+  @media (max-width: 749px) {
+    #shopify-section-{{ uid }} .stw__p p {
+      font-size: {{ fsm }}px;
+    }
+    #shopify-section-{{ uid }} .stw__actions {
+      margin-top: 1.75rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ uid }} .stw__w,
+    #shopify-section-{{ uid }} .stw__btn {
+      transition: none;
+    }
+    /* Belt and braces: if the preference flips mid-session, show everything. */
+    #shopify-section-{{ uid }} .stw--armed .stw__w {
+      opacity: 1;
+      color: inherit;
+    }
+    #shopify-section-{{ uid }} .stw--armed .stw__text strong .stw__w,
+    #shopify-section-{{ uid }} .stw--armed .stw__text b .stw__w {
+      background-color: var(--stw-hl-bg);
+      color: var(--stw-hl-tx);
+    }
+  }
+{% comment %}{% endcomment %}</style>
+
+<scroll-text-banner class="stw-{{ uid }} color-{{ scheme }}" data-offset="{{ sticky_off }}">
+  <div class="stw__viewport">
+    <div class="stw__inner">
+      <div class="stw__text">
+        {%- for block in section.blocks -%}
+          {%- if block.type == 'text' and block.settings.text != blank -%}
+            <div class="stw__p" {{ block.shopify_attributes }}>{{ block.settings.text }}</div>
+          {%- endif -%}
+        {%- endfor -%}
+      </div>
+
+      {%- if has_button -%}
+        <div class="stw__actions">
+          {%- for block in section.blocks -%}
+            {%- if block.type == 'button' -%}
+              {%- liquid
+                assign lbl = block.settings.label | default: 'ABOUT US'
+              -%}
+              {%- if block.settings.link != blank -%}
+                <a class="stw__btn" href="{{ block.settings.link }}" {{ block.shopify_attributes }}>{{ lbl | escape }}</a>
+              {%- else -%}
+                <span class="stw__btn" {{ block.shopify_attributes }}>{{ lbl | escape }}</span>
+              {%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        </div>
+      {%- endif -%}
+    </div>
+  </div>
+</scroll-text-banner>
+
+<script>
+  (function () {
+    if (customElements.get('scroll-text-banner')) return;
+
+    class ScrollTextBanner extends HTMLElement {
+      connectedCallback() {
+        this._init();
+      }
+
+      disconnectedCallback() {
+        this._teardown();
+      }
+
+      refresh() {
+        this._teardown();
+        this._init();
+      }
+
+      _init() {
+        if (this._armed) return;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        this._textWrap = this.querySelector('.stw__text');
+        if (!this._textWrap) return;
+
+        /* Re-init safety (theme editor): restore the original, un-split HTML
+           before splitting so words are never double-wrapped. */
+        if (this._textWrap.hasAttribute('data-stw-original')) {
+          this._textWrap.innerHTML = this._textWrap.getAttribute('data-stw-original');
+        } else {
+          this._textWrap.setAttribute('data-stw-original', this._textWrap.innerHTML);
+        }
+
+        this._split();
+        if (!this._words.length) return;
+
+        this.classList.add('stw--armed');
+        this._armed = true;
+        this._count = -1;
+        this._ticking = false;
+        this._onScroll = this._onScroll || (() => {
+          if (this._ticking) return;
+          this._ticking = true;
+          requestAnimationFrame(() => {
+            this._ticking = false;
+            this._update();
+          });
+        });
+        window.addEventListener('scroll', this._onScroll, { passive: true });
+        window.addEventListener('resize', this._onScroll, { passive: true });
+
+        /* Run once immediately for mid-page reloads. */
+        this._update();
+      }
+
+      _teardown() {
+        if (this._onScroll) {
+          window.removeEventListener('scroll', this._onScroll);
+          window.removeEventListener('resize', this._onScroll);
+        }
+        this.classList.remove('stw--armed');
+        this._armed = false;
+        this._words = [];
+      }
+
+      /* Split rendered text into word spans, preserving highlight wrappers:
+         text nodes inside <strong>/<b> are split in place so each word keeps
+         the pill styling via CSS descendant selectors. */
+      _split() {
+        const walker = document.createTreeWalker(this._textWrap, NodeFilter.SHOW_TEXT, null);
+        const nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+
+        nodes.forEach((node) => {
+          if (!/\S/.test(node.nodeValue)) return;
+          const parts = node.nodeValue.split(/(\s+)/);
+          const frag = document.createDocumentFragment();
+          parts.forEach((part) => {
+            if (!part) return;
+            if (/^\s+$/.test(part)) {
+              frag.appendChild(document.createTextNode(part));
+            } else {
+              const w = document.createElement('span');
+              w.className = 'stw__w';
+              w.textContent = part;
+              frag.appendChild(w);
+            }
+          });
+          node.parentNode.replaceChild(frag, node);
+        });
+
+        this._words = Array.prototype.slice.call(this._textWrap.querySelectorAll('.stw__w'));
+      }
+
+      _update() {
+        if (!this._armed || !this._words.length) return;
+        const rect = this.getBoundingClientRect();
+        const vh = window.innerHeight || document.documentElement.clientHeight;
+        /* Sticky top offset (px): the stage pins at `off`, not 0. The pinned
+           travel is the wrapper height minus the stage's REAL height
+           (measured, so the Banner-height sliders are automatically
+           accounted for at any breakpoint). */
+        const off = parseFloat(this.dataset.offset || '0') || 0;
+        const stage = this.querySelector('.stw__viewport');
+        const stageH = stage ? stage.offsetHeight : Math.max(vh - off, 1);
+        const range = rect.height - stageH;
+        let p = range > 0 ? (off - rect.top) / range : (rect.top <= off ? 1 : 0);
+        if (p < 0) p = 0;
+        else if (p > 1) p = 1;
+
+        const total = this._words.length;
+        const n = Math.round(p * total);
+        if (n === this._count) return;
+
+        /* Only touch the words whose state actually changed. */
+        const prev = this._count < 0 ? 0 : this._count;
+        if (n > prev) {
+          for (let i = prev; i < n; i++) this._words[i].classList.add('is-on');
+        } else {
+          for (let i = n; i < prev; i++) this._words[i].classList.remove('is-on');
+        }
+        this._count = n;
+      }
+    }
+
+    customElements.define('scroll-text-banner', ScrollTextBanner);
+
+    /* Theme editor: section:load replaces the section's DOM, which re-runs
+       connectedCallback on the fresh element. The explicit refresh below is a
+       safety net in case the editor morphs the DOM instead of replacing it. */
+    document.addEventListener('shopify:section:load', (event) => {
+      const el = event.target && event.target.querySelector('scroll-text-banner');
+      if (el && typeof el.refresh === 'function') el.refresh();
+    });
+  })();
+{% comment %}{% endcomment %}</script>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "scroll-text-banner",
+  "name": "Scrolling Text Reveal",
+  "settings": [
+    {
+      "type": "header",
+      "id": "hdr_1",
+      "label": "Layout"
+    },
+    {
+      "type": "color_scheme",
+      "id": "color_scheme",
+      "label": "Color scheme",
+      "default": "scheme-1"
+    },
+    {
+      "type": "select",
+      "id": "width",
+      "label": "Section width",
+      "default": "fluid_container",
+      "options": [
+        {
+          "value": "container",
+          "label": "Container"
+        },
+        {
+          "value": "fluid_container",
+          "label": "Fluid container"
+        },
+        {
+          "value": "stretch_width",
+          "label": "Stretched"
+        },
+        {
+          "value": "full_width",
+          "label": "Full width"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "scroll_length",
+      "label": "Scroll length",
+      "min": 150,
+      "max": 400,
+      "step": 10,
+      "unit": "vh",
+      "default": 250,
+      "info": "How far the visitor scrolls while the section stays pinned."
+    },
+    {
+      "type": "checkbox",
+      "id": "fit_content_d",
+      "label": "Fit height to text (desktop)",
+      "default": false,
+      "info": "The banner hugs the text instead of filling the screen — no empty space above or below."
+    },
+    {
+      "type": "range",
+      "id": "stage_height_d",
+      "label": "Banner height (desktop)",
+      "min": 40,
+      "max": 100,
+      "step": 5,
+      "unit": "vh",
+      "default": 100,
+      "info": "Height of the visible pinned banner. 100 fills the screen.",
+      "visible_if": "{{ section.settings.fit_content_d == false }}"
+    },
+    {
+      "type": "checkbox",
+      "id": "fit_content_m",
+      "label": "Fit height to text (mobile)",
+      "default": true
+    },
+    {
+      "type": "range",
+      "id": "stage_height_m",
+      "label": "Banner height (mobile)",
+      "min": 40,
+      "max": 100,
+      "step": 5,
+      "unit": "vh",
+      "default": 100,
+      "visible_if": "{{ section.settings.fit_content_m == false }}"
+    },
+    {
+      "type": "range",
+      "id": "sticky_offset",
+      "label": "Sticky top offset",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "default": 0,
+      "info": "Offsets the pinned stage from the top of the screen. Useful when the store has a sticky header."
+    },
+    {
+      "type": "header",
+      "id": "hdr_10",
+      "label": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "label": "Top padding",
+      "min": 0,
+      "max": 120,
+      "step": 2,
+      "unit": "px",
+      "default": 0,
+      "info": "Spaces the text block within the pinned full-height stage."
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "label": "Bottom padding",
+      "min": 0,
+      "max": 120,
+      "step": 2,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "header",
+      "id": "hdr_13",
+      "label": "Typography"
+    },
+    {
+      "type": "checkbox",
+      "id": "uppercase",
+      "label": "Uppercase text",
+      "default": true
+    },
+    {
+      "type": "range",
+      "id": "font_size_d",
+      "label": "Font size (desktop)",
+      "min": 18,
+      "max": 72,
+      "step": 1,
+      "unit": "px",
+      "default": 40
+    },
+    {
+      "type": "range",
+      "id": "font_size_m",
+      "label": "Font size (mobile)",
+      "min": 14,
+      "max": 48,
+      "step": 1,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "range",
+      "id": "line_height",
+      "label": "Line height",
+      "min": 1.1,
+      "max": 1.8,
+      "step": 0.1,
+      "default": 1.4
+    },
+    {
+      "type": "checkbox",
+      "id": "bold",
+      "label": "Bold text",
+      "default": true
+    },
+    {
+      "type": "select",
+      "id": "font_style",
+      "label": "Font",
+      "default": "heading",
+      "options": [
+        {
+          "value": "heading",
+          "label": "Theme heading font"
+        },
+        {
+          "value": "mono",
+          "label": "Monospace"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "letter_spacing",
+      "label": "Letter spacing",
+      "min": 0,
+      "max": 10,
+      "step": 0.5,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "select",
+      "id": "text_align",
+      "label": "Text alignment",
+      "default": "left",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "max_width",
+      "label": "Text max width",
+      "min": 600,
+      "max": 1400,
+      "step": 50,
+      "unit": "px",
+      "default": 1100
+    },
+    {
+      "type": "header",
+      "id": "hdr_23",
+      "label": "Reveal"
+    },
+    {
+      "type": "range",
+      "id": "base_opacity",
+      "label": "Unrevealed word opacity",
+      "min": 5,
+      "max": 50,
+      "step": 5,
+      "unit": "%",
+      "default": 15,
+      "info": "Words start at this opacity and light up to full as you scroll."
+    },
+    {
+      "type": "range",
+      "id": "reveal_speed",
+      "label": "Reveal speed",
+      "min": 0.1,
+      "max": 0.6,
+      "step": 0.1,
+      "unit": "s",
+      "default": 0.3,
+      "info": "How long each word takes to ease in once the scroll reaches it."
+    },
+    {
+      "type": "header",
+      "id": "hdr_26",
+      "label": "Colors"
+    },
+    {
+      "type": "checkbox",
+      "id": "custom_text_color",
+      "label": "Custom text color",
+      "default": false,
+      "info": "Override the color scheme's heading color for the un-highlighted text."
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text color",
+      "default": "#FFFFFF",
+      "visible_if": "{{ section.settings.custom_text_color }}"
+    },
+    {
+      "type": "color",
+      "id": "reveal_dim_color",
+      "label": "Un-revealed word color",
+      "info": "Optional. Leave blank to keep the text color and fade with the opacity above."
+    },
+    {
+      "type": "header",
+      "id": "hdr_30",
+      "label": "Highlight"
+    },
+    {
+      "type": "color",
+      "id": "highlight_bg",
+      "label": "Highlight background",
+      "default": "#ffffff",
+      "info": "Bold phrases in the text render as pills with this background."
+    },
+    {
+      "type": "color",
+      "id": "highlight_text",
+      "label": "Highlight text",
+      "default": "#111111"
+    },
+    {
+      "type": "range",
+      "id": "highlight_radius",
+      "label": "Highlight corner radius",
+      "min": 0,
+      "max": 30,
+      "step": 1,
+      "unit": "px",
+      "default": 6
+    }
+  ],
+  "blocks": [
+    {
+      "type": "text",
+      "name": "Text",
+      "settings": [
+        {
+          "type": "richtext",
+          "id": "text",
+          "label": "Text",
+          "default": "<p>Our collection of sleek, <strong>high-performance bags</strong> embodies a perfect synergy of advanced technology, durable materials, and contemporary design.</p>",
+          "info": "Bold phrases render as highlight pills."
+        }
+      ]
+    },
+    {
+      "type": "button",
+      "name": "Button",
+      "settings": [
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Label",
+          "default": "ABOUT US"
+        },
+        {
+          "type": "url",
+          "id": "link",
+          "label": "Link"
+        }
+      ]
+    }
+  ],
+  "max_blocks": 6,
+  "presets": [
+    {
+      "name": "Scrolling Text Reveal",
+      "category": "Text Content",
+      "blocks": [
+        {
+          "type": "text"
+        },
+        {
+          "type": "button"
+        }
+      ]
+    }
+  ],
+  "shopify": {
+    "name": "Scrolling Text Reveal",
+    "tag": "section",
+    "class": "section",
+    "settings": [
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "scheme-1"
+      },
+      {
+        "type": "select",
+        "id": "width",
+        "label": "Section width",
+        "default": "fluid_container",
+        "options": [
+          {
+            "value": "container",
+            "label": "Container"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "scroll_length",
+        "label": "Scroll length",
+        "min": 150,
+        "max": 400,
+        "step": 10,
+        "unit": "vh",
+        "default": 250,
+        "info": "How far the visitor scrolls while the section stays pinned."
+      },
+      {
+        "type": "checkbox",
+        "id": "fit_content_d",
+        "label": "Fit height to text (desktop)",
+        "default": false,
+        "info": "The banner hugs the text instead of filling the screen — no empty space above or below."
+      },
+      {
+        "type": "range",
+        "id": "stage_height_d",
+        "label": "Banner height (desktop)",
+        "min": 40,
+        "max": 100,
+        "step": 5,
+        "unit": "vh",
+        "default": 100,
+        "info": "Height of the visible pinned banner. 100 fills the screen.",
+        "visible_if": "{{ section.settings.fit_content_d == false }}"
+      },
+      {
+        "type": "checkbox",
+        "id": "fit_content_m",
+        "label": "Fit height to text (mobile)",
+        "default": true
+      },
+      {
+        "type": "range",
+        "id": "stage_height_m",
+        "label": "Banner height (mobile)",
+        "min": 40,
+        "max": 100,
+        "step": 5,
+        "unit": "vh",
+        "default": 100,
+        "visible_if": "{{ section.settings.fit_content_m == false }}"
+      },
+      {
+        "type": "range",
+        "id": "sticky_offset",
+        "label": "Sticky top offset",
+        "min": 0,
+        "max": 120,
+        "step": 4,
+        "unit": "px",
+        "default": 0,
+        "info": "Offsets the pinned stage from the top of the screen. Useful when the store has a sticky header."
+      },
+      {
+        "type": "header",
+        "content": "Spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top padding",
+        "min": 0,
+        "max": 120,
+        "step": 2,
+        "unit": "px",
+        "default": 0,
+        "info": "Spaces the text block within the pinned full-height stage."
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom padding",
+        "min": 0,
+        "max": 120,
+        "step": 2,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "checkbox",
+        "id": "uppercase",
+        "label": "Uppercase text",
+        "default": true
+      },
+      {
+        "type": "range",
+        "id": "font_size_d",
+        "label": "Font size (desktop)",
+        "min": 18,
+        "max": 72,
+        "step": 1,
+        "unit": "px",
+        "default": 40
+      },
+      {
+        "type": "range",
+        "id": "font_size_m",
+        "label": "Font size (mobile)",
+        "min": 14,
+        "max": 48,
+        "step": 1,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "range",
+        "id": "line_height",
+        "label": "Line height",
+        "min": 1.1,
+        "max": 1.8,
+        "step": 0.1,
+        "default": 1.4
+      },
+      {
+        "type": "checkbox",
+        "id": "bold",
+        "label": "Bold text",
+        "default": true
+      },
+      {
+        "type": "select",
+        "id": "font_style",
+        "label": "Font",
+        "default": "heading",
+        "options": [
+          {
+            "value": "heading",
+            "label": "Theme heading font"
+          },
+          {
+            "value": "mono",
+            "label": "Monospace"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "letter_spacing",
+        "label": "Letter spacing",
+        "min": 0,
+        "max": 10,
+        "step": 0.5,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "select",
+        "id": "text_align",
+        "label": "Text alignment",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "max_width",
+        "label": "Text max width",
+        "min": 600,
+        "max": 1400,
+        "step": 50,
+        "unit": "px",
+        "default": 1100
+      },
+      {
+        "type": "header",
+        "content": "Reveal"
+      },
+      {
+        "type": "range",
+        "id": "base_opacity",
+        "label": "Unrevealed word opacity",
+        "min": 5,
+        "max": 50,
+        "step": 5,
+        "unit": "%",
+        "default": 15,
+        "info": "Words start at this opacity and light up to full as you scroll."
+      },
+      {
+        "type": "range",
+        "id": "reveal_speed",
+        "label": "Reveal speed",
+        "min": 0.1,
+        "max": 0.6,
+        "step": 0.1,
+        "unit": "s",
+        "default": 0.3,
+        "info": "How long each word takes to ease in once the scroll reaches it."
+      },
+      {
+        "type": "header",
+        "content": "Colors"
+      },
+      {
+        "type": "checkbox",
+        "id": "custom_text_color",
+        "label": "Custom text color",
+        "default": false,
+        "info": "Override the color scheme's heading color for the un-highlighted text."
+      },
+      {
+        "type": "color",
+        "id": "text_color",
+        "label": "Text color",
+        "default": "#FFFFFF",
+        "visible_if": "{{ section.settings.custom_text_color }}"
+      },
+      {
+        "type": "color",
+        "id": "reveal_dim_color",
+        "label": "Un-revealed word color",
+        "info": "Optional. Leave blank to keep the text color and fade with the opacity above."
+      },
+      {
+        "type": "header",
+        "content": "Highlight"
+      },
+      {
+        "type": "color",
+        "id": "highlight_bg",
+        "label": "Highlight background",
+        "default": "#ffffff",
+        "info": "Bold phrases in the text render as pills with this background."
+      },
+      {
+        "type": "color",
+        "id": "highlight_text",
+        "label": "Highlight text",
+        "default": "#111111"
+      },
+      {
+        "type": "range",
+        "id": "highlight_radius",
+        "label": "Highlight corner radius",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "unit": "px",
+        "default": 6
+      }
+    ],
+    "blocks": [
+      {
+        "type": "text",
+        "name": "Text",
+        "settings": [
+          {
+            "type": "richtext",
+            "id": "text",
+            "label": "Text",
+            "default": "<p>Our collection of sleek, <strong>high-performance bags</strong> embodies a perfect synergy of advanced technology, durable materials, and contemporary design.</p>",
+            "info": "Bold phrases render as highlight pills."
+          }
+        ]
+      },
+      {
+        "type": "button",
+        "name": "Button",
+        "settings": [
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Label",
+            "default": "ABOUT US"
+          },
+          {
+            "type": "url",
+            "id": "link",
+            "label": "Link"
+          }
+        ]
+      }
+    ],
+    "max_blocks": 6,
+    "presets": [
+      {
+        "name": "Scrolling Text Reveal",
+        "category": "Text Content",
+        "blocks": [
+          {
+            "type": "text"
+          },
+          {
+            "type": "button"
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

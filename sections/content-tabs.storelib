@@ -1,0 +1,2335 @@
+<template compat="shopify">
+{%- comment -%} Connect to the theme's global Animations & motion settings (Theme settings > Animations). {%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+{%- comment -%}
+  Materia / WildRoots — Content Tabs
+  A horizontal, touch-swipeable card carousel with a heading, an optional row
+  of highlight items, navigation arrows, button blocks and a footer line.
+
+  Everything is scoped to #shopify-section-{{ section.id }} and uses a unique
+  ctabs__ class prefix, so it can never style or be styled by other sections.
+  The carousel is native CSS scroll-snap (no library), with iOS momentum and
+  overscroll containment so a horizontal swipe never leaks to the page or to
+  another section. Fonts and colours come from the theme by default
+  (--heading-font / --body-font and the chosen color scheme).
+{%- endcomment -%}
+
+{%- liquid
+  assign st = section.settings
+  assign sid = section.id
+  assign color_scheme = st.color_scheme.id | default: st.color_scheme | default: 'default-color-scheme'
+  assign placeholder = 'image' | placeholder_svg_tag: 'placeholder-svg'
+
+  assign highlights_color = st.highlights_color | default: 'var(--color-heading)'
+
+  comment
+    Speed: honour the theme's global performance settings (Theme settings > Speed).
+  endcomment
+  assign sp_quality = 'balanced'
+  if sp_quality == 'max'
+    assign ct_img_max = 1200
+  elsif sp_quality == 'fast'
+    assign ct_img_max = 700
+  else
+    assign ct_img_max = 900
+  endif
+  assign sp_lazy = settings.perf_images
+  assign sp_preload = settings.perf_images
+  assign sp_decode = settings.perf_images
+
+  comment
+    Count blocks and grab the (single) heading + footer blocks up front.
+  endcomment
+  assign tab_count = 0
+  assign highlight_count = 0
+  assign button_count = 0
+  assign heading_found = false
+  assign footer_found = false
+  for block in section.blocks
+    case block.type
+      when 'tab'
+        assign tab_count = tab_count | plus: 1
+      when 'highlight'
+        assign highlight_count = highlight_count | plus: 1
+      when 'button'
+        if block.settings.label != blank
+          assign button_count = button_count | plus: 1
+        endif
+      when 'heading'
+        unless heading_found
+          assign heading_block = block
+          assign heading_found = true
+        endunless
+      when 'footer'
+        unless footer_found
+          assign footer_block = block
+          assign footer_found = true
+        endunless
+    endcase
+  endfor
+
+  comment
+    Resolve heading settings (and the shared heading + highlights alignment).
+  endcomment
+  if heading_found
+    assign hb = heading_block.settings
+    assign ta_d = hb.text_align | default: 'center'
+    assign ta_m = hb.text_align_mobile | default: 'center'
+    assign heading_color = hb.heading_color | default: 'var(--color-heading)'
+  else
+    assign ta_d = 'center'
+    assign ta_m = 'center'
+    assign heading_color = 'var(--color-heading)'
+  endif
+  case ta_d
+    when 'left'
+      assign jc_d = 'flex-start'
+    when 'right'
+      assign jc_d = 'flex-end'
+    else
+      assign jc_d = 'center'
+  endcase
+  case ta_m
+    when 'left'
+      assign ai_m = 'flex-start'
+    when 'right'
+      assign ai_m = 'flex-end'
+    else
+      assign ai_m = 'center'
+  endcase
+
+  if footer_found
+    assign fb = footer_block.settings
+    assign footer_color = fb.footer_color | default: 'var(--color-text)'
+  else
+    assign footer_color = 'var(--color-text)'
+  endif
+-%}
+
+{%- if heading_found and hb.heading_custom_font_enable and hb.heading_font != blank -%}
+  {% style %}{{ hb.heading_font | font_face: font_display: 'swap' }}{% endstyle %}
+{%- endif -%}
+
+{%- if st.reset_spacing -%}
+<style>
+  #shopify-section-{{ sid }} { margin-top: 0 !important; margin-bottom: 0 !important; }
+  #shopify-section-{{ sid }} + .shopify-section { margin-top: 0 !important; }
+{% comment %}{% endcomment %}</style>
+{%- endif -%}
+
+<style>
+  /* ---- Isolation: nothing in here touches the rest of the page ---- */
+  #shopify-section-{{ sid }} {
+    isolation: isolate;
+    position: relative;
+  }
+  #shopify-section-{{ sid }} *,
+  #shopify-section-{{ sid }} *::before,
+  #shopify-section-{{ sid }} *::after {
+    box-sizing: border-box;
+  }
+
+  /* ---- Outer spacing ---- */
+  #shopify-section-{{ sid }} .ctabs {
+    {% if st.background != blank %}background: {{ st.background }};{% endif %}
+    padding-top: {{ st.padding_top_mobile | default: 48 }}px;
+    padding-bottom: {{ st.padding_bottom_mobile | default: 48 }}px;
+    margin-top: {{ st.section_margin_top_mobile | default: 0 }}px;
+    margin-bottom: {{ st.section_margin_bottom_mobile | default: 0 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .ctabs {
+      padding-top: {{ st.padding_top_desktop | default: 80 }}px;
+      padding-bottom: {{ st.padding_bottom_desktop | default: 80 }}px;
+      margin-top: {{ st.section_margin_top_desktop | default: 0 }}px;
+      margin-bottom: {{ st.section_margin_bottom_desktop | default: 0 }}px;
+    }
+  }
+
+  /* ---- Inner container width ---- */
+  {%- case st.section_width -%}
+    {%- when 'container' -%}
+      #shopify-section-{{ sid }} .ctabs__inner { max-width: calc(var(--page-width, 1300px) + 3rem); margin-inline: auto; padding-inline: 1.5rem; }
+    {%- when 'fluid' -%}
+      #shopify-section-{{ sid }} .ctabs__inner { max-width: 1600px; margin-inline: auto; padding-inline: 1.5rem; }
+    {%- else -%}
+      #shopify-section-{{ sid }} .ctabs__inner { padding-inline: 1.5rem; }
+  {%- endcase -%}
+
+  /* ---- Heading + highlights (use theme fonts/colours by default) ---- */
+  #shopify-section-{{ sid }} .ctabs__head {
+    text-align: {{ ta_m }};
+    margin-bottom: {{ st.gap_heading_to_highlights | default: 22 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .ctabs__head { text-align: {{ ta_d }}; }
+  }
+  #shopify-section-{{ sid }} .ctabs__heading {
+    font-family: var(--heading-font);
+    color: {{ heading_color }};
+    margin: 0;
+    line-height: 1.15;
+    font-size: {{ hb.heading_size_mobile | default: 30 }}px;
+    {%- if heading_found and hb.heading_custom_font_enable and hb.heading_font != blank %}
+    font-family: {{ hb.heading_font.family }}, {{ hb.heading_font.fallback_families }};
+    font-style: {{ hb.heading_font.style }};
+    {%- endif %}
+    {%- if heading_found and hb.heading_font_weight != blank and hb.heading_font_weight != 'inherit' %}
+    font-weight: {{ hb.heading_font_weight }};
+    {%- elsif heading_found and hb.heading_custom_font_enable and hb.heading_font != blank %}
+    font-weight: {{ hb.heading_font.weight }};
+    {%- endif %}
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .ctabs__heading { font-size: {{ hb.heading_size_desktop | default: 44 }}px; }
+  }
+
+  /* Mobile: highlights stack one under the other. Desktop: single row. */
+  #shopify-section-{{ sid }} .ctabs__highlights {
+    display: flex;
+    flex-direction: column;
+    align-items: {{ ai_m }};
+    gap: 12px;
+    margin-bottom: {{ st.gap_highlights_to_cards | default: 28 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .ctabs__highlights {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: {{ jc_d }};
+      gap: 10px {{ st.highlights_gap | default: 32 }}px;
+    }
+  }
+  #shopify-section-{{ sid }} .ctabs__highlight {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-family: var(--body-font);
+    color: {{ highlights_color }};
+    font-size: {{ st.highlights_size | default: 16 }}px;
+    line-height: 1.3;
+  }
+  #shopify-section-{{ sid }} .ctabs__highlight svg {
+    width: {{ st.highlights_size | default: 16 | plus: 6 }}px;
+    height: {{ st.highlights_size | default: 16 | plus: 6 }}px;
+    flex: 0 0 auto;
+    stroke: currentColor;
+  }
+
+  /* ---- Carousel track (native scroll-snap, contained) ---- */
+  #shopify-section-{{ sid }} .ctabs__track {
+    --ctabs-per: {{ st.cards_mobile | default: '1.5' }};
+    --ctabs-gap: {{ st.card_gap | default: 16 }}px;
+    display: flex;
+    gap: var(--ctabs-gap);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding-bottom: 6px;
+    cursor: grab;
+  }
+  #shopify-section-{{ sid }} .ctabs__track.is-dragging {
+    cursor: grabbing;
+    scroll-snap-type: none;
+    scroll-behavior: auto;
+    user-select: none;
+  }
+  #shopify-section-{{ sid }} .ctabs__track.is-dragging a { pointer-events: none; }
+  #shopify-section-{{ sid }} .ctabs__media img {
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .ctabs__track {
+      --ctabs-per: {{ st.cards_desktop | default: '3.5' }};
+      --ctabs-gap: {{ st.card_gap | default: 16 | plus: 8 }}px;
+    }
+  }
+  #shopify-section-{{ sid }} .ctabs__track::-webkit-scrollbar { display: none; }
+
+  #shopify-section-{{ sid }} .ctabs__card {
+    flex: 0 0 calc((100% - (var(--ctabs-per) - 1) * var(--ctabs-gap)) / var(--ctabs-per));
+    scroll-snap-align: start;
+    position: relative;
+    display: block;
+    height: {{ st.card_height_mobile | default: 260 }}px;
+    border-radius: {{ st.card_radius | default: 16 }}px;
+    overflow: hidden;
+    isolation: isolate;
+    text-decoration: none;
+    background: #20202c;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .ctabs__card { height: {{ st.card_height_desktop | default: 230 }}px; }
+  }
+  #shopify-section-{{ sid }} a.ctabs__card { cursor: pointer; }
+
+  #shopify-section-{{ sid }} .ctabs__media { position: absolute; inset: 0; z-index: 0; }
+  #shopify-section-{{ sid }} .ctabs__media img,
+  #shopify-section-{{ sid }} .ctabs__media svg {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    filter: brightness(var(--ctabs-bri, 100%));
+  }
+  #shopify-section-{{ sid }} .ctabs__tint {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: var(--ctabs-ovl, #14142B);
+    opacity: calc(var(--ctabs-ovl-op, 45) / 100);
+  }
+  #shopify-section-{{ sid }} .ctabs__grad {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    background: linear-gradient(180deg, rgba(0,0,0,.28) 0%, rgba(0,0,0,0) 38%, rgba(0,0,0,0) 60%, rgba(0,0,0,.30) 100%);
+  }
+  #shopify-section-{{ sid }} .ctabs__body {
+    position: relative;
+    z-index: 3;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: {{ st.card_padding | default: 22 }}px;
+    color: var(--ctabs-text, #ffffff);
+  }
+  #shopify-section-{{ sid }} .ctabs__title {
+    font-family: var(--heading-font);
+    color: var(--ctabs-title, #ffffff);
+    margin: 0 0 10px;
+    line-height: 1.15;
+    font-size: {{ st.card_title_size | default: 24 }}px;
+    font-weight: 500;
+  }
+  #shopify-section-{{ sid }} .ctabs__desc {
+    font-family: var(--body-font);
+    color: var(--ctabs-text, #ffffff);
+    margin: 0;
+    flex: 1 1 auto;
+    line-height: 1.5;
+    font-size: {{ st.card_text_size | default: 15 }}px;
+    opacity: .94;
+  }
+  #shopify-section-{{ sid }} .ctabs__badges {
+    margin-top: auto;
+    padding-top: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  #shopify-section-{{ sid }} .ctabs__badge {
+    display: inline-flex;
+    align-items: center;
+    background: var(--ctabs-badge-bg, #E6E3FF);
+    color: var(--ctabs-badge-c, #2A2550);
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-family: var(--body-font);
+    font-size: 12px;
+    font-weight: var(--badges-font-weight, 600);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+
+  /* ---- Arrows ---- */
+  #shopify-section-{{ sid }} .ctabs__nav {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+    margin-top: {{ st.gap_cards_to_arrows | default: 26 }}px;
+  }
+  #shopify-section-{{ sid }} .ctabs__arrow {
+    width: 46px;
+    height: 46px;
+    border-radius: 999px;
+    border: 1px solid {{ st.arrow_border_color | default: 'var(--color-border, rgba(0,0,0,.15))' }};
+    background: transparent;
+    color: {{ st.arrow_icon_color | default: 'var(--color-heading)' }};
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: opacity .2s ease, transform .15s ease, background .2s ease;
+  }
+  #shopify-section-{{ sid }} .ctabs__arrow:hover { transform: translateY(-1px); }
+  #shopify-section-{{ sid }} .ctabs__arrow svg { width: 18px; height: 18px; stroke: currentColor; }
+  #shopify-section-{{ sid }} .ctabs__arrow[disabled] { opacity: .35; cursor: default; transform: none; }
+
+  /* ---- Button(s) ---- */
+  #shopify-section-{{ sid }} .ctabs__buttons {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 14px;
+    margin-top: {{ st.gap_arrows_to_button | default: 30 }}px;
+  }
+  #shopify-section-{{ sid }} .ctabs__btn { text-align: center; text-decoration: none !important; }
+
+  /* ---- Footer line ---- */
+  #shopify-section-{{ sid }} .ctabs__footer {
+    text-align: center;
+    max-width: 760px;
+    margin: {{ st.gap_button_to_footer | default: 26 }}px auto 0;
+    font-family: var(--body-font);
+    color: {{ footer_color }};
+    font-size: {{ fb.footer_size | default: 15 }}px;
+    line-height: 1.6;
+    opacity: .85;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ sid }} .ctabs__track { scroll-behavior: auto; }
+  }
+{% comment %}{% endcomment %}</style>
+
+<div class="ctabs color-{{ color_scheme }}">
+  <div class="ctabs__inner">
+
+    {%- if heading_found and hb.heading != blank -%}
+      <div class="ctabs__head" {{ heading_block.shopify_attributes }}>
+        <h2 class="ctabs__heading">{{ hb.heading }}</h2>
+      </div>
+    {%- endif -%}
+
+    {%- if highlight_count > 0 -%}
+      <div class="ctabs__highlights">
+        {%- for block in section.blocks -%}
+          {%- if block.type == 'highlight' -%}
+            {%- assign hb = block.settings -%}
+            <span class="ctabs__highlight" {{ block.shopify_attributes }}>
+              {%- case hb.icon -%}
+                {%- when 'seal' -%}
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" aria-hidden="true"><path d="M12 2l2.4 1.8 3 .2.9 2.9 2.3 1.9-1 2.8 1 2.8-2.3 1.9-.9 2.9-3 .2L12 22l-2.4-1.7-3-.2-.9-2.9L3.4 15.3l1-2.8-1-2.8 2.3-1.9.9-2.9 3-.2z"/></svg>
+                {%- when 'flask' -%}
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6"/><path d="M10 3v6L5 19a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-10V3"/><path d="M7.5 15h9"/></svg>
+                {%- when 'no_symbol' -%}
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>
+                {%- when 'leaf' -%}
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 20A7 7 0 0 1 4 13c0-6 7-9 16-9 0 9-3 16-9 16z"/><path d="M4 20c2.5-4 6-7 12-9"/></svg>
+                {%- when 'shield' -%}
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                {%- when 'star' -%}
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 18.8 6.2 21.4l1.1-6.5L2.6 9.8l6.5-.9z"/></svg>
+                {%- when 'heart' -%}
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>
+                {%- when 'lock' -%}
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                {%- when 'check' -%}
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.2 2.2 4.8-4.8"/></svg>
+                {%- when 'spark' -%}
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg>
+                {%- else -%}
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.2 2.2 4.8-4.8"/></svg>
+              {%- endcase -%}
+              {%- if hb.text != blank -%}<span>{{ hb.text }}</span>{%- endif -%}
+            </span>
+          {%- endif -%}
+        {%- endfor -%}
+      </div>
+    {%- endif -%}
+
+    {%- if tab_count > 0 -%}
+      <div class="ctabs__track" data-ctabs-track>
+        {%- assign tab_i = 0 -%}
+        {%- for block in section.blocks -%}
+          {%- if block.type == 'tab' -%}
+            {%- assign tb = block.settings -%}
+            {%- liquid
+              capture card_style
+                echo '--ctabs-ovl:' | append: tb.overlay_color | default: '#14142B' | append: ';'
+                echo '--ctabs-ovl-op:' | append: tb.overlay_opacity | default: 45 | append: ';'
+                echo '--ctabs-bri:' | append: tb.image_brightness | default: 100 | append: '%;'
+                echo '--ctabs-title:' | append: tb.title_color | default: '#FFFFFF' | append: ';'
+                echo '--ctabs-text:' | append: tb.text_color | default: '#FFFFFF' | append: ';'
+                echo '--ctabs-badge-bg:' | append: tb.badge_bg | default: '#E6E3FF' | append: ';'
+                echo '--ctabs-badge-c:' | append: tb.badge_text_color | default: '#2A2550' | append: ';'
+              endcapture
+              assign card_tag = 'article'
+              if tb.link != blank
+                assign card_tag = 'a'
+              endif
+              if tab_i == 0
+                assign ct_loading = 'eager'
+                unless sp_preload
+                  assign ct_loading = 'lazy'
+                endunless
+              else
+                assign ct_loading = 'lazy'
+                unless sp_lazy
+                  assign ct_loading = 'eager'
+                endunless
+              endif
+              assign demo_src = ''
+              if tb.image == blank
+                capture demo_src
+                  render 'demo-image', key: block.id
+                endcapture
+                assign demo_src = demo_src | strip
+              endif
+            -%}
+            <{{ card_tag }} class="ctabs__card"{% if tb.link != blank %} href="{{ tb.link }}"{% endif %} style="{{ card_style }}" {{ block.shopify_attributes }}>
+              <div class="ctabs__media">
+                {%- if tb.image != blank -%}
+                  <img
+                    src="{{ tb.image | image_url: width: ct_img_max }}"
+                    srcset="{{ tb.image | image_url: width: 400 }} 400w,
+                            {{ tb.image | image_url: width: 600 }} 600w,
+                            {{ tb.image | image_url: width: 800 }} 800w,
+                            {{ tb.image | image_url: width: ct_img_max }} {{ ct_img_max }}w"
+                    sizes="(max-width: 767px) 70vw, 28vw"
+                    width="{{ tb.image.width }}"
+                    height="{{ tb.image.height }}"
+                    alt="{{ tb.image.alt | default: tb.title | escape }}"
+                    loading="{{ ct_loading }}"
+                    {% if tab_i == 0 and sp_preload %}fetchpriority="high"{% endif %}
+                    {% if sp_decode %}decoding="async"{% endif %}>
+                {%- elsif demo_src != blank -%}
+                  <img src="{{ demo_src }}" sizes="(max-width: 767px) 70vw, 28vw" alt="{{ tb.title | escape }}" loading="{{ ct_loading }}">
+                {%- else -%}
+                  {{ placeholder }}
+                {%- endif -%}
+              </div>
+              <span class="ctabs__tint" aria-hidden="true"></span>
+              <span class="ctabs__grad" aria-hidden="true"></span>
+              <div class="ctabs__body">
+                {%- if tb.title != blank -%}<h3 class="ctabs__title">{{ tb.title | escape }}</h3>{%- endif -%}
+                {%- if tb.description != blank -%}<p class="ctabs__desc">{{ tb.description | escape }}</p>{%- endif -%}
+                {%- if tb.badge_1 != blank or tb.badge_2 != blank -%}
+                  <div class="ctabs__badges">
+                    {%- if tb.badge_1 != blank -%}<span class="ctabs__badge">{{ tb.badge_1 | escape }}</span>{%- endif -%}
+                    {%- if tb.badge_2 != blank -%}<span class="ctabs__badge">{{ tb.badge_2 | escape }}</span>{%- endif -%}
+                  </div>
+                {%- endif -%}
+              </div>
+            </{{ card_tag }}>
+            {%- assign tab_i = tab_i | plus: 1 -%}
+          {%- endif -%}
+        {%- endfor -%}
+      </div>
+
+      {%- if st.show_arrows -%}
+        <div class="ctabs__nav">
+          <button type="button" class="ctabs__arrow" data-ctabs-prev aria-label="{{ 'accessibility.previous' | t | default: 'Previous' }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <button type="button" class="ctabs__arrow" data-ctabs-next aria-label="{{ 'accessibility.next' | t | default: 'Next' }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+          </button>
+        </div>
+      {%- endif -%}
+    {%- endif -%}
+
+    {%- if button_count > 0 -%}
+      <div class="ctabs__buttons">
+        {%- for block in section.blocks -%}
+          {%- if block.type == 'button' and block.settings.label != blank -%}
+            {%- assign cb = block.settings -%}
+            {%- if cb.custom_colors -%}
+              <style>
+                #shopify-section-{{ sid }} #ctabs-btn-{{ block.id }} {
+                  background: {{ cb.bg | default: '#14142B' }} !important;
+                  border-color: {{ cb.bg | default: '#14142B' }} !important;
+                  color: {{ cb.text_color | default: '#FFFFFF' }} !important;
+                }
+                #shopify-section-{{ sid }} #ctabs-btn-{{ block.id }}:hover {
+                  background: {{ cb.bg_hover | default: '#2A2550' }} !important;
+                  border-color: {{ cb.bg_hover | default: '#2A2550' }} !important;
+                }
+{% comment %}{% endcomment %}              </style>
+            {%- endif -%}
+            <a id="ctabs-btn-{{ block.id }}" class="ctabs__btn btn {% if cb.style == 'outline' %}btn-outline{% else %}btn-primary{% endif %}{% if cb.full_width %} w-full{% endif %}" href="{{ cb.link | default: '#' }}" {{ block.shopify_attributes }}>{{ cb.label | escape }}</a>
+          {%- endif -%}
+        {%- endfor -%}
+      </div>
+    {%- endif -%}
+
+    {%- if footer_found and fb.footer_text != blank -%}
+      <div class="ctabs__footer" {{ footer_block.shopify_attributes }}>{{ fb.footer_text }}</div>
+    {%- endif -%}
+
+  </div>
+</div>
+
+<script>
+  (function () {
+    var root = document.getElementById('shopify-section-{{ sid }}');
+    if (!root) return;
+    var track = root.querySelector('[data-ctabs-track]');
+    if (!track) return;
+    var prev = root.querySelector('[data-ctabs-prev]');
+    var next = root.querySelector('[data-ctabs-next]');
+
+    function step() {
+      var card = track.querySelector('.ctabs__card');
+      if (!card) return track.clientWidth;
+      var styles = getComputedStyle(track);
+      var gap = parseFloat(styles.columnGap || styles.gap) || 0;
+      return card.getBoundingClientRect().width + gap;
+    }
+    function update() {
+      if (!prev || !next) return;
+      var max = track.scrollWidth - track.clientWidth - 2;
+      prev.disabled = track.scrollLeft <= 2;
+      next.disabled = track.scrollLeft >= max;
+    }
+    if (prev) prev.addEventListener('click', function () { track.scrollBy({ left: -step(), behavior: 'smooth' }); });
+    if (next) next.addEventListener('click', function () { track.scrollBy({ left: step(), behavior: 'smooth' }); });
+    track.addEventListener('scroll', function () { window.requestAnimationFrame(update); }, { passive: true });
+    window.addEventListener('resize', update);
+    update();
+
+    /* Mouse / pen click-and-drag with real-time tracking.
+       Touch is left to native scrolling so iOS momentum stays smooth. */
+    var down = false, dragged = false, startX = 0, startScroll = 0;
+    track.addEventListener('pointerdown', function (e) {
+      if (e.pointerType === 'touch') return;
+      down = true;
+      dragged = false;
+      startX = e.clientX;
+      startScroll = track.scrollLeft;
+      track.classList.add('is-dragging');
+      try { track.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    track.addEventListener('pointermove', function (e) {
+      if (!down) return;
+      var dx = e.clientX - startX;
+      if (Math.abs(dx) > 4) dragged = true;
+      track.scrollLeft = startScroll - dx;
+      e.preventDefault();
+    });
+    function end(e) {
+      if (!down) return;
+      down = false;
+      track.classList.remove('is-dragging');
+      try { track.releasePointerCapture(e.pointerId); } catch (err) {}
+    }
+    track.addEventListener('pointerup', end);
+    track.addEventListener('pointercancel', end);
+    track.addEventListener('pointerleave', end);
+    /* Swallow the click that follows a real drag so cards don't navigate. */
+    track.addEventListener('click', function (e) {
+      if (dragged) { e.preventDefault(); e.stopPropagation(); dragged = false; }
+    }, true);
+    track.addEventListener('dragstart', function (e) { e.preventDefault(); });
+  })();
+{% comment %}{% endcomment %}</script>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "content-tabs",
+  "name": "Content Tabs",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "Color"
+    },
+    {
+      "type": "color_scheme",
+      "id": "color_scheme",
+      "label": "Color scheme",
+      "default": "default-color-scheme",
+      "info": "Heading, highlights, arrows and buttons inherit this scheme's colors and the theme fonts."
+    },
+    {
+      "type": "color",
+      "id": "background",
+      "label": "Section background",
+      "info": "Leave empty to use the color scheme background."
+    },
+    {
+      "type": "header",
+      "id": "hdr_5",
+      "label": "Highlights row"
+    },
+    {
+      "type": "paragraph",
+      "id": "para_6",
+      "label": "Add 'Highlight' blocks below for the small icon + text items shown under the heading.",
+      "content": "Add 'Highlight' blocks below for the small icon + text items shown under the heading."
+    },
+    {
+      "type": "color",
+      "id": "highlights_color",
+      "label": "Highlights color",
+      "info": "Leave empty to inherit the theme heading color."
+    },
+    {
+      "type": "range",
+      "id": "highlights_size",
+      "label": "Highlights text size",
+      "min": 12,
+      "max": 22,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "highlights_gap",
+      "label": "Gap between highlights",
+      "min": 8,
+      "max": 64,
+      "step": 2,
+      "unit": "px",
+      "default": 32
+    },
+    {
+      "type": "header",
+      "id": "hdr_10",
+      "label": "Cards / carousel"
+    },
+    {
+      "type": "select",
+      "id": "cards_desktop",
+      "label": "Cards visible (desktop)",
+      "default": "3.5",
+      "options": [
+        {
+          "value": "2",
+          "label": "2"
+        },
+        {
+          "value": "2.5",
+          "label": "2.5"
+        },
+        {
+          "value": "3",
+          "label": "3"
+        },
+        {
+          "value": "3.5",
+          "label": "3.5"
+        },
+        {
+          "value": "4",
+          "label": "4"
+        },
+        {
+          "value": "4.5",
+          "label": "4.5"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "cards_mobile",
+      "label": "Cards visible (mobile)",
+      "default": "1.5",
+      "options": [
+        {
+          "value": "1",
+          "label": "1"
+        },
+        {
+          "value": "1.5",
+          "label": "1.5"
+        },
+        {
+          "value": "2",
+          "label": "2"
+        },
+        {
+          "value": "2.5",
+          "label": "2.5"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "card_gap",
+      "label": "Gap between cards",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "card_height_desktop",
+      "label": "Card height (desktop)",
+      "min": 160,
+      "max": 460,
+      "step": 5,
+      "unit": "px",
+      "default": 230
+    },
+    {
+      "type": "range",
+      "id": "card_height_mobile",
+      "label": "Card height (mobile)",
+      "min": 160,
+      "max": 460,
+      "step": 5,
+      "unit": "px",
+      "default": 260
+    },
+    {
+      "type": "range",
+      "id": "card_radius",
+      "label": "Card corner radius",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "card_padding",
+      "label": "Card inner padding",
+      "min": 12,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 22
+    },
+    {
+      "type": "range",
+      "id": "card_title_size",
+      "label": "Card title size",
+      "min": 16,
+      "max": 34,
+      "step": 1,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "range",
+      "id": "card_text_size",
+      "label": "Card text size",
+      "min": 12,
+      "max": 20,
+      "step": 1,
+      "unit": "px",
+      "default": 15
+    },
+    {
+      "type": "checkbox",
+      "id": "show_arrows",
+      "label": "Show navigation arrows",
+      "default": true
+    },
+    {
+      "type": "color",
+      "id": "arrow_icon_color",
+      "label": "Arrow icon color",
+      "info": "Leave empty to inherit the theme heading color."
+    },
+    {
+      "type": "color",
+      "id": "arrow_border_color",
+      "label": "Arrow border color",
+      "info": "Leave empty to inherit the theme border color."
+    },
+    {
+      "type": "header",
+      "id": "hdr_23",
+      "label": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "gap_heading_to_highlights",
+      "label": "Heading to highlights",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 22
+    },
+    {
+      "type": "range",
+      "id": "gap_highlights_to_cards",
+      "label": "Highlights to cards",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 28
+    },
+    {
+      "type": "range",
+      "id": "gap_cards_to_arrows",
+      "label": "Cards to arrows",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 26
+    },
+    {
+      "type": "range",
+      "id": "gap_arrows_to_button",
+      "label": "Arrows to button",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 30
+    },
+    {
+      "type": "range",
+      "id": "gap_button_to_footer",
+      "label": "Button to footer",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 26
+    },
+    {
+      "type": "header",
+      "id": "hdr_29",
+      "label": "Section padding & margin"
+    },
+    {
+      "type": "select",
+      "id": "section_width",
+      "label": "Section width",
+      "default": "container",
+      "options": [
+        {
+          "value": "container",
+          "label": "Default"
+        },
+        {
+          "value": "fluid",
+          "label": "Wide"
+        },
+        {
+          "value": "stretch",
+          "label": "Full width"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "padding_top_desktop",
+      "label": "Top padding (desktop)",
+      "min": 0,
+      "max": 100,
+      "step": 10,
+      "unit": "px",
+      "default": 80
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_desktop",
+      "label": "Bottom padding (desktop)",
+      "min": 0,
+      "max": 100,
+      "step": 10,
+      "unit": "px",
+      "default": 80
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "label": "Top padding (mobile)",
+      "min": 0,
+      "max": 100,
+      "step": 10,
+      "unit": "px",
+      "default": 50
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "label": "Bottom padding (mobile)",
+      "min": 0,
+      "max": 100,
+      "step": 10,
+      "unit": "px",
+      "default": 50
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_desktop",
+      "label": "Top margin (desktop)",
+      "min": -100,
+      "max": 100,
+      "step": 10,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_desktop",
+      "label": "Bottom margin (desktop)",
+      "min": -100,
+      "max": 100,
+      "step": 10,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_mobile",
+      "label": "Top margin (mobile)",
+      "min": -100,
+      "max": 100,
+      "step": 10,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_mobile",
+      "label": "Bottom margin (mobile)",
+      "min": -100,
+      "max": 100,
+      "step": 10,
+      "unit": "px",
+      "default": 0
+    }
+  ],
+  "blocks": [
+    {
+      "type": "heading",
+      "name": "Heading",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Heading",
+          "default": "Everything You Need, All In One Place"
+        },
+        {
+          "type": "color",
+          "id": "heading_color",
+          "label": "Heading color",
+          "info": "Leave empty to inherit the theme heading color."
+        },
+        {
+          "type": "select",
+          "id": "text_align",
+          "label": "Heading & highlights alignment (desktop)",
+          "default": "center",
+          "options": [
+            {
+              "value": "left",
+              "label": "Left"
+            },
+            {
+              "value": "center",
+              "label": "Center"
+            },
+            {
+              "value": "right",
+              "label": "Right"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "text_align_mobile",
+          "label": "Heading & highlights alignment (mobile)",
+          "default": "center",
+          "options": [
+            {
+              "value": "left",
+              "label": "Left"
+            },
+            {
+              "value": "center",
+              "label": "Center"
+            },
+            {
+              "value": "right",
+              "label": "Right"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "heading_size_desktop",
+          "label": "Heading size (desktop)",
+          "min": 24,
+          "max": 72,
+          "step": 1,
+          "unit": "px",
+          "default": 44
+        },
+        {
+          "type": "range",
+          "id": "heading_size_mobile",
+          "label": "Heading size (mobile)",
+          "min": 18,
+          "max": 48,
+          "step": 1,
+          "unit": "px",
+          "default": 30
+        },
+        {
+          "type": "header",
+          "id": "hdr_7",
+          "label": "Heading font"
+        },
+        {
+          "type": "paragraph",
+          "id": "para_8",
+          "label": "By default the heading uses your theme heading font and weight. Turn this on to choose a custom font for this heading only.",
+          "content": "By default the heading uses your theme heading font and weight. Turn this on to choose a custom font for this heading only."
+        },
+        {
+          "type": "checkbox",
+          "id": "heading_custom_font_enable",
+          "label": "Use a custom font for the heading",
+          "default": false
+        },
+        {
+          "type": "font_picker",
+          "id": "heading_font",
+          "label": "Heading font",
+          "default": "assistant_n4",
+          "info": "Only applied when the toggle above is on."
+        },
+        {
+          "type": "select",
+          "id": "heading_font_weight",
+          "label": "Heading font weight",
+          "default": "inherit",
+          "options": [
+            {
+              "value": "inherit",
+              "label": "Theme default"
+            },
+            {
+              "value": "300",
+              "label": "Light (300)"
+            },
+            {
+              "value": "400",
+              "label": "Regular (400)"
+            },
+            {
+              "value": "500",
+              "label": "Medium (500)"
+            },
+            {
+              "value": "600",
+              "label": "Semibold (600)"
+            },
+            {
+              "value": "700",
+              "label": "Bold (700)"
+            },
+            {
+              "value": "800",
+              "label": "Extra bold (800)"
+            }
+          ]
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "highlight",
+      "name": "Highlight",
+      "settings": [
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "default": "seal",
+          "options": [
+            {
+              "value": "seal",
+              "label": "Seal / badge"
+            },
+            {
+              "value": "flask",
+              "label": "Flask / tested"
+            },
+            {
+              "value": "no_symbol",
+              "label": "No symbol"
+            },
+            {
+              "value": "leaf",
+              "label": "Leaf"
+            },
+            {
+              "value": "shield",
+              "label": "Shield check"
+            },
+            {
+              "value": "star",
+              "label": "Star"
+            },
+            {
+              "value": "heart",
+              "label": "Heart"
+            },
+            {
+              "value": "lock",
+              "label": "Lock"
+            },
+            {
+              "value": "check",
+              "label": "Check circle"
+            },
+            {
+              "value": "spark",
+              "label": "Sparkle"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Text",
+          "default": "Highlight detail"
+        }
+      ],
+      "limit": 5
+    },
+    {
+      "type": "tab",
+      "name": "Card",
+      "settings": [
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Background image"
+        },
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Title",
+          "default": "Card title"
+        },
+        {
+          "type": "textarea",
+          "id": "description",
+          "label": "Description",
+          "default": "A short supporting line that explains this card in a sentence or two without crowding the layout."
+        },
+        {
+          "type": "text",
+          "id": "badge_1",
+          "label": "Badge 1"
+        },
+        {
+          "type": "text",
+          "id": "badge_2",
+          "label": "Badge 2"
+        },
+        {
+          "type": "url",
+          "id": "link",
+          "label": "Link (optional)",
+          "info": "If set, the whole card becomes clickable."
+        },
+        {
+          "type": "header",
+          "id": "hdr_7",
+          "label": "Image & overlay"
+        },
+        {
+          "type": "color",
+          "id": "overlay_color",
+          "label": "Overlay color",
+          "default": "#14142B"
+        },
+        {
+          "type": "range",
+          "id": "overlay_opacity",
+          "label": "Overlay opacity",
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "unit": "%",
+          "default": 45
+        },
+        {
+          "type": "range",
+          "id": "image_brightness",
+          "label": "Image brightness",
+          "min": 40,
+          "max": 130,
+          "step": 1,
+          "unit": "%",
+          "default": 100
+        },
+        {
+          "type": "header",
+          "id": "hdr_11",
+          "label": "Text & badges"
+        },
+        {
+          "type": "color",
+          "id": "title_color",
+          "label": "Title color",
+          "default": "#FFFFFF"
+        },
+        {
+          "type": "color",
+          "id": "text_color",
+          "label": "Description color",
+          "default": "#FFFFFF"
+        },
+        {
+          "type": "color",
+          "id": "badge_bg",
+          "label": "Badge background",
+          "default": "#E6E3FF"
+        },
+        {
+          "type": "color",
+          "id": "badge_text_color",
+          "label": "Badge text color",
+          "default": "#2A2550"
+        }
+      ],
+      "limit": 12
+    },
+    {
+      "type": "button",
+      "name": "Button",
+      "settings": [
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Button label",
+          "default": "Explore more"
+        },
+        {
+          "type": "url",
+          "id": "link",
+          "label": "Button link"
+        },
+        {
+          "type": "select",
+          "id": "style",
+          "label": "Style",
+          "default": "primary",
+          "options": [
+            {
+              "value": "primary",
+              "label": "Primary (filled)"
+            },
+            {
+              "value": "outline",
+              "label": "Outline"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "full_width",
+          "label": "Full width on mobile",
+          "default": false
+        },
+        {
+          "type": "checkbox",
+          "id": "custom_colors",
+          "label": "Override theme button colors",
+          "default": false,
+          "info": "Off = uses the color scheme's button styling."
+        },
+        {
+          "type": "color",
+          "id": "bg",
+          "label": "Background",
+          "default": "#14142B"
+        },
+        {
+          "type": "color",
+          "id": "bg_hover",
+          "label": "Hover background",
+          "default": "#2A2550"
+        },
+        {
+          "type": "color",
+          "id": "text_color",
+          "label": "Text color",
+          "default": "#FFFFFF"
+        }
+      ],
+      "limit": 2
+    },
+    {
+      "type": "footer",
+      "name": "Footer line",
+      "settings": [
+        {
+          "type": "richtext",
+          "id": "footer_text",
+          "label": "Footer text",
+          "default": "<p>A flexible content section you can adapt to any brand. Swap the images, edit the copy and arrange the cards however you like.</p>"
+        },
+        {
+          "type": "color",
+          "id": "footer_color",
+          "label": "Footer color",
+          "info": "Leave empty to inherit the theme text color."
+        },
+        {
+          "type": "range",
+          "id": "footer_size",
+          "label": "Footer text size",
+          "min": 12,
+          "max": 20,
+          "step": 1,
+          "unit": "px",
+          "default": 15
+        }
+      ],
+      "limit": 1
+    }
+  ],
+  "presets": [
+    {
+      "name": "Content Tabs",
+      "category": "Benefits",
+      "blocks": [
+        {
+          "type": "heading",
+          "settings": {
+            "heading": "Everything You Need, All In One Place"
+          }
+        },
+        {
+          "type": "highlight",
+          "settings": {
+            "icon": "seal",
+            "text": "Crafted with care"
+          }
+        },
+        {
+          "type": "highlight",
+          "settings": {
+            "icon": "shield",
+            "text": "Built to last"
+          }
+        },
+        {
+          "type": "highlight",
+          "settings": {
+            "icon": "heart",
+            "text": "Loved by many"
+          }
+        },
+        {
+          "type": "tab",
+          "settings": {
+            "title": "Made Simple",
+            "description": "A clean, considered approach to the things that matter, designed to fit into your everyday.",
+            "badge_1": "POPULAR"
+          }
+        },
+        {
+          "type": "tab",
+          "settings": {
+            "title": "Thoughtful Design",
+            "description": "Every detail is refined with intention, so the whole experience feels effortless from the start.",
+            "badge_1": "NEW"
+          }
+        },
+        {
+          "type": "tab",
+          "settings": {
+            "title": "Built To Last",
+            "description": "Quality you can rely on day after day, made with care and meant to stay with you.",
+            "badge_1": "PREMIUM"
+          }
+        },
+        {
+          "type": "tab",
+          "settings": {
+            "title": "Loved By Many",
+            "description": "Join a growing community who made this part of their routine and never looked back.",
+            "badge_1": "TOP RATED",
+            "badge_2": "FAVORITE"
+          }
+        },
+        {
+          "type": "button",
+          "settings": {
+            "label": "Explore more"
+          }
+        },
+        {
+          "type": "footer",
+          "settings": {}
+        }
+      ]
+    }
+  ],
+  "shopify": {
+    "name": "Content Tabs",
+    "tag": "section",
+    "class": "section-content-tabs",
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Color"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme",
+        "info": "Heading, highlights, arrows and buttons inherit this scheme's colors and the theme fonts."
+      },
+      {
+        "type": "color",
+        "id": "background",
+        "label": "Section background",
+        "info": "Leave empty to use the color scheme background."
+      },
+      {
+        "type": "header",
+        "content": "Highlights row"
+      },
+      {
+        "type": "paragraph",
+        "content": "Add 'Highlight' blocks below for the small icon + text items shown under the heading."
+      },
+      {
+        "type": "color",
+        "id": "highlights_color",
+        "label": "Highlights color",
+        "info": "Leave empty to inherit the theme heading color."
+      },
+      {
+        "type": "range",
+        "id": "highlights_size",
+        "label": "Highlights text size",
+        "min": 12,
+        "max": 22,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "highlights_gap",
+        "label": "Gap between highlights",
+        "min": 8,
+        "max": 64,
+        "step": 2,
+        "unit": "px",
+        "default": 32
+      },
+      {
+        "type": "header",
+        "content": "Cards / carousel"
+      },
+      {
+        "type": "select",
+        "id": "cards_desktop",
+        "label": "Cards visible (desktop)",
+        "default": "3.5",
+        "options": [
+          {
+            "value": "2",
+            "label": "2"
+          },
+          {
+            "value": "2.5",
+            "label": "2.5"
+          },
+          {
+            "value": "3",
+            "label": "3"
+          },
+          {
+            "value": "3.5",
+            "label": "3.5"
+          },
+          {
+            "value": "4",
+            "label": "4"
+          },
+          {
+            "value": "4.5",
+            "label": "4.5"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "cards_mobile",
+        "label": "Cards visible (mobile)",
+        "default": "1.5",
+        "options": [
+          {
+            "value": "1",
+            "label": "1"
+          },
+          {
+            "value": "1.5",
+            "label": "1.5"
+          },
+          {
+            "value": "2",
+            "label": "2"
+          },
+          {
+            "value": "2.5",
+            "label": "2.5"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "card_gap",
+        "label": "Gap between cards",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "card_height_desktop",
+        "label": "Card height (desktop)",
+        "min": 160,
+        "max": 460,
+        "step": 5,
+        "unit": "px",
+        "default": 230
+      },
+      {
+        "type": "range",
+        "id": "card_height_mobile",
+        "label": "Card height (mobile)",
+        "min": 160,
+        "max": 460,
+        "step": 5,
+        "unit": "px",
+        "default": 260
+      },
+      {
+        "type": "range",
+        "id": "card_radius",
+        "label": "Card corner radius",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "card_padding",
+        "label": "Card inner padding",
+        "min": 12,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 22
+      },
+      {
+        "type": "range",
+        "id": "card_title_size",
+        "label": "Card title size",
+        "min": 16,
+        "max": 34,
+        "step": 1,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "range",
+        "id": "card_text_size",
+        "label": "Card text size",
+        "min": 12,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 15
+      },
+      {
+        "type": "checkbox",
+        "id": "show_arrows",
+        "label": "Show navigation arrows",
+        "default": true
+      },
+      {
+        "type": "color",
+        "id": "arrow_icon_color",
+        "label": "Arrow icon color",
+        "info": "Leave empty to inherit the theme heading color."
+      },
+      {
+        "type": "color",
+        "id": "arrow_border_color",
+        "label": "Arrow border color",
+        "info": "Leave empty to inherit the theme border color."
+      },
+      {
+        "type": "header",
+        "content": "Spacing"
+      },
+      {
+        "type": "range",
+        "id": "gap_heading_to_highlights",
+        "label": "Heading to highlights",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 22
+      },
+      {
+        "type": "range",
+        "id": "gap_highlights_to_cards",
+        "label": "Highlights to cards",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 28
+      },
+      {
+        "type": "range",
+        "id": "gap_cards_to_arrows",
+        "label": "Cards to arrows",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 26
+      },
+      {
+        "type": "range",
+        "id": "gap_arrows_to_button",
+        "label": "Arrows to button",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 30
+      },
+      {
+        "type": "range",
+        "id": "gap_button_to_footer",
+        "label": "Button to footer",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 26
+      },
+      {
+        "type": "header",
+        "content": "Section padding & margin"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "container",
+        "options": [
+          {
+            "value": "container",
+            "label": "Default"
+          },
+          {
+            "value": "fluid",
+            "label": "Wide"
+          },
+          {
+            "value": "stretch",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "padding_top_desktop",
+        "label": "Top padding (desktop)",
+        "min": 0,
+        "max": 100,
+        "step": 10,
+        "unit": "px",
+        "default": 80
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_desktop",
+        "label": "Bottom padding (desktop)",
+        "min": 0,
+        "max": 100,
+        "step": 10,
+        "unit": "px",
+        "default": 80
+      },
+      {
+        "type": "range",
+        "id": "padding_top_mobile",
+        "label": "Top padding (mobile)",
+        "min": 0,
+        "max": 100,
+        "step": 10,
+        "unit": "px",
+        "default": 50
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_mobile",
+        "label": "Bottom padding (mobile)",
+        "min": 0,
+        "max": 100,
+        "step": 10,
+        "unit": "px",
+        "default": 50
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin (desktop)",
+        "min": -100,
+        "max": 100,
+        "step": 10,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin (desktop)",
+        "min": -100,
+        "max": 100,
+        "step": 10,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_mobile",
+        "label": "Top margin (mobile)",
+        "min": -100,
+        "max": 100,
+        "step": 10,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_mobile",
+        "label": "Bottom margin (mobile)",
+        "min": -100,
+        "max": 100,
+        "step": 10,
+        "unit": "px",
+        "default": 0
+      }
+    ],
+    "blocks": [
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "heading",
+            "label": "Heading",
+            "default": "Everything You Need, All In One Place"
+          },
+          {
+            "type": "color",
+            "id": "heading_color",
+            "label": "Heading color",
+            "info": "Leave empty to inherit the theme heading color."
+          },
+          {
+            "type": "select",
+            "id": "text_align",
+            "label": "Heading & highlights alignment (desktop)",
+            "default": "center",
+            "options": [
+              {
+                "value": "left",
+                "label": "Left"
+              },
+              {
+                "value": "center",
+                "label": "Center"
+              },
+              {
+                "value": "right",
+                "label": "Right"
+              }
+            ]
+          },
+          {
+            "type": "select",
+            "id": "text_align_mobile",
+            "label": "Heading & highlights alignment (mobile)",
+            "default": "center",
+            "options": [
+              {
+                "value": "left",
+                "label": "Left"
+              },
+              {
+                "value": "center",
+                "label": "Center"
+              },
+              {
+                "value": "right",
+                "label": "Right"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "heading_size_desktop",
+            "label": "Heading size (desktop)",
+            "min": 24,
+            "max": 72,
+            "step": 1,
+            "unit": "px",
+            "default": 44
+          },
+          {
+            "type": "range",
+            "id": "heading_size_mobile",
+            "label": "Heading size (mobile)",
+            "min": 18,
+            "max": 48,
+            "step": 1,
+            "unit": "px",
+            "default": 30
+          },
+          {
+            "type": "header",
+            "content": "Heading font"
+          },
+          {
+            "type": "paragraph",
+            "content": "By default the heading uses your theme heading font and weight. Turn this on to choose a custom font for this heading only."
+          },
+          {
+            "type": "checkbox",
+            "id": "heading_custom_font_enable",
+            "label": "Use a custom font for the heading",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "heading_font",
+            "label": "Heading font",
+            "default": "assistant_n4",
+            "info": "Only applied when the toggle above is on."
+          },
+          {
+            "type": "select",
+            "id": "heading_font_weight",
+            "label": "Heading font weight",
+            "default": "inherit",
+            "options": [
+              {
+                "value": "inherit",
+                "label": "Theme default"
+              },
+              {
+                "value": "300",
+                "label": "Light (300)"
+              },
+              {
+                "value": "400",
+                "label": "Regular (400)"
+              },
+              {
+                "value": "500",
+                "label": "Medium (500)"
+              },
+              {
+                "value": "600",
+                "label": "Semibold (600)"
+              },
+              {
+                "value": "700",
+                "label": "Bold (700)"
+              },
+              {
+                "value": "800",
+                "label": "Extra bold (800)"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "highlight",
+        "name": "Highlight",
+        "limit": 5,
+        "settings": [
+          {
+            "type": "select",
+            "id": "icon",
+            "label": "Icon",
+            "default": "seal",
+            "options": [
+              {
+                "value": "seal",
+                "label": "Seal / badge"
+              },
+              {
+                "value": "flask",
+                "label": "Flask / tested"
+              },
+              {
+                "value": "no_symbol",
+                "label": "No symbol"
+              },
+              {
+                "value": "leaf",
+                "label": "Leaf"
+              },
+              {
+                "value": "shield",
+                "label": "Shield check"
+              },
+              {
+                "value": "star",
+                "label": "Star"
+              },
+              {
+                "value": "heart",
+                "label": "Heart"
+              },
+              {
+                "value": "lock",
+                "label": "Lock"
+              },
+              {
+                "value": "check",
+                "label": "Check circle"
+              },
+              {
+                "value": "spark",
+                "label": "Sparkle"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Text",
+            "default": "Highlight detail"
+          }
+        ]
+      },
+      {
+        "type": "tab",
+        "name": "Card",
+        "limit": 12,
+        "settings": [
+          {
+            "type": "image_picker",
+            "id": "image",
+            "label": "Background image"
+          },
+          {
+            "type": "text",
+            "id": "title",
+            "label": "Title",
+            "default": "Card title"
+          },
+          {
+            "type": "textarea",
+            "id": "description",
+            "label": "Description",
+            "default": "A short supporting line that explains this card in a sentence or two without crowding the layout."
+          },
+          {
+            "type": "text",
+            "id": "badge_1",
+            "label": "Badge 1"
+          },
+          {
+            "type": "text",
+            "id": "badge_2",
+            "label": "Badge 2"
+          },
+          {
+            "type": "url",
+            "id": "link",
+            "label": "Link (optional)",
+            "info": "If set, the whole card becomes clickable."
+          },
+          {
+            "type": "header",
+            "content": "Image & overlay"
+          },
+          {
+            "type": "color",
+            "id": "overlay_color",
+            "label": "Overlay color",
+            "default": "#14142B"
+          },
+          {
+            "type": "range",
+            "id": "overlay_opacity",
+            "label": "Overlay opacity",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "unit": "%",
+            "default": 45
+          },
+          {
+            "type": "range",
+            "id": "image_brightness",
+            "label": "Image brightness",
+            "min": 40,
+            "max": 130,
+            "step": 1,
+            "unit": "%",
+            "default": 100
+          },
+          {
+            "type": "header",
+            "content": "Text & badges"
+          },
+          {
+            "type": "color",
+            "id": "title_color",
+            "label": "Title color",
+            "default": "#FFFFFF"
+          },
+          {
+            "type": "color",
+            "id": "text_color",
+            "label": "Description color",
+            "default": "#FFFFFF"
+          },
+          {
+            "type": "color",
+            "id": "badge_bg",
+            "label": "Badge background",
+            "default": "#E6E3FF"
+          },
+          {
+            "type": "color",
+            "id": "badge_text_color",
+            "label": "Badge text color",
+            "default": "#2A2550"
+          }
+        ]
+      },
+      {
+        "type": "button",
+        "name": "Button",
+        "limit": 2,
+        "settings": [
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Button label",
+            "default": "Explore more"
+          },
+          {
+            "type": "url",
+            "id": "link",
+            "label": "Button link"
+          },
+          {
+            "type": "select",
+            "id": "style",
+            "label": "Style",
+            "default": "primary",
+            "options": [
+              {
+                "value": "primary",
+                "label": "Primary (filled)"
+              },
+              {
+                "value": "outline",
+                "label": "Outline"
+              }
+            ]
+          },
+          {
+            "type": "checkbox",
+            "id": "full_width",
+            "label": "Full width on mobile",
+            "default": false
+          },
+          {
+            "type": "checkbox",
+            "id": "custom_colors",
+            "label": "Override theme button colors",
+            "default": false,
+            "info": "Off = uses the color scheme's button styling."
+          },
+          {
+            "type": "color",
+            "id": "bg",
+            "label": "Background",
+            "default": "#14142B"
+          },
+          {
+            "type": "color",
+            "id": "bg_hover",
+            "label": "Hover background",
+            "default": "#2A2550"
+          },
+          {
+            "type": "color",
+            "id": "text_color",
+            "label": "Text color",
+            "default": "#FFFFFF"
+          }
+        ]
+      },
+      {
+        "type": "footer",
+        "name": "Footer line",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "richtext",
+            "id": "footer_text",
+            "label": "Footer text",
+            "default": "<p>A flexible content section you can adapt to any brand. Swap the images, edit the copy and arrange the cards however you like.</p>"
+          },
+          {
+            "type": "color",
+            "id": "footer_color",
+            "label": "Footer color",
+            "info": "Leave empty to inherit the theme text color."
+          },
+          {
+            "type": "range",
+            "id": "footer_size",
+            "label": "Footer text size",
+            "min": 12,
+            "max": 20,
+            "step": 1,
+            "unit": "px",
+            "default": 15
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Content Tabs",
+        "category": "Benefits",
+        "blocks": [
+          {
+            "type": "heading",
+            "settings": {
+              "heading": "Everything You Need, All In One Place"
+            }
+          },
+          {
+            "type": "highlight",
+            "settings": {
+              "icon": "seal",
+              "text": "Crafted with care"
+            }
+          },
+          {
+            "type": "highlight",
+            "settings": {
+              "icon": "shield",
+              "text": "Built to last"
+            }
+          },
+          {
+            "type": "highlight",
+            "settings": {
+              "icon": "heart",
+              "text": "Loved by many"
+            }
+          },
+          {
+            "type": "tab",
+            "settings": {
+              "title": "Made Simple",
+              "description": "A clean, considered approach to the things that matter, designed to fit into your everyday.",
+              "badge_1": "POPULAR"
+            }
+          },
+          {
+            "type": "tab",
+            "settings": {
+              "title": "Thoughtful Design",
+              "description": "Every detail is refined with intention, so the whole experience feels effortless from the start.",
+              "badge_1": "NEW"
+            }
+          },
+          {
+            "type": "tab",
+            "settings": {
+              "title": "Built To Last",
+              "description": "Quality you can rely on day after day, made with care and meant to stay with you.",
+              "badge_1": "PREMIUM"
+            }
+          },
+          {
+            "type": "tab",
+            "settings": {
+              "title": "Loved By Many",
+              "description": "Join a growing community who made this part of their routine and never looked back.",
+              "badge_1": "TOP RATED",
+              "badge_2": "FAVORITE"
+            }
+          },
+          {
+            "type": "button",
+            "settings": {
+              "label": "Explore more"
+            }
+          },
+          {
+            "type": "footer",
+            "settings": {}
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

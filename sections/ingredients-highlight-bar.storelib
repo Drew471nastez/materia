@@ -1,0 +1,1751 @@
+<template compat="shopify">
+{%- comment -%}
+  Ingredients Highlight Bar
+  -------------------------
+  A horizontal highlight strip: a bold heading block on the left, then a row of
+  line-icon item blocks (top label + bold bottom label) on the right.
+  Everything is a block (heading + items). Fully responsive: one row on desktop,
+  heading stacks above on tablet, and a horizontal-scroll carousel on mobile
+  with a configurable "items per view" (peek). Theme color-scheme aware.
+{%- endcomment -%}
+
+{%- liquid
+  assign s = section.settings
+  assign scheme = s.color_scheme.id | default: s.color_scheme | default: 'default'
+  assign scroll_animation = settings.scroll_animation | default: 'none'
+
+  case s.section_width
+    when 'container'
+      assign width_class = 'container'
+    when 'fluid_container'
+      assign width_class = 'fluid_container'
+    when 'stretch_width'
+      assign width_class = 'stretch_width'
+    else
+      assign width_class = 'full_width'
+  endcase
+
+  assign mpv = s.mobile_per_view | default: 2.2
+-%}
+
+{%- style -%}
+  #shopify-section-{{ section.id }} {
+    isolation: isolate;
+    position: relative;
+
+    --ihb-gap: {{ s.item_gap_desktop | default: 28 }}px;
+    --ihb-icon-size: {{ s.icon_size | default: 40 }}px;
+    --ihb-icon-stroke: {{ s.icon_stroke | default: 1.6 }};
+    --ihb-pt: {{ s.padding_top_desktop | default: 22 }}px;
+    --ihb-pb: {{ s.padding_bottom_desktop | default: 22 }}px;
+  }
+
+  {%- if s.show_accent_bar -%}
+  #shopify-section-{{ section.id }} .ihb__accent {
+    height: {{ s.accent_height | default: 6 }}px;
+    background: {{ s.accent_color | default: '#111111' }};
+    width: 100%;
+  }
+  {%- endif -%}
+
+  {%- if s.use_custom_background -%}
+  #shopify-section-{{ section.id }} .ihb {
+    background: {{ s.background_color | default: '#f7f7f5' }};
+  }
+  {%- endif -%}
+
+  #shopify-section-{{ section.id }} .ihb__inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: clamp(24px, 4vw, 56px);
+    padding-top: var(--ihb-pt);
+    padding-bottom: var(--ihb-pb);
+    padding-inline: clamp(20px, 5vw, 64px);
+    box-sizing: border-box;
+  }
+
+  #shopify-section-{{ section.id }} .ihb__heading {
+    margin: 0;
+    flex: 0 0 auto;
+    max-width: 38%;
+    line-height: 1.05;
+    font-size: var(--ihb-h-size, 26px);
+    color: var(--color-foreground, #111);
+  }
+
+  #shopify-section-{{ section.id }} .ihb__items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: var(--ihb-gap);
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /* Scroller wrapper — holds the items list plus the desktop arrow buttons */
+  #shopify-section-{{ section.id }} .ihb__scroller {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  #shopify-section-{{ section.id }} .ihb__arrow {
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--color-border, rgba(0, 0, 0, 0.15));
+    background: var(--color-background, #fff);
+    color: var(--color-foreground, #111);
+    border-radius: 999px;
+    cursor: pointer;
+    line-height: 1;
+    transition: opacity 0.2s ease, background 0.2s ease, color 0.2s ease;
+  }
+  #shopify-section-{{ section.id }} .ihb__arrow svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+  }
+  #shopify-section-{{ section.id }} .ihb__arrow:hover { opacity: 0.7; }
+  #shopify-section-{{ section.id }} .ihb__arrow[hidden] { display: none; }
+
+  #shopify-section-{{ section.id }} .ihb__item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  #shopify-section-{{ section.id }} .ihb__icon {
+    flex: 0 0 auto;
+    width: var(--ihb-icon-size);
+    height: var(--ihb-icon-size);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    {% if s.icon_color != blank %}color: {{ s.icon_color }};{% else %}color: var(--color-foreground, #111);{% endif %}
+  }
+  #shopify-section-{{ section.id }} .ihb__icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    stroke: currentColor;
+    stroke-width: var(--ihb-icon-stroke);
+    fill: none;
+  }
+  /* Custom uploaded image — hard-constrained to the icon box so it can never
+     blow out the layout (this was the earlier bug). */
+  #shopify-section-{{ section.id }} .ihb__icon img {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    object-fit: contain !important;
+    display: block !important;
+    margin: 0 !important;
+  }
+
+  #shopify-section-{{ section.id }} .ihb__text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+    min-width: 0;
+    {% if s.text_color != blank %}color: {{ s.text_color }};{% else %}color: var(--color-foreground, #111);{% endif %}
+  }
+  #shopify-section-{{ section.id }} .ihb__top {
+    font-size: {{ s.label_size | default: 16 }}px;
+    font-weight: {{ s.label_top_weight | default: 400 }};
+    opacity: .92;
+    white-space: nowrap;
+  }
+  #shopify-section-{{ section.id }} .ihb__bottom {
+    font-size: {{ s.label_size | default: 16 }}px;
+    font-weight: {{ s.label_bottom_weight | default: 700 }};
+    white-space: nowrap;
+  }
+
+  /* ---- Tablet: heading drops above the items ---- */
+  @media (max-width: 991px) {
+    #shopify-section-{{ section.id }} .ihb__inner {
+      flex-direction: column;
+      align-items: {{ s.mobile_align | default: 'center' }};
+      gap: 20px;
+      text-align: {{ s.mobile_align | default: 'center' }};
+    }
+    #shopify-section-{{ section.id }} .ihb__heading {
+      max-width: 100%;
+      font-size: var(--ihb-h-size-m, 22px);
+    }
+    #shopify-section-{{ section.id }} .ihb__items {
+      justify-content: center;
+      width: 100%;
+    }
+    /* Below desktop: scroller is a plain full-width block, arrows hidden */
+    #shopify-section-{{ section.id }} .ihb__scroller {
+      display: block;
+      width: 100%;
+      flex: 0 0 auto;
+    }
+    #shopify-section-{{ section.id }} .ihb__arrow { display: none !important; }
+  }
+
+  /* ---- Mobile ---- */
+  @media (max-width: 749px) {
+    #shopify-section-{{ section.id }} {
+      --ihb-pt: {{ s.padding_top_mobile | default: 18 }}px;
+      --ihb-pb: {{ s.padding_bottom_mobile | default: 18 }}px;
+      --ihb-icon-size: {{ s.icon_size_mobile | default: 34 }}px;
+      --ihb-gap: {{ s.item_gap_mobile | default: 16 }}px;
+    }
+
+    #shopify-section-{{ section.id }} .ihb__heading--hide-mobile { display: none; }
+
+    {%- if s.mobile_layout == 'stack' -%}
+    #shopify-section-{{ section.id }} .ihb__items {
+      flex-direction: column;
+      align-items: {{ s.mobile_align | default: 'center' }};
+    }
+    {%- elsif s.mobile_layout == 'grid' -%}
+    #shopify-section-{{ section.id }} .ihb__items {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--ihb-gap);
+    }
+    #shopify-section-{{ section.id }} .ihb__item {
+      justify-content: {% if s.mobile_align == 'center' %}center{% else %}flex-start{% endif %};
+    }
+    {%- else -%}
+    /* default: horizontal scroll with "items per view" peek */
+    #shopify-section-{{ section.id }} .ihb__items {
+      flex-wrap: nowrap;
+      justify-content: flex-start;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scroll-snap-type: x mandatory;
+      padding-bottom: 6px;
+      scrollbar-width: none;
+      scroll-padding-left: 4px;
+    }
+    #shopify-section-{{ section.id }} .ihb__items::-webkit-scrollbar { display: none; }
+    #shopify-section-{{ section.id }} .ihb__item {
+      /* Per-view width, but never narrower than 170px so items can't crowd on small screens */
+      flex: 0 0 max(170px, calc((100% - (({{ mpv }} - 1) * var(--ihb-gap))) / {{ mpv }}));
+      scroll-snap-align: start;
+    }
+    {%- endif -%}
+  }
+
+  /* ---- Desktop: keep ONE row; scroll horizontally with arrows when it overflows ---- */
+  @media (min-width: 992px) {
+    #shopify-section-{{ section.id }} .ihb__items {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scroll-behavior: smooth;
+      scrollbar-width: none;
+      justify-content: {% if s.center_items %}safe center{% else %}safe flex-end{% endif %};
+    }
+    #shopify-section-{{ section.id }} .ihb__items::-webkit-scrollbar { display: none; }
+    #shopify-section-{{ section.id }} .ihb__item { flex: 0 0 auto; }
+  }
+{%- endstyle -%}
+
+{%- if scroll_animation != 'none' -%}
+  <script>
+    (function(){
+      var el = document.getElementById('shopify-section-{{ section.id }}');
+      if (el && !el.classList.contains('scroll-trigger')) {
+        el.classList.add('scroll-trigger', {{ scroll_animation | json }});
+      }
+    })();
+{% comment %}{% endcomment %}  </script>
+{%- endif -%}
+
+<section class="ihb color-{{ scheme }} gradient">
+  {%- if s.show_accent_bar -%}<div class="ihb__accent" aria-hidden="true"></div>{%- endif -%}
+
+  <div class="ihb__inner {{ width_class }}">
+
+    {%- comment -%} Heading block(s) render on the left {%- endcomment -%}
+    {%- for block in section.blocks -%}
+      {%- if block.type == 'heading' -%}
+        {%- liquid
+          assign hb = block.settings
+        -%}
+        {%- if hb.heading != blank -%}
+          <h2
+            class="ihb__heading{% if hb.heading_hide_mobile %} ihb__heading--hide-mobile{% endif %}"
+            style="--ihb-h-size: {{ hb.heading_size_desktop | default: 26 }}px; --ihb-h-size-m: {{ hb.heading_size_mobile | default: 22 }}px; font-weight: {{ hb.heading_weight | default: 800 }};{% if hb.heading_letter_spacing != 0 %} letter-spacing: {{ hb.heading_letter_spacing }}px;{% endif %}{% if hb.heading_uppercase %} text-transform: uppercase;{% endif %}{% if hb.heading_color != blank %} color: {{ hb.heading_color }};{% endif %}"
+            {{ block.shopify_attributes }}
+          >{{ hb.heading }}</h2>
+        {%- endif -%}
+      {%- endif -%}
+    {%- endfor -%}
+
+    {%- comment -%} Item blocks render in the row; wrapped in a scroller with desktop arrows {%- endcomment -%}
+    <div class="ihb__scroller" data-ihb-scroller>
+      <button type="button" class="ihb__arrow ihb__arrow--prev" aria-label="Scroll items left" hidden>
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+      </button>
+      <ul class="ihb__items" role="list" data-ihb-track>
+      {%- for block in section.blocks -%}
+        {%- if block.type == 'item' -%}
+          {%- liquid
+            assign b = block.settings
+            assign top = b.top_label
+            assign bottom = b.bottom_label
+            capture icon_alt
+              echo top
+              echo ' '
+              echo bottom
+            endcapture
+          -%}
+          <li class="ihb__item" {{ block.shopify_attributes }}>
+            <span class="ihb__icon" aria-hidden="true">
+              {%- if b.icon_source == 'image' and b.custom_image != blank -%}
+                {{ b.custom_image | image_url: width: 160 | image_tag: loading: 'lazy', widths: '40,80,120,160', sizes: '40px', alt: icon_alt }}
+              {%- else -%}
+                {%- case b.icon -%}
+                  {%- when 'microscope' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18h12"/><path d="M9 18a6 6 0 0 0 6-5"/><path d="M14.5 4.5l2 2"/><path d="m11 8 3-3 2 2-3 3z"/><path d="m11 8-2.5 2.5a2.12 2.12 0 0 0 3 3L14 11"/><path d="M5 21h6"/></svg>
+                  {%- when 'test_tube' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 3 6 11.5a3.5 3.5 0 0 0 5 5L19.5 8"/><path d="m13 5 6 6"/><path d="M9 13.5h4"/></svg>
+                  {%- when 'check' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>
+                  {%- when 'shield' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg>
+                  {%- when 'award' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M8.2 13.9 7 22l5-3 5 3-1.2-8.1"/></svg>
+                  {%- when 'medal' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4 6 9"/><path d="m16 4 2 5"/><circle cx="12" cy="14" r="5"/><path d="M12 12v4"/><path d="M10.5 13h3"/></svg>
+                  {%- when 'leaf' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6"/></svg>
+                  {%- when 'sprout' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20h10"/><path d="M12 20v-9"/><path d="M9 11C5 11 3 9 3 5c4 0 6 2 6 6"/><path d="M15 11c4 0 6-2 6-6-4 0-6 2-6 6"/></svg>
+                  {%- when 'hand_plant' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16c3.5 0 5 1.2 7 3h6.5a1.5 1.5 0 0 0 0-3H11"/><path d="M2 14v6"/><path d="M12 11V7"/><path d="M12 7c0-2 1.5-3.5 3.5-3.5C15.5 5.5 14 7 12 7Z"/><path d="M12 7c0-2-1.5-3.5-3.5-3.5C8.5 5.5 10 7 12 7Z"/></svg>
+                  {%- when 'paw' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="10" r="1.7"/><circle cx="9.7" cy="6.4" r="1.7"/><circle cx="14.3" cy="6.4" r="1.7"/><circle cx="17.5" cy="10" r="1.7"/><path d="M12 11.5c-2.2 0-4 1.6-4.5 3.6-.4 1.7 1 3.4 2.7 3.4.7 0 1.2-.3 1.8-.3s1.1.3 1.8.3c1.7 0 3.1-1.7 2.7-3.4-.5-2-2.3-3.6-4.5-3.6Z"/></svg>
+                  {%- when 'bone' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15 15 9"/><circle cx="6.6" cy="15.4" r="2"/><circle cx="8.6" cy="17.4" r="2"/><circle cx="15.4" cy="8.6" r="2"/><circle cx="17.4" cy="6.6" r="2"/></svg>
+                  {%- when 'target' -%}
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg>
+                  {%- when 'dumbbell' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="m6.5 6.5 11 11"/><path d="m21 21-1-1"/><path d="m3 3 1 1"/><path d="m18 22 4-4"/><path d="m2 6 4-4"/><path d="m3 10 7-7"/><path d="m14 21 7-7"/></svg>
+                  {%- when 'heart' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.5-1.5 3-3.5 3-5.5A4.5 4.5 0 0 0 12 5 4.5 4.5 0 0 0 2 8.5c0 2 1.5 4 3 5.5l7 7Z"/></svg>
+                  {%- when 'thumbs_up' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11v9H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z"/><path d="M7 11l4-7a2 2 0 0 1 2 2v3h5a2 2 0 0 1 2 2.3l-1.2 6A2 2 0 0 1 18.8 20H7"/></svg>
+                  {%- when 'bottle' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6v3l1 2v13a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V7l1-2z"/><path d="M8 11h8"/></svg>
+                  {%- when 'shaker' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M8 8h8l-.7 11a2 2 0 0 1-2 1.9H10.7a2 2 0 0 1-2-1.9z"/><path d="M8.5 8 9 4.5h6L15.5 8"/><path d="M9.2 12h5.6"/></svg>
+                  {%- when 'cup' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 11a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z"/><path d="M9 8V5a3 3 0 0 1 6 0v3"/></svg>
+                  {%- when 'flask' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v6.5L4.5 18A2 2 0 0 0 6.3 21h11.4a2 2 0 0 0 1.8-3L14 8.5V2"/><path d="M8.5 2h7"/><path d="M7 15h10"/></svg>
+                  {%- when 'droplet' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 5.5 9.5a6.5 6.5 0 1 0 13 0z"/></svg>
+                  {%- when 'fire' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c1 3 4 4.5 4 8a4 4 0 0 1-8 0c0-1 .3-1.8.8-2.5C9 10 9 11 10 11.5 9.4 9 12 6 12 3Z"/><path d="M8.5 14a3.5 3.5 0 0 0 7 0"/></svg>
+                  {%- when 'bolt' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+                  {%- when 'sparkles' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l1.6 4.4L18 10l-4.4 1.6L12 16l-1.6-4.4L6 10l4.4-1.6z"/><path d="M18 14l.6 1.7 1.7.6-1.7.6L18 19l-.6-1.5-1.7-.6 1.7-.6z"/></svg>
+                  {%- when 'gift' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M3 7h18v4H3z"/><path d="M12 7v14"/><path d="M12 7s-1-4-3.5-4a2.5 2.5 0 0 0 0 5"/><path d="M12 7s1-4 3.5-4a2.5 2.5 0 0 1 0 5"/></svg>
+                  {%- when 'truck' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11v9H3z"/><path d="M14 9h4l3 3v3h-7z"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>
+                  {%- when 'clock' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                  {%- when 'star' -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.9 6.3 6.9.7-5.1 4.6 1.4 6.8L12 17.8 5.9 20.4l1.4-6.8L2.2 9l6.9-.7z"/></svg>
+                  {%- else -%}
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>
+                {%- endcase -%}
+              {%- endif -%}
+            </span>
+            {%- if top != blank or bottom != blank -%}
+              <span class="ihb__text">
+                {%- if top != blank -%}<span class="ihb__top">{{ top }}</span>{%- endif -%}
+                {%- if bottom != blank -%}<span class="ihb__bottom">{{ bottom }}</span>{%- endif -%}
+              </span>
+            {%- endif -%}
+          </li>
+        {%- endif -%}
+      {%- endfor -%}
+      </ul>
+      <button type="button" class="ihb__arrow ihb__arrow--next" aria-label="Scroll items right" hidden>
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
+    </div>
+  </div>
+</section>
+
+<script>
+  (function () {
+    var root = document.getElementById('shopify-section-{{ section.id }}');
+    if (!root) return;
+    var scroller = root.querySelector('[data-ihb-scroller]');
+    if (!scroller || scroller.dataset.ihbBound) return;
+    scroller.dataset.ihbBound = '1';
+    var track = scroller.querySelector('[data-ihb-track]');
+    var prev = scroller.querySelector('.ihb__arrow--prev');
+    var next = scroller.querySelector('.ihb__arrow--next');
+    if (!track || !prev || !next) return;
+    var isDesktop = function () { return window.matchMedia('(min-width: 992px)').matches; };
+    function update() {
+      if (!isDesktop()) { prev.hidden = true; next.hidden = true; return; }
+      var max = track.scrollWidth - track.clientWidth;
+      if (max <= 1) { prev.hidden = true; next.hidden = true; return; }
+      prev.hidden = track.scrollLeft <= 2;
+      next.hidden = track.scrollLeft >= max - 2;
+    }
+    function step(dir) { track.scrollBy({ left: dir * track.clientWidth * 0.7, behavior: 'smooth' }); }
+    prev.addEventListener('click', function () { step(-1); });
+    next.addEventListener('click', function () { step(1); });
+    track.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    window.addEventListener('load', update);
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(update).observe(track);
+    }
+    // Recompute once any custom-image icons finish loading (they can change item widths).
+    track.querySelectorAll('img').forEach(function (img) {
+      if (!img.complete) img.addEventListener('load', update, { once: true });
+    });
+    update();
+    setTimeout(update, 300);
+  })();
+{% comment %}{% endcomment %}</script>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "ingredients-highlight-bar",
+  "name": "Benefits Bar 3",
+  "settings": [
+    {
+      "type": "color_scheme",
+      "id": "color_scheme",
+      "label": "Color scheme",
+      "default": "default-color-scheme"
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "Items — icon style"
+    },
+    {
+      "type": "range",
+      "id": "icon_size",
+      "min": 20,
+      "max": 72,
+      "step": 1,
+      "unit": "px",
+      "label": "Icon size (desktop)",
+      "default": 40
+    },
+    {
+      "type": "range",
+      "id": "icon_size_mobile",
+      "min": 18,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "label": "Icon size (mobile)",
+      "default": 34
+    },
+    {
+      "type": "range",
+      "id": "icon_stroke",
+      "min": 1,
+      "max": 3,
+      "step": 0.1,
+      "label": "Icon line thickness",
+      "default": 1.6
+    },
+    {
+      "type": "color",
+      "id": "icon_color",
+      "label": "Icon color",
+      "info": "Built-in line icons only. Leave empty to use the color scheme text color."
+    },
+    {
+      "type": "header",
+      "id": "hdr_7",
+      "label": "Items — labels"
+    },
+    {
+      "type": "range",
+      "id": "label_size",
+      "min": 11,
+      "max": 24,
+      "step": 1,
+      "unit": "px",
+      "label": "Label size",
+      "default": 16
+    },
+    {
+      "type": "select",
+      "id": "label_top_weight",
+      "label": "Top label weight",
+      "default": "400",
+      "options": [
+        {
+          "value": "300",
+          "label": "Light"
+        },
+        {
+          "value": "400",
+          "label": "Regular"
+        },
+        {
+          "value": "500",
+          "label": "Medium"
+        },
+        {
+          "value": "600",
+          "label": "Semibold"
+        },
+        {
+          "value": "700",
+          "label": "Bold"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "label_bottom_weight",
+      "label": "Bottom label weight",
+      "default": "700",
+      "options": [
+        {
+          "value": "400",
+          "label": "Regular"
+        },
+        {
+          "value": "500",
+          "label": "Medium"
+        },
+        {
+          "value": "600",
+          "label": "Semibold"
+        },
+        {
+          "value": "700",
+          "label": "Bold"
+        },
+        {
+          "value": "800",
+          "label": "Extra Bold"
+        }
+      ]
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Label color",
+      "info": "Leave empty to use the color scheme text color."
+    },
+    {
+      "type": "header",
+      "id": "hdr_12",
+      "label": "Accent bar (top line)"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_accent_bar",
+      "label": "Show top accent line",
+      "default": false
+    },
+    {
+      "type": "range",
+      "id": "accent_height",
+      "min": 1,
+      "max": 16,
+      "step": 1,
+      "unit": "px",
+      "label": "Accent line height",
+      "default": 6
+    },
+    {
+      "type": "color",
+      "id": "accent_color",
+      "label": "Accent line color",
+      "default": "#111111"
+    },
+    {
+      "type": "header",
+      "id": "hdr_16",
+      "label": "Background"
+    },
+    {
+      "type": "checkbox",
+      "id": "use_custom_background",
+      "label": "Override background color",
+      "default": false,
+      "info": "Off = use the color scheme background."
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background color",
+      "default": "#f7f7f5"
+    },
+    {
+      "type": "header",
+      "id": "hdr_19",
+      "label": "Layout & spacing"
+    },
+    {
+      "type": "checkbox",
+      "id": "center_items",
+      "label": "Center items in the bar",
+      "default": false,
+      "info": "Centers the row on desktop instead of aligning it to the right."
+    },
+    {
+      "type": "select",
+      "id": "section_width",
+      "label": "Section width",
+      "default": "full_width",
+      "options": [
+        {
+          "value": "container",
+          "label": "Default"
+        },
+        {
+          "value": "fluid_container",
+          "label": "Fluid container"
+        },
+        {
+          "value": "stretch_width",
+          "label": "Stretched"
+        },
+        {
+          "value": "full_width",
+          "label": "Full width"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "item_gap_desktop",
+      "min": 8,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "label": "Gap between items (desktop)",
+      "default": 28
+    },
+    {
+      "type": "range",
+      "id": "item_gap_mobile",
+      "min": 6,
+      "max": 48,
+      "step": 2,
+      "unit": "px",
+      "label": "Gap between items (mobile)",
+      "default": 24
+    },
+    {
+      "type": "range",
+      "id": "padding_top_desktop",
+      "min": 0,
+      "max": 100,
+      "step": 2,
+      "unit": "px",
+      "label": "Top padding (desktop)",
+      "default": 22
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_desktop",
+      "min": 0,
+      "max": 100,
+      "step": 2,
+      "unit": "px",
+      "label": "Bottom padding (desktop)",
+      "default": 22
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "min": 0,
+      "max": 100,
+      "step": 2,
+      "unit": "px",
+      "label": "Top padding (mobile)",
+      "default": 18
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "min": 0,
+      "max": 100,
+      "step": 2,
+      "unit": "px",
+      "label": "Bottom padding (mobile)",
+      "default": 18
+    },
+    {
+      "type": "header",
+      "id": "hdr_28",
+      "label": "Mobile"
+    },
+    {
+      "type": "select",
+      "id": "mobile_layout",
+      "label": "Mobile item layout",
+      "default": "scroll",
+      "options": [
+        {
+          "value": "scroll",
+          "label": "Horizontal scroll"
+        },
+        {
+          "value": "grid",
+          "label": "2 per row (grid)"
+        },
+        {
+          "value": "stack",
+          "label": "Stacked (1 per row)"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "mobile_per_view",
+      "label": "Items per view (horizontal scroll)",
+      "info": "How many items are visible at once on mobile. Decimals (e.g. 2.2) show a peek of the next item to hint scrolling.",
+      "default": "2.2",
+      "visible_if": "{{ section.settings.mobile_layout == 'scroll' }}",
+      "options": [
+        {
+          "value": "1",
+          "label": "1"
+        },
+        {
+          "value": "1.2",
+          "label": "1.2"
+        },
+        {
+          "value": "1.3",
+          "label": "1.3"
+        },
+        {
+          "value": "1.5",
+          "label": "1.5"
+        },
+        {
+          "value": "2",
+          "label": "2"
+        },
+        {
+          "value": "2.2",
+          "label": "2.2"
+        },
+        {
+          "value": "2.3",
+          "label": "2.3"
+        },
+        {
+          "value": "2.5",
+          "label": "2.5"
+        },
+        {
+          "value": "3",
+          "label": "3"
+        },
+        {
+          "value": "3.5",
+          "label": "3.5"
+        },
+        {
+          "value": "4",
+          "label": "4"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "mobile_align",
+      "label": "Mobile alignment",
+      "default": "center",
+      "options": [
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "flex-start",
+          "label": "Left"
+        }
+      ]
+    }
+  ],
+  "blocks": [
+    {
+      "type": "heading",
+      "name": "Heading",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Heading",
+          "default": "Our mission"
+        },
+        {
+          "type": "checkbox",
+          "id": "heading_uppercase",
+          "label": "Uppercase",
+          "default": true
+        },
+        {
+          "type": "range",
+          "id": "heading_size_desktop",
+          "min": 14,
+          "max": 48,
+          "step": 1,
+          "unit": "px",
+          "label": "Size (desktop)",
+          "default": 26
+        },
+        {
+          "type": "range",
+          "id": "heading_size_mobile",
+          "min": 12,
+          "max": 36,
+          "step": 1,
+          "unit": "px",
+          "label": "Size (mobile)",
+          "default": 22
+        },
+        {
+          "type": "select",
+          "id": "heading_weight",
+          "label": "Weight",
+          "default": "800",
+          "options": [
+            {
+              "value": "400",
+              "label": "Regular"
+            },
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semibold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            },
+            {
+              "value": "800",
+              "label": "Extra Bold"
+            },
+            {
+              "value": "900",
+              "label": "Black"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "heading_letter_spacing",
+          "min": -2,
+          "max": 6,
+          "step": 1,
+          "unit": "px",
+          "label": "Letter spacing",
+          "default": 0
+        },
+        {
+          "type": "color",
+          "id": "heading_color",
+          "label": "Color",
+          "info": "Leave empty to use the color scheme text color."
+        },
+        {
+          "type": "checkbox",
+          "id": "heading_hide_mobile",
+          "label": "Hide heading on mobile",
+          "default": false
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "item",
+      "name": "Item",
+      "settings": [
+        {
+          "type": "select",
+          "id": "icon_source",
+          "label": "Icon source",
+          "default": "icon",
+          "options": [
+            {
+              "value": "icon",
+              "label": "Built-in line icon"
+            },
+            {
+              "value": "image",
+              "label": "Custom image"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "default": "check",
+          "visible_if": "{{ block.settings.icon_source == 'icon' }}",
+          "options": [
+            {
+              "value": "check",
+              "label": "Check / certified"
+            },
+            {
+              "value": "shield",
+              "label": "Shield check"
+            },
+            {
+              "value": "award",
+              "label": "Award"
+            },
+            {
+              "value": "medal",
+              "label": "Medal"
+            },
+            {
+              "value": "star",
+              "label": "Star"
+            },
+            {
+              "value": "thumbs_up",
+              "label": "Thumbs up"
+            },
+            {
+              "value": "microscope",
+              "label": "Microscope (lab)"
+            },
+            {
+              "value": "test_tube",
+              "label": "Test tube"
+            },
+            {
+              "value": "flask",
+              "label": "Flask"
+            },
+            {
+              "value": "leaf",
+              "label": "Leaf"
+            },
+            {
+              "value": "sprout",
+              "label": "Sprout"
+            },
+            {
+              "value": "hand_plant",
+              "label": "Hand holding plant"
+            },
+            {
+              "value": "paw",
+              "label": "Paw"
+            },
+            {
+              "value": "bone",
+              "label": "Bone"
+            },
+            {
+              "value": "heart",
+              "label": "Heart"
+            },
+            {
+              "value": "target",
+              "label": "Target / goals"
+            },
+            {
+              "value": "dumbbell",
+              "label": "Dumbbell / fitness"
+            },
+            {
+              "value": "fire",
+              "label": "Fire / energy"
+            },
+            {
+              "value": "bolt",
+              "label": "Bolt / fast"
+            },
+            {
+              "value": "bottle",
+              "label": "Bottle"
+            },
+            {
+              "value": "shaker",
+              "label": "Shaker bottle"
+            },
+            {
+              "value": "cup",
+              "label": "Cup"
+            },
+            {
+              "value": "droplet",
+              "label": "Droplet / flavor"
+            },
+            {
+              "value": "sparkles",
+              "label": "Sparkles"
+            },
+            {
+              "value": "gift",
+              "label": "Gift"
+            },
+            {
+              "value": "truck",
+              "label": "Truck / delivery"
+            },
+            {
+              "value": "clock",
+              "label": "Clock"
+            }
+          ]
+        },
+        {
+          "type": "image_picker",
+          "id": "custom_image",
+          "label": "Custom image",
+          "visible_if": "{{ block.settings.icon_source == 'image' }}"
+        },
+        {
+          "type": "text",
+          "id": "top_label",
+          "label": "Top label",
+          "default": "Free shipping"
+        },
+        {
+          "type": "text",
+          "id": "bottom_label",
+          "label": "Bottom label (bold)",
+          "default": "On all orders"
+        }
+      ],
+      "limit": 12
+    }
+  ],
+  "presets": [
+    {
+      "name": "Benefits Bar 3",
+      "category": "Benefits",
+      "blocks": [
+        {
+          "type": "heading"
+        },
+        {
+          "type": "item",
+          "settings": {
+            "icon": "truck",
+            "top_label": "Fast Delivery",
+            "bottom_label": "On all orders"
+          }
+        },
+        {
+          "type": "item",
+          "settings": {
+            "icon": "shield",
+            "top_label": "Secure Payment",
+            "bottom_label": "100% protected"
+          }
+        },
+        {
+          "type": "item",
+          "settings": {
+            "icon": "clock",
+            "top_label": "Easy Returns",
+            "bottom_label": "30-day policy"
+          }
+        }
+      ]
+    }
+  ],
+  "disabled_on": {
+    "groups": [
+      "header",
+      "footer"
+    ]
+  },
+  "shopify": {
+    "name": "Benefits Bar 3",
+    "tag": "section",
+    "class": "section-ingredients-highlight-bar",
+    "disabled_on": {
+      "groups": [
+        "header",
+        "footer"
+      ]
+    },
+    "settings": [
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "t:sections.all.color_scheme.label",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "header",
+        "content": "Items — icon style"
+      },
+      {
+        "type": "range",
+        "id": "icon_size",
+        "min": 20,
+        "max": 72,
+        "step": 1,
+        "unit": "px",
+        "label": "Icon size (desktop)",
+        "default": 40
+      },
+      {
+        "type": "range",
+        "id": "icon_size_mobile",
+        "min": 18,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "label": "Icon size (mobile)",
+        "default": 34
+      },
+      {
+        "type": "range",
+        "id": "icon_stroke",
+        "min": 1,
+        "max": 3,
+        "step": 0.1,
+        "label": "Icon line thickness",
+        "default": 1.6
+      },
+      {
+        "type": "color",
+        "id": "icon_color",
+        "label": "Icon color",
+        "info": "Built-in line icons only. Leave empty to use the color scheme text color."
+      },
+      {
+        "type": "header",
+        "content": "Items — labels"
+      },
+      {
+        "type": "range",
+        "id": "label_size",
+        "min": 11,
+        "max": 24,
+        "step": 1,
+        "unit": "px",
+        "label": "Label size",
+        "default": 16
+      },
+      {
+        "type": "select",
+        "id": "label_top_weight",
+        "label": "Top label weight",
+        "default": "400",
+        "options": [
+          {
+            "value": "300",
+            "label": "Light"
+          },
+          {
+            "value": "400",
+            "label": "Regular"
+          },
+          {
+            "value": "500",
+            "label": "Medium"
+          },
+          {
+            "value": "600",
+            "label": "Semibold"
+          },
+          {
+            "value": "700",
+            "label": "Bold"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "label_bottom_weight",
+        "label": "Bottom label weight",
+        "default": "700",
+        "options": [
+          {
+            "value": "400",
+            "label": "Regular"
+          },
+          {
+            "value": "500",
+            "label": "Medium"
+          },
+          {
+            "value": "600",
+            "label": "Semibold"
+          },
+          {
+            "value": "700",
+            "label": "Bold"
+          },
+          {
+            "value": "800",
+            "label": "Extra Bold"
+          }
+        ]
+      },
+      {
+        "type": "color",
+        "id": "text_color",
+        "label": "Label color",
+        "info": "Leave empty to use the color scheme text color."
+      },
+      {
+        "type": "header",
+        "content": "Accent bar (top line)"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_accent_bar",
+        "label": "Show top accent line",
+        "default": false
+      },
+      {
+        "type": "range",
+        "id": "accent_height",
+        "min": 1,
+        "max": 16,
+        "step": 1,
+        "unit": "px",
+        "label": "Accent line height",
+        "default": 6
+      },
+      {
+        "type": "color",
+        "id": "accent_color",
+        "label": "Accent line color",
+        "default": "#111111"
+      },
+      {
+        "type": "header",
+        "content": "Background"
+      },
+      {
+        "type": "checkbox",
+        "id": "use_custom_background",
+        "label": "Override background color",
+        "default": false,
+        "info": "Off = use the color scheme background."
+      },
+      {
+        "type": "color",
+        "id": "background_color",
+        "label": "Background color",
+        "default": "#f7f7f5"
+      },
+      {
+        "type": "header",
+        "content": "Layout & spacing"
+      },
+      {
+        "type": "checkbox",
+        "id": "center_items",
+        "label": "Center items in the bar",
+        "default": false,
+        "info": "Centers the row on desktop instead of aligning it to the right."
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "full_width",
+        "options": [
+          {
+            "value": "container",
+            "label": "Default"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "item_gap_desktop",
+        "min": 8,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "label": "Gap between items (desktop)",
+        "default": 28
+      },
+      {
+        "type": "range",
+        "id": "item_gap_mobile",
+        "min": 6,
+        "max": 48,
+        "step": 2,
+        "unit": "px",
+        "label": "Gap between items (mobile)",
+        "default": 24
+      },
+      {
+        "type": "range",
+        "id": "padding_top_desktop",
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "unit": "px",
+        "label": "Top padding (desktop)",
+        "default": 22
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_desktop",
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "unit": "px",
+        "label": "Bottom padding (desktop)",
+        "default": 22
+      },
+      {
+        "type": "range",
+        "id": "padding_top_mobile",
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "unit": "px",
+        "label": "Top padding (mobile)",
+        "default": 18
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_mobile",
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "unit": "px",
+        "label": "Bottom padding (mobile)",
+        "default": 18
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "select",
+        "id": "mobile_layout",
+        "label": "Mobile item layout",
+        "default": "scroll",
+        "options": [
+          {
+            "value": "scroll",
+            "label": "Horizontal scroll"
+          },
+          {
+            "value": "grid",
+            "label": "2 per row (grid)"
+          },
+          {
+            "value": "stack",
+            "label": "Stacked (1 per row)"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "mobile_per_view",
+        "label": "Items per view (horizontal scroll)",
+        "info": "How many items are visible at once on mobile. Decimals (e.g. 2.2) show a peek of the next item to hint scrolling.",
+        "default": "2.2",
+        "visible_if": "{{ section.settings.mobile_layout == 'scroll' }}",
+        "options": [
+          {
+            "value": "1",
+            "label": "1"
+          },
+          {
+            "value": "1.2",
+            "label": "1.2"
+          },
+          {
+            "value": "1.3",
+            "label": "1.3"
+          },
+          {
+            "value": "1.5",
+            "label": "1.5"
+          },
+          {
+            "value": "2",
+            "label": "2"
+          },
+          {
+            "value": "2.2",
+            "label": "2.2"
+          },
+          {
+            "value": "2.3",
+            "label": "2.3"
+          },
+          {
+            "value": "2.5",
+            "label": "2.5"
+          },
+          {
+            "value": "3",
+            "label": "3"
+          },
+          {
+            "value": "3.5",
+            "label": "3.5"
+          },
+          {
+            "value": "4",
+            "label": "4"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "mobile_align",
+        "label": "Mobile alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "flex-start",
+            "label": "Left"
+          }
+        ]
+      }
+    ],
+    "blocks": [
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "heading",
+            "label": "Heading",
+            "default": "Our mission"
+          },
+          {
+            "type": "checkbox",
+            "id": "heading_uppercase",
+            "label": "Uppercase",
+            "default": true
+          },
+          {
+            "type": "range",
+            "id": "heading_size_desktop",
+            "min": 14,
+            "max": 48,
+            "step": 1,
+            "unit": "px",
+            "label": "Size (desktop)",
+            "default": 26
+          },
+          {
+            "type": "range",
+            "id": "heading_size_mobile",
+            "min": 12,
+            "max": 36,
+            "step": 1,
+            "unit": "px",
+            "label": "Size (mobile)",
+            "default": 22
+          },
+          {
+            "type": "select",
+            "id": "heading_weight",
+            "label": "Weight",
+            "default": "800",
+            "options": [
+              {
+                "value": "400",
+                "label": "Regular"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semibold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              },
+              {
+                "value": "800",
+                "label": "Extra Bold"
+              },
+              {
+                "value": "900",
+                "label": "Black"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "heading_letter_spacing",
+            "min": -2,
+            "max": 6,
+            "step": 1,
+            "unit": "px",
+            "label": "Letter spacing",
+            "default": 0
+          },
+          {
+            "type": "color",
+            "id": "heading_color",
+            "label": "Color",
+            "info": "Leave empty to use the color scheme text color."
+          },
+          {
+            "type": "checkbox",
+            "id": "heading_hide_mobile",
+            "label": "Hide heading on mobile",
+            "default": false
+          }
+        ]
+      },
+      {
+        "type": "item",
+        "name": "Item",
+        "limit": 12,
+        "settings": [
+          {
+            "type": "select",
+            "id": "icon_source",
+            "label": "Icon source",
+            "default": "icon",
+            "options": [
+              {
+                "value": "icon",
+                "label": "Built-in line icon"
+              },
+              {
+                "value": "image",
+                "label": "Custom image"
+              }
+            ]
+          },
+          {
+            "type": "select",
+            "id": "icon",
+            "label": "Icon",
+            "default": "check",
+            "visible_if": "{{ block.settings.icon_source == 'icon' }}",
+            "options": [
+              {
+                "value": "check",
+                "label": "Check / certified"
+              },
+              {
+                "value": "shield",
+                "label": "Shield check"
+              },
+              {
+                "value": "award",
+                "label": "Award"
+              },
+              {
+                "value": "medal",
+                "label": "Medal"
+              },
+              {
+                "value": "star",
+                "label": "Star"
+              },
+              {
+                "value": "thumbs_up",
+                "label": "Thumbs up"
+              },
+              {
+                "value": "microscope",
+                "label": "Microscope (lab)"
+              },
+              {
+                "value": "test_tube",
+                "label": "Test tube"
+              },
+              {
+                "value": "flask",
+                "label": "Flask"
+              },
+              {
+                "value": "leaf",
+                "label": "Leaf"
+              },
+              {
+                "value": "sprout",
+                "label": "Sprout"
+              },
+              {
+                "value": "hand_plant",
+                "label": "Hand holding plant"
+              },
+              {
+                "value": "paw",
+                "label": "Paw"
+              },
+              {
+                "value": "bone",
+                "label": "Bone"
+              },
+              {
+                "value": "heart",
+                "label": "Heart"
+              },
+              {
+                "value": "target",
+                "label": "Target / goals"
+              },
+              {
+                "value": "dumbbell",
+                "label": "Dumbbell / fitness"
+              },
+              {
+                "value": "fire",
+                "label": "Fire / energy"
+              },
+              {
+                "value": "bolt",
+                "label": "Bolt / fast"
+              },
+              {
+                "value": "bottle",
+                "label": "Bottle"
+              },
+              {
+                "value": "shaker",
+                "label": "Shaker bottle"
+              },
+              {
+                "value": "cup",
+                "label": "Cup"
+              },
+              {
+                "value": "droplet",
+                "label": "Droplet / flavor"
+              },
+              {
+                "value": "sparkles",
+                "label": "Sparkles"
+              },
+              {
+                "value": "gift",
+                "label": "Gift"
+              },
+              {
+                "value": "truck",
+                "label": "Truck / delivery"
+              },
+              {
+                "value": "clock",
+                "label": "Clock"
+              }
+            ]
+          },
+          {
+            "type": "image_picker",
+            "id": "custom_image",
+            "label": "Custom image",
+            "visible_if": "{{ block.settings.icon_source == 'image' }}"
+          },
+          {
+            "type": "text",
+            "id": "top_label",
+            "label": "Top label",
+            "default": "Free shipping"
+          },
+          {
+            "type": "text",
+            "id": "bottom_label",
+            "label": "Bottom label (bold)",
+            "default": "On all orders"
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Benefits Bar 3",
+        "category": "Benefits",
+        "blocks": [
+          {
+            "type": "heading"
+          },
+          {
+            "type": "item",
+            "settings": {
+              "icon": "truck",
+              "top_label": "Fast Delivery",
+              "bottom_label": "On all orders"
+            }
+          },
+          {
+            "type": "item",
+            "settings": {
+              "icon": "shield",
+              "top_label": "Secure Payment",
+              "bottom_label": "100% protected"
+            }
+          },
+          {
+            "type": "item",
+            "settings": {
+              "icon": "clock",
+              "top_label": "Easy Returns",
+              "bottom_label": "30-day policy"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

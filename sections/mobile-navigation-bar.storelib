@@ -1,0 +1,1507 @@
+<template compat="shopify">
+{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
+{%- if request.design_mode != true and settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger') || document.documentElement.classList.contains('shopify-design-mode') || (window.Shopify && window.Shopify.designMode)) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- liquid
+  assign __ti_scroll_animation = settings.scroll_animation | default: 'none'
+  assign __ti_reveal = section.settings.reveal
+-%}
+<style>
+  /* Section isolation — prevent CSS/JS bleed between sections */
+  #shopify-section-{{ section.id }} {
+    isolation: isolate;
+    position: relative;
+  }
+  /* Aggressive theme typography */
+  :where(#shopify-section-{{ section.id }}) {
+    font-family: var(--body-font, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :where(button, input, textarea, select, optgroup) {
+    font-family: inherit;
+  }
+  /* Theme font-weight inheritance — sections inherit theme weights by default.
+     Specific font-weight rules in section CSS still override these. */
+  #shopify-section-{{ section.id }} {
+    font-weight: var(--body-weight, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
+    font-weight: var(--heading-weight, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
+    font-family: var(--heading-font, inherit);
+  }
+  /* Section margin sliders (mobile-first) */
+  #shopify-section-{{ section.id }} {
+    margin-top: {{ section.settings.section_margin_top_mobile | default: 0 }}px;
+    margin-bottom: {{ section.settings.section_margin_bottom_mobile | default: 0 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ section.id }} {
+      margin-top: {{ section.settings.section_margin_top_desktop | default: 0 }}px;
+      margin-bottom: {{ section.settings.section_margin_bottom_desktop | default: 0 }}px;
+    }
+  }
+  /* Section wrapper spans its parent's full width without breaking out of
+     the editor preview. The section + first child span 100% so backgrounds
+     reach edge-to-edge but the editor inspector outline stays inside the
+     iframe viewport. */
+  #shopify-section-{{ section.id }} {
+    max-width: none !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    position: relative !important;
+    box-sizing: border-box !important;
+  }
+  #shopify-section-{{ section.id }} > :where(div, section, header, footer, aside, main, article):first-child {
+    max-width: none !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Section width — universal selector that works regardless of inner
+     markup. Targets both:
+       1) Theme container classes (.container/.fluid_container/etc.) — for
+          sections that have an inner wrapper with that class
+       2) The section's first-child div — for sections that don't have a
+          named inner wrapper. The padding-inline sets the max content
+          area while the wrapper itself stays 100% wide so any background
+          stays edge-to-edge. */
+  {%- case section.settings.section_width -%}
+    {%- when 'container' -%}
+      #shopify-section-{{ section.id }} .container,
+      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+        max-width: calc(var(--page-width, 1300px) + 3rem) !important;
+        margin-inline: auto !important;
+        box-sizing: border-box !important;
+      }
+    {%- when 'fluid_container' -%}
+      #shopify-section-{{ section.id }} .fluid_container,
+      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+        max-width: calc(var(--fluid-container-width, 1500px) + 3rem) !important;
+        margin-inline: auto !important;
+        box-sizing: border-box !important;
+      }
+    {%- when 'stretch_width' -%}
+      /* Stretched: no max-width; tighter side padding handled below */
+      @media (min-width: 1200px) {
+        #shopify-section-{{ section.id }} .stretch_width,
+        #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+          padding-inline: 3rem;
+        }
+      }
+    {%- when 'full_width' -%}
+      /* full bleed — no constraints */
+  {%- endcase -%}
+  /* Reset spacing */
+  {%- if section.settings.reset_spacing -%}
+    #shopify-section-{{ section.id }} { margin-bottom: 0 !important; margin-top: 0 !important; }
+    #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif -%}
+  /* Mobile nav opts out of every theme-level scroll/animation system.
+     The bar is `position: fixed` and visible at all times — it should
+     never participate in fade-in / slide-up / reveal-on-scroll passes
+     (settings.scroll_animation, animation.js safety nets, etc.).
+
+     CRITICAL: do NOT set `transform` on `#shopify-section-{id}` — even
+     `transform: translateY(0)` creates a containing block, which TRAPS
+     the inner `<mobile-navigation-bar>` `position: fixed` so it renders
+     at the bottom of the section in normal flow (after the footer)
+     instead of at the bottom of the viewport. We split the rules: the
+     section wrapper gets opacity/visibility/animation overrides only;
+     `transform: translateY(0)` lives ONLY on the bar element itself. */
+  #shopify-section-{{ section.id }},
+  #shopify-section-{{ section.id }}.scroll-trigger,
+  #shopify-section-{{ section.id }}.scroll-trigger--offscreen,
+  #shopify-section-{{ section.id }}.scroll-trigger--cancel,
+  #shopify-section-{{ section.id }}.invisible {
+    opacity: 1 !important;
+    visibility: visible !important;
+    animation: none !important;
+    animation-name: none !important;
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+    transform: none !important;
+    filter: none !important;
+    perspective: none !important;
+    will-change: auto !important;
+    pointer-events: auto !important;
+  }
+  /* Bar itself + its children: keep visible + force the slide-in
+     transform back to 0 so `.show` is effectively always-on. */
+  #shopify-section-{{ section.id }} mobile-navigation-bar,
+  #shopify-section-{{ section.id }} mobile-navigation-bar.scroll-trigger,
+  #shopify-section-{{ section.id }} mobile-navigation-bar.scroll-trigger--offscreen,
+  #shopify-section-{{ section.id }} mobile-navigation-bar.invisible,
+  #shopify-section-{{ section.id }} .mobile-navigation-bar {
+    opacity: 1 !important;
+    visibility: visible !important;
+    animation: none !important;
+    transform: translateY(0) !important;
+    pointer-events: auto !important;
+  }
+  #shopify-section-{{ section.id }} mobile-navigation-bar > *,
+  #shopify-section-{{ section.id }} .mobile-navigation-bar > * {
+    opacity: 1 !important;
+    visibility: visible !important;
+    animation: none !important;
+  }
+
+  /* Section isolation makes this wrapper a stacking context; lift the wrapper
+     itself so page content (product cards, buttons) never paints over the
+     bar. Drawers, search and popups (z-index 15 and up) still sit above it. */
+  #shopify-section-{{ section.id }} { position: relative; z-index: 12 !important; }
+  #shopify-section-{{ section.id }} :is(mobile-navigation-bar, .mobile-navigation-bar) { isolation: isolate; }
+
+  /* Reserve space at the bottom of the page on mobile so the fixed
+     nav bar never overlaps page content. Applied in both storefront
+     AND theme editor so the preview reflects production behavior. */
+  @media (max-width: 768px) {
+    body {
+      padding-bottom: calc({{ section.settings.height | default: 62 }}px + env(safe-area-inset-bottom, 0px)) !important;
+    }
+  }
+{% comment %}{% endcomment %}</style>
+<!-- ti-theme:start -->
+{%- comment -%}
+  Materia Themes. Developed By Materia Themes.
+{%- endcomment -%}
+{%- liquid
+  assign sec_st = section.settings
+  assign use_custom = sec_st.use_custom_colors
+  assign nav_bg = sec_st.background_color
+  assign nav_fg = sec_st.icon_color
+  assign nav_label = sec_st.label_color
+  assign nav_active = sec_st.active_color
+  assign show_labels = sec_st.show_labels
+  assign nav_height = sec_st.height | default: 62
+  assign border_top = sec_st.border_top
+  assign border_color = sec_st.border_color
+  assign shadow_enabled = sec_st.shadow_enabled
+  assign radius_top = sec_st.radius_top | default: 0
+
+  assign has_bg = false
+  if use_custom and nav_bg != blank and nav_bg != 'rgba(0,0,0,0)'
+    assign has_bg = true
+  endif
+  assign has_fg = false
+  if use_custom and nav_fg != blank and nav_fg != 'rgba(0,0,0,0)'
+    assign has_fg = true
+  endif
+  assign has_label = false
+  if use_custom and nav_label != blank and nav_label != 'rgba(0,0,0,0)'
+    assign has_label = true
+  endif
+  assign has_active = false
+  if use_custom and nav_active != blank and nav_active != 'rgba(0,0,0,0)'
+    assign has_active = true
+  endif
+  assign has_border = false
+  if use_custom and border_color != blank and border_color != 'rgba(0,0,0,0)'
+    assign has_border = true
+  endif
+-%}
+{%- capture style -%}
+  --mnb-count: {{ section.blocks.size }};
+  --mnb-height: {{ nav_height }}px;
+  --mnb-bg: {% if has_bg %}{{ nav_bg }}{% else %}var(--color-background){% endif %};
+  --mnb-fg: {% if has_fg %}{{ nav_fg }}{% else %}var(--color-heading){% endif %};
+  --mnb-label: {% if has_label %}{{ nav_label }}{% elsif has_fg %}{{ nav_fg }}{% else %}var(--color-heading){% endif %};
+  {%- comment -%}
+    Active / hover state — when no custom colour is set we DON'T flip
+    to black (looked harsh, especially on dark schemes). Instead, the
+    active link uses the same scheme heading colour but faded via the
+    `--mnb-active-opacity` rule below, so "you are here" reads as a
+    soft de-emphasis rather than a colour change.
+  {%- endcomment -%}
+  --mnb-active: {% if has_active %}{{ nav_active }}{% else %}var(--mnb-fg, var(--color-heading)){% endif %};
+  --mnb-active-opacity: {% if has_active %}1{% else %}0.7{% endif %};
+  --mnb-border: {% if has_border %}{{ border_color }}{% else %}rgba(0,0,0,0.06){% endif %};
+  --mnb-radius: {{ radius_top }}px;
+  --mnb-icon-size: {{ sec_st.icon_size | default: 22 }}px;
+{%- endcapture -%}
+
+{% if section.blocks.size > 0 %}
+  <style>
+    .mobile-navigation-bar,
+    mobile-navigation-bar {
+      background: var(--mnb-bg);
+      color: var(--mnb-fg);
+      min-height: var(--mnb-height);
+      padding-top: 6px;
+      padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+      border-top-left-radius: var(--mnb-radius);
+      border-top-right-radius: var(--mnb-radius);
+      {% if border_top %}border-top: 1px solid var(--mnb-border);{% endif %}
+      {% if shadow_enabled %}box-shadow: 0 -2px 7px -6px rgba(0,0,0,0.1);{% endif %}
+      /* Very high z-index so no normal section can overlap the bar,
+         while popups (32-bit max) still sit above it. */
+      z-index: 12 !important;
+      /* The bar must be its own positioning context so the background-fill
+         pseudo below anchors to it. */
+      position: fixed;
+    }
+#shopify-section-{{ section.id }} mobile-navigation-bar.show,
+    #shopify-section-{{ section.id }} mobile-navigation-bar {
+      z-index: 12 !important;
+    }
+    .mobile-navigation-bar > a,
+    .mobile-navigation-bar > div {
+      transition: color 0.25s cubic-bezier(0.2, 0.7, 0.2, 1), transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1);
+      color: var(--mnb-fg);
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      padding: 2px 4px;
+    }
+    .mobile-navigation-bar > a svg,
+    .mobile-navigation-bar > div svg {
+      width: var(--mnb-icon-size);
+      height: var(--mnb-icon-size);
+      transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.2, 1);
+      display: block;
+    }
+    .mobile-navigation-bar > a .mnb-label,
+    .mobile-navigation-bar > div .mnb-label {
+      color: var(--mnb-label);
+      font-size: 11px;
+      line-height: 1.1;
+      letter-spacing: 0.02em;
+      margin-top: 2px;
+      text-align: center;
+      {% unless show_labels %}display: none !important;{% endunless %}
+    }
+    .mobile-navigation-bar > a.active,
+    .mobile-navigation-bar > a:hover {
+      color: var(--mnb-active);
+      opacity: var(--mnb-active-opacity, 1);
+    }
+    .mobile-navigation-bar > a.active .mnb-label,
+    .mobile-navigation-bar > a:hover .mnb-label {
+      color: var(--mnb-active);
+    }
+    .mobile-navigation-bar > a:hover svg {
+      /* More subtle hover lift — was translateY(-2px) scale(1.06) which
+         felt jumpy. Halved the scale step and reduced the lift. */
+      transform: translateY(-1px) scale(1.025);
+    }
+    .mobile-navigation-bar .h-count {
+      background: var(--count-bubble-bg, var(--mnb-active));
+      color: var(--count-bubble-color, #ffffff);
+    }
+    .mobile-navigation-bar .wishlist-count {
+      background: var(--count-bubble-wishlist-bg, var(--count-bubble-bg, var(--mnb-active)));
+      color: var(--count-bubble-wishlist-color, var(--count-bubble-color, #ffffff));
+    }
+{% comment %}{% endcomment %}  </style>
+  {%- comment -%}
+    Removed `invisible` class — the bar should be visible at all times,
+    not depend on a JS-toggled `.show` class. The previous markup had
+    BOTH `invisible` (opacity: 0) and `show` simultaneously and relied
+    on CSS specificity to resolve, which broke when other rules (e.g.
+    section isolation `contain: style`) interfered. Now the bar starts
+    in its visible state and stays there.
+    Also fixed the `algin-center` typo (was inert; now `align-center`).
+  {%- endcomment -%}
+  <mobile-navigation-bar
+    class="mobile-navigation-bar transition flex align-center hidden-md fixed bottom-0 inset-x-0 z-10 px-15 show color-{{ sec_st.color_scheme | default: 'default' }}"
+    style="{{ style | strip | strip_newlines }}"
+  >
+    {% for block in section.blocks %}
+      {%- liquid
+        assign b = block.settings
+        assign icon_key = b.icon | default: 'auto'
+        assign custom_label = b.label
+      -%}
+      {% case block.type %}
+        {% when 'homepage' %}
+          {%- if custom_label != blank -%}
+            {%- assign _label = custom_label -%}
+          {%- else -%}
+            {%- assign _label = 'mobile_navbar.homepage' | t -%}
+          {%- endif -%}
+          <a
+            href="{{ routes.root_url }}"
+            id="homepage-icon-bubble"
+            class="no-underline lh-normal inline-flex content-center flex-column text-center px-5{% if request.path == "/" %} active{% endif %}"
+            aria-label="{{ _label }}"
+            {{ block.shopify_attributes }}
+          >
+            {% render 'mnb-icon', icon: icon_key, fallback: 'home' %}
+            <span class="block mnb-label heading-style">
+              {{- _label -}}
+            </span>
+          </a>
+        {% when 'shop' %}
+          {%- if custom_label != blank -%}
+            {%- assign _label = custom_label -%}
+          {%- else -%}
+            {%- assign _label = 'mobile_navbar.shop' | t -%}
+          {%- endif -%}
+          <a
+            href="{{ collections.all.url }}"
+            class="no-underline lh-normal inline-flex content-center flex-column text-center px-5{% if request.path == "/collections/all" %} active{% endif %}"
+            aria-label="{{ _label }}"
+            {{ block.shopify_attributes }}
+          >
+            {% render 'mnb-icon', icon: icon_key, fallback: 'shop' %}
+            <span class="block mnb-label heading-style">{{ _label }}</span>
+          </a>
+        {% when 'account' %}
+          {%- if custom_label != blank -%}
+            {%- assign _label = custom_label -%}
+          {%- else -%}
+            {%- assign _label = 'mobile_navbar.account' | t -%}
+          {%- endif -%}
+          <a
+            href="{%- if customer -%}{{ routes.account_url }}{%- else -%}{{ routes.account_login_url }}{% endif %}"
+            class="no-underline lh-normal inline-flex content-center flex-column text-center px-5{% if request.path == "/account/login" or request.path == "/account" %} active{% endif %}"
+            aria-label="{{ _label }}"
+            {{ block.shopify_attributes }}
+          >
+            {% render 'mnb-icon', icon: icon_key, fallback: 'user' %}
+            <span class="block mnb-label heading-style">{{ _label }}</span>
+          </a>
+        {% when 'cart' %}
+          {%- if custom_label != blank -%}
+            {%- assign _label = custom_label -%}
+          {%- else -%}
+            {%- assign _label = 'mobile_navbar.cart' | t -%}
+          {%- endif -%}
+          <a
+            id="cart-icon-bubble-mobile"
+            href="{{ routes.cart_url }}"
+            class="no-underline lh-normal inline-flex content-center flex-column text-center{% if request.path == "/cart" %} active{% endif %}"
+            aria-label="{{ _label }}"
+            {{ block.shopify_attributes }}
+          >
+            <span class="relative inline-flex">
+              {% render 'mnb-icon', icon: icon_key, fallback: 'cart' %}
+              {%- if cart != empty -%}
+                <span class="absolute lh-1 cart-count h-count inline-flex align-center justify-content-center rounded-50 overflow-hidden fs-10">
+                  {%- if cart.item_count < 100 -%}
+                    {{ cart.item_count }}
+                  {%- else -%}
+                    ~
+                  {% endif %}
+                  <span class="visually-hidden">{{ 'sections.header.cart_count' | t: count: cart.item_count }}</span>
+                </span>
+              {%- else -%}
+                <span class="absolute lh-1 cart-count h-count inline-flex align-center justify-content-center rounded-50 overflow-hidden fs-10">
+                  <span aria-hidden="true">0</span>
+                </span>
+              {% endif %}
+            </span>
+            <span class="block mnb-label heading-style">{{ _label }}</span>
+          </a>
+        {% when 'wishlist' %}
+          {%- if custom_label != blank -%}
+            {%- assign _label = custom_label -%}
+          {%- else -%}
+            {%- assign _label = 'mobile_navbar.wishlist' | t -%}
+          {%- endif -%}
+          <a
+            id="wishlist-icon-bubble-mobile"
+            href="/pages/wishlist"
+            class="wishlist-icon-bubble no-underline lh-normal inline-flex content-center flex-column text-center"
+            aria-label="{{ _label }}"
+            {{ block.shopify_attributes }}
+          >
+            <span class="relative inline-flex">
+              {% render 'mnb-icon', icon: icon_key, fallback: 'heart' %}
+              <span class="absolute lh-1 wishlist-count h-count inline-flex align-center justify-content-center rounded-50 overflow-hidden fs-10">
+                0
+              </span>
+            </span>
+            <span class="block mnb-label heading-style">
+              {{- _label -}}
+            </span>
+          </a>
+        {% when 'search' %}
+          {%- if custom_label != blank -%}
+            {%- assign _label = custom_label -%}
+          {%- else -%}
+            {%- assign _label = 'general.search.search' | t -%}
+          {%- endif -%}
+          <a
+            href="{{ routes.search_url }}"
+            class="no-underline lh-normal inline-flex content-center flex-column text-center px-5"
+            aria-label="{{ _label }}"
+            {{ block.shopify_attributes }}
+          >
+            {% render 'mnb-icon', icon: icon_key, fallback: 'search' %}
+            <span class="block mnb-label heading-style">{{ _label }}</span>
+          </a>
+        {% when 'currency' %}
+          <div class="lang__currency-on-nav mobile-navigation__currency lh-normal inline-flex content-center flex-column text-center" {{ block.shopify_attributes }}>
+            {%- render 'country-switcher' | type: 'mobile-navigation' -%}
+          </div>
+        {% when 'language' %}
+          <div class="lang__currency-on-nav mobile-navigation__currency lh-normal inline-flex content-center flex-column text-center" {{ block.shopify_attributes }}>
+            {% render 'language-switcher' | type: 'mobile-navigation' %}
+          </div>
+      {% endcase %}
+    {% endfor %}
+  </mobile-navigation-bar>
+{% endif %}
+
+
+</template>
+
+<schema>
+{
+  "type": "mobile-navigation-bar",
+  "name": "Mobile navigation bar",
+  "settings": [
+    {
+      "type": "header",
+      "id": "hdr_1",
+      "label": "Basics"
+    },
+    {
+      "type": "color_scheme",
+      "id": "color_scheme",
+      "label": "Color scheme",
+      "default": "scheme-1"
+    },
+    {
+      "type": "select",
+      "id": "section_width",
+      "label": "Section width",
+      "default": "full_width",
+      "options": [
+        {
+          "value": "container",
+          "label": "Default"
+        },
+        {
+          "value": "fluid_container",
+          "label": "Fluid container"
+        },
+        {
+          "value": "stretch_width",
+          "label": "Stretched"
+        },
+        {
+          "value": "full_width",
+          "label": "Full width"
+        }
+      ]
+    },
+    {
+      "type": "checkbox",
+      "id": "show_labels",
+      "label": "Show labels under icons",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "border_top",
+      "label": "Show top border",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "use_custom_colors",
+      "label": "Enable custom colors",
+      "default": false
+    },
+    {
+      "type": "header",
+      "id": "hdr_7",
+      "label": "Typography"
+    },
+    {
+      "type": "color",
+      "id": "active_color",
+      "label": "Active / hover"
+    },
+    {
+      "type": "header",
+      "id": "hdr_9",
+      "label": "Colors & appearance"
+    },
+    {
+      "type": "checkbox",
+      "id": "shadow_enabled",
+      "label": "Drop shadow",
+      "default": true
+    },
+    {
+      "type": "range",
+      "id": "radius_top",
+      "min": 0,
+      "max": 32,
+      "step": 2,
+      "unit": "px",
+      "label": "Top corner radius",
+      "default": 0
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background"
+    },
+    {
+      "type": "color",
+      "id": "icon_color",
+      "label": "Icon"
+    },
+    {
+      "type": "color",
+      "id": "label_color",
+      "label": "Label"
+    },
+    {
+      "type": "color",
+      "id": "border_color",
+      "label": "Top border"
+    },
+    {
+      "type": "header",
+      "id": "hdr_16",
+      "label": "Behavior & animation"
+    },
+    {
+      "type": "checkbox",
+      "id": "reveal",
+      "label": "Reveal on scroll",
+      "default": true,
+      "info": "Uses your global Animations & motion setting."
+    },
+    {
+      "type": "header",
+      "id": "hdr_18",
+      "label": "Layout & spacing"
+    },
+    {
+      "type": "range",
+      "id": "height",
+      "min": 48,
+      "max": 96,
+      "step": 2,
+      "unit": "px",
+      "label": "Minimum height",
+      "default": 62
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_desktop",
+      "label": "Top margin (desktop px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_desktop",
+      "label": "Bottom margin (desktop px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "header",
+      "id": "hdr_22",
+      "label": "Mobile layout"
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_mobile",
+      "label": "Top margin (mobile px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_mobile",
+      "label": "Bottom margin (mobile px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "header",
+      "id": "hdr_25",
+      "label": "Advanced"
+    },
+    {
+      "type": "range",
+      "id": "icon_size",
+      "min": 16,
+      "max": 32,
+      "step": 1,
+      "unit": "px",
+      "label": "Icon size",
+      "default": 22
+    },
+    {
+      "type": "header",
+      "id": "hdr_28",
+      "label": "Advanced spacing"
+    },
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    }
+  ],
+  "blocks": [
+    {
+      "type": "homepage",
+      "name": "Homepage",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content"
+        },
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Label override"
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Advanced"
+        },
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "default": "home",
+          "options": [
+            {
+              "value": "auto",
+              "label": "Default"
+            },
+            {
+              "value": "home",
+              "label": "Home"
+            },
+            {
+              "value": "home-alt",
+              "label": "Home (filled roof)"
+            },
+            {
+              "value": "shop",
+              "label": "Store"
+            },
+            {
+              "value": "grid",
+              "label": "Grid"
+            },
+            {
+              "value": "compass",
+              "label": "Compass"
+            },
+            {
+              "value": "star",
+              "label": "Star"
+            }
+          ]
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "shop",
+      "name": "Shop",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content"
+        },
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Label override"
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Advanced"
+        },
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "default": "shop",
+          "options": [
+            {
+              "value": "auto",
+              "label": "Default"
+            },
+            {
+              "value": "shop",
+              "label": "Store"
+            },
+            {
+              "value": "grid",
+              "label": "Grid"
+            },
+            {
+              "value": "tag",
+              "label": "Tag"
+            },
+            {
+              "value": "category",
+              "label": "Category"
+            },
+            {
+              "value": "sparkle",
+              "label": "Sparkle"
+            }
+          ]
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "account",
+      "name": "Account",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content"
+        },
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Label override"
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Advanced"
+        },
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "default": "user",
+          "options": [
+            {
+              "value": "auto",
+              "label": "Default"
+            },
+            {
+              "value": "user",
+              "label": "User"
+            },
+            {
+              "value": "user-circle",
+              "label": "User (circle)"
+            },
+            {
+              "value": "lock",
+              "label": "Lock"
+            }
+          ]
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "cart",
+      "name": "Cart",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content"
+        },
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Label override"
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Advanced"
+        },
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "default": "cart",
+          "options": [
+            {
+              "value": "auto",
+              "label": "Default"
+            },
+            {
+              "value": "cart",
+              "label": "Bag"
+            },
+            {
+              "value": "basket",
+              "label": "Basket"
+            },
+            {
+              "value": "trolley",
+              "label": "Shopping trolley"
+            }
+          ]
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "wishlist",
+      "name": "Wishlist",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content"
+        },
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Label override"
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Advanced"
+        },
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "default": "heart",
+          "options": [
+            {
+              "value": "auto",
+              "label": "Default"
+            },
+            {
+              "value": "heart",
+              "label": "Heart"
+            },
+            {
+              "value": "heart-outline",
+              "label": "Heart (outline)"
+            },
+            {
+              "value": "bookmark",
+              "label": "Bookmark"
+            }
+          ]
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "search",
+      "name": "Search",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content"
+        },
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Label override"
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Advanced"
+        },
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "default": "search",
+          "options": [
+            {
+              "value": "auto",
+              "label": "Default"
+            },
+            {
+              "value": "search",
+              "label": "Magnifier"
+            },
+            {
+              "value": "search-alt",
+              "label": "Magnifier (bold)"
+            }
+          ]
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "currency",
+      "name": "Currency",
+      "settings": [],
+      "limit": 1
+    },
+    {
+      "type": "language",
+      "name": "Language",
+      "settings": [],
+      "limit": 1
+    }
+  ],
+  "presets": [],
+  "enabled_on": {
+    "groups": [
+      "overlay"
+    ]
+  },
+  "shopify": {
+    "name": "t:sections.mobile-navigation-bar.name",
+    "tag": "section",
+    "limit": 1,
+    "enabled_on": {
+      "groups": [
+        "custom.overlay"
+      ]
+    },
+    "settings": [
+      {
+        "type": "header",
+        "content": "Basics"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "scheme-1"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "full_width",
+        "options": [
+          {
+            "value": "container",
+            "label": "Default"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "checkbox",
+        "id": "show_labels",
+        "label": "Show labels under icons",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "border_top",
+        "label": "Show top border",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "use_custom_colors",
+        "label": "Enable custom colors",
+        "default": false
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "color",
+        "id": "active_color",
+        "label": "Active / hover"
+      },
+      {
+        "type": "header",
+        "content": "Colors & appearance"
+      },
+      {
+        "type": "checkbox",
+        "id": "shadow_enabled",
+        "label": "Drop shadow",
+        "default": true
+      },
+      {
+        "type": "range",
+        "id": "radius_top",
+        "min": 0,
+        "max": 32,
+        "step": 2,
+        "unit": "px",
+        "label": "Top corner radius",
+        "default": 0
+      },
+      {
+        "type": "color",
+        "id": "background_color",
+        "label": "Background"
+      },
+      {
+        "type": "color",
+        "id": "icon_color",
+        "label": "Icon"
+      },
+      {
+        "type": "color",
+        "id": "label_color",
+        "label": "Label"
+      },
+      {
+        "type": "color",
+        "id": "border_color",
+        "label": "Top border"
+      },
+      {
+        "type": "header",
+        "content": "Behavior & animation"
+      },
+      {
+        "type": "checkbox",
+        "id": "reveal",
+        "label": "Reveal on scroll",
+        "default": true,
+        "info": "Uses your global Animations & motion setting."
+      },
+      {
+        "type": "header",
+        "content": "Layout & spacing"
+      },
+      {
+        "type": "range",
+        "id": "height",
+        "min": 48,
+        "max": 96,
+        "step": 2,
+        "unit": "px",
+        "label": "Minimum height",
+        "default": 62
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin (desktop px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin (desktop px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Mobile layout"
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_mobile",
+        "label": "Top margin (mobile px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_mobile",
+        "label": "Bottom margin (mobile px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Advanced"
+      },
+      {
+        "type": "paragraph",
+        "content": "t:sections.mobile-navigation-bar.info"
+      },
+      {
+        "type": "range",
+        "id": "icon_size",
+        "min": 16,
+        "max": 32,
+        "step": 1,
+        "unit": "px",
+        "label": "Icon size",
+        "default": 22
+      },
+      {
+        "type": "header",
+        "content": "Advanced spacing"
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      }
+    ],
+    "blocks": [
+      {
+        "type": "homepage",
+        "name": "t:sections.mobile-navigation-bar.blocks.homepage",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Label override"
+          },
+          {
+            "type": "header",
+            "content": "Advanced"
+          },
+          {
+            "type": "select",
+            "id": "icon",
+            "label": "Icon",
+            "default": "home",
+            "options": [
+              {
+                "value": "auto",
+                "label": "Default"
+              },
+              {
+                "value": "home",
+                "label": "Home"
+              },
+              {
+                "value": "home-alt",
+                "label": "Home (filled roof)"
+              },
+              {
+                "value": "shop",
+                "label": "Store"
+              },
+              {
+                "value": "grid",
+                "label": "Grid"
+              },
+              {
+                "value": "compass",
+                "label": "Compass"
+              },
+              {
+                "value": "star",
+                "label": "Star"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "shop",
+        "name": "t:sections.mobile-navigation-bar.blocks.shop",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Label override"
+          },
+          {
+            "type": "header",
+            "content": "Advanced"
+          },
+          {
+            "type": "select",
+            "id": "icon",
+            "label": "Icon",
+            "default": "shop",
+            "options": [
+              {
+                "value": "auto",
+                "label": "Default"
+              },
+              {
+                "value": "shop",
+                "label": "Store"
+              },
+              {
+                "value": "grid",
+                "label": "Grid"
+              },
+              {
+                "value": "tag",
+                "label": "Tag"
+              },
+              {
+                "value": "category",
+                "label": "Category"
+              },
+              {
+                "value": "sparkle",
+                "label": "Sparkle"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "account",
+        "name": "t:sections.mobile-navigation-bar.blocks.account",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Label override"
+          },
+          {
+            "type": "header",
+            "content": "Advanced"
+          },
+          {
+            "type": "select",
+            "id": "icon",
+            "label": "Icon",
+            "default": "user",
+            "options": [
+              {
+                "value": "auto",
+                "label": "Default"
+              },
+              {
+                "value": "user",
+                "label": "User"
+              },
+              {
+                "value": "user-circle",
+                "label": "User (circle)"
+              },
+              {
+                "value": "lock",
+                "label": "Lock"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "cart",
+        "name": "t:sections.mobile-navigation-bar.blocks.cart",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Label override"
+          },
+          {
+            "type": "header",
+            "content": "Advanced"
+          },
+          {
+            "type": "select",
+            "id": "icon",
+            "label": "Icon",
+            "default": "cart",
+            "options": [
+              {
+                "value": "auto",
+                "label": "Default"
+              },
+              {
+                "value": "cart",
+                "label": "Bag"
+              },
+              {
+                "value": "basket",
+                "label": "Basket"
+              },
+              {
+                "value": "trolley",
+                "label": "Shopping trolley"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "wishlist",
+        "name": "t:sections.mobile-navigation-bar.blocks.wishlist",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Label override"
+          },
+          {
+            "type": "header",
+            "content": "Advanced"
+          },
+          {
+            "type": "select",
+            "id": "icon",
+            "label": "Icon",
+            "default": "heart",
+            "options": [
+              {
+                "value": "auto",
+                "label": "Default"
+              },
+              {
+                "value": "heart",
+                "label": "Heart"
+              },
+              {
+                "value": "heart-outline",
+                "label": "Heart (outline)"
+              },
+              {
+                "value": "bookmark",
+                "label": "Bookmark"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "search",
+        "name": "Search",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Label override"
+          },
+          {
+            "type": "header",
+            "content": "Advanced"
+          },
+          {
+            "type": "select",
+            "id": "icon",
+            "label": "Icon",
+            "default": "search",
+            "options": [
+              {
+                "value": "auto",
+                "label": "Default"
+              },
+              {
+                "value": "search",
+                "label": "Magnifier"
+              },
+              {
+                "value": "search-alt",
+                "label": "Magnifier (bold)"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "currency",
+        "name": "t:sections.mobile-navigation-bar.blocks.currency",
+        "limit": 1,
+        "settings": []
+      },
+      {
+        "type": "language",
+        "name": "t:sections.mobile-navigation-bar.blocks.language",
+        "limit": 1,
+        "settings": []
+      }
+    ],
+    "presets": [],
+    "class": "section-edge-bleed"
+  }
+}
+</schema>

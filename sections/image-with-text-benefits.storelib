@@ -1,0 +1,2831 @@
+<template compat="shopify">
+{%- assign fb_accessibility_media = 'accessibility.media' | t -%}
+{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- comment -%}
+  Materia Themes — Image With Text Benefits
+
+  Two-column layout: media on the left, heading + benefits grid on the right.
+  Benefits render as a responsive grid (default 2 per row → 2×2 with 4 blocks).
+
+  Block types:
+    • media       — image OR video (image_picker, Shopify video, video URL,
+                    + per-block: show controls, autoplay, muted, loop)
+    • heading     — section heading text
+    • subheading  — supporting copy under the heading
+    • footnote    — small line under the benefits
+    • benefit     — icon + heading + body. Icon source: library / image / SVG code.
+
+  Media layout (same as IWT Stats):
+    • Auto: 1 → single, 2 → side-by-side, 3+ → carousel
+    • Or pick exact per-row count: 1 / 1.2 / 1.5 / 2 / 2.5 / 3
+    • 3+ slots = horizontal scroll with slim light-gray progress bar
+    • Mouse-drag + native touch swipe enabled
+{%- endcomment -%}
+
+{%- liquid
+  assign st  = section.settings
+  assign sid = section.id
+
+  case st.media_position
+    when 'right'
+      assign _flex_dir = 'row-reverse'
+    else
+      assign _flex_dir = 'row'
+  endcase
+
+  case st.content_align
+    when 'center'
+      assign _ai = 'center'
+      assign _ta = 'center'
+    when 'right'
+      assign _ai = 'flex-end'
+      assign _ta = 'right'
+    else
+      assign _ai = 'flex-start'
+      assign _ta = 'left'
+  endcase
+  case st.content_align_mobile
+    when 'center'
+      assign _ai_m = 'center'
+      assign _ta_m = 'center'
+    when 'right'
+      assign _ai_m = 'flex-end'
+      assign _ta_m = 'right'
+    else
+      assign _ai_m = 'flex-start'
+      assign _ta_m = 'left'
+  endcase
+
+  assign media_blocks = section.blocks | where: 'type', 'media'
+  assign media_count  = media_blocks | size
+
+  assign per_row = st.per_row | default: '1.2'
+  if per_row == 'auto'
+    if media_count <= 1
+      assign per_row_value = 1
+      assign final_layout = 'single'
+    elsif media_count == 2
+      assign per_row_value = 2
+      assign final_layout = 'side_by_side'
+    else
+      assign per_row_value = 2.5
+      assign final_layout = 'carousel'
+    endif
+  else
+    assign per_row_value = per_row | times: 1.0
+    if media_count > per_row_value
+      assign final_layout = 'carousel'
+    elsif per_row_value <= 1
+      assign final_layout = 'single'
+    elsif media_count <= 1
+      assign final_layout = 'single'
+    else
+      assign final_layout = 'side_by_side'
+    endif
+  endif
+
+  assign slot_width_pct = 100.0 | divided_by: per_row_value
+
+  assign benefits_per_row_d = st.benefits_per_row_desktop | default: 2
+  assign benefits_per_row_m = st.benefits_per_row_mobile  | default: 1
+-%}
+
+<style>
+  /* Custom fonts (toggle, off by default) */
+  {%- if st.enable_custom_fonts and st.body_font -%}
+    #shopify-section-{{ sid }},
+    #shopify-section-{{ sid }} :is(p, div, span, a, li) {
+      font-family: {{ st.body_font.family }}, {{ st.body_font.fallback_families }};
+      font-weight: {{ st.body_font.weight }};
+    }
+  {%- endif -%}
+  {%- if st.enable_custom_fonts and st.heading_font -%}
+    #shopify-section-{{ sid }} :is(h1, h2, h3, h4, h5, h6) {
+      font-family: {{ st.heading_font.family }}, {{ st.heading_font.fallback_families }};
+      font-weight: {{ st.heading_font.weight }};
+    }
+  {%- endif -%}
+
+  #shopify-section-{{ sid }} {
+    background-color: {{ st.section_bg | default: '#FFFFFF' }};
+    margin-top: {{ st.section_margin_top_mobile | default: 0 }}px;
+    margin-bottom: {{ st.section_margin_bottom_mobile | default: 0 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} {
+      margin-top: {{ st.section_margin_top_desktop | default: 0 }}px;
+      margin-bottom: {{ st.section_margin_bottom_desktop | default: 0 }}px;
+    }
+  }
+  {%- if st.reset_spacing -%}
+    #shopify-section-{{ sid }} {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+    }
+    #shopify-section-{{ sid }} + .shopify-section { margin-top: 0 !important; padding-top: 0 !important; }
+    .shopify-section:has(+ #shopify-section-{{ sid }}) { margin-bottom: 0 !important; padding-bottom: 0 !important; }
+  {%- endif -%}
+
+  {%- case st.section_width -%}
+    {%- when 'container' -%}
+      #shopify-section-{{ sid }} .iwb__inner { max-width: calc(var(--page-width, 1300px) + 3rem); margin-inline: auto; }
+    {%- when 'fluid_container' -%}
+      #shopify-section-{{ sid }} .iwb__inner { max-width: calc(var(--fluid-container-width, 1500px) + 3rem); margin-inline: auto; }
+    {%- when 'stretch_width' -%}
+      @media (min-width: 1200px) {
+        #shopify-section-{{ sid }} .iwb__inner { padding-inline: 3rem; }
+      }
+  {%- endcase -%}
+
+  #shopify-section-{{ sid }} .iwb {
+    padding: {{ st.padding_top_mobile | default: 60 }}px {{ st.side_padding_mobile | default: 20 }}px {{ st.padding_bottom_mobile | default: 60 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .iwb {
+      padding: {{ st.padding_top_desktop | default: 100 }}px {{ st.side_padding_desktop | default: 32 }}px {{ st.padding_bottom_desktop | default: 100 }}px;
+    }
+  }
+  #shopify-section-{{ sid }} .iwb__inner { width: 100%; box-sizing: border-box; }
+
+  /* Two-column grid */
+  #shopify-section-{{ sid }} .iwb__grid {
+    display: flex;
+    flex-direction: column;
+    gap: {{ st.gap_mobile | default: 32 }}px;
+  }
+  @media (min-width: 900px) {
+    #shopify-section-{{ sid }} .iwb__grid {
+      flex-direction: {{ _flex_dir }};
+      gap: {{ st.gap_desktop | default: 64 }}px;
+      align-items: center;
+    }
+  }
+  #shopify-section-{{ sid }} .iwb__media,
+  #shopify-section-{{ sid }} .iwb__text { width: 100%; box-sizing: border-box; }
+  @media (min-width: 900px) {
+    #shopify-section-{{ sid }} .iwb__media { width: {{ st.media_column_width | default: 50 }}%; }
+    #shopify-section-{{ sid }} .iwb__text  { width: calc(100% - {{ st.media_column_width | default: 50 }}%); }
+  }
+  #iwb-{{ sid }}.iwb--no-media .iwb__media { display: none; }
+  @media (min-width: 900px) {
+    #iwb-{{ sid }}.iwb--no-media .iwb__text {
+      width: 100%;
+      max-width: {{ st.text_max_width | default: 900 }}px;
+      margin-inline: auto;
+    }
+  }
+
+  /* Media area */
+  #shopify-section-{{ sid }} .iwb__media-grid {
+    display: flex;
+    gap: {{ st.media_gap | default: 12 }}px;
+    width: 100%;
+  }
+  #shopify-section-{{ sid }} .iwb__media-grid--single { flex-direction: column; }
+  #shopify-section-{{ sid }} .iwb__media-grid--side_by_side { flex-direction: row; }
+  #shopify-section-{{ sid }} .iwb__media-grid--carousel {
+    flex-direction: row;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    padding-bottom: 6px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: pan-x;
+  }
+  #shopify-section-{{ sid }} .iwb__media-grid--carousel::-webkit-scrollbar { display: none; }
+  #shopify-section-{{ sid }} .iwb__media-grid--carousel.iwb--dragging {
+    cursor: grabbing;
+    scroll-snap-type: none;
+    scroll-behavior: auto;
+  }
+  #shopify-section-{{ sid }} .iwb__media-grid--carousel.iwb--dragging * { pointer-events: none !important; }
+  #shopify-section-{{ sid }} .iwb__media-grid--carousel img,
+  #shopify-section-{{ sid }} .iwb__media-grid--carousel video { -webkit-user-drag: none; user-drag: none; }
+
+  #shopify-section-{{ sid }} .iwb__slot {
+    flex: 0 0 auto;
+    border-radius: {{ st.media_radius | default: 16 }}px;
+    overflow: hidden;
+    background: rgba(0,0,0,0.04);
+    aspect-ratio: {{ st.media_aspect_w | default: 3 }} / {{ st.media_aspect_h | default: 4 }};
+    position: relative;
+    isolation: isolate;
+    contain: layout paint;
+  }
+  #shopify-section-{{ sid }} .iwb__media-grid--single .iwb__slot { width: 100%; }
+  #shopify-section-{{ sid }} .iwb__media-grid--side_by_side .iwb__slot {
+    flex: 1 1 calc({{ slot_width_pct }}% - {{ st.media_gap | default: 12 }}px);
+    min-width: 0;
+  }
+  #shopify-section-{{ sid }} .iwb__media-grid--carousel .iwb__slot {
+    width: calc({{ slot_width_pct }}% - {{ st.media_gap | default: 12 | times: 0.5 | round: 1 }}px);
+    scroll-snap-align: start;
+  }
+  #shopify-section-{{ sid }} .iwb__slot img,
+  #shopify-section-{{ sid }} .iwb__slot video,
+  #shopify-section-{{ sid }} .iwb__slot .video-wrapper,
+  #shopify-section-{{ sid }} .iwb__slot .video-wrapper > * {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  /* Slim light-gray progress bar */
+  #shopify-section-{{ sid }} .iwb__progress {
+    position: relative;
+    width: 100%;
+    height: {{ st.progress_height | default: 2 }}px;
+    margin-top: {{ st.progress_margin | default: 18 }}px;
+    background: {{ st.progress_track | default: '#E5E7EB' }};
+    border-radius: 999px;
+    overflow: hidden;
+    cursor: pointer;
+  }
+  #shopify-section-{{ sid }} .iwb__progress-fill {
+    position: absolute;
+    top: 0; bottom: 0; left: 0;
+    width: 0%;
+    background: {{ st.progress_fill | default: '#3F2A5C' }};
+    border-radius: 999px;
+    transition: width .15s linear;
+  }
+
+  /* Right column */
+  #shopify-section-{{ sid }} .iwb__text {
+    display: flex;
+    flex-direction: column;
+    gap: {{ st.content_gap | default: 24 }}px;
+    align-items: {{ _ai_m }};
+    text-align: {{ _ta_m }};
+    color: {{ st.text_color | default: '#0F172A' }};
+  }
+  @media (min-width: 900px) {
+    #shopify-section-{{ sid }} .iwb__text {
+      align-items: {{ _ai }};
+      text-align: {{ _ta }};
+    }
+  }
+  #shopify-section-{{ sid }} .iwb__text > * { margin: 0; max-width: 100%; }
+
+  #shopify-section-{{ sid }} .iwb__heading {
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+  }
+  #shopify-section-{{ sid }} .iwb__subheading {
+    line-height: 1.6;
+    max-width: 540px;
+  }
+  #shopify-section-{{ sid }} .iwb__subheading p { margin: 0 0 0.5em; }
+  #shopify-section-{{ sid }} .iwb__subheading p:last-child { margin: 0; }
+
+  /* Per-block heading / subheading / footnote styling */
+  {%- for block in section.blocks -%}
+    {%- assign bs = block.settings -%}
+    {%- if block.type == 'heading' -%}
+      #shopify-section-{{ sid }} .iwb__heading[data-block-id="{{ block.id }}"] {
+        color: {{ bs.color | default: '#3F2A5C' }};
+        font-size: {{ bs.size_mobile | default: 32 }}px;
+        text-transform: {% if bs.uppercase %}uppercase{% else %}none{% endif %};
+      }
+      @media (min-width: 768px) {
+        #shopify-section-{{ sid }} .iwb__heading[data-block-id="{{ block.id }}"] {
+          font-size: {{ bs.size_desktop | default: 48 }}px;
+        }
+      }
+    {%- endif -%}
+    {%- if block.type == 'subheading' -%}
+      #shopify-section-{{ sid }} .iwb__subheading[data-block-id="{{ block.id }}"] {
+        color: {{ bs.color | default: '#5B4480' }};
+        font-size: {{ bs.size_mobile | default: 14 }}px;
+      }
+      @media (min-width: 768px) {
+        #shopify-section-{{ sid }} .iwb__subheading[data-block-id="{{ block.id }}"] {
+          font-size: {{ bs.size_desktop | default: 16 }}px;
+        }
+      }
+    {%- endif -%}
+    {%- if block.type == 'footnote' -%}
+      #shopify-section-{{ sid }} .iwb__footnote[data-block-id="{{ block.id }}"] {
+        color: {{ bs.color | default: '#7B5BA0' }};
+        font-size: {{ bs.size | default: 13 }}px;
+        margin-top: {{ bs.margin_top | default: 12 }}px;
+      }
+    {%- endif -%}
+  {%- endfor -%}
+
+  /* Benefits grid */
+  #shopify-section-{{ sid }} .iwb__benefits {
+    display: grid;
+    grid-template-columns: repeat({{ benefits_per_row_m }}, minmax(0, 1fr));
+    gap: {{ st.benefit_gap_mobile | default: 20 }}px;
+    width: 100%;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .iwb__benefits {
+      grid-template-columns: repeat({{ benefits_per_row_d }}, minmax(0, 1fr));
+      gap: {{ st.benefit_gap_desktop | default: 28 }}px;
+    }
+  }
+
+  #shopify-section-{{ sid }} .iwb__benefit {
+    display: flex;
+    flex-direction: {% if st.benefit_layout == 'horizontal' %}row{% else %}column{% endif %};
+    align-items: {% if st.benefit_layout == 'horizontal' %}flex-start{% else %}flex-start{% endif %};
+    gap: {{ st.benefit_inner_gap | default: 12 }}px;
+    padding: {{ st.benefit_padding | default: 0 }}px;
+    background: {{ st.benefit_bg | default: 'transparent' }};
+    border: {{ st.benefit_border_width | default: 0 }}px solid {{ st.benefit_border_color | default: 'rgba(127,73,176,0.18)' }};
+    border-radius: {{ st.benefit_radius | default: 12 }}px;
+    text-align: {% if st.benefit_layout == 'horizontal' %}left{% else %}{{ _ta }}{% endif %};
+  }
+  #shopify-section-{{ sid }} .iwb__benefit-icon {
+    flex-shrink: 0;
+    width: {{ st.icon_size | default: 40 }}px;
+    height: {{ st.icon_size | default: 40 }}px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: {{ st.icon_color | default: '#7C3AED' }};
+    background: {{ st.icon_bg | default: 'transparent' }};
+    border-radius: {{ st.icon_radius | default: 8 }}px;
+    padding: {{ st.icon_padding | default: 0 }}px;
+    box-sizing: border-box;
+  }
+  #shopify-section-{{ sid }} .iwb__benefit-icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  #shopify-section-{{ sid }} .iwb__benefit-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  #shopify-section-{{ sid }} .iwb__benefit-icon svg[data-iwb-fill] {
+    fill: currentColor;
+    stroke: none;
+  }
+  #shopify-section-{{ sid }} .iwb__benefit-body {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  #shopify-section-{{ sid }} .iwb__benefit-heading {
+    font-size: {{ st.benefit_heading_size | default: 17 }}px;
+    font-weight: 700;
+    color: {{ st.benefit_heading_color | default: '#3F2A5C' }};
+    line-height: 1.3;
+    margin: 0 0 {{ st.benefit_heading_gap | default: 6 }}px 0;
+  }
+  #shopify-section-{{ sid }} .iwb__benefit-text {
+    font-size: {{ st.benefit_text_size | default: 14 }}px;
+    color: {{ st.benefit_text_color | default: '#5B4480' }};
+    line-height: 1.5;
+  }
+  #shopify-section-{{ sid }} .iwb__benefit-text p { margin: 0 0 0.5em 0; }
+  #shopify-section-{{ sid }} .iwb__benefit-text p:last-child { margin: 0; }
+{% comment %}{% endcomment %}</style>
+
+<div id="iwb-{{ sid }}" class="iwb section sec__image-text-benefits{% if media_count == 0 %} iwb--no-media{% endif %}" data-section-id="{{ sid }}">
+  <div class="iwb__inner">
+    <div class="iwb__grid">
+
+      {%- if media_count > 0 -%}
+        <div class="iwb__media">
+          <div class="iwb__media-grid iwb__media-grid--{{ final_layout }}" {% if final_layout == 'carousel' %}data-iwb-carousel="1"{% endif %}>
+            {%- for blk in media_blocks -%}
+              {%- assign mb = blk.settings -%}
+              <div class="iwb__slot" {{ blk.shopify_attributes }}>
+                {%- liquid
+                  assign use_video = false
+                  if mb.media_type == 'video' or mb.media_type == 'video_url'
+                    assign use_video = true
+                  endif
+                  assign autoplay = mb.autoplay
+                  if autoplay == nil
+                    assign autoplay = true
+                  endif
+                  assign muted = mb.muted
+                  if muted == nil
+                    assign muted = true
+                  endif
+                  assign loop_video = mb.loop
+                  if loop_video == nil
+                    assign loop_video = true
+                  endif
+                -%}
+                {%- if mb.media_type == 'video' and mb.video != blank -%}
+                  {{ mb.video | video_tag: autoplay: autoplay, muted: muted, playsinline: true, loop: loop_video, controls: mb.show_controls, image_size: '1200x' }}
+                {%- elsif mb.media_type == 'video_url' and mb.video_url != blank -%}
+                  <video
+                    src="{{ mb.video_url }}"
+                    {% if autoplay %}autoplay{% endif %}
+                    {% if muted %}muted{% endif %}
+                    {% if loop_video %}loop{% endif %}
+                    {% if mb.show_controls %}controls{% endif %}
+                    playsinline></video>
+                {%- elsif mb.image != blank -%}
+                  <img
+                    src="{{ mb.image | image_url: width: 1200 }}"
+                    srcset="{{ mb.image | image_url: width: 600 }} 600w,
+                            {{ mb.image | image_url: width: 900 }} 900w,
+                            {{ mb.image | image_url: width: 1200 }} 1200w"
+                    sizes="(min-width: 900px) {{ slot_width_pct | round: 1 }}vw, {{ slot_width_pct | round: 1 }}vw"
+                    alt="{{ mb.image.alt | default: fb_accessibility_media | escape }}"
+                    loading="lazy"
+                  >
+                {%- else -%}
+                  <img src="https://2dbags.co/wp-content/uploads/revslider/lookbook1-demo_slider/placeholder.jpg" alt="{{ 'accessibility.placeholder' | t }}" loading="lazy">
+                {%- endif -%}
+              </div>
+            {%- endfor -%}
+          </div>
+
+          {%- if final_layout == 'carousel' and media_count > 1 -%}
+            <div class="iwb__progress" data-iwb-progress role="progressbar" aria-label="{{ 'accessibility.carousel_progress' | t }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div class="iwb__progress-fill" data-iwb-progress-fill></div>
+            </div>
+          {%- endif -%}
+        </div>
+      {%- endif -%}
+
+      <div class="iwb__text">
+        {%- assign all_benefits     = section.blocks | where: 'type', 'benefit' -%}
+        {%- assign benefits_anchors = section.blocks | where: 'type', 'benefits_group' -%}
+        {%- assign has_anchor       = false -%}
+        {%- if benefits_anchors.size > 0 -%}{%- assign has_anchor = true -%}{%- endif -%}
+
+        {%- for block in section.blocks -%}
+          {%- assign bs = block.settings -%}
+          {%- case block.type -%}
+
+            {%- when 'heading' -%}
+              {%- assign htag = bs.tag | default: 'h2' -%}
+              <{{ htag }} class="iwb__heading" data-block-id="{{ block.id }}" {{ block.shopify_attributes }}>{%- if bs.text != blank -%}{{ bs.text | escape }}{%- else -%}Heading text{%- endif -%}</{{ htag }}>
+
+            {%- when 'subheading' -%}
+              <div class="iwb__subheading" data-block-id="{{ block.id }}" {{ block.shopify_attributes }}>{%- if bs.text != blank -%}{{ bs.text }}{%- else -%}<p>{{ 'accessibility.add_supporting_copy' | t }}</p>{%- endif -%}</div>
+
+            {%- when 'benefits_group' -%}
+              <div class="iwb__benefits" {{ block.shopify_attributes }}>
+                {%- if all_benefits.size > 0 -%}
+                  {%- for ben in all_benefits -%}
+                    {%- assign bb = ben.settings -%}
+                    <div class="iwb__benefit" {{ ben.shopify_attributes }}>
+                      <div class="iwb__benefit-icon">{%- render 'iwb-icon', bb: bb -%}</div>
+                      <div class="iwb__benefit-body">
+                        <div class="iwb__benefit-heading">{%- if bb.heading != blank -%}{{ bb.heading | escape }}{%- else -%}Benefit heading{%- endif -%}</div>
+                        <div class="iwb__benefit-text">{%- if bb.text != blank -%}{{ bb.text }}{%- else -%}<p>{{ 'accessibility.describe_benefit' | t }}</p>{%- endif -%}</div>
+                      </div>
+                    </div>
+                  {%- endfor -%}
+                {%- else -%}
+                  <div class="iwb__benefit"><div class="iwb__benefit-body" style="opacity:.6">{{ 'accessibility.add_benefit_blocks' | t }}</div></div>
+                {%- endif -%}
+              </div>
+
+            {%- when 'benefit' -%}
+              {%- if has_anchor == false -%}
+                {%- assign prev_index = forloop.index0 | minus: 1 -%}
+                {%- assign prev_block = section.blocks[prev_index] -%}
+                {%- assign open_group = false -%}
+                {%- if forloop.first -%}{%- assign open_group = true -%}{%- elsif prev_block.type != 'benefit' -%}{%- assign open_group = true -%}{%- endif -%}
+                {%- if open_group -%}<div class="iwb__benefits iwb__benefits--orphan">{%- endif -%}
+
+                {%- assign bb = bs -%}
+                <div class="iwb__benefit" {{ block.shopify_attributes }}>
+                  <div class="iwb__benefit-icon">{%- render 'iwb-icon', bb: bb -%}</div>
+                  <div class="iwb__benefit-body">
+                    <div class="iwb__benefit-heading">{%- if bb.heading != blank -%}{{ bb.heading | escape }}{%- else -%}Benefit heading{%- endif -%}</div>
+                    <div class="iwb__benefit-text">{%- if bb.text != blank -%}{{ bb.text }}{%- else -%}<p>{{ 'accessibility.describe_benefit' | t }}</p>{%- endif -%}</div>
+                  </div>
+                </div>
+
+                {%- assign next_index = forloop.index0 | plus: 1 -%}
+                {%- assign next_block = section.blocks[next_index] -%}
+                {%- assign close_group = false -%}
+                {%- if forloop.last -%}{%- assign close_group = true -%}{%- elsif next_block.type != 'benefit' -%}{%- assign close_group = true -%}{%- endif -%}
+                {%- if close_group -%}</div>{%- endif -%}
+              {%- endif -%}
+
+            {%- when 'footnote' -%}
+              <p class="iwb__footnote" data-block-id="{{ block.id }}" {{ block.shopify_attributes }}>{%- if bs.text != blank -%}{{ bs.text | escape }}{%- else -%}Add a small note here.{%- endif -%}</p>
+
+          {%- endcase -%}
+        {%- endfor -%}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function() {
+    var section = document.getElementById('iwb-{{ sid }}');
+    if (!section) return;
+
+    var carousel = section.querySelector('[data-iwb-carousel="1"]');
+    if (!carousel) return;
+    var progress = section.querySelector('[data-iwb-progress]');
+    var fill     = section.querySelector('[data-iwb-progress-fill]');
+
+    function update() {
+      if (!progress || !fill) return;
+      var max = carousel.scrollWidth - carousel.clientWidth;
+      if (max <= 0) { fill.style.width = '100%'; progress.setAttribute('aria-valuenow', '100'); return; }
+      var pct = Math.max(0, Math.min(100, (carousel.scrollLeft / max) * 100));
+      fill.style.width = pct + '%';
+      progress.setAttribute('aria-valuenow', Math.round(pct));
+    }
+    if (progress) {
+      progress.addEventListener('click', function(e) {
+        var rect = progress.getBoundingClientRect();
+        var pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        var max = carousel.scrollWidth - carousel.clientWidth;
+        carousel.scrollTo({ left: max * pct, behavior: 'smooth' });
+      });
+    }
+    var ticking = false;
+    carousel.addEventListener('scroll', function() {
+      if (!ticking) { window.requestAnimationFrame(function(){ update(); ticking = false; }); ticking = true; }
+    }, { passive: true });
+    window.addEventListener('resize', update);
+    update();
+
+    var isDown = false, moved = false, startX = 0, startScroll = 0, lastX = 0, velocity = 0, lastT = 0;
+    var DRAG_THRESHOLD = 5;
+    function onDown(e) {
+      if (e.button !== undefined && e.button !== 0) return;
+      isDown = true; moved = false;
+      startX = e.pageX; lastX = e.pageX; lastT = Date.now(); velocity = 0;
+      startScroll = carousel.scrollLeft;
+    }
+    function onMove(e) {
+      if (!isDown) return;
+      var dx = e.pageX - startX;
+      if (!moved && Math.abs(dx) < DRAG_THRESHOLD) return;
+      if (!moved) { moved = true; carousel.classList.add('iwb--dragging'); }
+      e.preventDefault();
+      var now = Date.now();
+      var dt = Math.max(1, now - lastT);
+      velocity = (e.pageX - lastX) / dt;
+      lastX = e.pageX; lastT = now;
+      carousel.scrollLeft = startScroll - dx;
+    }
+    function onUp() {
+      if (!isDown) return;
+      isDown = false;
+      if (moved) {
+        var v = velocity * 18;
+        var start = carousel.scrollLeft;
+        var target = start - v;
+        var max = carousel.scrollWidth - carousel.clientWidth;
+        target = Math.max(0, Math.min(max, target));
+        carousel.scrollTo({ left: target, behavior: 'smooth' });
+        setTimeout(function(){ carousel.classList.remove('iwb--dragging'); }, 320);
+        var swallow = function(ev){ ev.stopPropagation(); ev.preventDefault(); };
+        carousel.addEventListener('click', swallow, { capture: true, once: true });
+      } else {
+        carousel.classList.remove('iwb--dragging');
+      }
+    }
+    carousel.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove, { passive: false });
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('blur', onUp);
+    carousel.addEventListener('dragstart', function(e){ e.preventDefault(); });
+
+    carousel.setAttribute('tabindex', '0');
+    carousel.addEventListener('keydown', function(e) {
+      var slots = carousel.querySelectorAll('.iwb__slot');
+      if (!slots.length) return;
+      var step = slots[0].offsetWidth + 12;
+      if (e.key === 'ArrowLeft')  { e.preventDefault(); carousel.scrollBy({ left: -step, behavior: 'smooth' }); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); carousel.scrollBy({ left:  step, behavior: 'smooth' }); }
+    });
+  })();
+{% comment %}{% endcomment %}</script>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "image-with-text-benefits",
+  "name": "Image With Text Benefits",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "Layout"
+    },
+    {
+      "type": "select",
+      "id": "section_width",
+      "label": "Section width",
+      "default": "container",
+      "options": [
+        {
+          "value": "container",
+          "label": "Default"
+        },
+        {
+          "value": "fluid_container",
+          "label": "Fluid container"
+        },
+        {
+          "value": "stretch_width",
+          "label": "Stretched"
+        },
+        {
+          "value": "full_width",
+          "label": "Full width"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "media_position",
+      "label": "Media position (desktop)",
+      "default": "left",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "content_align",
+      "label": "Content alignment (desktop)",
+      "default": "left",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "content_align_mobile",
+      "label": "Content alignment (mobile)",
+      "default": "left",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "media_column_width",
+      "label": "Media column width (desktop)",
+      "min": 30,
+      "max": 70,
+      "step": 1,
+      "unit": "%",
+      "default": 50
+    },
+    {
+      "type": "range",
+      "id": "text_max_width",
+      "label": "Text max width (when no media)",
+      "min": 400,
+      "max": 1400,
+      "step": 20,
+      "unit": "px",
+      "default": 900
+    },
+    {
+      "type": "range",
+      "id": "gap_desktop",
+      "label": "Column gap (desktop)",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "default": 64
+    },
+    {
+      "type": "range",
+      "id": "gap_mobile",
+      "label": "Column gap (mobile)",
+      "min": 0,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 32
+    },
+    {
+      "type": "range",
+      "id": "content_gap",
+      "label": "Vertical gap between blocks",
+      "min": 0,
+      "max": 60,
+      "step": 2,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "header",
+      "id": "hdr_12",
+      "label": "Media layout"
+    },
+    {
+      "type": "select",
+      "id": "per_row",
+      "label": "Items per row",
+      "default": "1.2",
+      "info": "Auto: 1→single, 2→side-by-side, 3+→carousel. Or pick an exact count. Anything more than the chosen count becomes a carousel.",
+      "options": [
+        {
+          "value": "auto",
+          "label": "Auto"
+        },
+        {
+          "value": "1",
+          "label": "1 per row"
+        },
+        {
+          "value": "1.2",
+          "label": "1.2 per row"
+        },
+        {
+          "value": "1.5",
+          "label": "1.5 per row"
+        },
+        {
+          "value": "2",
+          "label": "2 per row"
+        },
+        {
+          "value": "2.5",
+          "label": "2.5 per row"
+        },
+        {
+          "value": "3",
+          "label": "3 per row"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "media_aspect_w",
+      "label": "Slot aspect — width",
+      "min": 1,
+      "max": 16,
+      "step": 1,
+      "default": 3
+    },
+    {
+      "type": "range",
+      "id": "media_aspect_h",
+      "label": "Slot aspect — height",
+      "min": 1,
+      "max": 24,
+      "step": 1,
+      "default": 4
+    },
+    {
+      "type": "range",
+      "id": "media_radius",
+      "label": "Slot corner radius",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "media_gap",
+      "label": "Gap between slots",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "color",
+      "id": "progress_track",
+      "label": "Progress bar track",
+      "default": "#E5E7EB"
+    },
+    {
+      "type": "color",
+      "id": "progress_fill",
+      "label": "Progress bar fill",
+      "default": "#3F2A5C"
+    },
+    {
+      "type": "range",
+      "id": "progress_height",
+      "label": "Progress bar height",
+      "min": 1,
+      "max": 8,
+      "step": 1,
+      "unit": "px",
+      "default": 2
+    },
+    {
+      "type": "range",
+      "id": "progress_margin",
+      "label": "Progress bar top margin",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "default": 18
+    },
+    {
+      "type": "header",
+      "id": "hdr_22",
+      "label": "Benefits grid"
+    },
+    {
+      "type": "select",
+      "id": "benefits_per_row_desktop",
+      "label": "Benefits per row (desktop)",
+      "default": "2",
+      "options": [
+        {
+          "value": "1",
+          "label": "1"
+        },
+        {
+          "value": "2",
+          "label": "2"
+        },
+        {
+          "value": "3",
+          "label": "3"
+        },
+        {
+          "value": "4",
+          "label": "4"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "benefits_per_row_mobile",
+      "label": "Benefits per row (mobile)",
+      "default": "1",
+      "options": [
+        {
+          "value": "1",
+          "label": "1"
+        },
+        {
+          "value": "2",
+          "label": "2"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "benefit_layout",
+      "label": "Benefit layout",
+      "default": "vertical",
+      "options": [
+        {
+          "value": "vertical",
+          "label": "Icon above text"
+        },
+        {
+          "value": "horizontal",
+          "label": "Icon beside text"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "benefit_gap_desktop",
+      "label": "Grid gap (desktop)",
+      "min": 0,
+      "max": 60,
+      "step": 2,
+      "unit": "px",
+      "default": 28
+    },
+    {
+      "type": "range",
+      "id": "benefit_gap_mobile",
+      "label": "Grid gap (mobile)",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "default": 20
+    },
+    {
+      "type": "range",
+      "id": "benefit_inner_gap",
+      "label": "Icon → text gap",
+      "min": 0,
+      "max": 32,
+      "step": 2,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "range",
+      "id": "benefit_padding",
+      "label": "Card padding",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "default": 18
+    },
+    {
+      "type": "color",
+      "id": "benefit_bg",
+      "label": "Card background",
+      "default": "#FAFAFA"
+    },
+    {
+      "type": "range",
+      "id": "benefit_radius",
+      "label": "Card corner radius",
+      "min": 0,
+      "max": 32,
+      "step": 1,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "range",
+      "id": "benefit_border_width",
+      "label": "Card border width",
+      "min": 0,
+      "max": 4,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "color",
+      "id": "benefit_border_color",
+      "label": "Card border color"
+    },
+    {
+      "type": "range",
+      "id": "benefit_heading_size",
+      "label": "Benefit heading size",
+      "min": 12,
+      "max": 24,
+      "step": 1,
+      "unit": "px",
+      "default": 17
+    },
+    {
+      "type": "color",
+      "id": "benefit_heading_color",
+      "label": "Benefit heading color",
+      "default": "#3F2A5C"
+    },
+    {
+      "type": "range",
+      "id": "benefit_heading_gap",
+      "label": "Heading → text gap",
+      "min": 0,
+      "max": 20,
+      "step": 1,
+      "unit": "px",
+      "default": 6
+    },
+    {
+      "type": "range",
+      "id": "benefit_text_size",
+      "label": "Benefit text size",
+      "min": 11,
+      "max": 20,
+      "step": 1,
+      "unit": "px",
+      "default": 14
+    },
+    {
+      "type": "color",
+      "id": "benefit_text_color",
+      "label": "Benefit text color",
+      "default": "#5B4480"
+    },
+    {
+      "type": "header",
+      "id": "hdr_39",
+      "label": "Icon style"
+    },
+    {
+      "type": "range",
+      "id": "icon_size",
+      "label": "Icon size",
+      "min": 16,
+      "max": 96,
+      "step": 2,
+      "unit": "px",
+      "default": 40
+    },
+    {
+      "type": "range",
+      "id": "icon_padding",
+      "label": "Icon inner padding",
+      "min": 0,
+      "max": 24,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "icon_radius",
+      "label": "Icon corner radius",
+      "min": 0,
+      "max": 50,
+      "step": 1,
+      "unit": "px",
+      "default": 8
+    },
+    {
+      "type": "color",
+      "id": "icon_color",
+      "label": "Icon color",
+      "default": "#7C3AED"
+    },
+    {
+      "type": "color",
+      "id": "icon_bg",
+      "label": "Icon background"
+    },
+    {
+      "type": "header",
+      "id": "hdr_45",
+      "label": "Custom fonts (optional)"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_custom_fonts",
+      "label": "Enable custom fonts",
+      "default": false,
+      "info": "When off, this section uses the theme's global Typography fonts."
+    },
+    {
+      "type": "font_picker",
+      "id": "heading_font",
+      "label": "Heading font",
+      "default": "assistant_n4"
+    },
+    {
+      "type": "font_picker",
+      "id": "body_font",
+      "label": "Body font",
+      "default": "assistant_n4"
+    },
+    {
+      "type": "header",
+      "id": "hdr_49",
+      "label": "Section colors + spacing"
+    },
+    {
+      "type": "color",
+      "id": "section_bg",
+      "label": "Section background",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Default text color",
+      "default": "#0F172A"
+    },
+    {
+      "type": "range",
+      "id": "padding_top_desktop",
+      "label": "Top padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 100
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_desktop",
+      "label": "Bottom padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 100
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "label": "Top padding (mobile)",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "default": 60
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "label": "Bottom padding (mobile)",
+      "min": 0,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "default": 60
+    },
+    {
+      "type": "range",
+      "id": "side_padding_desktop",
+      "label": "Horizontal padding (desktop)",
+      "min": 0,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 32
+    },
+    {
+      "type": "range",
+      "id": "side_padding_mobile",
+      "label": "Horizontal padding (mobile)",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "default": 20
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_desktop",
+      "label": "Top margin (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_desktop",
+      "label": "Bottom margin (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_mobile",
+      "label": "Top margin (mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_mobile",
+      "label": "Bottom margin (mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 0
+    }
+  ],
+  "blocks": [
+    {
+      "type": "media",
+      "name": "Image / Video",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Choose what to show"
+        },
+        {
+          "type": "select",
+          "id": "media_type",
+          "label": "Media type",
+          "default": "image",
+          "options": [
+            {
+              "value": "image",
+              "label": "Image"
+            },
+            {
+              "value": "video",
+              "label": "Video (uploaded to Shopify)"
+            },
+            {
+              "value": "video_url",
+              "label": "Video URL (external .mp4)"
+            }
+          ]
+        },
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Image"
+        },
+        {
+          "type": "video",
+          "id": "video",
+          "label": "Video (uploaded)",
+          "info": "Pick a Shopify-uploaded video file."
+        },
+        {
+          "type": "url",
+          "id": "video_url",
+          "label": "Video URL",
+          "info": "External direct .mp4 URL."
+        },
+        {
+          "type": "header",
+          "id": "hdr_6",
+          "label": "Video playback"
+        },
+        {
+          "type": "checkbox",
+          "id": "autoplay",
+          "label": "Autoplay",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "muted",
+          "label": "Muted",
+          "default": true,
+          "info": "Required for autoplay in most browsers."
+        },
+        {
+          "type": "checkbox",
+          "id": "loop",
+          "label": "Loop",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "show_controls",
+          "label": "Show player controls (play / pause)",
+          "default": false
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "name": "Heading",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Text",
+          "default": "REAL BENEFITS, REAL RESULTS"
+        },
+        {
+          "type": "select",
+          "id": "tag",
+          "label": "HTML tag",
+          "default": "h2",
+          "options": [
+            {
+              "value": "h1",
+              "label": "H1"
+            },
+            {
+              "value": "h2",
+              "label": "H2"
+            },
+            {
+              "value": "h3",
+              "label": "H3"
+            }
+          ]
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#3F2A5C"
+        },
+        {
+          "type": "range",
+          "id": "size_desktop",
+          "label": "Size (desktop)",
+          "min": 24,
+          "max": 80,
+          "step": 1,
+          "unit": "px",
+          "default": 48
+        },
+        {
+          "type": "range",
+          "id": "size_mobile",
+          "label": "Size (mobile)",
+          "min": 18,
+          "max": 56,
+          "step": 1,
+          "unit": "px",
+          "default": 32
+        },
+        {
+          "type": "checkbox",
+          "id": "uppercase",
+          "label": "UPPERCASE",
+          "default": true
+        }
+      ],
+      "limit": 2
+    },
+    {
+      "type": "subheading",
+      "name": "Subheading",
+      "settings": [
+        {
+          "type": "richtext",
+          "id": "text",
+          "label": "Text",
+          "default": "<p>{{ 'accessibility.add_supporting_copy' | t }}</p>"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#5B4480"
+        },
+        {
+          "type": "range",
+          "id": "size_desktop",
+          "label": "Size (desktop)",
+          "min": 12,
+          "max": 24,
+          "step": 1,
+          "unit": "px",
+          "default": 16
+        },
+        {
+          "type": "range",
+          "id": "size_mobile",
+          "label": "Size (mobile)",
+          "min": 11,
+          "max": 20,
+          "step": 1,
+          "unit": "px",
+          "default": 14
+        }
+      ],
+      "limit": 2
+    },
+    {
+      "type": "benefits_group",
+      "name": "Benefits list (anchor)",
+      "settings": [
+        {
+          "type": "paragraph",
+          "id": "para_1",
+          "label": "Drag this block to position the benefits grid in the right column. Add Benefit blocks below to populate it.",
+          "content": "Drag this block to position the benefits grid in the right column. Add Benefit blocks below to populate it."
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "benefit",
+      "name": "Benefit",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Icon"
+        },
+        {
+          "type": "select",
+          "id": "icon_source",
+          "label": "Icon source",
+          "default": "library",
+          "options": [
+            {
+              "value": "library",
+              "label": "Icon library"
+            },
+            {
+              "value": "image",
+              "label": "Custom image"
+            },
+            {
+              "value": "svg",
+              "label": "Custom SVG code"
+            },
+            {
+              "value": "none",
+              "label": "No icon"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "icon_name",
+          "label": "Icon (library)",
+          "default": "check",
+          "info": "Used when Icon source = Library.",
+          "options": [
+            {
+              "value": "check",
+              "label": "Check"
+            },
+            {
+              "value": "star",
+              "label": "Star"
+            },
+            {
+              "value": "heart",
+              "label": "Heart"
+            },
+            {
+              "value": "leaf",
+              "label": "Leaf"
+            },
+            {
+              "value": "sparkle",
+              "label": "Sparkle"
+            },
+            {
+              "value": "shield",
+              "label": "Shield"
+            },
+            {
+              "value": "lock",
+              "label": "Lock"
+            },
+            {
+              "value": "gift",
+              "label": "Gift"
+            },
+            {
+              "value": "truck",
+              "label": "Truck (delivery)"
+            },
+            {
+              "value": "clock",
+              "label": "Clock"
+            },
+            {
+              "value": "drop",
+              "label": "Water drop"
+            },
+            {
+              "value": "sun",
+              "label": "Sun"
+            },
+            {
+              "value": "moon",
+              "label": "Moon"
+            },
+            {
+              "value": "flame",
+              "label": "Flame"
+            },
+            {
+              "value": "flask",
+              "label": "Flask"
+            },
+            {
+              "value": "bottle",
+              "label": "Bottle"
+            },
+            {
+              "value": "feather",
+              "label": "Feather"
+            },
+            {
+              "value": "smile",
+              "label": "Smile"
+            },
+            {
+              "value": "thumbs_up",
+              "label": "Thumbs up"
+            },
+            {
+              "value": "tag",
+              "label": "Tag"
+            },
+            {
+              "value": "globe",
+              "label": "Globe"
+            },
+            {
+              "value": "recycle",
+              "label": "Recycle"
+            },
+            {
+              "value": "diamond",
+              "label": "Diamond"
+            },
+            {
+              "value": "award",
+              "label": "Award"
+            }
+          ]
+        },
+        {
+          "type": "image_picker",
+          "id": "icon_image",
+          "label": "Icon image",
+          "info": "Used when Icon source = Custom image."
+        },
+        {
+          "type": "textarea",
+          "id": "icon_svg",
+          "label": "Custom SVG code",
+          "info": "Paste a full <svg>…</svg>. Used when Icon source = Custom SVG. Tip: remove fixed width/height; the icon size setting controls dimensions."
+        },
+        {
+          "type": "header",
+          "id": "hdr_6",
+          "label": "Content"
+        },
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Heading",
+          "default": "Benefit heading"
+        },
+        {
+          "type": "richtext",
+          "id": "text",
+          "label": "Body text",
+          "default": "<p>A short sentence describing this benefit and why it matters.</p>"
+        }
+      ]
+    },
+    {
+      "type": "footnote",
+      "name": "Footnote",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Text",
+          "default": "Tested on 20,000+ customers"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#7B5BA0"
+        },
+        {
+          "type": "range",
+          "id": "size",
+          "label": "Font size",
+          "min": 10,
+          "max": 18,
+          "step": 1,
+          "unit": "px",
+          "default": 13
+        },
+        {
+          "type": "range",
+          "id": "margin_top",
+          "label": "Top margin",
+          "min": 0,
+          "max": 40,
+          "step": 2,
+          "unit": "px",
+          "default": 12
+        }
+      ],
+      "limit": 1
+    }
+  ],
+  "presets": [
+    {
+      "name": "Image With Text Benefits",
+      "category": "Image With Text",
+      "blocks": [
+        {
+          "type": "media",
+          "settings": {
+            "media_type": "image"
+          }
+        },
+        {
+          "type": "heading",
+          "settings": {
+            "text": "REAL BENEFITS, REAL RESULTS"
+          }
+        },
+        {
+          "type": "benefits_group"
+        },
+        {
+          "type": "benefit",
+          "settings": {
+            "icon_source": "library",
+            "icon_name": "drop",
+            "heading": "Deep hydration",
+            "text": "<p>Locks in moisture for up to 24 hours so skin stays soft and supple.</p>"
+          }
+        },
+        {
+          "type": "benefit",
+          "settings": {
+            "icon_source": "library",
+            "icon_name": "leaf",
+            "heading": "Clean ingredients",
+            "text": "<p>Plant-based formula, free from parabens, sulfates, and synthetic dyes.</p>"
+          }
+        },
+        {
+          "type": "benefit",
+          "settings": {
+            "icon_source": "library",
+            "icon_name": "sparkle",
+            "heading": "Visible glow",
+            "text": "<p>Brightens dull skin and restores a radiant, healthy-looking finish.</p>"
+          }
+        },
+        {
+          "type": "benefit",
+          "settings": {
+            "icon_source": "library",
+            "icon_name": "shield",
+            "heading": "All-day protection",
+            "text": "<p>A lightweight barrier that defends against pollution and dryness.</p>"
+          }
+        },
+        {
+          "type": "footnote",
+          "settings": {
+            "text": "Tested on 20,000+ customers"
+          }
+        }
+      ]
+    }
+  ],
+  "shopify": {
+    "name": "Image With Text Benefits",
+    "tag": "section",
+    "class": "section sec__image-text-benefits",
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "container",
+        "options": [
+          {
+            "value": "container",
+            "label": "Default"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "media_position",
+        "label": "Media position (desktop)",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "content_align",
+        "label": "Content alignment (desktop)",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "content_align_mobile",
+        "label": "Content alignment (mobile)",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "media_column_width",
+        "label": "Media column width (desktop)",
+        "min": 30,
+        "max": 70,
+        "step": 1,
+        "unit": "%",
+        "default": 50
+      },
+      {
+        "type": "range",
+        "id": "text_max_width",
+        "label": "Text max width (when no media)",
+        "min": 400,
+        "max": 1400,
+        "step": 20,
+        "unit": "px",
+        "default": 900
+      },
+      {
+        "type": "range",
+        "id": "gap_desktop",
+        "label": "Column gap (desktop)",
+        "min": 0,
+        "max": 160,
+        "step": 4,
+        "unit": "px",
+        "default": 64
+      },
+      {
+        "type": "range",
+        "id": "gap_mobile",
+        "label": "Column gap (mobile)",
+        "min": 0,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 32
+      },
+      {
+        "type": "range",
+        "id": "content_gap",
+        "label": "Vertical gap between blocks",
+        "min": 0,
+        "max": 60,
+        "step": 2,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "header",
+        "content": "Media layout"
+      },
+      {
+        "type": "select",
+        "id": "per_row",
+        "label": "Items per row",
+        "default": "1.2",
+        "info": "Auto: 1→single, 2→side-by-side, 3+→carousel. Or pick an exact count. Anything more than the chosen count becomes a carousel.",
+        "options": [
+          {
+            "value": "auto",
+            "label": "Auto"
+          },
+          {
+            "value": "1",
+            "label": "1 per row"
+          },
+          {
+            "value": "1.2",
+            "label": "1.2 per row"
+          },
+          {
+            "value": "1.5",
+            "label": "1.5 per row"
+          },
+          {
+            "value": "2",
+            "label": "2 per row"
+          },
+          {
+            "value": "2.5",
+            "label": "2.5 per row"
+          },
+          {
+            "value": "3",
+            "label": "3 per row"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "media_aspect_w",
+        "label": "Slot aspect — width",
+        "min": 1,
+        "max": 16,
+        "step": 1,
+        "default": 3
+      },
+      {
+        "type": "range",
+        "id": "media_aspect_h",
+        "label": "Slot aspect — height",
+        "min": 1,
+        "max": 24,
+        "step": 1,
+        "default": 4
+      },
+      {
+        "type": "range",
+        "id": "media_radius",
+        "label": "Slot corner radius",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "media_gap",
+        "label": "Gap between slots",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "default": 12
+      },
+      {
+        "type": "color",
+        "id": "progress_track",
+        "label": "Progress bar track",
+        "default": "#E5E7EB"
+      },
+      {
+        "type": "color",
+        "id": "progress_fill",
+        "label": "Progress bar fill",
+        "default": "#3F2A5C"
+      },
+      {
+        "type": "range",
+        "id": "progress_height",
+        "label": "Progress bar height",
+        "min": 1,
+        "max": 8,
+        "step": 1,
+        "unit": "px",
+        "default": 2
+      },
+      {
+        "type": "range",
+        "id": "progress_margin",
+        "label": "Progress bar top margin",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "default": 18
+      },
+      {
+        "type": "header",
+        "content": "Benefits grid"
+      },
+      {
+        "type": "select",
+        "id": "benefits_per_row_desktop",
+        "label": "Benefits per row (desktop)",
+        "default": "2",
+        "options": [
+          {
+            "value": "1",
+            "label": "1"
+          },
+          {
+            "value": "2",
+            "label": "2"
+          },
+          {
+            "value": "3",
+            "label": "3"
+          },
+          {
+            "value": "4",
+            "label": "4"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "benefits_per_row_mobile",
+        "label": "Benefits per row (mobile)",
+        "default": "1",
+        "options": [
+          {
+            "value": "1",
+            "label": "1"
+          },
+          {
+            "value": "2",
+            "label": "2"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "benefit_layout",
+        "label": "Benefit layout",
+        "default": "vertical",
+        "options": [
+          {
+            "value": "vertical",
+            "label": "Icon above text"
+          },
+          {
+            "value": "horizontal",
+            "label": "Icon beside text"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "benefit_gap_desktop",
+        "label": "Grid gap (desktop)",
+        "min": 0,
+        "max": 60,
+        "step": 2,
+        "unit": "px",
+        "default": 28
+      },
+      {
+        "type": "range",
+        "id": "benefit_gap_mobile",
+        "label": "Grid gap (mobile)",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "default": 20
+      },
+      {
+        "type": "range",
+        "id": "benefit_inner_gap",
+        "label": "Icon → text gap",
+        "min": 0,
+        "max": 32,
+        "step": 2,
+        "unit": "px",
+        "default": 12
+      },
+      {
+        "type": "range",
+        "id": "benefit_padding",
+        "label": "Card padding",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "default": 18
+      },
+      {
+        "type": "color",
+        "id": "benefit_bg",
+        "label": "Card background",
+        "default": "#FAFAFA"
+      },
+      {
+        "type": "range",
+        "id": "benefit_radius",
+        "label": "Card corner radius",
+        "min": 0,
+        "max": 32,
+        "step": 1,
+        "unit": "px",
+        "default": 12
+      },
+      {
+        "type": "range",
+        "id": "benefit_border_width",
+        "label": "Card border width",
+        "min": 0,
+        "max": 4,
+        "step": 1,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "color",
+        "id": "benefit_border_color",
+        "label": "Card border color",
+        "default": "rgba(127,73,176,0.18)"
+      },
+      {
+        "type": "range",
+        "id": "benefit_heading_size",
+        "label": "Benefit heading size",
+        "min": 12,
+        "max": 24,
+        "step": 1,
+        "unit": "px",
+        "default": 17
+      },
+      {
+        "type": "color",
+        "id": "benefit_heading_color",
+        "label": "Benefit heading color",
+        "default": "#3F2A5C"
+      },
+      {
+        "type": "range",
+        "id": "benefit_heading_gap",
+        "label": "Heading → text gap",
+        "min": 0,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 6
+      },
+      {
+        "type": "range",
+        "id": "benefit_text_size",
+        "label": "Benefit text size",
+        "min": 11,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "color",
+        "id": "benefit_text_color",
+        "label": "Benefit text color",
+        "default": "#5B4480"
+      },
+      {
+        "type": "header",
+        "content": "Icon style"
+      },
+      {
+        "type": "range",
+        "id": "icon_size",
+        "label": "Icon size",
+        "min": 16,
+        "max": 96,
+        "step": 2,
+        "unit": "px",
+        "default": 40
+      },
+      {
+        "type": "range",
+        "id": "icon_padding",
+        "label": "Icon inner padding",
+        "min": 0,
+        "max": 24,
+        "step": 1,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "icon_radius",
+        "label": "Icon corner radius",
+        "min": 0,
+        "max": 50,
+        "step": 1,
+        "unit": "px",
+        "default": 8
+      },
+      {
+        "type": "color",
+        "id": "icon_color",
+        "label": "Icon color",
+        "default": "#7C3AED"
+      },
+      {
+        "type": "color",
+        "id": "icon_bg",
+        "label": "Icon background",
+        "default": "rgba(0,0,0,0)"
+      },
+      {
+        "type": "header",
+        "content": "Custom fonts (optional)"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Enable custom fonts",
+        "default": false,
+        "info": "When off, this section uses the theme's global Typography fonts."
+      },
+      {
+        "type": "font_picker",
+        "id": "heading_font",
+        "label": "Heading font",
+        "default": "assistant_n4"
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Body font",
+        "default": "assistant_n4"
+      },
+      {
+        "type": "header",
+        "content": "Section colors + spacing"
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Section background",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "text_color",
+        "label": "Default text color",
+        "default": "#0F172A"
+      },
+      {
+        "type": "range",
+        "id": "padding_top_desktop",
+        "label": "Top padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 100
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_desktop",
+        "label": "Bottom padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 100
+      },
+      {
+        "type": "range",
+        "id": "padding_top_mobile",
+        "label": "Top padding (mobile)",
+        "min": 0,
+        "max": 160,
+        "step": 4,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_mobile",
+        "label": "Bottom padding (mobile)",
+        "min": 0,
+        "max": 160,
+        "step": 4,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "range",
+        "id": "side_padding_desktop",
+        "label": "Horizontal padding (desktop)",
+        "min": 0,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 32
+      },
+      {
+        "type": "range",
+        "id": "side_padding_mobile",
+        "label": "Horizontal padding (mobile)",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "default": 20
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_mobile",
+        "label": "Top margin (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_mobile",
+        "label": "Bottom margin (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 0
+      }
+    ],
+    "blocks": [
+      {
+        "type": "media",
+        "name": "Image / Video",
+        "settings": [
+          {
+            "type": "header",
+            "content": "Choose what to show"
+          },
+          {
+            "type": "select",
+            "id": "media_type",
+            "label": "Media type",
+            "default": "image",
+            "options": [
+              {
+                "value": "image",
+                "label": "Image"
+              },
+              {
+                "value": "video",
+                "label": "Video (uploaded to Shopify)"
+              },
+              {
+                "value": "video_url",
+                "label": "Video URL (external .mp4)"
+              }
+            ]
+          },
+          {
+            "type": "image_picker",
+            "id": "image",
+            "label": "Image"
+          },
+          {
+            "type": "video",
+            "id": "video",
+            "label": "Video (uploaded)",
+            "info": "Pick a Shopify-uploaded video file."
+          },
+          {
+            "type": "url",
+            "id": "video_url",
+            "label": "Video URL",
+            "info": "External direct .mp4 URL."
+          },
+          {
+            "type": "header",
+            "content": "Video playback"
+          },
+          {
+            "type": "checkbox",
+            "id": "autoplay",
+            "label": "Autoplay",
+            "default": true
+          },
+          {
+            "type": "checkbox",
+            "id": "muted",
+            "label": "Muted",
+            "default": true,
+            "info": "Required for autoplay in most browsers."
+          },
+          {
+            "type": "checkbox",
+            "id": "loop",
+            "label": "Loop",
+            "default": true
+          },
+          {
+            "type": "checkbox",
+            "id": "show_controls",
+            "label": "Show player controls (play / pause)",
+            "default": false
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 2,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Text",
+            "default": "REAL BENEFITS, REAL RESULTS"
+          },
+          {
+            "type": "select",
+            "id": "tag",
+            "label": "HTML tag",
+            "default": "h2",
+            "options": [
+              {
+                "value": "h1",
+                "label": "H1"
+              },
+              {
+                "value": "h2",
+                "label": "H2"
+              },
+              {
+                "value": "h3",
+                "label": "H3"
+              }
+            ]
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#3F2A5C"
+          },
+          {
+            "type": "range",
+            "id": "size_desktop",
+            "label": "Size (desktop)",
+            "min": 24,
+            "max": 80,
+            "step": 1,
+            "unit": "px",
+            "default": 48
+          },
+          {
+            "type": "range",
+            "id": "size_mobile",
+            "label": "Size (mobile)",
+            "min": 18,
+            "max": 56,
+            "step": 1,
+            "unit": "px",
+            "default": 32
+          },
+          {
+            "type": "checkbox",
+            "id": "uppercase",
+            "label": "UPPERCASE",
+            "default": true
+          }
+        ]
+      },
+      {
+        "type": "subheading",
+        "name": "Subheading",
+        "limit": 2,
+        "settings": [
+          {
+            "type": "richtext",
+            "id": "text",
+            "label": "Text",
+            "default": "<p>{{ 'accessibility.add_supporting_copy' | t }}</p>"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#5B4480"
+          },
+          {
+            "type": "range",
+            "id": "size_desktop",
+            "label": "Size (desktop)",
+            "min": 12,
+            "max": 24,
+            "step": 1,
+            "unit": "px",
+            "default": 16
+          },
+          {
+            "type": "range",
+            "id": "size_mobile",
+            "label": "Size (mobile)",
+            "min": 11,
+            "max": 20,
+            "step": 1,
+            "unit": "px",
+            "default": 14
+          }
+        ]
+      },
+      {
+        "type": "benefits_group",
+        "name": "Benefits list (anchor)",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "paragraph",
+            "content": "Drag this block to position the benefits grid in the right column. Add Benefit blocks below to populate it."
+          }
+        ]
+      },
+      {
+        "type": "benefit",
+        "name": "Benefit",
+        "settings": [
+          {
+            "type": "header",
+            "content": "Icon"
+          },
+          {
+            "type": "select",
+            "id": "icon_source",
+            "label": "Icon source",
+            "default": "library",
+            "options": [
+              {
+                "value": "library",
+                "label": "Icon library"
+              },
+              {
+                "value": "image",
+                "label": "Custom image"
+              },
+              {
+                "value": "svg",
+                "label": "Custom SVG code"
+              },
+              {
+                "value": "none",
+                "label": "No icon"
+              }
+            ]
+          },
+          {
+            "type": "select",
+            "id": "icon_name",
+            "label": "Icon (library)",
+            "default": "check",
+            "info": "Used when Icon source = Library.",
+            "options": [
+              {
+                "value": "check",
+                "label": "Check"
+              },
+              {
+                "value": "star",
+                "label": "Star"
+              },
+              {
+                "value": "heart",
+                "label": "Heart"
+              },
+              {
+                "value": "leaf",
+                "label": "Leaf"
+              },
+              {
+                "value": "sparkle",
+                "label": "Sparkle"
+              },
+              {
+                "value": "shield",
+                "label": "Shield"
+              },
+              {
+                "value": "lock",
+                "label": "Lock"
+              },
+              {
+                "value": "gift",
+                "label": "Gift"
+              },
+              {
+                "value": "truck",
+                "label": "Truck (delivery)"
+              },
+              {
+                "value": "clock",
+                "label": "Clock"
+              },
+              {
+                "value": "drop",
+                "label": "Water drop"
+              },
+              {
+                "value": "sun",
+                "label": "Sun"
+              },
+              {
+                "value": "moon",
+                "label": "Moon"
+              },
+              {
+                "value": "flame",
+                "label": "Flame"
+              },
+              {
+                "value": "flask",
+                "label": "Flask"
+              },
+              {
+                "value": "bottle",
+                "label": "Bottle"
+              },
+              {
+                "value": "feather",
+                "label": "Feather"
+              },
+              {
+                "value": "smile",
+                "label": "Smile"
+              },
+              {
+                "value": "thumbs_up",
+                "label": "Thumbs up"
+              },
+              {
+                "value": "tag",
+                "label": "Tag"
+              },
+              {
+                "value": "globe",
+                "label": "Globe"
+              },
+              {
+                "value": "recycle",
+                "label": "Recycle"
+              },
+              {
+                "value": "diamond",
+                "label": "Diamond"
+              },
+              {
+                "value": "award",
+                "label": "Award"
+              }
+            ]
+          },
+          {
+            "type": "image_picker",
+            "id": "icon_image",
+            "label": "Icon image",
+            "info": "Used when Icon source = Custom image."
+          },
+          {
+            "type": "textarea",
+            "id": "icon_svg",
+            "label": "Custom SVG code",
+            "info": "Paste a full <svg>…</svg>. Used when Icon source = Custom SVG. Tip: remove fixed width/height; the icon size setting controls dimensions."
+          },
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "text",
+            "id": "heading",
+            "label": "Heading",
+            "default": "Benefit heading"
+          },
+          {
+            "type": "richtext",
+            "id": "text",
+            "label": "Body text",
+            "default": "<p>A short sentence describing this benefit and why it matters.</p>"
+          }
+        ]
+      },
+      {
+        "type": "footnote",
+        "name": "Footnote",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Text",
+            "default": "Tested on 20,000+ customers"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#7B5BA0"
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "label": "Font size",
+            "min": 10,
+            "max": 18,
+            "step": 1,
+            "unit": "px",
+            "default": 13
+          },
+          {
+            "type": "range",
+            "id": "margin_top",
+            "label": "Top margin",
+            "min": 0,
+            "max": 40,
+            "step": 2,
+            "unit": "px",
+            "default": 12
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Image With Text Benefits",
+        "category": "Image With Text",
+        "blocks": [
+          {
+            "type": "media",
+            "settings": {
+              "media_type": "image"
+            }
+          },
+          {
+            "type": "heading",
+            "settings": {
+              "text": "REAL BENEFITS, REAL RESULTS"
+            }
+          },
+          {
+            "type": "benefits_group"
+          },
+          {
+            "type": "benefit",
+            "settings": {
+              "icon_source": "library",
+              "icon_name": "drop",
+              "heading": "Deep hydration",
+              "text": "<p>Locks in moisture for up to 24 hours so skin stays soft and supple.</p>"
+            }
+          },
+          {
+            "type": "benefit",
+            "settings": {
+              "icon_source": "library",
+              "icon_name": "leaf",
+              "heading": "Clean ingredients",
+              "text": "<p>Plant-based formula, free from parabens, sulfates, and synthetic dyes.</p>"
+            }
+          },
+          {
+            "type": "benefit",
+            "settings": {
+              "icon_source": "library",
+              "icon_name": "sparkle",
+              "heading": "Visible glow",
+              "text": "<p>Brightens dull skin and restores a radiant, healthy-looking finish.</p>"
+            }
+          },
+          {
+            "type": "benefit",
+            "settings": {
+              "icon_source": "library",
+              "icon_name": "shield",
+              "heading": "All-day protection",
+              "text": "<p>A lightweight barrier that defends against pollution and dryness.</p>"
+            }
+          },
+          {
+            "type": "footnote",
+            "settings": {
+              "text": "Tested on 20,000+ customers"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

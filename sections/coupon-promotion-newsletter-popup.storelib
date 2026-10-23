@@ -1,0 +1,2255 @@
+<template compat="shopify">
+{%- assign fb_accessibility_promotion_image = 'accessibility.promotion_image' | t -%}
+{%- assign fb_accessibility_subscribe = 'accessibility.subscribe' | t -%}
+{%- assign fb_accessibility_enter_your_email = 'accessibility.enter_your_email' | t -%}
+{%- comment -%}
+  Coupon Promotion Newsletter Banner Popup
+  --------------------------------------------------------------
+  A clean, block-based promotional popup that combines an eyebrow,
+  headline, subheading, coupon code, newsletter form and an image.
+  Built from scratch to live in the Promotional Popup category.
+  Renders above all theme content via maximum 32-bit z-index and a
+  position-static section wrapper (no isolation: isolate stacking
+  context trap).
+{%- endcomment -%}
+
+{%- assign block_eyebrow   = blank -%}
+{%- assign block_headline  = blank -%}
+{%- assign block_subheading = blank -%}
+{%- assign block_coupon    = blank -%}
+{%- assign block_form      = blank -%}
+{%- assign block_image     = blank -%}
+{%- assign block_dismiss   = blank -%}
+{%- for b in section.blocks -%}
+  {%- case b.type -%}
+    {%- when 'eyebrow' -%}{%- assign block_eyebrow = b -%}
+    {%- when 'headline' -%}{%- assign block_headline = b -%}
+    {%- when 'subheading' -%}{%- assign block_subheading = b -%}
+    {%- when 'coupon' -%}{%- assign block_coupon = b -%}
+    {%- when 'form' -%}{%- assign block_form = b -%}
+    {%- when 'image' -%}{%- assign block_image = b -%}
+    {%- when 'dismiss' -%}{%- assign block_dismiss = b -%}
+  {%- endcase -%}
+{%- endfor -%}
+
+{%- assign open_mode = section.settings.open_mode -%}
+{%- assign delay_s = section.settings.delay_s | default: 0 -%}
+{%- assign hide_days = section.settings.hide_days | default: 1 -%}
+{%- assign mobile_gutter = section.settings.mobile_gutter | default: 32 -%}
+
+<style>
+  /* No section stacking context — popup must escape and render above all */
+  #shopify-section-{{ section.id }} { position: static; }
+
+  .cpnb-{{ section.id }} { font-family: var(--body-font, inherit); }
+  .cpnb-{{ section.id }} *,
+  .cpnb-{{ section.id }} *::before,
+  .cpnb-{{ section.id }} *::after { box-sizing: border-box; }
+
+  /* Overlay (backdrop) */
+  .cpnb-overlay-{{ section.id }} {
+    position: fixed; inset: 0;
+    background: {{ section.settings.overlay_color | default: '#000000' }};
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .3s ease;
+    z-index: 2147483646;
+  }
+  .cpnb-{{ section.id }}.cpnb-open .cpnb-overlay-{{ section.id }} {
+    opacity: {{ section.settings.overlay_opacity | default: 50 | times: 0.01 }};
+    pointer-events: auto;
+  }
+
+  /* Card (popup container) */
+  .cpnb-card-{{ section.id }} {
+    position: fixed; left: 50%; top: 50%;
+    transform: translate(-50%, -50%) scale(.96);
+    opacity: 0; pointer-events: none;
+    transition: transform .3s ease, opacity .3s ease;
+    z-index: 2147483647;
+    width: min(calc(100vw - {{ mobile_gutter }}px), {{ section.settings.popup_width | default: 880 }}px);
+    /* Hard-cap to viewport so popup never requires page scroll.
+       Internal layout is sized so it fits inside this without overflowing. */
+    max-height: min(560px, calc(100vh - 24px));
+    overflow: hidden;
+    background: {{ section.settings.card_bg | default: '#ffffff' }};
+    color: {{ section.settings.text_color | default: '#111111' }};
+    border-radius: {{ section.settings.popup_radius | default: 14 }}px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.15);
+  }
+  .cpnb-{{ section.id }}.cpnb-open .cpnb-card-{{ section.id }} {
+    opacity: 1; pointer-events: auto;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  @media (min-width: 750px) {
+    .cpnb-card-{{ section.id }} {
+      width: min(92vw, {{ section.settings.popup_width | default: 880 }}px);
+      max-height: min(520px, calc(100vh - 32px));
+    }
+  }
+
+  /* Layout — two columns on desktop, single column on mobile.
+     Each column owns half the card height so neither side scrolls. */
+  .cpnb-grid-{{ section.id }} {
+    display: grid;
+    grid-template-columns: {% if section.settings.image_side == 'image-left' %}.95fr 1.05fr{% else %}1.05fr .95fr{% endif %};
+    align-items: stretch;
+    gap: 0;
+    height: 100%;
+  }
+  .cpnb-grid-{{ section.id }}.cpnb-image-left .cpnb-text-{{ section.id }} { order: 2; }
+  .cpnb-grid-{{ section.id }}.cpnb-image-left .cpnb-image-{{ section.id }} { order: 1; }
+  @media (max-width: 749px) {
+    .cpnb-grid-{{ section.id }} {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr;
+      height: auto;
+    }
+    {% if section.settings.mobile_image_position == 'above' %}
+    .cpnb-grid-{{ section.id }} .cpnb-text-{{ section.id }} { order: 2; }
+    .cpnb-grid-{{ section.id }} .cpnb-image-{{ section.id }} { order: 1; }
+    {% elsif section.settings.mobile_image_position == 'below' %}
+    .cpnb-grid-{{ section.id }} .cpnb-text-{{ section.id }} { order: 1; }
+    .cpnb-grid-{{ section.id }} .cpnb-image-{{ section.id }} { order: 2; }
+    {% elsif section.settings.mobile_image_position == 'hidden' %}
+    .cpnb-grid-{{ section.id }} .cpnb-image-{{ section.id }} { display: none; }
+    .cpnb-grid-{{ section.id }} { grid-template-rows: 1fr; }
+    {% endif %}
+  }
+
+  /* Text column */
+  .cpnb-text-{{ section.id }} {
+    padding: {{ section.settings.card_padding_v | default: 24 }}px {{ section.settings.card_padding_h | default: 28 }}px;
+    display: flex; flex-direction: column;
+    justify-content: center;
+    text-align: {{ section.settings.text_align | default: 'left' }};
+    {% if section.settings.text_align == 'center' %}align-items: center;{% endif %}
+    min-height: 0;
+    overflow: hidden;
+  }
+  @media (max-width: 749px) {
+    .cpnb-text-{{ section.id }} {
+      padding: 18px 20px;
+      justify-content: flex-start;
+    }
+  }
+
+  /* Image column — fixed sizing so it never overflows the card */
+  .cpnb-image-{{ section.id }} {
+    background: #f3f3f3;
+    overflow: hidden;
+    min-height: 0;
+    {%- case section.settings.image_ratio -%}
+      {%- when 'square' -%} aspect-ratio: 1 / 1;
+      {%- when 'portrait' -%} aspect-ratio: 3 / 4;
+      {%- when 'landscape' -%} aspect-ratio: 4 / 3;
+      {%- when 'wide' -%} aspect-ratio: 16 / 9;
+      {%- when 'auto' -%}
+      {%- else -%}
+    {%- endcase -%}
+  }
+  .cpnb-image-{{ section.id }} img {
+    width: 100%; height: 100%;
+    object-fit: {{ section.settings.image_fit | default: 'cover' }};
+    object-position: {{ section.settings.image_position | default: 'center' }};
+    display: block;
+  }
+  @media (max-width: 749px) {
+    .cpnb-image-{{ section.id }} {
+      {%- if section.settings.mobile_image_height_mode == 'fixed' -%}
+        height: {{ section.settings.mobile_image_height | default: 180 }}px;
+        aspect-ratio: auto;
+      {%- else -%}
+        aspect-ratio: 16 / 10;
+      {%- endif -%}
+    }
+  }
+
+  /* Close */
+  .cpnb-close-{{ section.id }} {
+    position: absolute; top: 10px; right: 10px;
+    width: 32px; height: 32px;
+    border: none; border-radius: 50%;
+    background: rgba(255,255,255,.95);
+    color: {{ section.settings.close_color | default: '#111111' }};
+    font-size: 18px; line-height: 1;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,.1);
+    transition: transform .2s ease, background .2s ease;
+    z-index: 2;
+  }
+  .cpnb-close-{{ section.id }}:hover { transform: scale(1.05); background: #fff; }
+
+  /* Block typography — compact sizes so 2-column popup fits without scroll */
+  .cpnb-eyebrow-{{ section.id }} { font-weight: 700; letter-spacing: .12em; text-transform: uppercase; opacity: .85; margin: 0 0 6px; }
+  .cpnb-headline-{{ section.id }} { font-weight: 800; line-height: 1.1; margin: 0 0 8px; }
+  .cpnb-subheading-{{ section.id }} { line-height: 1.45; margin: 0 0 12px; max-width: 480px; }
+  @media (max-width: 749px) {
+    .cpnb-headline-{{ section.id }} { font-size: 24px !important; }
+    .cpnb-subheading-{{ section.id }} { font-size: 14px !important; margin-bottom: 10px; }
+  }
+
+  /* Coupon visibility. When gating is ON, coupon is hidden until subscribe.
+     When gating is OFF, coupon is visible from the start. */
+  {% if section.settings.gate_coupon %}
+    .cpnb-coupon-{{ section.id }}.cpnb-coupon-gated { display: none; }
+    .cpnb-{{ section.id }}.cpnb-subscribed .cpnb-coupon-{{ section.id }}.cpnb-coupon-gated { display: flex; }
+    .cpnb-coupon-{{ section.id }}.cpnb-coupon-ungated { display: none !important; }
+  {% else %}
+    .cpnb-coupon-{{ section.id }}.cpnb-coupon-gated { display: none !important; }
+    .cpnb-coupon-{{ section.id }}.cpnb-coupon-ungated { display: flex; }
+  {% endif %}
+  .cpnb-code-row-{{ section.id }} {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    margin: 0 0 10px;
+    {% if section.settings.text_align == 'center' %}justify-content: center;{% endif %}
+  }
+  .cpnb-code-label-{{ section.id }} { font-weight: 600; opacity: .9; font-size: 13px; letter-spacing: .08em; }
+  .cpnb-code-{{ section.id }} {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-weight: 700; letter-spacing: .12em; font-size: 15px;
+    padding: 8px 12px; border-radius: 6px;
+    border: 2px dashed currentColor;
+    cursor: pointer; user-select: all;
+    background: transparent;
+    transition: background .2s ease, color .2s ease, border-color .2s ease;
+  }
+  .cpnb-code-{{ section.id }}.is-copied { background: #1c8d3a; color: #fff; border-color: #1c8d3a; }
+
+  /* Pre-subscribe form: hidden after subscribe */
+  .cpnb-prepane-{{ section.id }} { display: block; }
+  .cpnb-{{ section.id }}.cpnb-subscribed .cpnb-prepane-{{ section.id }} { display: none; }
+  /* Post-subscribe success: hidden until subscribe */
+  .cpnb-postpane-{{ section.id }} { display: none; }
+  .cpnb-{{ section.id }}.cpnb-subscribed .cpnb-postpane-{{ section.id }} { display: block; }
+
+  /* Form — gap between input and button is enforced on the inner <form> too */
+  .cpnb-form-{{ section.id }} { max-width: 420px; {% if section.settings.text_align == 'center' %}margin-inline: auto;{% endif %} }
+  .cpnb-form-{{ section.id }} > form,
+  .cpnb-form-{{ section.id }} form.cpnb-formel-{{ section.id }} {
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .cpnb-form-{{ section.id }} input[type="email"] {
+    width: 100%; padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid #cccccc;
+    font-size: 15px;
+    background: #fff; color: #111;
+    outline: none;
+  }
+  .cpnb-form-{{ section.id }} button[type="submit"] {
+    width: 100%; padding: 12px 20px;
+    border-radius: 8px; border: none;
+    font-weight: 700; font-size: 15px;
+    cursor: pointer;
+    /* Smooth hover transition with ease-out — buttery feel */
+    transition: background-color .35s cubic-bezier(.4,0,.2,1),
+                color .35s cubic-bezier(.4,0,.2,1),
+                transform .15s ease-out,
+                box-shadow .35s ease;
+  }
+  .cpnb-form-{{ section.id }} button[type="submit"]:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(0,0,0,.12);
+  }
+  .cpnb-form-{{ section.id }} button[type="submit"]:active {
+    transform: translateY(0);
+    box-shadow: none;
+  }
+  /* Loading state — shown while the fetch is in-flight */
+  .cpnb-form-{{ section.id }} button[type="submit"].is-loading {
+    pointer-events: none;
+    opacity: .7;
+  }
+  .cpnb-form-{{ section.id }} button[type="submit"].is-loading::after {
+    content: '';
+    display: inline-block;
+    width: 14px; height: 14px;
+    margin-left: 10px;
+    vertical-align: middle;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: cpnb-spin-{{ section.id }} .8s linear infinite;
+  }
+  @keyframes cpnb-spin-{{ section.id }} {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Body scroll lock helper — applied by JS while the popup is open */
+  body.cpnb-no-scroll-{{ section.id }} {
+    overflow: hidden;
+  }
+
+  /* Respect prefers-reduced-motion: disable animations for visitors who opted out. */
+  @media (prefers-reduced-motion: reduce) {
+    .cpnb-card-{{ section.id }},
+    .cpnb-overlay-{{ section.id }},
+    .cpnb-form-{{ section.id }} button[type="submit"],
+    .cpnb-code-{{ section.id }},
+    .cpnb-close-{{ section.id }} {
+      transition: none !important;
+      animation: none !important;
+    }
+    .cpnb-form-{{ section.id }} button[type="submit"]:hover {
+      transform: none;
+    }
+  }
+
+  /* Dismiss link — alignment is configurable */
+  .cpnb-dismiss-wrap-{{ section.id }} {
+    margin-top: 10px;
+    text-align: {{ section.settings.dismiss_align | default: 'center' }};
+  }
+  .cpnb-dismiss-{{ section.id }} {
+    background: none; border: none; cursor: pointer;
+    font-size: 13px;
+    text-decoration: underline;
+    color: inherit; opacity: .7;
+    padding: 4px 0;
+    transition: opacity .2s ease;
+  }
+  .cpnb-dismiss-{{ section.id }}:hover { opacity: 1; }
+{% comment %}{% endcomment %}</style>
+
+<section class="cpnb-{{ section.id }}"
+         data-cpnb-section="{{ section.id }}"
+         data-section-id="{{ section.id }}"
+         aria-hidden="true">
+  <div class="cpnb-overlay-{{ section.id }}" aria-hidden="true"></div>
+  <div class="cpnb-card-{{ section.id }}"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="cpnb-title-{{ section.id }}"
+       tabindex="-1">
+    <button type="button" class="cpnb-close-{{ section.id }}" aria-label="{{ 'accessibility.close_popup' | t }}">×</button>
+
+    <div class="cpnb-grid-{{ section.id }}{% if section.settings.image_side == 'image-left' %} cpnb-image-left{% endif %}">
+      <div class="cpnb-text-{{ section.id }}">
+        {%- if block_eyebrow != blank and block_eyebrow.settings.text != blank -%}
+          <div class="cpnb-eyebrow-{{ section.id }}"
+               style="font-size: {{ block_eyebrow.settings.size_desktop | default: 12 }}px; color: {{ block_eyebrow.settings.color | default: '#111' }};"
+               {{ block_eyebrow.shopify_attributes }}>{{ block_eyebrow.settings.text }}</div>
+        {%- endif -%}
+
+        {%- if block_headline != blank and block_headline.settings.text != blank -%}
+          <h2 class="cpnb-headline-{{ section.id }}" id="cpnb-title-{{ section.id }}"
+              style="font-size: {{ block_headline.settings.size_desktop | default: 32 }}px; color: {{ block_headline.settings.color | default: '#111' }}; font-weight: {{ block_headline.settings.weight | default: '800' }};"
+              {{ block_headline.shopify_attributes }}>{{ block_headline.settings.text }}</h2>
+        {%- endif -%}
+
+        {%- if block_subheading != blank and block_subheading.settings.text != blank -%}
+          <p class="cpnb-subheading-{{ section.id }}"
+             style="font-size: {{ block_subheading.settings.size_desktop | default: 15 }}px; color: {{ block_subheading.settings.color | default: '#444' }};"
+             {{ block_subheading.shopify_attributes }}>{{ block_subheading.settings.text }}</p>
+        {%- endif -%}
+
+        {%- comment -%}
+          Pre-subscribe pane: show the newsletter form. Coupon is hidden until
+          the visitor subscribes.
+        {%- endcomment -%}
+        <div class="cpnb-prepane-{{ section.id }}">
+          {%- comment -%} Ungated coupon: visible immediately when gate_coupon is OFF {%- endcomment -%}
+          {%- unless section.settings.gate_coupon -%}
+            {%- if block_coupon != blank and block_coupon.settings.code != blank -%}
+              <div class="cpnb-code-row-{{ section.id }} cpnb-coupon-{{ section.id }} cpnb-coupon-ungated" {{ block_coupon.shopify_attributes }}>
+                {%- if block_coupon.settings.label != blank -%}
+                  <span class="cpnb-code-label-{{ section.id }}">{{ block_coupon.settings.label }}</span>
+                {%- endif -%}
+                <button type="button" class="cpnb-code-{{ section.id }}" data-code="{{ block_coupon.settings.code | escape }}" aria-label="{{ 'accessibility.copy_coupon_code' | t }}">{{ block_coupon.settings.code | escape }}</button>
+              </div>
+            {%- endif -%}
+          {%- endunless -%}
+
+          {%- if block_form != blank -%}
+            {%- assign cpnb_form_id = 'cpnb-form-' | append: section.id -%}
+            {%- assign cpnb_form_class = 'cpnb-formel-' | append: section.id -%}
+            <div class="cpnb-form-{{ section.id }}" {{ block_form.shopify_attributes }}>
+              {%- form 'customer', id: cpnb_form_id, class: cpnb_form_class -%}
+                <input type="hidden" name="contact[tags]" value="newsletter">
+                <input type="email" name="contact[email]" placeholder="{{ block_form.settings.placeholder | default: fb_accessibility_enter_your_email | escape }}" required
+                       style="border-radius: {{ block_form.settings.input_radius | default: 8 }}px;">
+                {%- if block_form.settings.collect_phone -%}
+                  {%- if block_form.settings.phone_required -%}{%- assign cpnb_phone_req = 'true' -%}{%- else -%}{%- assign cpnb_phone_req = 'false' -%}{%- endif -%}
+                  {%- render 'cpnb-phone-field',
+                      scope: section.id,
+                      default_country: block_form.settings.phone_default_country,
+                      phone_placeholder: block_form.settings.phone_placeholder,
+                      required: cpnb_phone_req -%}
+                {%- endif -%}
+                <button type="submit"
+                        style="background: {{ block_form.settings.button_bg | default: '#111111' }}; color: {{ block_form.settings.button_text_color | default: '#ffffff' }}; border-radius: {{ block_form.settings.button_radius | default: 8 }}px; font-weight: {{ block_form.settings.button_weight | default: '700' }};"
+                        onmouseover="this.style.background='{{ block_form.settings.button_bg_hover | default: '#000000' }}'; this.style.color='{{ block_form.settings.button_text_hover | default: '#ffffff' }}';"
+                        onmouseout="this.style.background='{{ block_form.settings.button_bg | default: '#111111' }}'; this.style.color='{{ block_form.settings.button_text_color | default: '#ffffff' }}';">
+                  {{ block_form.settings.button_text | default: fb_accessibility_subscribe }}
+                </button>
+                {%- comment -%}
+                  When Shopify POSTs the form, the page reloads with form.posted_successfully?
+                  set. We render an invisible flag here that the JS picks up on next load to
+                  re-open the popup in the post-pane (coupon) state for a short window.
+                {%- endcomment -%}
+                {%- if form.posted_successfully? -%}
+                  <span data-cpnb-just-subscribed="true" style="display:none;"></span>
+                {%- endif -%}
+              {%- endform -%}
+            </div>
+          {%- endif -%}
+
+          {%- if block_dismiss != blank and block_dismiss.settings.text != blank -%}
+            <div class="cpnb-dismiss-wrap-{{ section.id }}" {{ block_dismiss.shopify_attributes }}>
+              <button type="button" class="cpnb-dismiss-{{ section.id }}">{{ block_dismiss.settings.text }}</button>
+            </div>
+          {%- endif -%}
+        </div>
+
+        {%- comment -%}
+          Post-subscribe pane: reveal the coupon code + success message.
+        {%- endcomment -%}
+        {%- comment -%} Post-subscribe pane only renders when gating is ON {%- endcomment -%}
+        {%- if section.settings.gate_coupon -%}
+          <div class="cpnb-postpane-{{ section.id }}" aria-live="polite">
+            {%- if block_form != blank -%}
+              <p style="color:#1c8d3a; margin:0 0 12px; font-size:14px; font-weight:600;">{{ block_form.settings.success_text | default: 'Thanks! Here is your code:' }}</p>
+            {%- endif -%}
+
+            {%- if block_coupon != blank and block_coupon.settings.code != blank -%}
+              <div class="cpnb-code-row-{{ section.id }} cpnb-coupon-{{ section.id }} cpnb-coupon-gated" {{ block_coupon.shopify_attributes }}>
+                {%- if block_coupon.settings.label != blank -%}
+                  <span class="cpnb-code-label-{{ section.id }}">{{ block_coupon.settings.label }}</span>
+                {%- endif -%}
+                <button type="button" class="cpnb-code-{{ section.id }}" data-code="{{ block_coupon.settings.code | escape }}" aria-label="{{ 'accessibility.copy_coupon_code' | t }}">{{ block_coupon.settings.code | escape }}</button>
+              </div>
+            {%- endif -%}
+          </div>
+        {%- endif -%}
+      </div>
+
+      {%- if block_image != blank -%}
+        <div class="cpnb-image-{{ section.id }}" {{ block_image.shopify_attributes }}>
+          {%- if block_image.settings.image != blank -%}
+            {{ block_image.settings.image | image_url: width: 900 | image_tag: loading: 'lazy', alt: block_image.settings.alt | default: fb_accessibility_promotion_image, sizes: '(min-width: 750px) 50vw, 100vw', widths: '360,540,720,900' }}
+          {%- else -%}
+            <img src="https://2dbags.co/wp-content/uploads/revslider/lookbook1-demo_slider/placeholder.jpg" alt="{{ 'accessibility.promotion_placeholder' | t }}" loading="lazy">
+          {%- endif -%}
+        </div>
+      {%- endif -%}
+    </div>
+  </div>
+</section>
+
+<script>
+(function(){
+  // Per-section constants (rendered from Liquid)
+  const SECTION_ID = '{{ section.id }}';
+  const I18N_COPIED = {{ 'accessibility.copied' | t | json }};
+  const lsKey = 'cpnb_dismissed_' + SECTION_ID;
+  const subKey = 'cpnb_subscribed_' + SECTION_ID;
+  const subTimeKey = 'cpnb_subtime_' + SECTION_ID;
+  const couponShownKey = 'cpnb_coupon_shown_' + SECTION_ID;
+  const neverKey = 'cpnb_never_' + SECTION_ID;
+  const bodyLockClass = 'cpnb-no-scroll-' + SECTION_ID;
+  const afterDismiss = '{{ section.settings.after_dismiss | default: "after_days" }}';
+  const hideDays = {{ section.settings.hide_days | default: 1 }};
+  const postSubscribeMs = {{ section.settings.post_subscribe_duration_s | default: 15 }} * 1000;
+  const editorModeOn = {% if section.settings.editor_mode %}true{% else %}false{% endif %};
+  const openMode = '{{ section.settings.open_mode }}';
+  const delayMs = {{ section.settings.delay_s | default: 0 }} * 1000;
+
+  // Safe localStorage wrapper (private mode / quota exhausted)
+  const LS = {
+    get(k){ try { return localStorage.getItem(k); } catch(_){ return null; } },
+    set(k,v){ try { localStorage.setItem(k, v); } catch(_){} },
+    rm(k){ try { localStorage.removeItem(k); } catch(_){} }
+  };
+
+  // Active controller for the current instance — kept around so we can fully
+  // tear down listeners when Shopify unloads the section in the editor.
+  let controller = null;
+
+  function init() {
+    const root = document.querySelector('.cpnb-' + SECTION_ID);
+    if (!root) return;
+    if (root.__cpnbInited) return;          // already initialised
+    root.__cpnbInited = true;
+
+    const card = root.querySelector('.cpnb-card-' + SECTION_ID);
+    const overlay = root.querySelector('.cpnb-overlay-' + SECTION_ID);
+    const closeBtn = root.querySelector('.cpnb-close-' + SECTION_ID);
+    const dismissBtn = root.querySelector('.cpnb-dismiss-' + SECTION_ID);
+    const codeBtn = root.querySelector('.cpnb-code-' + SECTION_ID);
+    const formEl = root.querySelector('.cpnb-formel-' + SECTION_ID);
+    const submitBtn = formEl ? formEl.querySelector('button[type="submit"]') : null;
+    const inDesign = !!(window.Shopify && Shopify.designMode);
+    const forceEditor = editorModeOn && inDesign;
+    const wasSubscribed = LS.get(subKey) === '1';
+
+    // Liquid marker — fallback if the form posted as a real reload
+    const justSubmittedMarker = root.querySelector('[data-cpnb-just-subscribed]');
+    if (justSubmittedMarker && LS.get(couponShownKey) !== '1') {
+      LS.set(subKey, '1');
+      LS.set(subTimeKey, String(Date.now()));
+    }
+
+    const subTime = parseInt(LS.get(subTimeKey) || '0', 10);
+    const elapsed = subTime > 0 ? Date.now() - subTime : Infinity;
+    const justSubscribed = subTime > 0 && elapsed < postSubscribeMs && LS.get(couponShownKey) !== '1';
+
+    // ----- Helpers -----------------------------------------------------------
+    function isSuppressed() {
+      if (forceEditor) return false;
+      if (wasSubscribed) return true;
+      if (LS.get(neverKey) === '1') return true;
+      if (afterDismiss === 'every_visit') return false;
+      const until = parseInt(LS.get(lsKey) || '0', 10);
+      return !!(until && Date.now() < until);
+    }
+    function persistDismiss() {
+      if (forceEditor) return;
+      if (afterDismiss === 'never') LS.set(neverKey, '1');
+      else if (afterDismiss === 'after_days' && hideDays > 0) {
+        LS.set(lsKey, String(Date.now() + hideDays * 24 * 60 * 60 * 1000));
+      }
+    }
+
+    // Body scroll lock — only while the popup is open
+    function lockBody() { document.body.classList.add(bodyLockClass); }
+    function unlockBody() { document.body.classList.remove(bodyLockClass); }
+
+    // Focus management — trap focus inside the card, restore focus on close.
+    let prevActive = null;
+    function focusableElements() {
+      if (!card) return [];
+      // Visible focusable descendants. Use getClientRects() for visibility — works
+      // for elements inside position:fixed/sticky parents where offsetParent is null.
+      return Array.from(card.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )).filter(el => {
+        if (el.hidden || el.getAttribute('aria-hidden') === 'true') return false;
+        return el.getClientRects().length > 0;
+      });
+    }
+    function trapFocus(e) {
+      if (e.key !== 'Tab') return;
+      const focusables = focusableElements();
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+
+    function show() {
+      if (isSuppressed()) return;
+      root.classList.add('cpnb-open');
+      root.setAttribute('aria-hidden', 'false');
+      lockBody();
+      prevActive = document.activeElement;
+      // Give the dialog role/title a chance to be announced by screen readers
+      // before moving focus into the first interactive control.
+      if (card && typeof card.focus === 'function') {
+        try { card.focus({ preventScroll: true }); } catch(_) {}
+      }
+      // Then move focus to the email input (or first focusable) for keyboard users
+      requestAnimationFrame(() => {
+        const focusables = focusableElements();
+        const target = focusables.find(el => el.tagName === 'INPUT' && el.type === 'email') || focusables[0];
+        if (target) {
+          try { target.focus({ preventScroll: true }); } catch(_) {}
+        }
+      });
+    }
+    function hide() {
+      root.classList.remove('cpnb-open');
+      root.setAttribute('aria-hidden', 'true');
+      unlockBody();
+      if (prevActive && typeof prevActive.focus === 'function') {
+        try { prevActive.focus({ preventScroll: true }); } catch(_) {}
+      }
+      persistDismiss();
+    }
+
+    // ----- Event listeners (tracked so we can clean up) ----------------------
+    const listeners = [];
+    function on(target, type, fn, opts) {
+      if (!target) return;
+      target.addEventListener(type, fn, opts);
+      listeners.push({ target, type, fn, opts });
+    }
+
+    on(closeBtn, 'click', hide);
+    on(dismissBtn, 'click', hide);
+    on(overlay, 'click', hide);
+    on(document, 'keydown', (e) => {
+      if (e.key === 'Escape' && root.classList.contains('cpnb-open')) hide();
+      else if (e.key === 'Tab' && root.classList.contains('cpnb-open')) trapFocus(e);
+    });
+
+    // Bulletproof copy-to-clipboard. Tries the async Clipboard API first; on
+    // any failure (insecure context, permission denied, lack of user activation)
+    // falls back to a visible-but-tiny textarea + execCommand('copy'). Some
+    // browsers reject execCommand on display:none source elements, so the
+    // textarea is rendered with opacity:0 (still in the layout tree).
+    function cpnbCopy(text) {
+      return new Promise((resolve, reject) => {
+        if (!text) { reject(new Error('empty')); return; }
+        const useAsync = navigator.clipboard
+          && typeof navigator.clipboard.writeText === 'function'
+          && (window.isSecureContext === true || window.isSecureContext === undefined);
+        const fallback = () => {
+          try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.top = '0'; ta.style.left = '0';
+            ta.style.width = '2em'; ta.style.height = '2em';
+            ta.style.padding = '0'; ta.style.border = 'none';
+            ta.style.outline = 'none'; ta.style.boxShadow = 'none';
+            ta.style.background = 'transparent'; ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+            const ok = document.execCommand && document.execCommand('copy');
+            document.body.removeChild(ta);
+            if (ok) resolve(); else reject(new Error('execCommand failed'));
+          } catch (err) { reject(err); }
+        };
+        if (useAsync) {
+          navigator.clipboard.writeText(text).then(resolve).catch(fallback);
+        } else {
+          fallback();
+        }
+      });
+    }
+
+    // Coupon copy-to-clipboard
+    if (codeBtn) {
+      on(codeBtn, 'click', () => {
+        const code = (codeBtn.dataset.code || '').trim();
+        if (!code) return;
+        const original = codeBtn.textContent;
+        const finishOk = () => {
+          codeBtn.classList.add('is-copied');
+          codeBtn.textContent = I18N_COPIED;
+          setTimeout(() => { codeBtn.classList.remove('is-copied'); codeBtn.textContent = original; }, 2200);
+        };
+        cpnbCopy(code).then(finishOk).catch(() => {
+          // Still show feedback so the visitor sees something happened. The
+          // code remains visible/selectable for manual Cmd-C / Ctrl-C copy.
+          finishOk();
+        });
+      });
+    }
+
+    // Form submit ---------------------------------------------------------
+    if (formEl) {
+      if (forceEditor) {
+        // EDITOR MODE: never POST anywhere. Cycle: submit → coupon → reset → form.
+        on(formEl, 'submit', (e) => {
+          e.preventDefault();
+          root.classList.add('cpnb-subscribed');
+          setTimeout(() => { root.classList.remove('cpnb-subscribed'); }, postSubscribeMs);
+        });
+      } else {
+        // LIVE MODE: AJAX submit, no page reload.
+        on(formEl, 'submit', (e) => {
+          // (1) Persist state synchronously so even a failed preventDefault recovers
+          LS.set(subKey, '1');
+          LS.set(subTimeKey, String(Date.now()));
+          // (2) Flip UI immediately
+          root.classList.add('cpnb-subscribed');
+          // (3) Block default form submission + sibling handlers
+          e.preventDefault();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          e.stopPropagation();
+          // (4) Loading state on the button
+          if (submitBtn) { submitBtn.classList.add('is-loading'); submitBtn.disabled = true; }
+          // (5) Background POST so Shopify still records the subscriber
+          const formData = new FormData(formEl);
+          try {
+            fetch(formEl.action || '/contact', {
+              method: 'POST',
+              headers: { 'Accept': 'application/json, text/html;q=0.9, */*;q=0.8' },
+              body: formData,
+              credentials: 'same-origin',
+              redirect: 'manual'
+            }).catch(() => {});
+          } catch(_) {}
+          setTimeout(() => {
+            if (submitBtn) { submitBtn.classList.remove('is-loading'); submitBtn.disabled = false; }
+          }, 1500);
+          return false;
+        }, true); // capture phase
+      }
+    }
+
+    // Manual hooks (always available regardless of trigger mode)
+    window['CPNB_open_' + SECTION_ID] = show;
+    window['CPNB_close_' + SECTION_ID] = hide;
+    window['CPNB_reset_' + SECTION_ID] = function() {
+      [lsKey, subKey, subTimeKey, couponShownKey, neverKey].forEach(LS.rm);
+      root.classList.remove('cpnb-subscribed');
+    };
+
+    // ----- Initial state -----------------------------------------------------
+    if (forceEditor) {
+      root.classList.add('cpnb-open');
+      root.setAttribute('aria-hidden', 'false');
+      // Don't lock body scroll in the editor — merchants need to scroll settings panel
+    } else if (justSubscribed) {
+      // Just-subscribed replay — open in coupon state, stay open until visitor closes
+      root.classList.add('cpnb-subscribed');
+      root.classList.add('cpnb-open');
+      root.setAttribute('aria-hidden', 'false');
+      lockBody();
+      const finalize = () => {
+        LS.set(couponShownKey, '1');
+        LS.rm(subTimeKey);
+      };
+      on(closeBtn, 'click', finalize, { once: true });
+      on(overlay, 'click', finalize, { once: true });
+      on(dismissBtn, 'click', finalize, { once: true });
+      on(document, 'keydown', function escFinalize(e) {
+        if (e.key === 'Escape') finalize();
+      });
+    } else if (!isSuppressed()) {
+      // Normal trigger flow
+      if (openMode === 'immediate') show();
+      else if (openMode === 'delay') setTimeout(show, delayMs > 0 ? delayMs : 0);
+      else if (openMode === 'exit') {
+        const exitHandler = (e) => {
+          if (e.clientY <= 8) { show(); document.removeEventListener('mousemove', exitHandler); }
+        };
+        on(document, 'mousemove', exitHandler, { passive: true });
+      } else if (openMode === 'manual') {
+        document.querySelectorAll('[data-cpnb-trigger="' + SECTION_ID + '"]').forEach(el => {
+          on(el, 'click', (ev) => { ev.preventDefault(); show(); });
+        });
+      }
+    }
+
+    // Build the controller for external teardown
+    controller = {
+      destroy() {
+        listeners.forEach(({ target, type, fn, opts }) => {
+          target.removeEventListener(type, fn, opts);
+        });
+        unlockBody();
+        delete window['CPNB_open_' + SECTION_ID];
+        delete window['CPNB_close_' + SECTION_ID];
+        delete window['CPNB_reset_' + SECTION_ID];
+        root.__cpnbInited = false;
+      }
+    };
+  }
+
+  // ----- Lifecycle ----------------------------------------------------------
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+
+  // bfcache (back/forward cache restore) — re-evaluate the popup state
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted) {
+      if (controller) controller.destroy();
+      controller = null;
+      init();
+    }
+  });
+
+  // Shopify Theme Editor — re-init when this section is added/edited, tear down on removal
+  if (window.Shopify && Shopify.designMode) {
+    document.addEventListener('shopify:section:load', (e) => {
+      if (e.detail && e.detail.sectionId === SECTION_ID) {
+        if (controller) controller.destroy();
+        controller = null;
+        init();
+      }
+    });
+    document.addEventListener('shopify:section:unload', (e) => {
+      if (e.detail && e.detail.sectionId === SECTION_ID && controller) {
+        controller.destroy();
+        controller = null;
+      }
+    });
+  }
+})();
+{% comment %}{% endcomment %}</script>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "coupon-promotion-newsletter-popup",
+  "name": "Coupon Promo Popup",
+  "settings": [
+    {
+      "type": "header",
+      "id": "hdr_1",
+      "label": "Coupon access"
+    },
+    {
+      "type": "checkbox",
+      "id": "gate_coupon",
+      "label": "Reveal coupon only after newsletter subscribe",
+      "info": "When ON, visitors must enter their email to see the coupon code. When OFF, the coupon is shown alongside the form.",
+      "default": true
+    },
+    {
+      "type": "range",
+      "id": "post_subscribe_duration_s",
+      "min": 5,
+      "max": 60,
+      "step": 5,
+      "unit": "s",
+      "label": "Show coupon for (seconds after subscribe)",
+      "info": "After the visitor subscribes, the coupon code stays visible for this many seconds (or until they close the popup). Then the popup is dismissed forever.",
+      "default": 15
+    },
+    {
+      "type": "header",
+      "id": "hdr_4",
+      "label": "Trigger / When to open"
+    },
+    {
+      "type": "select",
+      "id": "open_mode",
+      "label": "When to open",
+      "default": "delay",
+      "options": [
+        {
+          "value": "immediate",
+          "label": "Immediately"
+        },
+        {
+          "value": "delay",
+          "label": "After delay"
+        },
+        {
+          "value": "exit",
+          "label": "Exit intent (desktop)"
+        },
+        {
+          "value": "manual",
+          "label": "Manual (button click)"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "delay_s",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "unit": "s",
+      "label": "Delay (seconds)",
+      "default": 5
+    },
+    {
+      "type": "select",
+      "id": "after_dismiss",
+      "label": "After dismiss / close — show again?",
+      "info": "Subscribed users never see this popup again regardless of this setting.",
+      "default": "after_days",
+      "options": [
+        {
+          "value": "every_visit",
+          "label": "Show on every visit"
+        },
+        {
+          "value": "after_days",
+          "label": "Hide for X days then show again"
+        },
+        {
+          "value": "never",
+          "label": "Never show again on this device"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "hide_days",
+      "min": 0,
+      "max": 30,
+      "step": 1,
+      "unit": "d",
+      "label": "Don't show again for (days)",
+      "info": "Only applies when “After dismiss” is set to Hide for X days.",
+      "default": 1
+    },
+    {
+      "type": "header",
+      "id": "hdr_9",
+      "label": "Editor"
+    },
+    {
+      "type": "checkbox",
+      "id": "editor_mode",
+      "label": "Editor mode (always show in Theme Editor preview)",
+      "info": "Only affects the Shopify Theme Editor preview — has no effect on the live storefront. When ON: popup is always open in the editor and submitting cycles between form and coupon every few seconds so you can edit both states. Turn OFF if you want the editor preview to behave exactly like a real visitor.",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_11",
+      "label": "Layout"
+    },
+    {
+      "type": "select",
+      "id": "image_side",
+      "label": "Image position (desktop)",
+      "default": "image-right",
+      "options": [
+        {
+          "value": "image-right",
+          "label": "Right"
+        },
+        {
+          "value": "image-left",
+          "label": "Left"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "mobile_image_position",
+      "label": "Mobile image position",
+      "default": "above",
+      "options": [
+        {
+          "value": "above",
+          "label": "Above the content"
+        },
+        {
+          "value": "below",
+          "label": "Below the content"
+        },
+        {
+          "value": "hidden",
+          "label": "Hidden on mobile"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "image_ratio",
+      "label": "Image aspect ratio (desktop)",
+      "default": "auto",
+      "options": [
+        {
+          "value": "auto",
+          "label": "Auto (fills column)"
+        },
+        {
+          "value": "square",
+          "label": "Square (1:1)"
+        },
+        {
+          "value": "portrait",
+          "label": "Portrait (3:4)"
+        },
+        {
+          "value": "landscape",
+          "label": "Landscape (4:3)"
+        },
+        {
+          "value": "wide",
+          "label": "Wide (16:9)"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "image_fit",
+      "label": "Image fit",
+      "default": "cover",
+      "options": [
+        {
+          "value": "cover",
+          "label": "Cover (fill, may crop)"
+        },
+        {
+          "value": "contain",
+          "label": "Contain (no crop)"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "image_position",
+      "label": "Image focus",
+      "default": "center",
+      "options": [
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "top",
+          "label": "Top"
+        },
+        {
+          "value": "bottom",
+          "label": "Bottom"
+        },
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "mobile_image_height_mode",
+      "label": "Mobile image sizing",
+      "default": "auto",
+      "options": [
+        {
+          "value": "auto",
+          "label": "Auto (16:10 ratio)"
+        },
+        {
+          "value": "fixed",
+          "label": "Fixed height"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "mobile_image_height",
+      "min": 100,
+      "max": 400,
+      "step": 10,
+      "unit": "px",
+      "label": "Mobile image fixed height",
+      "default": 180
+    },
+    {
+      "type": "select",
+      "id": "text_align",
+      "label": "Text alignment",
+      "default": "left",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "dismiss_align",
+      "label": "Dismiss link alignment",
+      "default": "center",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "popup_width",
+      "min": 360,
+      "max": 1100,
+      "step": 10,
+      "unit": "px",
+      "label": "Popup max width",
+      "default": 770
+    },
+    {
+      "type": "range",
+      "id": "popup_radius",
+      "min": 0,
+      "max": 32,
+      "step": 1,
+      "unit": "px",
+      "label": "Popup corner radius",
+      "default": 12
+    },
+    {
+      "type": "range",
+      "id": "card_padding_v",
+      "min": 12,
+      "max": 60,
+      "step": 2,
+      "unit": "px",
+      "label": "Vertical padding",
+      "default": 36
+    },
+    {
+      "type": "range",
+      "id": "card_padding_h",
+      "min": 12,
+      "max": 60,
+      "step": 2,
+      "unit": "px",
+      "label": "Horizontal padding",
+      "default": 36
+    },
+    {
+      "type": "range",
+      "id": "mobile_gutter",
+      "min": 0,
+      "max": 80,
+      "step": 4,
+      "unit": "px",
+      "label": "Mobile side gutter (total)",
+      "default": 32,
+      "info": "Reserved space on left + right of the popup on mobile so it doesn't glue to the edges."
+    },
+    {
+      "type": "header",
+      "id": "hdr_26",
+      "label": "Color"
+    },
+    {
+      "type": "color",
+      "id": "card_bg",
+      "label": "Card background",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Default text color",
+      "default": "#111111"
+    },
+    {
+      "type": "color",
+      "id": "close_color",
+      "label": "Close icon color",
+      "default": "#111111"
+    },
+    {
+      "type": "color",
+      "id": "overlay_color",
+      "label": "Overlay color",
+      "default": "#000000"
+    },
+    {
+      "type": "range",
+      "id": "overlay_opacity",
+      "min": 0,
+      "max": 90,
+      "step": 5,
+      "unit": "%",
+      "label": "Overlay opacity",
+      "default": 50
+    }
+  ],
+  "blocks": [
+    {
+      "type": "eyebrow",
+      "name": "Eyebrow",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content"
+        },
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Eyebrow text",
+          "default": "LIMITED TIME OFFER"
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Typography"
+        },
+        {
+          "type": "range",
+          "id": "size_desktop",
+          "min": 10,
+          "max": 22,
+          "step": 1,
+          "unit": "px",
+          "label": "Size (desktop)",
+          "default": 12
+        },
+        {
+          "type": "header",
+          "id": "hdr_5",
+          "label": "Color"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#111111"
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "headline",
+      "name": "Headline",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content"
+        },
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Headline",
+          "default": "15% off your first order"
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Typography"
+        },
+        {
+          "type": "range",
+          "id": "size_desktop",
+          "min": 20,
+          "max": 80,
+          "step": 1,
+          "unit": "px",
+          "label": "Size (desktop)",
+          "default": 32
+        },
+        {
+          "type": "select",
+          "id": "weight",
+          "label": "Font weight",
+          "default": "800",
+          "options": [
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semi Bold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            },
+            {
+              "value": "800",
+              "label": "Extra Bold"
+            },
+            {
+              "value": "900",
+              "label": "Black"
+            }
+          ]
+        },
+        {
+          "type": "header",
+          "id": "hdr_6",
+          "label": "Color"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#111111"
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "subheading",
+      "name": "Subheading",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content"
+        },
+        {
+          "type": "textarea",
+          "id": "text",
+          "label": "Subheading text",
+          "default": "Subscribe and get your coupon."
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Typography"
+        },
+        {
+          "type": "range",
+          "id": "size_desktop",
+          "min": 12,
+          "max": 24,
+          "step": 1,
+          "unit": "px",
+          "label": "Size (desktop)",
+          "default": 15
+        },
+        {
+          "type": "header",
+          "id": "hdr_5",
+          "label": "Color"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#444444"
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "coupon",
+      "name": "Coupon code",
+      "settings": [
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Label",
+          "default": "USE CODE"
+        },
+        {
+          "type": "text",
+          "id": "code",
+          "label": "Coupon code",
+          "default": "WELCOME15"
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "form",
+      "name": "Newsletter form",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content"
+        },
+        {
+          "type": "text",
+          "id": "placeholder",
+          "label": "Email placeholder",
+          "default": "Enter your email"
+        },
+        {
+          "type": "text",
+          "id": "button_text",
+          "label": "Button label",
+          "default": "Subscribe"
+        },
+        {
+          "type": "text",
+          "id": "success_text",
+          "label": "Success message",
+          "default": "Thanks! Here is your code:"
+        },
+        {
+          "type": "header",
+          "id": "hdr_5",
+          "label": "Phone collection (optional)"
+        },
+        {
+          "type": "checkbox",
+          "id": "collect_phone",
+          "label": "Also collect phone number",
+          "info": "Shows a phone-number field with a country-code selector beneath the email field. Phone numbers are saved to the customer's Shopify profile.",
+          "default": false
+        },
+        {
+          "type": "text",
+          "id": "phone_placeholder",
+          "label": "Phone placeholder",
+          "default": "Phone number"
+        },
+        {
+          "type": "text",
+          "id": "phone_default_country",
+          "label": "Default country (ISO code)",
+          "info": "ISO-2 country code, e.g. US, GB, FR, DE.",
+          "default": "US"
+        },
+        {
+          "type": "checkbox",
+          "id": "phone_required",
+          "label": "Make phone required",
+          "default": false
+        },
+        {
+          "type": "header",
+          "id": "hdr_10",
+          "label": "Input"
+        },
+        {
+          "type": "range",
+          "id": "input_radius",
+          "min": 0,
+          "max": 40,
+          "step": 1,
+          "unit": "px",
+          "label": "Input radius",
+          "default": 8
+        },
+        {
+          "type": "header",
+          "id": "hdr_12",
+          "label": "Button typography"
+        },
+        {
+          "type": "select",
+          "id": "button_weight",
+          "label": "Button font weight",
+          "default": "700",
+          "options": [
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semi Bold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            },
+            {
+              "value": "800",
+              "label": "Extra Bold"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "button_radius",
+          "min": 0,
+          "max": 40,
+          "step": 1,
+          "unit": "px",
+          "label": "Button radius",
+          "default": 8
+        },
+        {
+          "type": "header",
+          "id": "hdr_15",
+          "label": "Button color (default)"
+        },
+        {
+          "type": "color",
+          "id": "button_bg",
+          "label": "Background",
+          "default": "#111111"
+        },
+        {
+          "type": "color",
+          "id": "button_text_color",
+          "label": "Text",
+          "default": "#ffffff"
+        },
+        {
+          "type": "header",
+          "id": "hdr_18",
+          "label": "Button color (hover)"
+        },
+        {
+          "type": "color",
+          "id": "button_bg_hover",
+          "label": "Background on hover",
+          "default": "#000000"
+        },
+        {
+          "type": "color",
+          "id": "button_text_hover",
+          "label": "Text on hover",
+          "default": "#ffffff"
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "image",
+      "name": "Image",
+      "settings": [
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Image"
+        },
+        {
+          "type": "text",
+          "id": "alt",
+          "label": "Image alt text",
+          "default": "Promotion"
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "dismiss",
+      "name": "Dismiss link",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Dismiss link text",
+          "default": "No thanks"
+        }
+      ],
+      "limit": 1
+    }
+  ],
+  "presets": [],
+  "enabled_on": {
+    "groups": [
+      "overlay"
+    ]
+  },
+  "shopify": {
+    "name": "Coupon Promo Popup",
+    "tag": "section",
+    "class": "cpnb-section",
+    "enabled_on": {
+      "groups": [
+        "custom.overlay"
+      ]
+    },
+    "settings": [
+      {
+        "type": "header",
+        "content": "Coupon access"
+      },
+      {
+        "type": "checkbox",
+        "id": "gate_coupon",
+        "label": "Reveal coupon only after newsletter subscribe",
+        "info": "When ON, visitors must enter their email to see the coupon code. When OFF, the coupon is shown alongside the form.",
+        "default": true
+      },
+      {
+        "type": "range",
+        "id": "post_subscribe_duration_s",
+        "min": 5,
+        "max": 60,
+        "step": 5,
+        "unit": "s",
+        "label": "Show coupon for (seconds after subscribe)",
+        "info": "After the visitor subscribes, the coupon code stays visible for this many seconds (or until they close the popup). Then the popup is dismissed forever.",
+        "default": 15
+      },
+      {
+        "type": "header",
+        "content": "Trigger / When to open"
+      },
+      {
+        "type": "select",
+        "id": "open_mode",
+        "label": "When to open",
+        "default": "delay",
+        "options": [
+          {
+            "value": "immediate",
+            "label": "Immediately"
+          },
+          {
+            "value": "delay",
+            "label": "After delay"
+          },
+          {
+            "value": "exit",
+            "label": "Exit intent (desktop)"
+          },
+          {
+            "value": "manual",
+            "label": "Manual (button click)"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "delay_s",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "s",
+        "label": "Delay (seconds)",
+        "default": 5
+      },
+      {
+        "type": "select",
+        "id": "after_dismiss",
+        "label": "After dismiss / close — show again?",
+        "info": "Subscribed users never see this popup again regardless of this setting.",
+        "default": "after_days",
+        "options": [
+          {
+            "value": "every_visit",
+            "label": "Show on every visit"
+          },
+          {
+            "value": "after_days",
+            "label": "Hide for X days then show again"
+          },
+          {
+            "value": "never",
+            "label": "Never show again on this device"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "hide_days",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "unit": "d",
+        "label": "Don't show again for (days)",
+        "info": "Only applies when “After dismiss” is set to Hide for X days.",
+        "default": 1
+      },
+      {
+        "type": "header",
+        "content": "Editor"
+      },
+      {
+        "type": "checkbox",
+        "id": "editor_mode",
+        "label": "Editor mode (always show in Theme Editor preview)",
+        "info": "Only affects the Shopify Theme Editor preview — has no effect on the live storefront. When ON: popup is always open in the editor and submitting cycles between form and coupon every few seconds so you can edit both states. Turn OFF if you want the editor preview to behave exactly like a real visitor.",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "image_side",
+        "label": "Image position (desktop)",
+        "default": "image-right",
+        "options": [
+          {
+            "value": "image-right",
+            "label": "Right"
+          },
+          {
+            "value": "image-left",
+            "label": "Left"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "mobile_image_position",
+        "label": "Mobile image position",
+        "default": "above",
+        "options": [
+          {
+            "value": "above",
+            "label": "Above the content"
+          },
+          {
+            "value": "below",
+            "label": "Below the content"
+          },
+          {
+            "value": "hidden",
+            "label": "Hidden on mobile"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "image_ratio",
+        "label": "Image aspect ratio (desktop)",
+        "default": "auto",
+        "options": [
+          {
+            "value": "auto",
+            "label": "Auto (fills column)"
+          },
+          {
+            "value": "square",
+            "label": "Square (1:1)"
+          },
+          {
+            "value": "portrait",
+            "label": "Portrait (3:4)"
+          },
+          {
+            "value": "landscape",
+            "label": "Landscape (4:3)"
+          },
+          {
+            "value": "wide",
+            "label": "Wide (16:9)"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "image_fit",
+        "label": "Image fit",
+        "default": "cover",
+        "options": [
+          {
+            "value": "cover",
+            "label": "Cover (fill, may crop)"
+          },
+          {
+            "value": "contain",
+            "label": "Contain (no crop)"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "image_position",
+        "label": "Image focus",
+        "default": "center",
+        "options": [
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "top",
+            "label": "Top"
+          },
+          {
+            "value": "bottom",
+            "label": "Bottom"
+          },
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "mobile_image_height_mode",
+        "label": "Mobile image sizing",
+        "default": "auto",
+        "options": [
+          {
+            "value": "auto",
+            "label": "Auto (16:10 ratio)"
+          },
+          {
+            "value": "fixed",
+            "label": "Fixed height"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "mobile_image_height",
+        "min": 100,
+        "max": 400,
+        "step": 10,
+        "unit": "px",
+        "label": "Mobile image fixed height",
+        "default": 180
+      },
+      {
+        "type": "select",
+        "id": "text_align",
+        "label": "Text alignment",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "dismiss_align",
+        "label": "Dismiss link alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "popup_width",
+        "min": 360,
+        "max": 1100,
+        "step": 10,
+        "unit": "px",
+        "label": "Popup max width",
+        "default": 770
+      },
+      {
+        "type": "range",
+        "id": "popup_radius",
+        "min": 0,
+        "max": 32,
+        "step": 1,
+        "unit": "px",
+        "label": "Popup corner radius",
+        "default": 12
+      },
+      {
+        "type": "range",
+        "id": "card_padding_v",
+        "min": 12,
+        "max": 60,
+        "step": 2,
+        "unit": "px",
+        "label": "Vertical padding",
+        "default": 36
+      },
+      {
+        "type": "range",
+        "id": "card_padding_h",
+        "min": 12,
+        "max": 60,
+        "step": 2,
+        "unit": "px",
+        "label": "Horizontal padding",
+        "default": 36
+      },
+      {
+        "type": "range",
+        "id": "mobile_gutter",
+        "min": 0,
+        "max": 80,
+        "step": 4,
+        "unit": "px",
+        "label": "Mobile side gutter (total)",
+        "default": 32,
+        "info": "Reserved space on left + right of the popup on mobile so it doesn't glue to the edges."
+      },
+      {
+        "type": "header",
+        "content": "Color"
+      },
+      {
+        "type": "color",
+        "id": "card_bg",
+        "label": "Card background",
+        "default": "#ffffff"
+      },
+      {
+        "type": "color",
+        "id": "text_color",
+        "label": "Default text color",
+        "default": "#111111"
+      },
+      {
+        "type": "color",
+        "id": "close_color",
+        "label": "Close icon color",
+        "default": "#111111"
+      },
+      {
+        "type": "color",
+        "id": "overlay_color",
+        "label": "Overlay color",
+        "default": "#000000"
+      },
+      {
+        "type": "range",
+        "id": "overlay_opacity",
+        "min": 0,
+        "max": 90,
+        "step": 5,
+        "unit": "%",
+        "label": "Overlay opacity",
+        "default": 50
+      }
+    ],
+    "blocks": [
+      {
+        "type": "eyebrow",
+        "name": "Eyebrow",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Eyebrow text",
+            "default": "LIMITED TIME OFFER"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "range",
+            "id": "size_desktop",
+            "min": 10,
+            "max": 22,
+            "step": 1,
+            "unit": "px",
+            "label": "Size (desktop)",
+            "default": 12
+          },
+          {
+            "type": "header",
+            "content": "Color"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#111111"
+          }
+        ]
+      },
+      {
+        "type": "headline",
+        "name": "Headline",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Headline",
+            "default": "15% off your first order"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "range",
+            "id": "size_desktop",
+            "min": 20,
+            "max": 80,
+            "step": 1,
+            "unit": "px",
+            "label": "Size (desktop)",
+            "default": 32
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Font weight",
+            "default": "800",
+            "options": [
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi Bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              },
+              {
+                "value": "800",
+                "label": "Extra Bold"
+              },
+              {
+                "value": "900",
+                "label": "Black"
+              }
+            ]
+          },
+          {
+            "type": "header",
+            "content": "Color"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#111111"
+          }
+        ]
+      },
+      {
+        "type": "subheading",
+        "name": "Subheading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "textarea",
+            "id": "text",
+            "label": "Subheading text",
+            "default": "Subscribe and get your coupon."
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "range",
+            "id": "size_desktop",
+            "min": 12,
+            "max": 24,
+            "step": 1,
+            "unit": "px",
+            "label": "Size (desktop)",
+            "default": 15
+          },
+          {
+            "type": "header",
+            "content": "Color"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#444444"
+          }
+        ]
+      },
+      {
+        "type": "coupon",
+        "name": "Coupon code",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Label",
+            "default": "USE CODE"
+          },
+          {
+            "type": "text",
+            "id": "code",
+            "label": "Coupon code",
+            "default": "WELCOME15"
+          }
+        ]
+      },
+      {
+        "type": "form",
+        "name": "Newsletter form",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "text",
+            "id": "placeholder",
+            "label": "Email placeholder",
+            "default": "Enter your email"
+          },
+          {
+            "type": "text",
+            "id": "button_text",
+            "label": "Button label",
+            "default": "Subscribe"
+          },
+          {
+            "type": "text",
+            "id": "success_text",
+            "label": "Success message",
+            "default": "Thanks! Here is your code:"
+          },
+          {
+            "type": "header",
+            "content": "Phone collection (optional)"
+          },
+          {
+            "type": "checkbox",
+            "id": "collect_phone",
+            "label": "Also collect phone number",
+            "info": "Shows a phone-number field with a country-code selector beneath the email field. Phone numbers are saved to the customer's Shopify profile.",
+            "default": false
+          },
+          {
+            "type": "text",
+            "id": "phone_placeholder",
+            "label": "Phone placeholder",
+            "default": "Phone number"
+          },
+          {
+            "type": "text",
+            "id": "phone_default_country",
+            "label": "Default country (ISO code)",
+            "info": "ISO-2 country code, e.g. US, GB, FR, DE.",
+            "default": "US"
+          },
+          {
+            "type": "checkbox",
+            "id": "phone_required",
+            "label": "Make phone required",
+            "default": false
+          },
+          {
+            "type": "header",
+            "content": "Input"
+          },
+          {
+            "type": "range",
+            "id": "input_radius",
+            "min": 0,
+            "max": 40,
+            "step": 1,
+            "unit": "px",
+            "label": "Input radius",
+            "default": 8
+          },
+          {
+            "type": "header",
+            "content": "Button typography"
+          },
+          {
+            "type": "select",
+            "id": "button_weight",
+            "label": "Button font weight",
+            "default": "700",
+            "options": [
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi Bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              },
+              {
+                "value": "800",
+                "label": "Extra Bold"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "button_radius",
+            "min": 0,
+            "max": 40,
+            "step": 1,
+            "unit": "px",
+            "label": "Button radius",
+            "default": 8
+          },
+          {
+            "type": "header",
+            "content": "Button color (default)"
+          },
+          {
+            "type": "color",
+            "id": "button_bg",
+            "label": "Background",
+            "default": "#111111"
+          },
+          {
+            "type": "color",
+            "id": "button_text_color",
+            "label": "Text",
+            "default": "#ffffff"
+          },
+          {
+            "type": "header",
+            "content": "Button color (hover)"
+          },
+          {
+            "type": "color",
+            "id": "button_bg_hover",
+            "label": "Background on hover",
+            "default": "#000000"
+          },
+          {
+            "type": "color",
+            "id": "button_text_hover",
+            "label": "Text on hover",
+            "default": "#ffffff"
+          }
+        ]
+      },
+      {
+        "type": "image",
+        "name": "Image",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "image_picker",
+            "id": "image",
+            "label": "Image"
+          },
+          {
+            "type": "text",
+            "id": "alt",
+            "label": "Image alt text",
+            "default": "Promotion"
+          }
+        ]
+      },
+      {
+        "type": "dismiss",
+        "name": "Dismiss link",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Dismiss link text",
+            "default": "No thanks"
+          }
+        ]
+      }
+    ],
+    "presets": []
+  }
+}
+</schema>

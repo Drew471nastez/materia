@@ -1,0 +1,813 @@
+<template compat="shopify">
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+<style>
+  
+  /* Reset spacing between sections */
+  {%- if section.settings.reset_spacing -%}
+    #shopify-section-{{ section.id }} { margin-top: 0 !important; margin-bottom: 0 !important; }
+    #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif -%}
+/* Theme font-weight inheritance — inherit theme weights by default; explicit rules still override */
+  #shopify-section-{{ section.id }} {
+    font-weight: var(--body-weight, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
+    font-weight: var(--heading-weight, inherit);
+  }
+  /* ── Loading skeleton (scoped) ──
+     Ghost cards rendered server-side inside <product-recommendations> on
+     first paint, replaced by real product cards once the async fetch
+     completes. Mirrors the theme's skeleton look (soft text-color fill,
+     rounded corners, gentle pulse — see assets/skeleton.css). */
+  #shopify-section-{{ section.id }} .related-skeleton__card {
+    pointer-events: none;
+  }
+  #shopify-section-{{ section.id }} .related-skeleton__media,
+  #shopify-section-{{ section.id }} .related-skeleton__line {
+    display: block;
+    background-color: rgba(0, 0, 0, 0.06);
+    background-color: rgba(var(--color-text-rgb), 0.06);
+    border-radius: 10px;
+    animation: relpro-skeleton-pulse 1.6s ease-in-out infinite;
+  }
+  #shopify-section-{{ section.id }} .related-skeleton__media {
+    width: 100%;
+    aspect-ratio: var(--aspect-ratio, 3 / 4);
+  }
+  #shopify-section-{{ section.id }} .related-skeleton__line {
+    height: 12px;
+  }
+  #shopify-section-{{ section.id }} .related-skeleton__line--title {
+    width: 70%;
+    margin-top: 16px;
+  }
+  #shopify-section-{{ section.id }} .related-skeleton__line--price {
+    width: 40%;
+    margin-top: 10px;
+  }
+  @keyframes relpro-skeleton-pulse {
+    0%   { opacity: 1; }
+    50%  { opacity: 0.45; }
+    100% { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ section.id }} .related-skeleton__media,
+    #shopify-section-{{ section.id }} .related-skeleton__line {
+      animation: none;
+    }
+  }
+{% comment %}{% endcomment %}</style>
+{%- comment -%}Section isolation — prevent CSS/JS bleed between sections{%- endcomment -%}
+<style>
+  #shopify-section-{{ section.id }} { isolation: isolate; position: relative; }
+{% comment %}{% endcomment %}</style>
+{%- comment -%}
+  Materia Themes — People Also Bought (related products) section.
+  Two modes:
+    1. Automatic — Shopify product recommendations (related / complementary).
+    2. Custom — a hand-picked product list. The currently viewed product is
+       always skipped so the section never recommends the page you're on.
+{%- endcomment -%}
+{%- liquid
+  assign s = section.settings
+  assign section_width = s.section_width | default: 'fluid_container'
+  assign color_scheme = s.color_scheme.id | default: 'scheme-1'
+  if s.reset_spacing
+    assign reset_spacing = ' remove_spacing'
+  endif
+  assign column_gap = s.column_gap | default: 30
+  assign items_to_show = s.items_to_show | default: 4
+  assign heading = s.heading
+  assign description = s.description
+  assign header_size = ''
+  if s.header_size == 'small'
+    assign header_size = 'h3'
+  elsif s.header_size == 'large'
+    assign header_size = 'h1-size'
+  endif
+  if s.items_per_row_mobile > 1 and s.items_per_row_mobile < 2
+    assign data_free_scroll = 'true'
+  endif
+  assign reveal = s.reveal
+  assign items_per_row = s.items_per_row | default: 4
+  assign items_per_row_mobile = s.items_per_row_mobile | default: 2
+  assign scroll_animation = settings.scroll_animation
+
+  comment
+    Decide which mode is active. Custom mode only kicks in when the toggle is on
+    AND at least one product has actually been picked, otherwise fall back to the
+    automatic recommendations so the section is never empty by accident.
+  endcomment
+  assign use_custom = false
+  if s.enable_custom_products and s.custom_products != blank and s.custom_products.size > 0
+    assign use_custom = true
+  endif
+-%}
+{%- capture style -%}
+  --section-pt: {{ s.padding_top }}; --section-pb: {{ s.padding_bottom }};
+{%- endcapture -%}
+{%- capture col_style -%}
+  --col-desktop: {{ items_per_row }};--col-number: {{ items_per_row_mobile }};{% if items_per_row > 3 %}--col-tablet: 3;{% else %}--col-tablet: {{ items_per_row }};{% endif %}
+  {% if column_gap < 15 %}--col-gap: {{ column_gap }}px;{% else %}--col-gap: 15px;--col-gap-desktop: {{ column_gap }}px;{% endif %}--repeat: {{ items_to_show }}; --col-mobile: {{ items_per_row_mobile }}
+{%- endcapture -%}
+<div
+  class="section{% if s.padding_top < 30 %} pt-min{% endif %}{% if s.padding_bottom < 30 %} pb-min{% endif %} sec__related-product color-{{ color_scheme }} gradient{{ reset_spacing }}{% if reveal %} overflow-hidden{% endif %}"
+  style="{{ style | strip | strip_newlines }}"
+>
+  <div class="{{ section_width }}">
+    {%- if heading != blank or description != blank -%}
+      <div class="section__header mb-33 mb-sm-20 text-{{ s.header_alignment }}{% if s.section_width == 'full_width' %} px-20{% endif %}">
+        <div class="secion__header-inner">
+          {%- if heading != blank -%}
+            <motion-element
+              data-motion="fade-up-lg"
+              {% if scroll_animation != 'slide_in' %}hold{% endif %}
+              data-motion-delay="50"
+              class="block {% if scroll_animation != 'none' %} scroll-trigger {{ scroll_animation }}{% endif %}"
+              style="{%- if scroll_animation != 'none' -%}--animation-order: 0;{% endif %}"
+            >
+              <h2 class="section__header-heading heading-letter-spacing {{ header_size }} mt-0{% if description != blank %} mb-10{% else %} mb-0{% endif %}">
+                {{ heading }}
+              </h2>
+            </motion-element>
+          {%- endif -%}
+          {%- if description != blank -%}
+            <motion-element
+              data-motion="fade-up-lg"
+              data-motion-delay="150"
+              {% if scroll_animation != 'slide_in' %}hold{% endif %}
+              class="section__header-des block rich__text-m0"
+              style="{%- if scroll_animation != 'none' -%}--animation-order: 1{% endif %}"
+            >
+              {{ description }}
+            </motion-element>
+          {%- endif -%}
+        </div>
+      </div>
+    {%- endif -%}
+
+    {%- if use_custom -%}
+      {%- comment -%}
+        Custom mode. Render the hand-picked products as a plain grid (NOT the
+        <product-recommendations> element) so nothing fetches the API and
+        overwrites the selection. The current product is skipped.
+      {%- endcomment -%}
+      <div
+        data-section-id="{{ section.id }}"
+        {% if data_free_scroll != blank %}data-free-scroll="{{ data_free_scroll }}"{% endif %}
+        style="{{ col_style | strip | strip_newlines }}"
+        class="products-grid__items flex flex-cols{% if column_gap < 31 %} row-gap-20 row-gap-md-30{% endif %} flex-wrap {% if s.items_per_row_mobile > 1 and s.items_per_row_mobile < 2 %} grid_scroll{% endif %}"
+      >
+        {%- assign rendered = 0 -%}
+        {%- for cp in s.custom_products -%}
+          {%- comment -%} Always skip the product whose page we're on {%- endcomment -%}
+          {%- if product != blank and cp.id == product.id -%}
+            {%- continue -%}
+          {%- endif -%}
+          {%- assign rendered = rendered | plus: 1 -%}
+          {% render 'product-item',
+            card_product: cp,
+            section_id: section.id,
+            is_compare: false,
+            template_enable_action: s.show_action,
+            template_enable_product_vendor: s.show_vendor,
+            template_enable_rate: s.show_rating,
+            template_enable_product_short_description: false,
+            template_enable_color_swatches: s.show_swatches,
+            template_enable_price: s.show_price,
+            template_enable_add_cart: s.show_add_to_cart,
+            template_enable_product_badges: s.show_badges,
+            indexFor: rendered,
+            scroll_animation: scroll_animation
+          %}
+        {%- endfor -%}
+        {%- if rendered == 0 -%}
+          {%- if request.design_mode -%}
+            {%- comment -%} Theme editor only: explain why the section is empty. {%- endcomment -%}
+            <p>{{ 'sections.related_products.no_product' | t }}</p>
+          {%- else -%}
+            {%- comment -%} Storefront: collapse the whole section quietly. {%- endcomment -%}
+            <style>
+              #shopify-section-{{ section.id }} { display: none; }
+{% comment %}{% endcomment %}            </style>
+          {%- endif -%}
+        {%- endif -%}
+      </div>
+    {%- else -%}
+      <product-recommendations
+        data-section-id="{{ section.id }}"
+        {% if data_free_scroll != blank %}data-free-scroll="{{ data_free_scroll }}"{% endif %}
+        style="{{ col_style | strip | strip_newlines }}"
+        class="products-grid__items flex flex-cols{% if column_gap < 31 %} row-gap-20 row-gap-md-30{% endif %} flex-wrap {% if s.items_per_row_mobile > 1 and s.items_per_row_mobile < 2 %} grid_scroll{% endif %}"
+        data-url="{{ routes.product_recommendations_url }}?section_id={{ section.id }}&product_id={{ product.id }}&limit={{ items_to_show }}&intent={{ s.intent | default: 'related' }}"
+        data-arrow-centerimage="1"
+      >
+        {%- if recommendations.performed -%}
+          {%- comment -%}
+            This branch only renders inside the async response fetched from
+            routes.product_recommendations_url. When there are zero products
+            we output NOTHING, so the ProductRecommendations JS sees an empty
+            element and collapses the section quietly (no empty-state text).
+          {%- endcomment -%}
+          {%- for recommendation in recommendations.products -%}
+            {% render 'product-item',
+              card_product: recommendation,
+              section_id: section.id,
+              is_compare: false,
+              template_enable_action: s.show_action,
+              template_enable_product_vendor: s.show_vendor,
+              template_enable_rate: s.show_rating,
+              template_enable_product_short_description: false,
+              template_enable_color_swatches: s.show_swatches,
+              template_enable_price: s.show_price,
+              template_enable_add_cart: s.show_add_to_cart,
+              template_enable_product_badges: s.show_badges,
+              indexFor: forloop.index,
+              scroll_animation: scroll_animation
+            %}
+          {%- endfor -%}
+        {%- else -%}
+          {%- comment -%}
+            Initial server-side render — recommendations have not been fetched
+            yet. Render ghost skeleton cards (theme skeleton look) instead of
+            the "No related products found" text. The fetch in main-product.js
+            replaces this innerHTML with the real cards when they arrive.
+          {%- endcomment -%}
+          {%- liquid
+            assign skeleton_count = items_per_row | at_most: items_to_show
+            assign sk_ratio = '3/4'
+            case settings.product_image_ratio
+              when 'square'
+                assign sk_ratio = '1/1'
+              when 'landscape'
+                assign sk_ratio = '4/3'
+              when 'portrait'
+                assign sk_ratio = '3/4'
+              when 'adapt'
+                assign sk_ratio = '3/4'
+              else
+                if settings.product_custom_ratio != blank
+                  assign sk_ratio = settings.product_custom_ratio | replace: ':', '/'
+                endif
+            endcase
+          -%}
+          {%- for i in (1..skeleton_count) -%}
+            <div class="related-skeleton__card" aria-hidden="true">
+              <div class="related-skeleton__media" style="--aspect-ratio: {{ sk_ratio }};"></div>
+              <div class="related-skeleton__line related-skeleton__line--title"></div>
+              <div class="related-skeleton__line related-skeleton__line--price"></div>
+            </div>
+          {%- endfor -%}
+        {%- endif -%}
+      </product-recommendations>
+    {%- endif -%}
+  </div>
+</div>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "related-products",
+  "name": "People Also Bought",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "Layout"
+    },
+    {
+      "type": "color_scheme",
+      "id": "color_scheme",
+      "label": "Color scheme",
+      "default": "scheme-1"
+    },
+    {
+      "type": "select",
+      "id": "section_width",
+      "label": "Section width",
+      "default": "fluid_container",
+      "options": [
+        {
+          "value": "container",
+          "label": "Container"
+        },
+        {
+          "value": "fluid_container",
+          "label": "Fluid container"
+        },
+        {
+          "value": "stretch_width",
+          "label": "Stretched"
+        },
+        {
+          "value": "full_width",
+          "label": "Full width"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_5",
+      "label": "Section header"
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "People Also Bought"
+    },
+    {
+      "type": "inline_richtext",
+      "id": "description",
+      "label": "Description",
+      "default": "Here's some of our most similar products people are buying. Click to discover trending styles."
+    },
+    {
+      "type": "select",
+      "id": "header_size",
+      "label": "Header size",
+      "default": "medium",
+      "options": [
+        {
+          "value": "small",
+          "label": "Small"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "large",
+          "label": "Large"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "header_alignment",
+      "label": "Alignment",
+      "default": "left",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Centered"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_10",
+      "label": "Products"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_custom_products",
+      "label": "Enable custom selected products",
+      "info": "When on, this section shows the exact products you pick below instead of automatic recommendations. The product currently being viewed is always skipped, since you're already on its page.",
+      "default": false
+    },
+    {
+      "type": "product_list",
+      "id": "custom_products",
+      "label": "Selected products",
+      "limit": 12,
+      "info": "Only used when 'Enable custom selected products' is on. Order here is the order shown."
+    },
+    {
+      "type": "select",
+      "id": "intent",
+      "label": "Recommendation type",
+      "default": "related",
+      "info": "Shopify's recommendation algorithm. Used only for automatic recommendations.",
+      "options": [
+        {
+          "value": "related",
+          "label": "Related (default)"
+        },
+        {
+          "value": "complementary",
+          "label": "Complementary"
+        }
+      ],
+      "visible_if": "{{ section.settings.enable_custom_products == false }}"
+    },
+    {
+      "type": "range",
+      "id": "items_to_show",
+      "label": "Items to show",
+      "min": 2,
+      "max": 12,
+      "step": 1,
+      "default": 4,
+      "info": "Used only for automatic recommendations.",
+      "visible_if": "{{ section.settings.enable_custom_products == false }}"
+    },
+    {
+      "type": "range",
+      "id": "items_per_row",
+      "label": "Items per row (desktop)",
+      "min": 2,
+      "max": 5,
+      "step": 1,
+      "default": 4
+    },
+    {
+      "type": "range",
+      "id": "column_gap",
+      "label": "Column gap",
+      "min": 0,
+      "max": 50,
+      "step": 5,
+      "unit": "px",
+      "default": 30
+    },
+    {
+      "type": "header",
+      "id": "hdr_17",
+      "label": "Product card"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_badges",
+      "label": "Show badges (sale / new / sold out)",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_vendor",
+      "label": "Show vendor name",
+      "default": false
+    },
+    {
+      "type": "checkbox",
+      "id": "show_rating",
+      "label": "Show review stars",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_swatches",
+      "label": "Show color swatches",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_price",
+      "label": "Show price",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_add_to_cart",
+      "label": "Show Add to cart",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_action",
+      "label": "Show wishlist / quickview icons",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_25",
+      "label": "Mobile"
+    },
+    {
+      "type": "range",
+      "id": "items_per_row_mobile",
+      "label": "Items per row (mobile)",
+      "min": 1,
+      "max": 3,
+      "step": 0.5,
+      "default": 2
+    },
+    {
+      "type": "header",
+      "id": "hdr_27",
+      "label": "Section padding"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "label": "Top padding",
+      "default": 30,
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px"
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "label": "Bottom padding",
+      "default": 30,
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px"
+    },
+    {
+      "type": "checkbox",
+      "id": "reveal",
+      "label": "Reveal on scroll",
+      "info": "Animates the section into view using Theme settings → Animations.",
+      "default": true
+    }
+  ],
+  "presets": [],
+  "shopify": {
+    "name": "People Also Bought",
+    "tag": "section",
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "scheme-1"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "fluid_container",
+        "options": [
+          {
+            "value": "container",
+            "label": "Container"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Section header"
+      },
+      {
+        "type": "text",
+        "id": "heading",
+        "label": "Heading",
+        "default": "People Also Bought"
+      },
+      {
+        "type": "inline_richtext",
+        "id": "description",
+        "label": "Description",
+        "default": "Here's some of our most similar products people are buying. Click to discover trending styles."
+      },
+      {
+        "type": "select",
+        "id": "header_size",
+        "label": "Header size",
+        "default": "medium",
+        "options": [
+          {
+            "value": "small",
+            "label": "Small"
+          },
+          {
+            "value": "medium",
+            "label": "Medium"
+          },
+          {
+            "value": "large",
+            "label": "Large"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "header_alignment",
+        "label": "Alignment",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Centered"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Products"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_products",
+        "label": "Enable custom selected products",
+        "info": "When on, this section shows the exact products you pick below instead of automatic recommendations. The product currently being viewed is always skipped, since you're already on its page.",
+        "default": false
+      },
+      {
+        "type": "product_list",
+        "id": "custom_products",
+        "label": "Selected products",
+        "limit": 12,
+        "info": "Only used when 'Enable custom selected products' is on. Order here is the order shown."
+      },
+      {
+        "type": "select",
+        "id": "intent",
+        "label": "Recommendation type",
+        "default": "related",
+        "info": "Shopify's recommendation algorithm. Used only for automatic recommendations.",
+        "options": [
+          {
+            "value": "related",
+            "label": "Related (default)"
+          },
+          {
+            "value": "complementary",
+            "label": "Complementary"
+          }
+        ],
+        "visible_if": "{{ section.settings.enable_custom_products == false }}"
+      },
+      {
+        "type": "range",
+        "id": "items_to_show",
+        "label": "Items to show",
+        "min": 2,
+        "max": 12,
+        "step": 1,
+        "default": 4,
+        "info": "Used only for automatic recommendations.",
+        "visible_if": "{{ section.settings.enable_custom_products == false }}"
+      },
+      {
+        "type": "range",
+        "id": "items_per_row",
+        "label": "Items per row (desktop)",
+        "min": 2,
+        "max": 5,
+        "step": 1,
+        "default": 4
+      },
+      {
+        "type": "range",
+        "id": "column_gap",
+        "label": "Column gap",
+        "min": 0,
+        "max": 50,
+        "step": 5,
+        "unit": "px",
+        "default": 30
+      },
+      {
+        "type": "header",
+        "content": "Product card"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_badges",
+        "label": "Show badges (sale / new / sold out)",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_vendor",
+        "label": "Show vendor name",
+        "default": false
+      },
+      {
+        "type": "checkbox",
+        "id": "show_rating",
+        "label": "Show review stars",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_swatches",
+        "label": "Show color swatches",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_price",
+        "label": "Show price",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_add_to_cart",
+        "label": "Show Add to cart",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_action",
+        "label": "Show wishlist / quickview icons",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "range",
+        "id": "items_per_row_mobile",
+        "label": "Items per row (mobile)",
+        "min": 1,
+        "max": 3,
+        "step": 0.5,
+        "default": 2
+      },
+      {
+        "type": "header",
+        "content": "Section padding"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top padding",
+        "default": 30,
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px"
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom padding",
+        "default": 30,
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px"
+      },
+      {
+        "type": "checkbox",
+        "id": "reveal",
+        "label": "Reveal on scroll",
+        "info": "Animates the section into view using Theme settings → Animations.",
+        "default": true
+      }
+    ],
+    "presets": []
+  }
+}
+</schema>

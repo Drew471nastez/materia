@@ -1,0 +1,1864 @@
+<template compat="shopify">
+{%- comment -%} Connect to the theme's global Animations & motion settings (Theme settings > Animations). {%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+
+{%- comment -%} Remove default space between sections (margins only — never touches padding). {%- endcomment -%}
+{%- if section.settings.reset_spacing -%}
+<style>
+  #shopify-section-{{ section.id }} { margin-top: 0 !important; margin-bottom: 0 !important; }
+  #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
+{% comment %}{% endcomment %}</style>
+{%- endif -%}
+
+{%- liquid
+  assign st = section.settings
+  assign sid = section.id
+  assign placeholder = 'image' | placeholder_svg_tag: 'placeholder-svg'
+
+  # --- Overlay colour -> RGB ---
+  case st.video_overlay_color_selector
+    when 'none'
+      assign overlay_rgb = '0,0,0'
+      assign overlay_opacity = 0
+    when 'white'
+      assign overlay_rgb = '255,255,255'
+      assign overlay_opacity = st.video_overlay_opacity
+    when 'gray'
+      assign overlay_rgb = '128,128,128'
+      assign overlay_opacity = st.video_overlay_opacity
+    when 'light-gray'
+      assign overlay_rgb = '211,211,211'
+      assign overlay_opacity = st.video_overlay_opacity
+    when 'dark-gray'
+      assign overlay_rgb = '169,169,169'
+      assign overlay_opacity = st.video_overlay_opacity
+    else
+      assign overlay_rgb = '0,0,0'
+      assign overlay_opacity = st.video_overlay_opacity
+  endcase
+
+  # --- Find the single heading + subheading blocks, count cards ---
+  assign card_count = 0
+  assign heading_found = false
+  assign subheading_found = false
+  for block in section.blocks
+    case block.type
+      when 'video_card'
+        assign card_count = card_count | plus: 1
+      when 'heading'
+        unless heading_found
+          assign heading_block = block
+          assign heading_found = true
+        endunless
+      when 'subheading'
+        unless subheading_found
+          assign subheading_block = block
+          assign subheading_found = true
+        endunless
+    endcase
+  endfor
+  if heading_found
+    assign hb = heading_block.settings
+  endif
+  if subheading_found
+    assign sb = subheading_block.settings
+  endif
+-%}
+
+<style>
+  /* ---- Isolation: this section never overlaps or styles anything else ---- */
+  #shopify-section-{{ sid }} { position: static; z-index: 0; }
+  :where(#shopify-section-{{ sid }}) { font-family: var(--body-font, inherit); }
+  :where(#shopify-section-{{ sid }}) :where(button, input, textarea, select, optgroup) { font-family: inherit; }
+  #community-stories-slider-{{ sid }} *,
+  #community-stories-slider-{{ sid }} *::before,
+  #community-stories-slider-{{ sid }} *::after { box-sizing: border-box; }
+
+  /* ---- Section shell + padding (works on desktop AND mobile) ---- */
+  #community-stories-slider-{{ sid }} {
+    position: relative;
+    overflow: hidden;
+    z-index: 0;
+    text-align: center;
+    background-color: {{ st.background_color | default: '#ffffff' }};
+    padding-top: {{ st.padding_top | default: 60 }}px;
+    padding-bottom: {{ st.padding_bottom | default: 60 }}px;
+  }
+  #community-stories-slider-{{ sid }} .ctv__inner {
+    padding-left: {{ st.desktop_padding_left | default: 15 }}px;
+    padding-right: {{ st.desktop_padding_right | default: 15 }}px;
+  }
+  @media (max-width: 768px) {
+    #community-stories-slider-{{ sid }} .ctv__inner {
+      padding-left: {{ st.mobile_padding_left | default: 10 }}px;
+      padding-right: {{ st.mobile_padding_right | default: 10 }}px;
+    }
+  }
+
+  /* ---- Heading + subheading (theme font by default) ---- */
+  #community-stories-slider-{{ sid }} .ctv__heading {
+    font-family: inherit;
+    color: {{ hb.heading_color | default: '#000000' }};
+    font-weight: {{ hb.heading_font_weight | default: '700' }};
+    font-size: {{ hb.heading_font_size_mobile | default: 25 }}px;
+    margin: 0 0 {{ hb.space_below_mobile | default: 10 }}px;
+    line-height: 1.2;
+  }
+  #community-stories-slider-{{ sid }} .ctv__subheading {
+    font-family: inherit;
+    color: {{ sb.subheading_color | default: '#555555' }};
+    font-size: {{ sb.subheading_font_size_mobile | default: 14 }}px;
+    margin: 0 0 {{ sb.space_below_mobile | default: 28 }}px;
+    line-height: 1.5;
+  }
+  @media (min-width: 769px) {
+    #community-stories-slider-{{ sid }} .ctv__heading {
+      font-size: {{ hb.heading_font_size_desktop | default: 29 }}px;
+      margin-bottom: {{ hb.space_below_desktop | default: 20 }}px;
+    }
+    #community-stories-slider-{{ sid }} .ctv__subheading {
+      font-size: {{ sb.subheading_font_size_desktop | default: 16 }}px;
+      margin-bottom: {{ sb.space_below_desktop | default: 40 }}px;
+    }
+  }
+
+  /* ---- Carousel rail (native scroll + drag, centred when it fits) ---- */
+  #community-stories-slider-{{ sid }} .ctv__viewport {
+    width: 100%;
+    position: relative;
+    touch-action: pan-y;
+    cursor: grab;
+  }
+  #community-stories-slider-{{ sid }} .ctv__viewport.is-dragging { cursor: grabbing; }
+  #community-stories-slider-{{ sid }} .ctv__rail {
+    --ctv-cols: {{ st.mobile_column_count | default: 1.5 }};
+    --ctv-gap: {{ st.video_cards_gap_mobile | default: 12 }}px;
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: var(--ctv-gap);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x proximity;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding: 4px 2px 8px;
+  }
+  /* When all cards fit, centre them (fixes the "stuck to the left" look). */
+  #community-stories-slider-{{ sid }} .ctv__rail.is-centered { justify-content: center; }
+  #community-stories-slider-{{ sid }} .ctv__rail::-webkit-scrollbar { display: none; }
+  #community-stories-slider-{{ sid }} .ctv__viewport.is-dragging .ctv__rail {
+    scroll-behavior: auto !important;
+    scroll-snap-type: none !important;
+  }
+  @media (min-width: 769px) {
+    #community-stories-slider-{{ sid }} .ctv__rail { --ctv-gap: {{ st.video_cards_gap_desktop | default: 16 }}px; }
+  }
+
+  #community-stories-slider-{{ sid }} .ctv__slide {
+    flex: 0 0 calc((100% - (var(--ctv-cols) - 1) * var(--ctv-gap)) / var(--ctv-cols));
+    scroll-snap-align: start;
+    display: flex;
+    justify-content: center;
+  }
+  @media (min-width: 769px) {
+    #community-stories-slider-{{ sid }} .ctv__slide { flex: 0 0 {{ st.video_card_size | default: 220 }}px; }
+  }
+
+  /* ---- Card ---- */
+  #community-stories-slider-{{ sid }} .ctv__card-link {
+    position: absolute; inset: 0; z-index: 2;
+    text-decoration: none; color: inherit;
+  }
+  #community-stories-slider-{{ sid }} .ctv__slide img,
+  #community-stories-slider-{{ sid }} .ctv__slide video { -webkit-user-drag: none; pointer-events: none; }
+  #community-stories-slider-{{ sid }} .video-overlay { z-index: 3; pointer-events: none; }
+  #community-stories-slider-{{ sid }} .custom-button { z-index: 4; pointer-events: auto; }
+  #community-stories-slider-{{ sid }} .ctv__viewport.is-dragging * { pointer-events: none; }
+  #community-stories-slider-{{ sid }} .video-card {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 10 / 16;
+    border-radius: {{ st.card_corner_radius | default: 12 }}px;
+    overflow: hidden;
+    transition: transform 0.3s, box-shadow 0.3s;
+    cursor: pointer;
+    background-color: #f1f1f3;
+  }
+  #community-stories-slider-{{ sid }} .media-content,
+  #community-stories-slider-{{ sid }} .media-content video,
+  #community-stories-slider-{{ sid }} video.media-content {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  /* Hover animations */
+  #community-stories-slider-{{ sid }} .video-card.smooth-zoom:hover { transform: scale(1.05); }
+  #community-stories-slider-{{ sid }} .video-card.scale-in:hover { transform: scale(1.1); }
+  #community-stories-slider-{{ sid }} .video-card.scale-in-up:hover { transform: scale(1.1) translateY(-5px); }
+  #community-stories-slider-{{ sid }} .video-card.subtle-shadow:hover { box-shadow: 0 8px 30px rgba(0,0,0,0.3); }
+  #community-stories-slider-{{ sid }} .video-card.subtle-white-glow-pulse:hover { box-shadow: 0 0 10px rgba(255,255,255,0.7); animation: ctvWhiteGlow-{{ sid }} 1.5s infinite; }
+  #community-stories-slider-{{ sid }} .video-card.subtle-gray-glow-pulse:hover { box-shadow: 0 0 10px rgba(128,128,128,0.7); animation: ctvGrayGlow-{{ sid }} 1.5s infinite; }
+  @keyframes ctvWhiteGlow-{{ sid }} { 0%,100%{ box-shadow:0 0 10px rgba(255,255,255,.7);} 50%{ box-shadow:0 0 20px rgba(255,255,255,.9);} }
+  @keyframes ctvGrayGlow-{{ sid }} { 0%,100%{ box-shadow:0 0 10px rgba(128,128,128,.7);} 50%{ box-shadow:0 0 20px rgba(128,128,128,.9);} }
+
+  /* Overlay + product info */
+  #community-stories-slider-{{ sid }} .video-overlay {
+    position: absolute; left: 0; bottom: 0; width: 100%;
+    display: flex; align-items: center; padding: 12px;
+    backdrop-filter: blur(2px);
+  }
+  #community-stories-slider-{{ sid }} .product-info { display: flex; flex-direction: column; align-items: flex-start; width: 100%; text-align: left; }
+  #community-stories-slider-{{ sid }} .username { font-size: 12px; font-weight: 700; font-family: inherit; margin-bottom: 2px; }
+  #community-stories-slider-{{ sid }} .product-name { font-size: 14px; font-weight: 700; font-family: inherit; margin-bottom: 2px; }
+  #community-stories-slider-{{ sid }} .stars { display: flex; font-size: 14px; font-family: inherit; }
+  #community-stories-slider-{{ sid }} .star { color: var(--star-off, #c9c9c9); }
+  #community-stories-slider-{{ sid }} .star.filled { color: var(--star-on, #ffd700); }
+
+  /* Button */
+  #community-stories-slider-{{ sid }} .custom-button {
+    position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%);
+    background-color: {{ st.button_background_color | default: '#ffffff' }};
+    color: {{ st.button_text_color | default: '#000000' }};
+    border: none; border-radius: {{ st.button_border_radius | default: 25 }}px;
+    padding: 8px 16px; text-decoration: none; font-size: 14px; white-space: nowrap;
+    display: inline-block; transition: filter 0.3s ease; will-change: filter;
+  }
+  #community-stories-slider-{{ sid }} .custom-button:hover { filter: brightness(0.94); }
+
+  /* Progress bar */
+  {%- if st.show_progress_bar == false -%}
+  #community-stories-slider-{{ sid }} .ctv__progress { display: none !important; }
+  {%- endif -%}
+  {%- if st.hide_progress_bar_desktop -%}
+  @media (min-width: 769px) { #community-stories-slider-{{ sid }} .ctv__progress { display: none !important; } }
+  {%- endif -%}
+  #community-stories-slider-{{ sid }} .ctv__progress {
+    position: relative; display: block; margin: 22px auto 0;
+    width: {{ st.progress_bar_max_width | default: 90 }}%;
+    height: {{ st.progress_bar_height | default: 2 }}px;
+    background: {{ st.pagination_bullet_color | default: '#E5E7EB' }};
+    border-radius: 999px; overflow: hidden; cursor: pointer;
+  }
+  #community-stories-slider-{{ sid }} .ctv__progress-fill {
+    position: absolute; inset: 0 auto 0 0; width: 0%;
+    background: {{ st.pagination_bullet_active_color | default: '#111111' }};
+    border-radius: 999px; transition: width .15s linear;
+  }
+  /* Hide the progress bar entirely when nothing scrolls (cards fit). */
+  #community-stories-slider-{{ sid }} .ctv__viewport.is-static .ctv__progress { visibility: hidden; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #community-stories-slider-{{ sid }} .ctv__rail { scroll-behavior: auto; }
+  }
+{% comment %}{% endcomment %}</style>
+
+{%- if st.enable_custom_fonts and st.selected_custom_font != blank -%}
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family={{ st.selected_custom_font | replace: ' ', '+' }}&display=swap');
+    #community-stories-slider-{{ sid }} * { font-family: '{{ st.selected_custom_font }}', sans-serif !important; }
+{% comment %}{% endcomment %}  </style>
+{%- elsif st.custom_font_url != blank -%}
+  <style>
+    @import url('{{ st.custom_font_url }}');
+    #community-stories-slider-{{ sid }} * { font-family: 'CustomFont', sans-serif !important; }
+{% comment %}{% endcomment %}  </style>
+{%- endif -%}
+
+<section id="community-stories-slider-{{ sid }}" class="community-stories-slider-{{ sid }}">
+  <div class="ctv__inner">
+
+    {%- if heading_found and hb.heading != blank -%}
+      <h2 class="ctv__heading" {{ heading_block.shopify_attributes }}>{{ hb.heading }}</h2>
+    {%- endif -%}
+
+    {%- if subheading_found and sb.subheading != blank -%}
+      <p class="ctv__subheading" {{ subheading_block.shopify_attributes }}>{{ sb.subheading }}</p>
+    {%- endif -%}
+
+    {%- if card_count > 0 -%}
+      <div class="ctv__viewport" data-ctv-viewport>
+        <div class="ctv__rail" data-ctv-rail>
+          {%- for block in section.blocks -%}
+            {%- if block.type == 'video_card' -%}
+              {%- liquid
+                assign card = block.settings
+                assign prod = card.product
+                assign pname = card.product_name
+                if pname == blank and prod != blank
+                  assign pname = prod.title
+                endif
+                assign plink = card.product_link
+                if plink == blank or plink == '/'
+                  if prod != blank
+                    assign plink = prod.url
+                  endif
+                endif
+                assign demo_src = ''
+                if card.image == blank and card.video == blank and card.video_url == blank
+                  capture demo_src
+                    render 'demo-image', key: block.id
+                  endcapture
+                  assign demo_src = demo_src | strip
+                endif
+              -%}
+              <div class="ctv__slide">
+                <div class="video-card {{ st.hover_animation }}" {{ block.shopify_attributes }}>
+                    {%- if card.image != blank -%}
+                      <img src="{{ card.image | image_url: width: 600 }}" alt="{{ pname | escape }}" class="media-content" loading="lazy" width="{{ card.image.width }}" height="{{ card.image.height }}">
+                    {%- elsif card.video != blank -%}
+                      {{ card.video | video_tag: autoplay: true, muted: true, loop: true, playsinline: true, controls: false, preload: 'auto', class: 'media-content' }}
+                    {%- elsif card.video_url != blank -%}
+                      <video class="media-content" autoplay muted loop playsinline preload="auto">
+                        <source src="{{ card.video_url }}" type="video/mp4">
+                      </video>
+                    {%- elsif prod != blank and prod.featured_image != blank -%}
+                      <img src="{{ prod.featured_image | image_url: width: 600 }}" alt="{{ pname | escape }}" class="media-content" loading="lazy">
+                    {%- elsif demo_src != blank -%}
+                      <video class="media-content" autoplay muted loop playsinline preload="auto">
+                        <source src="{{ demo_src }}" type="video/mp4">
+                      </video>
+                    {%- else -%}
+                      {{ placeholder }}
+                    {%- endif -%}
+
+                    <a class="ctv__card-link" href="{{ plink | default: '/' }}" aria-label="{{ pname | default: 'View' | escape }}"></a>
+
+                    {%- unless st.hide_addons -%}
+                      <div class="video-overlay" style="background-color: rgba({{ overlay_rgb }},{{ overlay_opacity }});">
+                        <div class="product-info">
+                          {%- if card.username != blank -%}<span class="username" style="color: {{ st.product_name_color }};">{{ card.username }}</span>{%- endif -%}
+                          {%- if pname != blank -%}<span class="product-name" style="color: {{ st.product_name_color }};">{{ pname }}</span>{%- endif -%}
+                          <div class="stars" style="--star-on: {{ st.product_price_color }};">
+                            {%- for i in (1..5) -%}
+                              {%- if i <= card.rating -%}<span class="star filled">&#9733;</span>{%- else -%}<span class="star">&#9734;</span>{%- endif -%}
+                            {%- endfor -%}
+                          </div>
+                        </div>
+                      </div>
+                    {%- endunless -%}
+
+                    {%- if st.enable_button -%}
+                      <a class="custom-button" href="{{ card.button_link | default: plink | default: '/' }}">{{ st.button_text }}</a>
+                    {%- endif -%}
+                </div>
+              </div>
+            {%- endif -%}
+          {%- endfor -%}
+        </div>
+
+        <div class="ctv__progress" data-ctv-progress role="progressbar" aria-label="{{ 'accessibility.carousel_progress' | t | default: 'Carousel progress' }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="ctv__progress-fill" data-ctv-progress-fill></div>
+        </div>
+      </div>
+    {%- endif -%}
+
+  </div>
+</section>
+
+<script>
+  (function () {
+    var sid = '{{ sid }}';
+    function init() {
+      var section = document.getElementById('community-stories-slider-' + sid);
+      if (!section || section.__ctvInited) return;
+      section.__ctvInited = true;
+
+      var viewport = section.querySelector('[data-ctv-viewport]');
+      var rail = section.querySelector('[data-ctv-rail]');
+      var progress = section.querySelector('[data-ctv-progress]');
+      var fill = section.querySelector('[data-ctv-progress-fill]');
+
+      /* ---- 1. Keep videos alive: play visible ones, pause off-screen ones to
+         avoid exceeding the browser's concurrent-decoder limit (the usual cause
+         of frozen first frames), and auto-resume if anything stalls or another
+         script pauses them. We never pause a video that's on screen. ---- */
+      var videos = section.querySelectorAll('video');
+      function inView(v) {
+        var r = v.getBoundingClientRect();
+        return r.bottom > 0 && r.top < (window.innerHeight || document.documentElement.clientHeight) &&
+               r.right > 0 && r.left < (window.innerWidth || document.documentElement.clientWidth);
+      }
+      function kick(v) { v.muted = true; var p = v.play(); if (p && p.catch) p.catch(function(){}); }
+      if ('IntersectionObserver' in window) {
+        var vio = new IntersectionObserver(function (entries) {
+          entries.forEach(function (en) {
+            if (en.isIntersecting) { kick(en.target); }
+            else { try { en.target.pause(); } catch (e) {} }
+          });
+        }, { threshold: 0.05 });
+        Array.prototype.forEach.call(videos, function (v) { vio.observe(v); });
+      }
+      Array.prototype.forEach.call(videos, function (v) {
+        ['stalled', 'suspend', 'error', 'pause'].forEach(function (ev) {
+          v.addEventListener(ev, function () {
+            if (inView(v)) { try { kick(v); } catch (e) {} }
+          });
+        });
+      });
+
+      if (!viewport || !rail) return;
+
+      /* ---- 2. Progress bar + centre-when-it-fits ---- */
+      function update() {
+        var max = rail.scrollWidth - rail.clientWidth;
+        var fits = max <= 1;
+        rail.classList.toggle('is-centered', fits);
+        viewport.classList.toggle('is-static', fits);
+        if (!progress || !fill) return;
+        var pct = fits ? 0 : Math.max(0, Math.min(100, (rail.scrollLeft / max) * 100));
+        fill.style.width = pct + '%';
+        progress.setAttribute('aria-valuenow', Math.round(pct));
+      }
+      if (progress) {
+        progress.addEventListener('click', function (e) {
+          var rect = progress.getBoundingClientRect();
+          var pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+          var max = rail.scrollWidth - rail.clientWidth;
+          rail.scrollTo({ left: max * pct, behavior: 'smooth' });
+        });
+      }
+      var ticking = false;
+      rail.addEventListener('scroll', function () {
+        if (!ticking) { window.requestAnimationFrame(function () { update(); ticking = false; }); ticking = true; }
+      }, { passive: true });
+      window.addEventListener('resize', update);
+      update();
+
+      /* ---- 3. Desktop mouse drag with rAF + inertia ---- */
+      var isDown = false, moved = false, startX = 0, startScroll = 0;
+      var lastX = 0, lastT = 0, velocity = 0, pendingX = 0, dragRaf = null, inertiaRaf = null;
+      var THRESH = 3;
+      function cancelInertia() { if (inertiaRaf) { cancelAnimationFrame(inertiaRaf); inertiaRaf = null; } }
+      function dragFrame() { if (dragRaf) return; dragRaf = requestAnimationFrame(function () { dragRaf = null; rail.scrollLeft = pendingX; }); }
+      function onDown(e) {
+        if (e.button !== undefined && e.button !== 0) return;
+        cancelInertia(); isDown = true; moved = false;
+        startX = e.pageX; lastX = e.pageX; lastT = performance.now(); velocity = 0; startScroll = rail.scrollLeft;
+      }
+      function onMove(e) {
+        if (!isDown) return;
+        var dx = e.pageX - startX;
+        if (!moved && Math.abs(dx) < THRESH) return;
+        if (!moved) { moved = true; viewport.classList.add('is-dragging'); }
+        if (e.cancelable !== false) e.preventDefault();
+        var now = performance.now(), dt = Math.max(1, now - lastT);
+        velocity = velocity * 0.7 + ((lastX - e.pageX) / dt) * 0.3;
+        lastX = e.pageX; lastT = now;
+        pendingX = startScroll - dx; dragFrame();
+      }
+      function onUp() {
+        if (!isDown) return; isDown = false;
+        if (!moved) return;
+        viewport.classList.remove('is-dragging');
+        var v = velocity * 16;
+        if (Math.abs(v) > 0.5) {
+          (function step() {
+            v *= 0.92;
+            if (Math.abs(v) < 0.4) { setTimeout(function () { moved = false; }, 30); return; }
+            rail.scrollLeft += v;
+            if (rail.scrollLeft <= 0 || rail.scrollLeft >= (rail.scrollWidth - rail.clientWidth)) { setTimeout(function () { moved = false; }, 30); return; }
+            inertiaRaf = requestAnimationFrame(step);
+          })();
+        } else { setTimeout(function () { moved = false; }, 30); }
+      }
+      viewport.addEventListener('mousedown', onDown);
+      window.addEventListener('mousemove', onMove, { passive: false });
+      window.addEventListener('mouseup', onUp);
+      viewport.addEventListener('mouseleave', onUp);
+      viewport.addEventListener('click', function (e) { if (moved) { e.preventDefault(); e.stopPropagation(); } }, true);
+
+      /* ---- 4. Keyboard ---- */
+      viewport.tabIndex = 0;
+      viewport.addEventListener('keydown', function (e) {
+        var step = rail.clientWidth * 0.8;
+        if (e.key === 'ArrowRight') { rail.scrollBy({ left: step, behavior: 'smooth' }); e.preventDefault(); }
+        if (e.key === 'ArrowLeft') { rail.scrollBy({ left: -step, behavior: 'smooth' }); e.preventDefault(); }
+      });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init, { once: true });
+    } else { init(); }
+    document.addEventListener('shopify:section:load', function (e) {
+      if (e.detail && e.detail.sectionId === sid) {
+        var s = document.getElementById('community-stories-slider-' + sid);
+        if (s) s.__ctvInited = false;
+        init();
+      }
+    });
+  })();
+{% comment %}{% endcomment %}</script>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "testimonial-video",
+  "name": "Video Testimonials 5",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "Layout & spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "label": "Top padding",
+      "min": 0,
+      "max": 200,
+      "step": 5,
+      "unit": "px",
+      "default": 60
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "label": "Bottom padding",
+      "min": 0,
+      "max": 200,
+      "step": 5,
+      "unit": "px",
+      "default": 60
+    },
+    {
+      "type": "range",
+      "id": "desktop_padding_left",
+      "label": "Left padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 5,
+      "unit": "px",
+      "default": 15
+    },
+    {
+      "type": "range",
+      "id": "desktop_padding_right",
+      "label": "Right padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 5,
+      "unit": "px",
+      "default": 15
+    },
+    {
+      "type": "range",
+      "id": "mobile_padding_left",
+      "label": "Left padding (mobile)",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "unit": "px",
+      "default": 10
+    },
+    {
+      "type": "range",
+      "id": "mobile_padding_right",
+      "label": "Right padding (mobile)",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "unit": "px",
+      "default": 10
+    },
+    {
+      "type": "header",
+      "id": "hdr_9",
+      "label": "Background & overlay"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "select",
+      "id": "video_overlay_color_selector",
+      "label": "Card overlay color",
+      "default": "black",
+      "options": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "black",
+          "label": "Black"
+        },
+        {
+          "value": "white",
+          "label": "White"
+        },
+        {
+          "value": "gray",
+          "label": "Gray"
+        },
+        {
+          "value": "light-gray",
+          "label": "Light Gray"
+        },
+        {
+          "value": "dark-gray",
+          "label": "Dark Gray"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "video_overlay_opacity",
+      "label": "Card overlay opacity",
+      "min": 0,
+      "max": 1,
+      "step": 0.1,
+      "default": 0.3
+    },
+    {
+      "type": "header",
+      "id": "hdr_13",
+      "label": "Cards"
+    },
+    {
+      "type": "range",
+      "id": "video_card_size",
+      "label": "Card width (desktop)",
+      "min": 150,
+      "max": 320,
+      "step": 10,
+      "unit": "px",
+      "default": 220
+    },
+    {
+      "type": "range",
+      "id": "mobile_column_count",
+      "label": "Cards visible (mobile)",
+      "min": 1,
+      "max": 2.5,
+      "step": 0.5,
+      "default": 1.5
+    },
+    {
+      "type": "range",
+      "id": "video_cards_gap_desktop",
+      "label": "Gap between cards (desktop)",
+      "min": 0,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "video_cards_gap_mobile",
+      "label": "Gap between cards (mobile)",
+      "min": 0,
+      "max": 50,
+      "step": 2,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "range",
+      "id": "card_corner_radius",
+      "label": "Card corner radius",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "select",
+      "id": "hover_animation",
+      "label": "Card hover animation",
+      "default": "none",
+      "options": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "smooth-zoom",
+          "label": "Smooth Zoom"
+        },
+        {
+          "value": "scale-in",
+          "label": "Scale In"
+        },
+        {
+          "value": "scale-in-up",
+          "label": "Scale In Up"
+        },
+        {
+          "value": "subtle-shadow",
+          "label": "Subtle Shadow"
+        },
+        {
+          "value": "subtle-white-glow-pulse",
+          "label": "Subtle White Glow Pulse"
+        },
+        {
+          "value": "subtle-gray-glow-pulse",
+          "label": "Subtle Gray Glow Pulse"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_20",
+      "label": "Product text"
+    },
+    {
+      "type": "color",
+      "id": "product_name_color",
+      "label": "Username & product name color",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "color",
+      "id": "product_price_color",
+      "label": "Stars color",
+      "default": "#FFD700"
+    },
+    {
+      "type": "header",
+      "id": "hdr_23",
+      "label": "Add-ons & button"
+    },
+    {
+      "type": "checkbox",
+      "id": "hide_addons",
+      "label": "Hide username / name / stars overlay",
+      "default": false
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_button",
+      "label": "Show button on each card",
+      "default": false
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button text",
+      "default": "Learn More"
+    },
+    {
+      "type": "color",
+      "id": "button_background_color",
+      "label": "Button background",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "button_text_color",
+      "label": "Button text color",
+      "default": "#000000"
+    },
+    {
+      "type": "range",
+      "id": "button_border_radius",
+      "label": "Button corner radius",
+      "min": 0,
+      "max": 50,
+      "step": 1,
+      "unit": "px",
+      "default": 25
+    },
+    {
+      "type": "header",
+      "id": "hdr_30",
+      "label": "Progress bar"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_progress_bar",
+      "label": "Show progress bar",
+      "info": "A slim bar under the cards that fills as the visitor swipes.",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "hide_progress_bar_desktop",
+      "label": "Hide progress bar on desktop",
+      "default": false
+    },
+    {
+      "type": "color",
+      "id": "pagination_bullet_color",
+      "label": "Track color",
+      "default": "#E5E7EB"
+    },
+    {
+      "type": "color",
+      "id": "pagination_bullet_active_color",
+      "label": "Fill color",
+      "default": "#111111"
+    },
+    {
+      "type": "range",
+      "id": "progress_bar_height",
+      "label": "Height",
+      "min": 1,
+      "max": 8,
+      "step": 1,
+      "unit": "px",
+      "default": 2
+    },
+    {
+      "type": "range",
+      "id": "progress_bar_max_width",
+      "label": "Max width",
+      "min": 60,
+      "max": 100,
+      "step": 5,
+      "unit": "%",
+      "default": 90
+    },
+    {
+      "type": "header",
+      "id": "hdr_37",
+      "label": "Fonts"
+    },
+    {
+      "type": "paragraph",
+      "id": "para_38",
+      "label": "By default text uses your theme font. Optionally load a Google font for this section only.",
+      "content": "By default text uses your theme font. Optionally load a Google font for this section only."
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_custom_fonts",
+      "label": "Enable custom Google font",
+      "default": false
+    },
+    {
+      "type": "select",
+      "id": "selected_custom_font",
+      "label": "Select font",
+      "default": "Roboto",
+      "options": [
+        {
+          "value": "Roboto",
+          "label": "Roboto"
+        },
+        {
+          "value": "Open Sans",
+          "label": "Open Sans"
+        },
+        {
+          "value": "Lato",
+          "label": "Lato"
+        },
+        {
+          "value": "Montserrat",
+          "label": "Montserrat"
+        },
+        {
+          "value": "Poppins",
+          "label": "Poppins"
+        },
+        {
+          "value": "Playfair Display",
+          "label": "Playfair Display"
+        },
+        {
+          "value": "Lora",
+          "label": "Lora"
+        },
+        {
+          "value": "Nunito",
+          "label": "Nunito"
+        },
+        {
+          "value": "Work Sans",
+          "label": "Work Sans"
+        },
+        {
+          "value": "Raleway",
+          "label": "Raleway"
+        },
+        {
+          "value": "Merriweather",
+          "label": "Merriweather"
+        },
+        {
+          "value": "Bebas Neue",
+          "label": "Bebas Neue"
+        }
+      ]
+    },
+    {
+      "type": "textarea",
+      "id": "custom_font_url",
+      "label": "Custom font @import URL",
+      "info": "Optional. Reference the font-family as 'CustomFont' in the imported CSS."
+    }
+  ],
+  "blocks": [
+    {
+      "type": "heading",
+      "name": "Heading",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Heading",
+          "default": "Our customers love it."
+        },
+        {
+          "type": "color",
+          "id": "heading_color",
+          "label": "Heading color",
+          "default": "#000000"
+        },
+        {
+          "type": "select",
+          "id": "heading_font_weight",
+          "label": "Heading font weight",
+          "default": "700",
+          "options": [
+            {
+              "value": "300",
+              "label": "Light"
+            },
+            {
+              "value": "400",
+              "label": "Normal"
+            },
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semibold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "heading_font_size_desktop",
+          "label": "Heading size (desktop)",
+          "min": 16,
+          "max": 60,
+          "step": 1,
+          "unit": "px",
+          "default": 29
+        },
+        {
+          "type": "range",
+          "id": "heading_font_size_mobile",
+          "label": "Heading size (mobile)",
+          "min": 14,
+          "max": 44,
+          "step": 1,
+          "unit": "px",
+          "default": 25
+        },
+        {
+          "type": "range",
+          "id": "space_below_desktop",
+          "label": "Space below (desktop)",
+          "min": 0,
+          "max": 100,
+          "step": 5,
+          "unit": "px",
+          "default": 20
+        },
+        {
+          "type": "range",
+          "id": "space_below_mobile",
+          "label": "Space below (mobile)",
+          "min": 0,
+          "max": 100,
+          "step": 5,
+          "unit": "px",
+          "default": 10
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "subheading",
+      "name": "Subheading",
+      "settings": [
+        {
+          "type": "text",
+          "id": "subheading",
+          "label": "Subheading",
+          "default": "Express your style with our standout collection."
+        },
+        {
+          "type": "color",
+          "id": "subheading_color",
+          "label": "Subheading color",
+          "default": "#555555"
+        },
+        {
+          "type": "range",
+          "id": "subheading_font_size_desktop",
+          "label": "Subheading size (desktop)",
+          "min": 12,
+          "max": 36,
+          "step": 1,
+          "unit": "px",
+          "default": 16
+        },
+        {
+          "type": "range",
+          "id": "subheading_font_size_mobile",
+          "label": "Subheading size (mobile)",
+          "min": 10,
+          "max": 28,
+          "step": 1,
+          "unit": "px",
+          "default": 14
+        },
+        {
+          "type": "range",
+          "id": "space_below_desktop",
+          "label": "Space below (desktop)",
+          "min": 0,
+          "max": 120,
+          "step": 5,
+          "unit": "px",
+          "default": 40
+        },
+        {
+          "type": "range",
+          "id": "space_below_mobile",
+          "label": "Space below (mobile)",
+          "min": 0,
+          "max": 120,
+          "step": 5,
+          "unit": "px",
+          "default": 30
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "video_card",
+      "name": "Video Card",
+      "settings": [
+        {
+          "type": "product",
+          "id": "product",
+          "label": "Product",
+          "info": "Optional. Links the card and auto-fills the product name."
+        },
+        {
+          "type": "video",
+          "id": "video",
+          "label": "Video (upload)",
+          "info": "Upload or pick a Shopify-hosted video."
+        },
+        {
+          "type": "url",
+          "id": "video_url",
+          "label": "External video URL (.mp4)",
+          "info": "Used only if no uploaded video is chosen."
+        },
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Image",
+          "info": "Used instead of a video if set."
+        },
+        {
+          "type": "text",
+          "id": "username",
+          "label": "Username",
+          "default": "@user"
+        },
+        {
+          "type": "text",
+          "id": "product_name",
+          "label": "Product name",
+          "info": "Leave empty to use the selected product's title.",
+          "default": "Product Name"
+        },
+        {
+          "type": "range",
+          "id": "rating",
+          "label": "Rating",
+          "min": 1,
+          "max": 5,
+          "step": 1,
+          "default": 5
+        },
+        {
+          "type": "url",
+          "id": "product_link",
+          "label": "Card link",
+          "info": "Leave empty to use the selected product's URL."
+        },
+        {
+          "type": "url",
+          "id": "button_link",
+          "label": "Button link"
+        }
+      ]
+    }
+  ],
+  "max_blocks": 30,
+  "presets": [
+    {
+      "name": "Video Testimonials 5",
+      "category": "Testimonials",
+      "blocks": [
+        {
+          "type": "heading",
+          "settings": {
+            "heading": "Our customers love it."
+          }
+        },
+        {
+          "type": "subheading",
+          "settings": {
+            "subheading": "Express your style with our standout collection."
+          }
+        },
+        {
+          "type": "video_card",
+          "settings": {
+            "username": "@user1",
+            "product_name": "Product 1",
+            "rating": 5,
+            "video_url": "https://v1.pinimg.com/videos/iht/720p/30/d9/a4/30d9a48417647dda7bb6c615e798cf94.mp4"
+          }
+        },
+        {
+          "type": "video_card",
+          "settings": {
+            "username": "@user2",
+            "product_name": "Product 2",
+            "rating": 4,
+            "video_url": "https://media.uplifted.ai/website/Godice/GoDice.mp4"
+          }
+        },
+        {
+          "type": "video_card",
+          "settings": {
+            "username": "@user3",
+            "product_name": "Product 3",
+            "rating": 5,
+            "video_url": "https://billo.app/wp-content/uploads/2024/07/Brickster_2_1-1.mp4"
+          }
+        },
+        {
+          "type": "video_card",
+          "settings": {
+            "username": "@user4",
+            "product_name": "Product 4",
+            "rating": 3,
+            "video_url": "https://v1.pinimg.com/videos/mc/720p/10/d7/02/10d7029d70efdad6c89a93aa4c22441b.mp4"
+          }
+        }
+      ]
+    }
+  ],
+  "shopify": {
+    "name": "Video Testimonials 5",
+    "tag": "section",
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Layout & spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top padding",
+        "min": 0,
+        "max": 200,
+        "step": 5,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom padding",
+        "min": 0,
+        "max": 200,
+        "step": 5,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "range",
+        "id": "desktop_padding_left",
+        "label": "Left padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 5,
+        "unit": "px",
+        "default": 15
+      },
+      {
+        "type": "range",
+        "id": "desktop_padding_right",
+        "label": "Right padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 5,
+        "unit": "px",
+        "default": 15
+      },
+      {
+        "type": "range",
+        "id": "mobile_padding_left",
+        "label": "Left padding (mobile)",
+        "min": 0,
+        "max": 100,
+        "step": 5,
+        "unit": "px",
+        "default": 10
+      },
+      {
+        "type": "range",
+        "id": "mobile_padding_right",
+        "label": "Right padding (mobile)",
+        "min": 0,
+        "max": 100,
+        "step": 5,
+        "unit": "px",
+        "default": 10
+      },
+      {
+        "type": "header",
+        "content": "Background & overlay"
+      },
+      {
+        "type": "color",
+        "id": "background_color",
+        "label": "Background color",
+        "default": "#ffffff"
+      },
+      {
+        "type": "select",
+        "id": "video_overlay_color_selector",
+        "label": "Card overlay color",
+        "default": "black",
+        "options": [
+          {
+            "value": "none",
+            "label": "None"
+          },
+          {
+            "value": "black",
+            "label": "Black"
+          },
+          {
+            "value": "white",
+            "label": "White"
+          },
+          {
+            "value": "gray",
+            "label": "Gray"
+          },
+          {
+            "value": "light-gray",
+            "label": "Light Gray"
+          },
+          {
+            "value": "dark-gray",
+            "label": "Dark Gray"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "video_overlay_opacity",
+        "label": "Card overlay opacity",
+        "min": 0,
+        "max": 1,
+        "step": 0.1,
+        "default": 0.3
+      },
+      {
+        "type": "header",
+        "content": "Cards"
+      },
+      {
+        "type": "range",
+        "id": "video_card_size",
+        "label": "Card width (desktop)",
+        "min": 150,
+        "max": 320,
+        "step": 10,
+        "unit": "px",
+        "default": 220
+      },
+      {
+        "type": "range",
+        "id": "mobile_column_count",
+        "label": "Cards visible (mobile)",
+        "min": 1,
+        "max": 2.5,
+        "step": 0.5,
+        "default": 1.5
+      },
+      {
+        "type": "range",
+        "id": "video_cards_gap_desktop",
+        "label": "Gap between cards (desktop)",
+        "min": 0,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "video_cards_gap_mobile",
+        "label": "Gap between cards (mobile)",
+        "min": 0,
+        "max": 50,
+        "step": 2,
+        "unit": "px",
+        "default": 12
+      },
+      {
+        "type": "range",
+        "id": "card_corner_radius",
+        "label": "Card corner radius",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 12
+      },
+      {
+        "type": "select",
+        "id": "hover_animation",
+        "label": "Card hover animation",
+        "default": "none",
+        "options": [
+          {
+            "value": "none",
+            "label": "None"
+          },
+          {
+            "value": "smooth-zoom",
+            "label": "Smooth Zoom"
+          },
+          {
+            "value": "scale-in",
+            "label": "Scale In"
+          },
+          {
+            "value": "scale-in-up",
+            "label": "Scale In Up"
+          },
+          {
+            "value": "subtle-shadow",
+            "label": "Subtle Shadow"
+          },
+          {
+            "value": "subtle-white-glow-pulse",
+            "label": "Subtle White Glow Pulse"
+          },
+          {
+            "value": "subtle-gray-glow-pulse",
+            "label": "Subtle Gray Glow Pulse"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Product text"
+      },
+      {
+        "type": "color",
+        "id": "product_name_color",
+        "label": "Username & product name color",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "product_price_color",
+        "label": "Stars color",
+        "default": "#FFD700"
+      },
+      {
+        "type": "header",
+        "content": "Add-ons & button"
+      },
+      {
+        "type": "checkbox",
+        "id": "hide_addons",
+        "label": "Hide username / name / stars overlay",
+        "default": false
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_button",
+        "label": "Show button on each card",
+        "default": false
+      },
+      {
+        "type": "text",
+        "id": "button_text",
+        "label": "Button text",
+        "default": "Learn More"
+      },
+      {
+        "type": "color",
+        "id": "button_background_color",
+        "label": "Button background",
+        "default": "#ffffff"
+      },
+      {
+        "type": "color",
+        "id": "button_text_color",
+        "label": "Button text color",
+        "default": "#000000"
+      },
+      {
+        "type": "range",
+        "id": "button_border_radius",
+        "label": "Button corner radius",
+        "min": 0,
+        "max": 50,
+        "step": 1,
+        "unit": "px",
+        "default": 25
+      },
+      {
+        "type": "header",
+        "content": "Progress bar"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_progress_bar",
+        "label": "Show progress bar",
+        "info": "A slim bar under the cards that fills as the visitor swipes.",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "hide_progress_bar_desktop",
+        "label": "Hide progress bar on desktop",
+        "default": false
+      },
+      {
+        "type": "color",
+        "id": "pagination_bullet_color",
+        "label": "Track color",
+        "default": "#E5E7EB"
+      },
+      {
+        "type": "color",
+        "id": "pagination_bullet_active_color",
+        "label": "Fill color",
+        "default": "#111111"
+      },
+      {
+        "type": "range",
+        "id": "progress_bar_height",
+        "label": "Height",
+        "min": 1,
+        "max": 8,
+        "step": 1,
+        "unit": "px",
+        "default": 2
+      },
+      {
+        "type": "range",
+        "id": "progress_bar_max_width",
+        "label": "Max width",
+        "min": 60,
+        "max": 100,
+        "step": 5,
+        "unit": "%",
+        "default": 90
+      },
+      {
+        "type": "header",
+        "content": "Fonts"
+      },
+      {
+        "type": "paragraph",
+        "content": "By default text uses your theme font. Optionally load a Google font for this section only."
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Enable custom Google font",
+        "default": false
+      },
+      {
+        "type": "select",
+        "id": "selected_custom_font",
+        "label": "Select font",
+        "default": "Roboto",
+        "options": [
+          {
+            "value": "Roboto",
+            "label": "Roboto"
+          },
+          {
+            "value": "Open Sans",
+            "label": "Open Sans"
+          },
+          {
+            "value": "Lato",
+            "label": "Lato"
+          },
+          {
+            "value": "Montserrat",
+            "label": "Montserrat"
+          },
+          {
+            "value": "Poppins",
+            "label": "Poppins"
+          },
+          {
+            "value": "Playfair Display",
+            "label": "Playfair Display"
+          },
+          {
+            "value": "Lora",
+            "label": "Lora"
+          },
+          {
+            "value": "Nunito",
+            "label": "Nunito"
+          },
+          {
+            "value": "Work Sans",
+            "label": "Work Sans"
+          },
+          {
+            "value": "Raleway",
+            "label": "Raleway"
+          },
+          {
+            "value": "Merriweather",
+            "label": "Merriweather"
+          },
+          {
+            "value": "Bebas Neue",
+            "label": "Bebas Neue"
+          }
+        ]
+      },
+      {
+        "type": "textarea",
+        "id": "custom_font_url",
+        "label": "Custom font @import URL",
+        "info": "Optional. Reference the font-family as 'CustomFont' in the imported CSS."
+      }
+    ],
+    "max_blocks": 30,
+    "blocks": [
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "heading",
+            "label": "Heading",
+            "default": "Our customers love it."
+          },
+          {
+            "type": "color",
+            "id": "heading_color",
+            "label": "Heading color",
+            "default": "#000000"
+          },
+          {
+            "type": "select",
+            "id": "heading_font_weight",
+            "label": "Heading font weight",
+            "default": "700",
+            "options": [
+              {
+                "value": "300",
+                "label": "Light"
+              },
+              {
+                "value": "400",
+                "label": "Normal"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semibold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "heading_font_size_desktop",
+            "label": "Heading size (desktop)",
+            "min": 16,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 29
+          },
+          {
+            "type": "range",
+            "id": "heading_font_size_mobile",
+            "label": "Heading size (mobile)",
+            "min": 14,
+            "max": 44,
+            "step": 1,
+            "unit": "px",
+            "default": 25
+          },
+          {
+            "type": "range",
+            "id": "space_below_desktop",
+            "label": "Space below (desktop)",
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "unit": "px",
+            "default": 20
+          },
+          {
+            "type": "range",
+            "id": "space_below_mobile",
+            "label": "Space below (mobile)",
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "unit": "px",
+            "default": 10
+          }
+        ]
+      },
+      {
+        "type": "subheading",
+        "name": "Subheading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "subheading",
+            "label": "Subheading",
+            "default": "Express your style with our standout collection."
+          },
+          {
+            "type": "color",
+            "id": "subheading_color",
+            "label": "Subheading color",
+            "default": "#555555"
+          },
+          {
+            "type": "range",
+            "id": "subheading_font_size_desktop",
+            "label": "Subheading size (desktop)",
+            "min": 12,
+            "max": 36,
+            "step": 1,
+            "unit": "px",
+            "default": 16
+          },
+          {
+            "type": "range",
+            "id": "subheading_font_size_mobile",
+            "label": "Subheading size (mobile)",
+            "min": 10,
+            "max": 28,
+            "step": 1,
+            "unit": "px",
+            "default": 14
+          },
+          {
+            "type": "range",
+            "id": "space_below_desktop",
+            "label": "Space below (desktop)",
+            "min": 0,
+            "max": 120,
+            "step": 5,
+            "unit": "px",
+            "default": 40
+          },
+          {
+            "type": "range",
+            "id": "space_below_mobile",
+            "label": "Space below (mobile)",
+            "min": 0,
+            "max": 120,
+            "step": 5,
+            "unit": "px",
+            "default": 30
+          }
+        ]
+      },
+      {
+        "type": "video_card",
+        "name": "Video Card",
+        "settings": [
+          {
+            "type": "product",
+            "id": "product",
+            "label": "Product",
+            "info": "Optional. Links the card and auto-fills the product name."
+          },
+          {
+            "type": "video",
+            "id": "video",
+            "label": "Video (upload)",
+            "info": "Upload or pick a Shopify-hosted video."
+          },
+          {
+            "type": "url",
+            "id": "video_url",
+            "label": "External video URL (.mp4)",
+            "info": "Used only if no uploaded video is chosen."
+          },
+          {
+            "type": "image_picker",
+            "id": "image",
+            "label": "Image",
+            "info": "Used instead of a video if set."
+          },
+          {
+            "type": "text",
+            "id": "username",
+            "label": "Username",
+            "default": "@user"
+          },
+          {
+            "type": "text",
+            "id": "product_name",
+            "label": "Product name",
+            "info": "Leave empty to use the selected product's title.",
+            "default": "Product Name"
+          },
+          {
+            "type": "range",
+            "id": "rating",
+            "label": "Rating",
+            "min": 1,
+            "max": 5,
+            "step": 1,
+            "default": 5
+          },
+          {
+            "type": "url",
+            "id": "product_link",
+            "label": "Card link",
+            "info": "Leave empty to use the selected product's URL."
+          },
+          {
+            "type": "url",
+            "id": "button_link",
+            "label": "Button link"
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Video Testimonials 5",
+        "category": "Testimonials",
+        "blocks": [
+          {
+            "type": "heading",
+            "settings": {
+              "heading": "Our customers love it."
+            }
+          },
+          {
+            "type": "subheading",
+            "settings": {
+              "subheading": "Express your style with our standout collection."
+            }
+          },
+          {
+            "type": "video_card",
+            "settings": {
+              "username": "@user1",
+              "product_name": "Product 1",
+              "rating": 5,
+              "video_url": "https://v1.pinimg.com/videos/iht/720p/30/d9/a4/30d9a48417647dda7bb6c615e798cf94.mp4"
+            }
+          },
+          {
+            "type": "video_card",
+            "settings": {
+              "username": "@user2",
+              "product_name": "Product 2",
+              "rating": 4,
+              "video_url": "https://media.uplifted.ai/website/Godice/GoDice.mp4"
+            }
+          },
+          {
+            "type": "video_card",
+            "settings": {
+              "username": "@user3",
+              "product_name": "Product 3",
+              "rating": 5,
+              "video_url": "https://billo.app/wp-content/uploads/2024/07/Brickster_2_1-1.mp4"
+            }
+          },
+          {
+            "type": "video_card",
+            "settings": {
+              "username": "@user4",
+              "product_name": "Product 4",
+              "rating": 3,
+              "video_url": "https://v1.pinimg.com/videos/mc/720p/10/d7/02/10d7029d70efdad6c89a93aa4c22441b.mp4"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

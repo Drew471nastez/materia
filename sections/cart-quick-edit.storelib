@@ -1,0 +1,287 @@
+<template compat="shopify">
+<style>
+  /* Theme font-weight inheritance — inherit theme weights by default; explicit rules still override */
+  #shopify-section-{{ section.id }} {
+    font-weight: var(--body-weight, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
+    font-weight: var(--heading-weight, inherit);
+  }
+{% comment %}{% endcomment %}</style>
+{%- comment -%}Section isolation — prevent CSS/JS bleed between sections{%- endcomment -%}
+<style>
+  #shopify-section-{{ section.id }} { isolation: isolate; position: relative; }
+{% comment %}{% endcomment %}</style>
+{%- comment -%}
+  Materia Themes. Developed By Materia Themes.
+{%- endcomment -%}
+{%- liquid
+  assign theme_st = settings
+  assign option_name = 'Color'
+  if theme_st.color_swatch_trigger != blank
+    assign option_name = theme_st.color_swatch_trigger | split: ','
+  endif
+  assign show_add_cart = theme_st.show_add_cart
+  assign hidden_price = theme_st.hidden_price
+  assign swatch_item_type = theme_st.swatch_item_type
+  assign show_quantity = theme_st.show_quantity_input
+-%}
+<div id="product-form-quick-edit" data-template-quick-cart-edit>
+  <product-form-quick-edit class="product-form">
+    {%- liquid
+      assign variants_available_arr = product.variants | map: 'available'
+      assign variants_option_1_arr = product.variants | map: 'option1'
+      assign variants_option_2_arr = product.variants | map: 'option2'
+      assign variants_option_3_arr = product.variants | map: 'option3'
+      assign product_form_id = 'product-form-quick-edit-' | append: section.id
+    -%}
+    {%- form 'product',
+      product,
+      id: product_form_id,
+      class: 'form',
+      novalidate: 'novalidate',
+      data-type: 'add-to-cart-form'
+    -%}
+      <input
+        type="hidden"
+        name="id"
+        value="{{ product.selected_or_first_available_variant.id }}"
+        disabled
+      >
+      <div
+        class="product-form-quick-edit product-form-quick-edit--v2 flex flex-column w-full gap-20 mb-30"
+        style="--col-width: 100%;--col-gap-desktop: 20px;"
+      >
+        <div class="product-quick-edit-left flex gap-15 w-full align-center pb-20 border-bottom">
+          <div class="product__media w-custom flex-auto" style="--custom-width: 10.5rem;">
+            {%- assign featured_media = product.selected_or_first_available_variant.featured_media -%}
+            {% if featured_media != blank %}
+              {%- assign image_alt = featured_media.alt | default: 'product' -%}
+              <div class="product-pickup-img">
+                {% render 'responsive-image',
+                  type: 'product',
+                  image: featured_media,
+                  image_alt: image_alt,
+                  class: 'rounded-5',
+                  no_animate: true
+                %}
+              </div>
+            {% else %}
+              {% assign first_image_found = false %}
+              {% for media in product.media %}
+                {% if media.media_type == 'image' and first_image_found == false %}
+                  <div class="product-pickup-img">
+                    {%- assign image_alt = media.alt | default: 'product' | escape -%}
+                    {% render 'responsive-image',
+                      type: 'product',
+                      image: media,
+                      image_alt: image_alt,
+                      class: 'rounded-5',
+                      no_animate: true
+                    %}
+                  </div>
+                  {% assign first_image_found = true %}
+                {% endif %}
+              {% endfor %}
+              {% if first_image_found == false %}
+                {% render 'placeholder-render', class: 'rounded-5' %}
+              {% endif %}
+            {% endif %}
+          </div>
+          <div class="product__info flex-1 flex flex-column">
+            <h3
+              class="product-item__name unset heading-style no-underline fs-custom block lh-normal my-0"
+              style="--font-size: {{ settings.product_size }}"
+            >
+              {{ product.title }}
+            </h3>
+            {% if hidden_price == false %}
+              <div class="product__price price mb-15">
+                {%- render 'price' | scope: 'detail' | product: product,  class: 'flex gap-5 mt-5' -%}
+              </div>
+            {% endif %}
+            <div
+              class="cart-item__error inline-flex align-start"
+              role="alert"
+            >
+              <span class="cart-item__error-text"></span>
+              {%- render 'icon-error' -%}
+            </div>
+            {%- comment -%}
+              Quantity controls are hoisted into the sticky footer bar below.
+            {%- endcomment -%}
+          </div>
+        </div>
+        <div class="product-quick-edit-right w-full">
+          {%- unless product.has_only_default_variant -%}
+            <variant-radios-quick-edit
+              id="variant-radios"
+              class="no-js-hidden"
+              data-section="{{ section.id }}"
+              data-url="{{ product.url }}"
+            >
+              {%- for option in product.options_with_values -%}
+                {%- liquid
+                  assign is_color_option = false
+                  for colorItem in option_name
+                    if option.name == colorItem
+                      assign is_color_option = true
+                    endif
+                  endfor
+                -%}
+                <fieldset class="js product-form__input flex flex-wrap mb-20 last-0 mx-0 p-0 border-0{% if is_color_option %} color gap-15{% else %} gap-15{% endif %}">
+                  <legend class="form__label gap-10 w-full mb-12 lh-normal">
+                    <span class="swatch-attribute-label">{{ option.name }}:</span>
+                    <span class="swatch-selected-value heading-style uppercase-first-letter inline-block">
+                      {{ option.selected_value }}
+                    </span>
+                  </legend>
+                  {%- for value in option.values -%}
+                    {%- liquid
+                      assign option_disabled = true
+                      for option1_name in variants_option_1_arr
+                        case option.position
+                          when 1
+                            if variants_option_1_arr[forloop.index0] == value and variants_available_arr[forloop.index0]
+                              assign option_disabled = false
+                            endif
+                          when 2
+                            if option1_name == product.selected_or_first_available_variant.option1 and variants_option_2_arr[forloop.index0] == value and variants_available_arr[forloop.index0]
+                              assign option_disabled = false
+                            endif
+                          when 3
+                            if option1_name == product.selected_or_first_available_variant.option1 and variants_option_2_arr[forloop.index0] == product.selected_or_first_available_variant.option2 and variants_option_3_arr[forloop.index0] == value and variants_available_arr[forloop.index0]
+                              assign option_disabled = false
+                            endif
+                        endcase
+                      endfor
+                      assign op = 'option' | append: option.position
+                      assign variant = product.variants | where: op, value
+                      assign img = ''
+                      for i in variant
+                        if i.featured_image.src
+                          assign img = i.featured_image.src
+                          break
+                        endif
+                      endfor
+                      if value.swatch.image
+                        assign image_url = value.swatch.image | image_url
+                        assign swatch_value = 'url(' | append: image_url | append: ')'
+                      elsif value.swatch.color
+                        assign swatch_value = 'rgb(' | append: value.swatch.color.rgb | append: ')'
+                      else
+                        assign swatch_value = null
+                      endif
+                    -%}
+                    <div
+                      class="{% if is_color_option %}product__color-swatches--js product__color-swatch inline-flex align-center rounded-50 swatch-large pointer {% endif %}relative tooltip option-swatch-js{% if option.selected_value == value %} active{% endif %}{% if option_disabled %} option-disabled{% endif %}"
+                      data-value="{% if is_color_option %}{{ value }}{% else %}{{ value | escape }}{% endif %}"
+                      data-color="{{ value | downcase }}"
+                      data-custom-value="custom__color-swatches--{{ value | downcase | replace: ' ', '-' | replace: '"', "'" }}"
+                      {% if img != blank %}
+                        data-image="{{ img | image_url: width: 100, height: 100 }}"
+                      {% endif %}
+                      {% if is_color_option %}
+                        data-swatch-type="{{ swatch_item_type }}"
+                        style="background-color: {{ value | downcase }};"
+                      {% endif %}
+                      data-option-swatch-value="{{ swatch_value }}"
+                    >
+                      {% if is_color_option %}
+                        <label
+                          class="product-swatches"
+                        >
+                          <span class="tooltip-content invisible rounded-3 absolute pointer-none">{{ value }}</span>
+                        </label>
+                      {% else %}
+                        <label
+                          class="product-swatches tooltip pointer product__item-option inline-flex align-center border rounded-3 subheading_weight btn-hover lh-normal px-20 py-8 transition relative {{ value | escape }}"
+                        >
+                          <span class="swatche-item">{{ value | escape }}</span>
+                        </label>
+                      {% endif %}
+                    </div>
+                  {%- endfor -%}
+                </fieldset>
+              {%- endfor -%}
+              <script type="application/json">
+                {{ product.variants | json }}
+{% comment %}{% endcomment %}              </script>
+            </variant-radios-quick-edit>
+          {%- endunless -%}
+        </div>
+      </div>
+      {%- if show_add_cart == true and theme_st.enable_catalog_mode == false -%}
+        <div class="product-form-quick-edit quick-edit-footer-bar">
+          {%- if show_quantity -%}
+            <quantity-input class="quick-edit-qty" aria-label="{{ 'general.cart.headings.quantity' | t }}">
+              <button
+                class="pointer"
+                name="minus"
+                type="button"
+                data-id="{{- product.key -}}"
+                aria-label="minus"
+              >
+                <svg width="10" height="2" viewBox="0 0 10 2" fill="none" aria-hidden="true">
+                  <path fill="currentColor" d="M0 0h10v2H0z"/>
+                </svg>
+              </button>
+              <label class="visually-hidden" for="QuantityFooter-{{ section.id }}">
+                {{ 'general.cart.headings.quantity' | t }}
+              </label>
+              <input
+                type="number"
+                name="quantity"
+                id="QuantityFooter-{{ section.id }}"
+                min="1"
+                value="1"
+                form="{{ product_form_id }}"
+              >
+              <button
+                class="pointer"
+                name="plus"
+                type="button"
+                data-id="{{- product.key -}}"
+                aria-label="plus"
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                  <path fill="currentColor" fill-rule="evenodd" d="M4 10h2V6h4V4H6V0H4v4H0v2h4v4Z" clip-rule="evenodd"/>
+                </svg>
+              </button>
+            </quantity-input>
+          {%- endif -%}
+          <button
+            type="submit"
+            name="add"
+            class="quick-edit-submit animation"
+            {% if product.selected_or_first_available_variant.available == false %}
+              disabled
+            {% endif %}
+          >
+            <span class="hidden-on-load">
+              {%- if product.selected_or_first_available_variant.available -%}
+                {{ 'products.product.add_to_cart' | t }}
+              {%- else -%}
+                {{ 'products.product.sold_out' | t }}
+              {% endif %}
+            </span>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" class="spin opacity-0 icon-load">
+              <use href="#icon-load"></use>
+            </svg>
+          </button>
+        </div>
+      {% endif %}
+    {%- endform -%}
+  </product-form-quick-edit>
+</div>
+
+</template>
+
+<schema>
+{
+  "type": "cart-quick-edit",
+  "name": "Cart quick edit",
+  "settings": [],
+  "shopify": {}
+}
+</schema>

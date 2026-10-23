@@ -1,0 +1,770 @@
+<template compat="shopify">
+{%- assign fb_accessibility_low = 'accessibility.low' | t -%}
+{%- assign fb_accessibility_question = 'accessibility.question' | t -%}
+{%- assign fb_accessibility_high = 'accessibility.high' | t -%}
+{%- assign fb_accessibility_question_with_mark = 'accessibility.question_with_mark' | t -%}
+{%- comment -%}
+  Community Feedback Slider
+  ----------------------------------------------------
+  A card showing an overall rating (stars + score), the total review count,
+  and a list of question rows. Each question row has a label, two endpoint
+  labels (e.g. "Very poor" → "Excellent"), and a horizontal bar with a
+  marker showing the average answer.
+
+  Design ref: image #2 — rating breakdown card.
+{%- endcomment -%}
+
+{%- assign sid = section.id -%}
+{%- liquid
+  assign scroll_anim = settings.scroll_animation | default: 'none'
+-%}
+{%- if scroll_anim != blank and scroll_anim != 'none' and section.settings.reveal -%}
+<style>
+  #shopify-section-{{ sid }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ sid }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ scroll_anim | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+
+<style>
+  #shopify-section-{{ sid }} { position: static; }
+  .cfs-{{ sid }} {
+    background: {{ section.settings.section_bg | default: '#ffffff' }};
+    color: {{ section.settings.text_color | default: '#111111' }};
+    padding-top: {{ section.settings.padding_top | default: 60 }}px;
+    padding-bottom: {{ section.settings.padding_bottom | default: 60 }}px;
+    font-family: var(--body-font, inherit);
+  }
+  .cfs-{{ sid }} *, .cfs-{{ sid }} *::before, .cfs-{{ sid }} *::after { box-sizing: border-box; }
+
+  .cfs-{{ sid }} .cfs-wrap {
+    max-width: {{ section.settings.max_width | default: 760 }}px;
+    margin: 0 auto;
+    padding-inline: 24px;
+  }
+  .cfs-{{ sid }} .cfs-card {
+    background: {{ section.settings.card_bg | default: '#ffffff' }};
+    border-radius: {{ section.settings.card_radius | default: 12 }}px;
+    box-shadow: 0 8px 28px rgba(16, 24, 40, .08);
+    padding: clamp(20px, 4vw, 36px);
+  }
+
+  /* Header row: rating left, source/count right */
+  .cfs-{{ sid }} .cfs-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 26px;
+  }
+  .cfs-{{ sid }} .cfs-score-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .cfs-{{ sid }} .cfs-score {
+    font-family: var(--heading-font, inherit);
+    font-size: clamp(28px, 5vw, 40px);
+    font-weight: 800;
+    line-height: 1;
+    color: {{ section.settings.score_color | default: '#111111' }};
+  }
+  .cfs-{{ sid }} .cfs-stars {
+    display: flex;
+    gap: 2px;
+  }
+  .cfs-{{ sid }} .cfs-star {
+    width: 22px; height: 22px;
+    fill: {{ section.settings.star_color | default: '#f5b301' }};
+  }
+  .cfs-{{ sid }} .cfs-star.is-empty {
+    fill: {{ section.settings.star_empty_color | default: '#d6d6d6' }};
+  }
+  .cfs-{{ sid }} .cfs-source {
+    text-align: right;
+    font-size: 14px;
+    color: {{ section.settings.muted_color | default: '#5b6470' }};
+    line-height: 1.5;
+  }
+  .cfs-{{ sid }} .cfs-source strong {
+    color: {{ section.settings.text_color | default: '#111111' }};
+    font-weight: 700;
+  }
+  .cfs-{{ sid }} .cfs-source-note {
+    display: block;
+    font-size: 13px;
+    margin-top: 2px;
+  }
+
+  /* Question rows */
+  .cfs-{{ sid }} .cfs-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .cfs-{{ sid }} .cfs-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .cfs-{{ sid }} .cfs-q {
+    font-weight: 800;
+    font-size: 15px;
+    margin: 0;
+  }
+  .cfs-{{ sid }} .cfs-scale {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: {{ section.settings.muted_color | default: '#5b6470' }};
+  }
+  .cfs-{{ sid }} .cfs-bar {
+    position: relative;
+    height: {{ section.settings.bar_height | default: 4 }}px;
+    background: {{ section.settings.bar_track_color | default: '#e7e7eb' }};
+    border-radius: 999px;
+    margin-top: 4px;
+  }
+  .cfs-{{ sid }} .cfs-bar-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: {{ section.settings.bar_fill_color | default: '#111111' }};
+    border-radius: 999px;
+    transition: width .6s cubic-bezier(.4,0,.2,1);
+  }
+  .cfs-{{ sid }} .cfs-bar-marker {
+    position: absolute;
+    top: 50%;
+    width: {{ section.settings.marker_size | default: 18 }}px;
+    height: {{ section.settings.marker_size | default: 18 }}px;
+    border-radius: 50%;
+    background: {{ section.settings.marker_color | default: '#111111' }};
+    transform: translate(-50%, -50%);
+    /* Cleaner marker: outer halo, white inner ring, no harsh border */
+    box-shadow:
+      0 0 0 4px {{ section.settings.card_bg | default: '#ffffff' }},
+      0 0 0 5px rgba(17, 17, 17, .08),
+      0 2px 6px rgba(0, 0, 0, .18);
+  }
+{% comment %}{% endcomment %}</style>
+
+<div class="cfs-{{ sid }}">
+  <div class="cfs-wrap">
+    <div class="cfs-card">
+      {%- if section.settings.show_header -%}
+        <div class="cfs-head">
+          <div>
+            <div class="cfs-score-row">
+              <span class="cfs-score">{{ section.settings.overall_score | default: '4,3' }}</span>
+              {%- assign rating_int = section.settings.overall_score_int | default: 4 | at_least: 0 | at_most: 5 -%}
+              <div class="cfs-stars" aria-label="{{ rating_int }} out of 5 stars">
+                {%- for n in (1..5) -%}
+                  <svg class="cfs-star{% if n > rating_int %} is-empty{% endif %}" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 2l2.95 6.27L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l7.05-1z"/>
+                  </svg>
+                {%- endfor -%}
+              </div>
+            </div>
+          </div>
+          <div class="cfs-source">
+            {%- if section.settings.review_count != blank -%}
+              <strong>{{ section.settings.review_count }}</strong>
+            {%- endif -%}
+            {%- if section.settings.source_note != blank -%}
+              <span class="cfs-source-note">{{ section.settings.source_note }}</span>
+            {%- endif -%}
+          </div>
+        </div>
+      {%- endif -%}
+
+      <div class="cfs-rows">
+        {%- for b in section.blocks -%}
+          {%- if b.type == 'question' -%}
+            {%- assign val = b.settings.value | default: 50 | at_least: 0 | at_most: 100 -%}
+            <div class="cfs-row" {{ b.shopify_attributes }}>
+              <p class="cfs-q">{{ b.settings.question | default: fb_accessibility_question_with_mark }}</p>
+              <div class="cfs-scale">
+                <span>{{ b.settings.left_label | default: fb_accessibility_low }}</span>
+                <span>{{ b.settings.right_label | default: fb_accessibility_high }}</span>
+              </div>
+              <div class="cfs-bar" role="img" aria-label="{{ b.settings.question | default: fb_accessibility_question }} score {{ val }} percent">
+                <span class="cfs-bar-fill" style="width: {{ val }}%;"></span>
+                <span class="cfs-bar-marker" style="left: {{ val }}%;"></span>
+              </div>
+            </div>
+          {%- endif -%}
+        {%- endfor -%}
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "comunitysldier",
+  "name": "Community Feedback Slider",
+  "settings": [
+    {
+      "type": "header",
+      "id": "hdr_1",
+      "label": "Overall rating"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_header",
+      "label": "Show overall rating header",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "overall_score",
+      "label": "Score (display)",
+      "info": "Shown large at the top, e.g. \"4,3\" or \"4.5\".",
+      "default": "4,3"
+    },
+    {
+      "type": "range",
+      "id": "overall_score_int",
+      "min": 0,
+      "max": 5,
+      "step": 1,
+      "label": "Filled stars",
+      "default": 4
+    },
+    {
+      "type": "text",
+      "id": "review_count",
+      "label": "Review count text",
+      "info": "Top-right, e.g. \"BASED ON 127+ REVIEWS\".",
+      "default": "BASED ON 127+ REVIEWS"
+    },
+    {
+      "type": "text",
+      "id": "source_note",
+      "label": "Source note",
+      "info": "Small text below the review count.",
+      "default": "All reviews are verified purchasers"
+    },
+    {
+      "type": "color",
+      "id": "score_color",
+      "label": "Score color",
+      "default": "#111111"
+    },
+    {
+      "type": "color",
+      "id": "star_color",
+      "label": "Filled star color",
+      "default": "#f5b301"
+    },
+    {
+      "type": "color",
+      "id": "star_empty_color",
+      "label": "Empty star color",
+      "default": "#d6d6d6"
+    },
+    {
+      "type": "color",
+      "id": "muted_color",
+      "label": "Muted text color (scale labels, source note)",
+      "default": "#5b6470"
+    },
+    {
+      "type": "header",
+      "id": "hdr_11",
+      "label": "Bar style"
+    },
+    {
+      "type": "range",
+      "id": "bar_height",
+      "min": 2,
+      "max": 12,
+      "step": 1,
+      "unit": "px",
+      "label": "Bar height",
+      "default": 4
+    },
+    {
+      "type": "color",
+      "id": "bar_track_color",
+      "label": "Bar track color",
+      "default": "#e7e7eb"
+    },
+    {
+      "type": "color",
+      "id": "bar_fill_color",
+      "label": "Bar fill color",
+      "default": "#111111"
+    },
+    {
+      "type": "range",
+      "id": "marker_size",
+      "min": 8,
+      "max": 28,
+      "step": 1,
+      "unit": "px",
+      "label": "Marker size",
+      "default": 18
+    },
+    {
+      "type": "color",
+      "id": "marker_color",
+      "label": "Marker color",
+      "default": "#111111"
+    },
+    {
+      "type": "header",
+      "id": "hdr_17",
+      "label": "Card & section"
+    },
+    {
+      "type": "color",
+      "id": "card_bg",
+      "label": "Card background",
+      "default": "#ffffff"
+    },
+    {
+      "type": "range",
+      "id": "card_radius",
+      "min": 0,
+      "max": 32,
+      "step": 1,
+      "unit": "px",
+      "label": "Card corner radius",
+      "default": 12
+    },
+    {
+      "type": "range",
+      "id": "max_width",
+      "min": 480,
+      "max": 1200,
+      "step": 10,
+      "unit": "px",
+      "label": "Card max width",
+      "default": 760
+    },
+    {
+      "type": "color",
+      "id": "section_bg",
+      "label": "Section background",
+      "default": "#f7f7f8"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Default text",
+      "default": "#111111"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding",
+      "default": 60
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding",
+      "default": 60
+    },
+    {
+      "type": "checkbox",
+      "id": "reveal",
+      "label": "Reveal on scroll",
+      "default": true
+    }
+  ],
+  "blocks": [
+    {
+      "type": "question",
+      "name": "Question",
+      "settings": [
+        {
+          "type": "text",
+          "id": "question",
+          "label": "Question",
+          "default": "Is this product good value for money?"
+        },
+        {
+          "type": "text",
+          "id": "left_label",
+          "label": "Left endpoint label",
+          "default": "Very poor"
+        },
+        {
+          "type": "text",
+          "id": "right_label",
+          "label": "Right endpoint label",
+          "default": "Excellent"
+        },
+        {
+          "type": "range",
+          "id": "value",
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "unit": "%",
+          "label": "Average score (0–100)",
+          "default": 80
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Community Feedback Slider",
+      "category": "Testimonials",
+      "blocks": [
+        {
+          "type": "question",
+          "settings": {
+            "question": "Is this product good value for money?",
+            "left_label": "Very poor",
+            "right_label": "Excellent",
+            "value": 85
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "What do you think of the length?",
+            "left_label": "Too short",
+            "right_label": "Too long",
+            "value": 50
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "What do you think of the sizing?",
+            "left_label": "Too tight",
+            "right_label": "Too loose",
+            "value": 55
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "Quality of Product",
+            "left_label": "1 Star",
+            "right_label": "5 Star",
+            "value": 90
+          }
+        },
+        {
+          "type": "question",
+          "settings": {
+            "question": "How comfortable is this product?",
+            "left_label": "Very uncomfortable",
+            "right_label": "Very comfortable",
+            "value": 88
+          }
+        }
+      ]
+    }
+  ],
+  "disabled_on": {
+    "groups": [
+      "header",
+      "footer"
+    ]
+  },
+  "shopify": {
+    "name": "Community Feedback Slider",
+    "tag": "section",
+    "class": "section-community-feedback-slider",
+    "disabled_on": {
+      "groups": [
+        "header",
+        "footer"
+      ]
+    },
+    "settings": [
+      {
+        "type": "header",
+        "content": "Overall rating"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_header",
+        "label": "Show overall rating header",
+        "default": true
+      },
+      {
+        "type": "text",
+        "id": "overall_score",
+        "label": "Score (display)",
+        "info": "Shown large at the top, e.g. \"4,3\" or \"4.5\".",
+        "default": "4,3"
+      },
+      {
+        "type": "range",
+        "id": "overall_score_int",
+        "min": 0,
+        "max": 5,
+        "step": 1,
+        "label": "Filled stars",
+        "default": 4
+      },
+      {
+        "type": "text",
+        "id": "review_count",
+        "label": "Review count text",
+        "info": "Top-right, e.g. \"BASED ON 127+ REVIEWS\".",
+        "default": "BASED ON 127+ REVIEWS"
+      },
+      {
+        "type": "text",
+        "id": "source_note",
+        "label": "Source note",
+        "info": "Small text below the review count.",
+        "default": "All reviews are verified purchasers"
+      },
+      {
+        "type": "color",
+        "id": "score_color",
+        "label": "Score color",
+        "default": "#111111"
+      },
+      {
+        "type": "color",
+        "id": "star_color",
+        "label": "Filled star color",
+        "default": "#f5b301"
+      },
+      {
+        "type": "color",
+        "id": "star_empty_color",
+        "label": "Empty star color",
+        "default": "#d6d6d6"
+      },
+      {
+        "type": "color",
+        "id": "muted_color",
+        "label": "Muted text color (scale labels, source note)",
+        "default": "#5b6470"
+      },
+      {
+        "type": "header",
+        "content": "Bar style"
+      },
+      {
+        "type": "range",
+        "id": "bar_height",
+        "min": 2,
+        "max": 12,
+        "step": 1,
+        "unit": "px",
+        "label": "Bar height",
+        "default": 4
+      },
+      {
+        "type": "color",
+        "id": "bar_track_color",
+        "label": "Bar track color",
+        "default": "#e7e7eb"
+      },
+      {
+        "type": "color",
+        "id": "bar_fill_color",
+        "label": "Bar fill color",
+        "default": "#111111"
+      },
+      {
+        "type": "range",
+        "id": "marker_size",
+        "min": 8,
+        "max": 28,
+        "step": 1,
+        "unit": "px",
+        "label": "Marker size",
+        "default": 18
+      },
+      {
+        "type": "color",
+        "id": "marker_color",
+        "label": "Marker color",
+        "default": "#111111"
+      },
+      {
+        "type": "header",
+        "content": "Card & section"
+      },
+      {
+        "type": "color",
+        "id": "card_bg",
+        "label": "Card background",
+        "default": "#ffffff"
+      },
+      {
+        "type": "range",
+        "id": "card_radius",
+        "min": 0,
+        "max": 32,
+        "step": 1,
+        "unit": "px",
+        "label": "Card corner radius",
+        "default": 12
+      },
+      {
+        "type": "range",
+        "id": "max_width",
+        "min": 480,
+        "max": 1200,
+        "step": 10,
+        "unit": "px",
+        "label": "Card max width",
+        "default": 760
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Section background",
+        "default": "#f7f7f8"
+      },
+      {
+        "type": "color",
+        "id": "text_color",
+        "label": "Default text",
+        "default": "#111111"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "label": "Top padding",
+        "default": 60
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "label": "Bottom padding",
+        "default": 60
+      },
+      {
+        "type": "checkbox",
+        "id": "reveal",
+        "label": "Reveal on scroll",
+        "default": true
+      }
+    ],
+    "blocks": [
+      {
+        "type": "question",
+        "name": "Question",
+        "settings": [
+          {
+            "type": "text",
+            "id": "question",
+            "label": "Question",
+            "default": "Is this product good value for money?"
+          },
+          {
+            "type": "text",
+            "id": "left_label",
+            "label": "Left endpoint label",
+            "default": "Very poor"
+          },
+          {
+            "type": "text",
+            "id": "right_label",
+            "label": "Right endpoint label",
+            "default": "Excellent"
+          },
+          {
+            "type": "range",
+            "id": "value",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "unit": "%",
+            "label": "Average score (0–100)",
+            "default": 80
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Community Feedback Slider",
+        "category": "Testimonials",
+        "blocks": [
+          {
+            "type": "question",
+            "settings": {
+              "question": "Is this product good value for money?",
+              "left_label": "Very poor",
+              "right_label": "Excellent",
+              "value": 85
+            }
+          },
+          {
+            "type": "question",
+            "settings": {
+              "question": "What do you think of the length?",
+              "left_label": "Too short",
+              "right_label": "Too long",
+              "value": 50
+            }
+          },
+          {
+            "type": "question",
+            "settings": {
+              "question": "What do you think of the sizing?",
+              "left_label": "Too tight",
+              "right_label": "Too loose",
+              "value": 55
+            }
+          },
+          {
+            "type": "question",
+            "settings": {
+              "question": "Quality of Product",
+              "left_label": "1 Star",
+              "right_label": "5 Star",
+              "value": 90
+            }
+          },
+          {
+            "type": "question",
+            "settings": {
+              "question": "How comfortable is this product?",
+              "left_label": "Very uncomfortable",
+              "right_label": "Very comfortable",
+              "value": 88
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

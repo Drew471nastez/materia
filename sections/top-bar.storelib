@@ -1,0 +1,1492 @@
+<template compat="shopify">
+{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
+{%- if request.design_mode != true and settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger') || document.documentElement.classList.contains('shopify-design-mode') || (window.Shopify && window.Shopify.designMode)) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- liquid
+  assign __ti_scroll_animation = settings.scroll_animation | default: 'none'
+  assign __ti_reveal = section.settings.reveal
+-%}
+<style>
+  /* Section isolation — prevent CSS/JS bleed between sections */
+  #shopify-section-{{ section.id }} {
+    isolation: isolate;
+    position: relative;
+  }
+  /* Aggressive theme typography */
+  :where(#shopify-section-{{ section.id }}) {
+    font-family: var(--body-font, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :where(button, input, textarea, select, optgroup) {
+    font-family: inherit;
+  }
+  /* Theme font-weight inheritance — sections inherit theme weights by default.
+     Specific font-weight rules in section CSS still override these. */
+  #shopify-section-{{ section.id }} {
+    font-weight: var(--body-weight, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
+    font-weight: var(--heading-weight, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
+    font-family: var(--heading-font, inherit);
+  }
+  /* Section margin sliders (mobile-first) */
+  #shopify-section-{{ section.id }} {
+    margin-top: {{ section.settings.section_margin_top_mobile | default: 0 }}px;
+    margin-bottom: {{ section.settings.section_margin_bottom_mobile | default: 0 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ section.id }} {
+      margin-top: {{ section.settings.section_margin_top_desktop | default: 0 }}px;
+      margin-bottom: {{ section.settings.section_margin_bottom_desktop | default: 0 }}px;
+    }
+  }
+  /* Section wrapper spans its parent's full width without breaking out of
+     the editor preview. The section + first child span 100% so backgrounds
+     reach edge-to-edge but the editor inspector outline stays inside the
+     iframe viewport. */
+  #shopify-section-{{ section.id }} {
+    max-width: none !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    position: relative !important;
+    box-sizing: border-box !important;
+  }
+  #shopify-section-{{ section.id }} > :where(div, section, header, footer, aside, main, article):first-child {
+    max-width: none !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Section width — universal selector that works regardless of inner
+     markup. Targets both:
+       1) Theme container classes (.container/.fluid_container/etc.) — for
+          sections that have an inner wrapper with that class
+       2) The section's first-child div — for sections that don't have a
+          named inner wrapper. The padding-inline sets the max content
+          area while the wrapper itself stays 100% wide so any background
+          stays edge-to-edge. */
+  {%- case section.settings.section_width -%}
+    {%- when 'container' -%}
+      #shopify-section-{{ section.id }} .container,
+      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+        max-width: calc(var(--page-width, 1300px) + 3rem) !important;
+        margin-inline: auto !important;
+        box-sizing: border-box !important;
+      }
+    {%- when 'fluid_container' -%}
+      #shopify-section-{{ section.id }} .fluid_container,
+      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+        max-width: calc(var(--fluid-container-width, 1500px) + 3rem) !important;
+        margin-inline: auto !important;
+        box-sizing: border-box !important;
+      }
+    {%- when 'stretch_width' -%}
+      /* Stretched: no max-width; tighter side padding handled below */
+      @media (min-width: 1200px) {
+        #shopify-section-{{ section.id }} .stretch_width,
+        #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+          padding-inline: 3rem;
+        }
+      }
+    {%- when 'full_width' -%}
+      /* full bleed — no constraints */
+  {%- endcase -%}
+  /* Reset spacing */
+  {%- if section.settings.reset_spacing -%}
+    #shopify-section-{{ section.id }} { margin-bottom: 0 !important; margin-top: 0 !important; }
+    #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+<!-- ti-theme:start -->
+{%- comment -%}
+  Materia Themes. Developed By Materia Themes.
+{%- endcomment -%}
+{%- liquid
+  assign section_st = section.settings
+  assign theme_st = settings
+  assign section_width = section_st.section_width
+  assign color_scheme = section_st.color_scheme.id | default: section_st.color_scheme
+  assign show_arrows = section_st.show_arrows
+  assign show_arrows_mobile = section_st.show_arrows_mobile
+  assign enable_custom_position = section_st.enable_custom_position
+  assign desktop_horizontal_offset = section_st.desktop_horizontal_offset | default: 0
+  assign text_align = section_st.text_align | default: 'center'
+  assign letter_spacing = section_st.letter_spacing | default: 0
+  assign border_position = section_st.border_position | default: 'bottom'
+  assign border_width = section_st.border_width | default: 1
+  assign border_color = section_st.border_color
+  assign sticky_top = section_st.sticky_top
+  assign custom_bg = section_st.custom_bg_color
+  assign custom_text = section_st.custom_text_color
+  assign custom_link = section_st.custom_link_color
+  assign custom_arrow = section_st.custom_arrow_color
+-%}
+{%- if section.blocks.size > 0 -%}
+  {%- style -%}
+    #topbar-{{ section.id }} a { text-decoration-line: none; }
+    #topbar-{{ section.id }} .topbar__section-inner { letter-spacing: {{ letter_spacing }}px; }
+    .topbar-item .list-social__item a { width: 3rem; height: 3rem; }
+
+    /* Per-slide responsive text variants — each slide can have a desktop
+       and a mobile copy. Only one is visible per breakpoint. If the
+       mobile field is left blank, the liquid falls back to the desktop
+       text so the slide always has something to show. */
+    #topbar-{{ section.id }} .topbar-text { display: inline; }
+    #topbar-{{ section.id }} .topbar-text--sm { display: none; }
+    #topbar-{{ section.id }} .topbar-text--lg { display: inline; }
+    @media (max-width: 767.98px) {
+      #topbar-{{ section.id }} .topbar-text--lg { display: none; }
+      #topbar-{{ section.id }} .topbar-text--sm { display: inline; }
+    }
+
+    /* Custom color overrides — leave any setting blank to inherit the scheme. */
+    {%- if custom_bg != blank -%}
+      #topbar-{{ section.id }}.topbar { background: {{ custom_bg }} !important; }
+    {%- endif -%}
+    {%- if custom_text != blank -%}
+      #topbar-{{ section.id }}, #topbar-{{ section.id }} .topbar__section-inner { color: {{ custom_text }} !important; }
+    {%- endif -%}
+    {%- if custom_link != blank -%}
+      #topbar-{{ section.id }} a { color: {{ custom_link }} !important; }
+    {%- endif -%}
+    {%- if custom_arrow != blank -%}
+      #topbar-{{ section.id }} .topbar-slider-arrow { color: {{ custom_arrow }} !important; }
+    {%- endif -%}
+
+
+    {%- if enable_custom_position and desktop_horizontal_offset != 0 -%}
+      /* Custom desktop horizontal offset — shifts the announcement messages
+         left/right within the bar on desktop only. Mobile stays centered. */
+      @media (min-width: 1025px) {
+        #topbar-{{ section.id }} .topbar-item.text-slide {
+          transform: translateX({{ desktop_horizontal_offset }}%);
+          will-change: transform;
+        }
+      }
+    {%- endif -%}
+
+    /* Navigation occupies real columns outside the clipped Swiper viewport. */
+    #shopify-section-{{ section.id }}:has(.button-localization.open) { z-index: 25; }
+    #topbar-{{ section.id }} > div {
+      padding-inline: clamp(16px, 2.5vw, 40px);
+    }
+    #topbar-{{ section.id }} .topbar__section-inner { gap: 12px 24px; }
+    #topbar-{{ section.id }} .text-slide {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: center;
+      min-width: 0;
+      max-width: 760px;
+      flex: 1 1 280px;
+      margin-inline: auto;
+    }
+    #topbar-{{ section.id }} .text-slide.topbar-has-arrows {
+      grid-template-columns: 44px minmax(0, 1fr) 44px;
+      max-width: min(100%, 690px);
+      gap: 4px;
+    }
+    #topbar-{{ section.id }} .text-slide.topbar-has-arrows .topbar-slider-arrow {
+      width: 44px !important; height: 44px !important; min-height: 44px !important;
+      border-radius: 50%; transition: background-color .2s ease, opacity .2s ease;
+    }
+    @media (hover:hover) { #topbar-{{ section.id }} .topbar-slider-arrow:hover { background-color: color-mix(in srgb, currentColor 9%, transparent) !important; } }
+    #topbar-{{ section.id }} .text-slide.hidden { display: none; }
+    @media (min-width: 1025px) {
+      #topbar-{{ section.id }} .text-slide.hidden { display: grid; }
+    }
+    #topbar-{{ section.id }} announcement-rotator-v2.topbar-slider {
+      display: block;
+      width: 100%;
+      min-width: 0;
+      overflow: hidden;
+      padding: 0;
+      margin: 0;
+      isolation: isolate;
+    }
+    #topbar-{{ section.id }} .topbar-track { display: grid; align-items: stretch; }
+    #topbar-{{ section.id }} .topbar-message {
+      display: flex;
+      grid-area: 1 / 1;
+      min-width: 0;
+      align-items: center;
+      justify-content: {% if text_align == 'left' %}flex-start{% elsif text_align == 'right' %}flex-end{% else %}center{% endif %};
+      text-align: {{ text_align }};
+      height: auto;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      line-height: 1.4;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: none;
+    }
+    #topbar-{{ section.id }} .topbar-message.is-active { opacity: 1; visibility: visible; pointer-events: auto; }
+    #topbar-{{ section.id }} announcement-rotator-v2 { touch-action: pan-y; }
+    @media (prefers-reduced-motion: reduce) {
+      #topbar-{{ section.id }} .topbar-message { transition: none; }
+    }
+    #topbar-{{ section.id }} .topbar-text-cell { width: 100%; min-width: 0; padding: 4px 8px; }
+    #topbar-{{ section.id }} .topbar-slider-arrow {
+      position: static !important;
+      inset: auto !important;
+      margin: 0 !important;
+      transform: none !important;
+      width: 44px !important;
+      height: 44px !important;
+      min-height: 44px !important;
+      max-height: none !important;
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      border: 0 !important;
+      padding: 0 !important;
+      background: transparent !important;
+      color: {% if custom_arrow != blank %}{{ custom_arrow }}{% else %}inherit{% endif %} !important;
+      opacity: 1;
+      cursor: pointer;
+      flex: none;
+    }
+    #topbar-{{ section.id }} .topbar-slider-arrow::before,
+    #topbar-{{ section.id }} .topbar-slider-arrow::after { content: none !important; }
+    #topbar-{{ section.id }} .topbar-slider-arrow svg { width: 16px; height: 16px; flex: none; }
+    #topbar-{{ section.id }} .topbar-slider-arrow:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; }
+    #topbar-{{ section.id }} .lang__currency-desktop { flex: 0 1 auto; flex-wrap: nowrap; gap: 12px; min-width: 0; }
+    #topbar-{{ section.id }} .lang__currency-desktop .localization-flags { width: 20px; height: 20px; }
+    #topbar-{{ section.id }} .button-localization > span { min-width: 0; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+    @media (min-width: 1025px) {
+      /* A message + selector pair stays centered on the page, not on the leftover space. */
+      #topbar-{{ section.id }} .topbar__section-inner:has(> .text-slide + .lang__currency-desktop:last-child) {
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) minmax(0, 760px) minmax(220px, 1fr);
+      }
+      #topbar-{{ section.id }} .topbar__section-inner:has(> .text-slide + .lang__currency-desktop:last-child) > .text-slide {
+        grid-column: 2;
+        width: 100%;
+        margin-inline: auto;
+        justify-self: center;
+      }
+      #topbar-{{ section.id }} .topbar__section-inner:has(> .text-slide + .lang__currency-desktop:last-child) > .lang__currency-desktop {
+        grid-column: 3;
+        justify-self: end;
+      }
+    }
+    @media (max-width: 767px) {
+      #topbar-{{ section.id }} .text-slide.topbar-has-arrows:not(.topbar-mobile-arrows) { grid-template-columns: minmax(0, 1fr); }
+      #topbar-{{ section.id }} .text-slide:not(.topbar-mobile-arrows) .topbar-slider-arrow { display: none !important; }
+    }
+
+    {%- if border_position == 'top' or border_position == 'both' -%}
+      #topbar-{{ section.id }} { border-top: {{ border_width }}px solid {% if border_color != blank %}{{ border_color }}{% else %}var(--color-border){% endif %}; }
+    {%- endif -%}
+    {%- if border_position == 'bottom' or border_position == 'both' -%}
+      #topbar-{{ section.id }} { border-bottom: {{ border_width }}px solid {% if border_color != blank %}{{ border_color }}{% else %}var(--color-border){% endif %}; }
+    {%- endif -%}
+    {%- if sticky_top -%}
+      #shopify-section-{{ section.id }} { position: sticky !important; top: var(--storelib-announcement-top, 0px) !important; z-index: 12; }
+      #topbar-{{ section.id }} { position: relative; }
+    {%- endif -%}
+
+    @media (max-width: 1024px) {
+      #topbar-{{ section.id }} .topbar-message { justify-content: center; }
+      #topbar-{{ section.id }} .text-slide { max-width: 100%; }
+    }
+  {%- endstyle -%}
+  {%- capture style -%}
+    --section-pt: {{ section_st.padding_top }}; --section-pb: {{ section_st.padding_bottom }};--swiper-navigation-color: var(--color-text);
+  {%- endcapture -%}
+  {%- liquid
+    assign hidden_block = true
+    for block in section.blocks
+      assign block_st = block.settings
+      if block_st.hidden_on_mobile == false
+        assign hidden_block = false
+        break
+      endif
+    endfor
+  -%}
+  <div
+    id="topbar-{{ section.id }}"
+    data-sticky-announcement="{{ sticky_top }}"
+    class="topbar gradient{% if section_st.padding_top < 30 %} pt-min{% endif %}{% if section_st.padding_bottom < 30 %} pb-min{% endif %} section remove_spacing color-{{ color_scheme }}{% if hidden_block == true %} hidden block-1025{% endif %}{% if section_st.show_separator_line and border_position == blank %} border-bottom{% endif %}{% if section_st.uppercase %} uppercase{% endif %}{% if section_st.show_mobile == blank %} hidden block-1025{% endif %}"
+    style="{{ style | strip | strip_newlines }}"
+  >
+    <div class="{{ section_width }}">
+      <div
+        class="flex flex-wrap flex-md-nowrap gap justify-center justify-between-1025 align-center topbar__section-inner gap-10 gap-lg-25 fs-custom {{ section_st.font_weight }}"
+        style="--font-size: {{ section_st.font_size }};"
+      >
+        {%- for block in section.blocks -%}
+          {%- liquid
+            assign block_st = block.settings
+          -%}
+          {%- case block.type -%}
+            {%- when 'store_information' -%}
+              {% if theme_st.store_email != blank or theme_st.store_phone != blank %}
+                <div class="topbar-item{% if block_st.hidden_on_mobile %} hidden flex-1025{% else %} flex{% endif %} gap-10">
+                  {%- if block_st.show_phone and theme_st.store_phone != blank -%}
+                    <a
+                      class="no-underline"
+                      href="tel:{{ theme_st.store_phone }}"
+                      arial-label="{{ theme_st.store_phone }}"
+                    >
+                      <span>{{ theme_st.store_phone }}</span>
+                    </a>
+                  {% endif %}
+                  {%- if block_st.show_email and theme_st.store_email != blank -%}
+                    <a
+                      class="no-underline"
+                      href="mailto:{{ theme_st.store_email }}"
+                      arial-label="{{ theme_st.store_email }}"
+                    >
+                      <span>{{ theme_st.store_email }}</span>
+                    </a>
+                  {% endif %}
+                </div>
+              {% endif %}
+            {%- when 'socials' -%}
+              {%- if settings.facebook != blank
+                or settings.instagram != blank
+                or settings.twitter != blank
+                or settings.tiktok != blank
+                or settings.youtube != blank
+                or settings.pinterest != blank
+                or settings.vimeo != blank
+                or settings.linkedin != blank
+                or settings.whatsapp != blank
+                or settings.tumblr != blank
+                or settings.snapchat != blank
+              -%}
+                <div class="topbar-item{% if block_st.hidden_on_mobile %} hidden block-1025{% endif %}">
+                  {%- render 'social-icons' -%}
+                </div>
+              {% endif %}
+            {%- when 'text_slider' -%}
+              <div class="topbar-item text-slide{% if show_arrows %} topbar-has-arrows{% endif %}{% if show_arrows_mobile %} topbar-mobile-arrows{% endif %}{% if block_st.hidden_on_mobile %} hidden block-1025{% endif %}">
+                {%- if show_arrows -%}
+                  <button type="button" class="topbar-slider-arrow topbar-slider-arrow--prev" aria-label="{{ 'accessibility.previous' | t }}" aria-controls="topbar-messages-{{ section.id }}-{{ block.id }}">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M9 3 4 7l5 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                {%- endif -%}
+                <announcement-rotator-v2
+                  id="topbar-messages-{{ section.id }}-{{ block.id }}"
+                  class="topbar-slider"
+                  data-section-id="{{ section.id }}"
+                  data-delay="{{ block_st.change_every | default: 5 }}"
+                  data-duration="{{ section_st.transition_speed | default: 700 }}"
+                >
+                  <div class="topbar-track">
+                    {%- if block_st.text1 != blank or block_st.text1_mobile != blank -%}
+                      <div class="topbar-message is-active lh-normal">
+                        <div class="px-10 topbar-text-cell">
+                          {%- if block_st.text1 != blank -%}
+                            <span class="topbar-text topbar-text--lg">{{- block_st.text1 -}}</span>
+                          {%- endif -%}
+                          {%- assign mobile1 = block_st.text1_mobile | default: block_st.text1 -%}
+                          {%- if mobile1 != blank -%}
+                            <span class="topbar-text topbar-text--sm">{{- mobile1 -}}</span>
+                          {%- endif -%}
+                        </div>
+                      </div>
+                    {% endif %}
+                    {%- if block_st.text2 != blank or block_st.text2_mobile != blank -%}
+                      <div class="topbar-message{% if block_st.text1 == blank and block_st.text1_mobile == blank %} is-active{% endif %} lh-normal">
+                        <div class="px-10 topbar-text-cell">
+                          {%- if block_st.text2 != blank -%}
+                            <span class="topbar-text topbar-text--lg">{{- block_st.text2 -}}</span>
+                          {%- endif -%}
+                          {%- assign mobile2 = block_st.text2_mobile | default: block_st.text2 -%}
+                          {%- if mobile2 != blank -%}
+                            <span class="topbar-text topbar-text--sm">{{- mobile2 -}}</span>
+                          {%- endif -%}
+                        </div>
+                      </div>
+                    {% endif %}
+                    {%- if block_st.text3 != blank or block_st.text3_mobile != blank -%}
+                      <div class="topbar-message{% if block_st.text1 == blank and block_st.text1_mobile == blank and block_st.text2 == blank and block_st.text2_mobile == blank %} is-active{% endif %} lh-normal">
+                        <div class="px-10 topbar-text-cell">
+                          {%- if block_st.text3 != blank -%}
+                            <span class="topbar-text topbar-text--lg">{{- block_st.text3 -}}</span>
+                          {%- endif -%}
+                          {%- assign mobile3 = block_st.text3_mobile | default: block_st.text3 -%}
+                          {%- if mobile3 != blank -%}
+                            <span class="topbar-text topbar-text--sm">{{- mobile3 -}}</span>
+                          {%- endif -%}
+                        </div>
+                      </div>
+                    {% endif %}
+                  </div>
+                </announcement-rotator-v2>
+                  {%- if show_arrows -%}
+                    <button
+                      type="button"
+                      class="topbar-slider-arrow topbar-slider-arrow--next"
+                      aria-label="{{ 'accessibility.next' | t }}"
+                      aria-controls="topbar-messages-{{ section.id }}-{{ block.id }}"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                        <path d="m5 3 5 4-5 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </button>
+                  {%- endif -%}
+              </div>
+            {%- when 'cur_lang' -%}
+              <div class="lang__currency-desktop justify-content-center justity-md-unset topbar-item{% if block_st.hidden_on_mobile %} hidden flex-1025{% else %} flex{% endif %} flex-wrap gap-10 gap-lg-25 align-center row-gap-0">
+                {%- if block_st.show_currency -%}
+                  {%- render 'country-switcher', compact: true -%}
+                {% endif %}
+                {%- if block_st.show_language -%}
+                  {%- render 'language-switcher' -%}
+                {% endif %}
+              </div>
+          {%- endcase -%}
+        {%- endfor -%}
+      </div>
+    </div>
+  </div>
+{% endif %}
+{% render 'announcement-rotator' %}
+</template>
+
+<schema>
+{
+  "type": "top-bar",
+  "name": "Announcement Bar Pro 3",
+  "settings": [
+    {
+      "type": "header",
+      "id": "hdr_1",
+      "label": "Basics"
+    },
+    {
+      "type": "color_scheme",
+      "id": "color_scheme",
+      "label": "Color scheme",
+      "default": "scheme-2"
+    },
+    {
+      "type": "select",
+      "id": "section_width",
+      "label": "Section width",
+      "default": "full_width",
+      "options": [
+        {
+          "value": "container",
+          "label": "Container"
+        },
+        {
+          "value": "fluid_container",
+          "label": "Fluid container"
+        },
+        {
+          "value": "stretch_width",
+          "label": "Stretch width"
+        },
+        {
+          "value": "full_width",
+          "label": "Full width"
+        }
+      ]
+    },
+    {
+      "type": "checkbox",
+      "id": "sticky_top",
+      "label": "Stick to top on scroll",
+      "default": false
+    },
+    {
+      "type": "checkbox",
+      "id": "show_mobile",
+      "label": "Show on mobile",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_6",
+      "label": "Typography"
+    },
+    {
+      "type": "select",
+      "id": "text_align",
+      "label": "Text alignment",
+      "default": "center",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "checkbox",
+      "id": "uppercase",
+      "label": "Uppercase text",
+      "default": false
+    },
+    {
+      "type": "range",
+      "id": "font_size",
+      "label": "Font size",
+      "min": 10,
+      "max": 20,
+      "step": 1,
+      "unit": "px",
+      "default": 13
+    },
+    {
+      "type": "select",
+      "id": "font_weight",
+      "label": "Font weight",
+      "default": "body_weight",
+      "options": [
+        {
+          "value": "body_weight",
+          "label": "Body weight"
+        },
+        {
+          "value": "heading_weight",
+          "label": "Heading weight"
+        },
+        {
+          "value": "subheading_weight",
+          "label": "Subheading weight"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "letter_spacing",
+      "label": "Letter spacing",
+      "min": 0,
+      "max": 5,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "header",
+      "id": "hdr_12",
+      "label": "Colors & appearance"
+    },
+    {
+      "type": "color",
+      "id": "custom_bg_color",
+      "label": "Background color"
+    },
+    {
+      "type": "color",
+      "id": "custom_text_color",
+      "label": "Text color"
+    },
+    {
+      "type": "color",
+      "id": "custom_link_color",
+      "label": "Link color"
+    },
+    {
+      "type": "color",
+      "id": "custom_arrow_color",
+      "label": "Arrow color"
+    },
+    {
+      "type": "select",
+      "id": "border_position",
+      "label": "Border position",
+      "default": "bottom",
+      "options": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "top",
+          "label": "Top"
+        },
+        {
+          "value": "bottom",
+          "label": "Bottom"
+        },
+        {
+          "value": "both",
+          "label": "Top & bottom"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "border_width",
+      "label": "Border width",
+      "min": 0,
+      "max": 6,
+      "step": 1,
+      "unit": "px",
+      "default": 1
+    },
+    {
+      "type": "color",
+      "id": "border_color",
+      "label": "Border color",
+      "default": "#e5e5e5"
+    },
+    {
+      "type": "header",
+      "id": "hdr_20",
+      "label": "Behavior & animation"
+    },
+    {
+      "type": "checkbox",
+      "id": "reveal",
+      "label": "Reveal on scroll",
+      "default": true,
+      "info": "Uses your global Animations & motion setting."
+    },
+    {
+      "type": "checkbox",
+      "id": "show_arrows",
+      "label": "Show navigation arrows",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_arrows_mobile",
+      "label": "Show arrows on mobile",
+      "default": true
+    },
+    {
+      "type": "range",
+      "id": "transition_speed",
+      "label": "Transition speed",
+      "min": 200,
+      "max": 1500,
+      "step": 50,
+      "unit": "ms",
+      "default": 700
+    },
+    {
+      "type": "header",
+      "id": "hdr_25",
+      "label": "Layout & spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "label": "Top padding",
+      "default": 10,
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "unit": "px"
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "label": "Bottom padding",
+      "default": 10,
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "unit": "px"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_custom_position",
+      "label": "Enable custom horizontal position (desktop)",
+      "info": "When on, use the slider below to nudge the announcement messages left or right within the bar on desktop. Mobile is always centered.",
+      "default": false
+    },
+    {
+      "type": "range",
+      "id": "desktop_horizontal_offset",
+      "label": "Desktop horizontal offset",
+      "min": -40,
+      "max": 40,
+      "step": 1,
+      "unit": "%",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_desktop",
+      "label": "Top margin (desktop px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_desktop",
+      "label": "Bottom margin (desktop px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_mobile",
+      "label": "Top margin (mobile px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_mobile",
+      "label": "Bottom margin (mobile px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "header",
+      "id": "hdr_34",
+      "label": "Advanced spacing"
+    },
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    }
+  ],
+  "blocks": [
+    {
+      "type": "store_information",
+      "name": "Contact info",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_2",
+          "label": "Content"
+        },
+        {
+          "type": "checkbox",
+          "id": "show_email",
+          "label": "Show email",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "show_phone",
+          "label": "Show phone",
+          "default": true
+        },
+        {
+          "type": "header",
+          "id": "hdr_5",
+          "label": "Mobile layout"
+        },
+        {
+          "type": "checkbox",
+          "id": "hidden_on_mobile",
+          "label": "Hidden on mobile",
+          "default": true
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "socials",
+      "name": "Social media",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_2",
+          "label": "Mobile layout"
+        },
+        {
+          "type": "checkbox",
+          "id": "hidden_on_mobile",
+          "label": "Hidden on mobile",
+          "default": true
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "text_slider",
+      "name": "Announcement messages",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content — Slide 1"
+        },
+        {
+          "type": "inline_richtext",
+          "id": "text1",
+          "label": "Text 1 (desktop)",
+          "default": "Free shipping on orders over $99 — no code needed"
+        },
+        {
+          "type": "inline_richtext",
+          "id": "text1_mobile",
+          "label": "Text 1 (mobile)",
+          "info": "Optional. Leave blank to reuse the desktop text."
+        },
+        {
+          "type": "header",
+          "id": "hdr_4",
+          "label": "Content — Slide 2"
+        },
+        {
+          "type": "inline_richtext",
+          "id": "text2",
+          "label": "Text 2 (desktop)",
+          "default": "New season collection — explore the latest drop"
+        },
+        {
+          "type": "inline_richtext",
+          "id": "text2_mobile",
+          "label": "Text 2 (mobile)",
+          "info": "Optional. Leave blank to reuse the desktop text."
+        },
+        {
+          "type": "header",
+          "id": "hdr_7",
+          "label": "Content — Slide 3"
+        },
+        {
+          "type": "inline_richtext",
+          "id": "text3",
+          "label": "Text 3 (desktop)",
+          "default": "Members get 15% off their first order. <a href=\"/account/register\"><strong>Sign up</strong></a>"
+        },
+        {
+          "type": "inline_richtext",
+          "id": "text3_mobile",
+          "label": "Text 3 (mobile)",
+          "info": "Optional. Leave blank to reuse the desktop text."
+        },
+        {
+          "type": "header",
+          "id": "hdr_10",
+          "label": "Behavior & animation"
+        },
+        {
+          "type": "range",
+          "id": "change_every",
+          "min": 3,
+          "max": 6,
+          "step": 1,
+          "label": "Change every",
+          "unit": "s",
+          "default": 3
+        },
+        {
+          "type": "header",
+          "id": "hdr_12",
+          "label": "Mobile layout"
+        },
+        {
+          "type": "checkbox",
+          "id": "hidden_on_mobile",
+          "label": "Hidden on mobile"
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "cur_lang",
+      "name": "Region & language",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content"
+        },
+        {
+          "type": "checkbox",
+          "id": "show_currency",
+          "label": "Show currency",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "show_language",
+          "label": "Show language",
+          "default": true
+        },
+        {
+          "type": "header",
+          "id": "hdr_4",
+          "label": "Mobile layout"
+        },
+        {
+          "type": "checkbox",
+          "id": "hidden_on_mobile",
+          "label": "Hidden on mobile",
+          "default": true
+        }
+      ],
+      "limit": 1
+    }
+  ],
+  "max_blocks": 3,
+  "presets": [
+    {
+      "name": "Announcement Bar Pro 3",
+      "blocks": [
+        {
+          "type": "text_slider"
+        },
+        {
+          "type": "cur_lang"
+        }
+      ],
+      "category": "Header & navigation"
+    }
+  ],
+  "enabled_on": {
+    "groups": [
+      "header"
+    ]
+  },
+  "shopify": {
+    "name": "Announcement Bar Pro 3",
+    "class": "section-top-bar section-edge-bleed",
+    "limit": 1,
+    "enabled_on": {
+      "groups": [
+        "header"
+      ]
+    },
+    "settings": [
+      {
+        "type": "header",
+        "content": "Basics"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "scheme-2"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "full_width",
+        "options": [
+          {
+            "value": "container",
+            "label": "t:sections.all.section_width.container.label"
+          },
+          {
+            "value": "fluid_container",
+            "label": "t:sections.all.section_width.fluid_container.label"
+          },
+          {
+            "value": "stretch_width",
+            "label": "t:sections.all.section_width.stretch_width.label"
+          },
+          {
+            "value": "full_width",
+            "label": "t:sections.all.section_width.full_width.label"
+          }
+        ]
+      },
+      {
+        "type": "checkbox",
+        "id": "sticky_top",
+        "label": "Stick to top on scroll",
+        "default": false
+      },
+      {
+        "type": "checkbox",
+        "id": "show_mobile",
+        "label": "Show on mobile",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "select",
+        "id": "text_align",
+        "label": "Text alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "checkbox",
+        "id": "uppercase",
+        "label": "Uppercase text",
+        "default": false
+      },
+      {
+        "type": "range",
+        "id": "font_size",
+        "label": "Font size",
+        "min": 10,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 13
+      },
+      {
+        "type": "select",
+        "id": "font_weight",
+        "label": "Font weight",
+        "default": "body_weight",
+        "options": [
+          {
+            "value": "body_weight",
+            "label": "Body weight"
+          },
+          {
+            "value": "heading_weight",
+            "label": "Heading weight"
+          },
+          {
+            "value": "subheading_weight",
+            "label": "Subheading weight"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "letter_spacing",
+        "label": "Letter spacing",
+        "min": 0,
+        "max": 5,
+        "step": 1,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Colors & appearance",
+        "info": "Optional overrides. Leave any field blank to use the active color scheme."
+      },
+      {
+        "type": "color",
+        "id": "custom_bg_color",
+        "label": "Background color"
+      },
+      {
+        "type": "color",
+        "id": "custom_text_color",
+        "label": "Text color"
+      },
+      {
+        "type": "color",
+        "id": "custom_link_color",
+        "label": "Link color"
+      },
+      {
+        "type": "color",
+        "id": "custom_arrow_color",
+        "label": "Arrow color"
+      },
+      {
+        "type": "select",
+        "id": "border_position",
+        "label": "Border position",
+        "default": "bottom",
+        "options": [
+          {
+            "value": "none",
+            "label": "None"
+          },
+          {
+            "value": "top",
+            "label": "Top"
+          },
+          {
+            "value": "bottom",
+            "label": "Bottom"
+          },
+          {
+            "value": "both",
+            "label": "Top & bottom"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "border_width",
+        "label": "Border width",
+        "min": 0,
+        "max": 6,
+        "step": 1,
+        "unit": "px",
+        "default": 1
+      },
+      {
+        "type": "color",
+        "id": "border_color",
+        "label": "Border color",
+        "default": "#e5e5e5"
+      },
+      {
+        "type": "header",
+        "content": "Behavior & animation"
+      },
+      {
+        "type": "checkbox",
+        "id": "reveal",
+        "label": "Reveal on scroll",
+        "default": true,
+        "info": "Uses your global Animations & motion setting."
+      },
+      {
+        "type": "checkbox",
+        "id": "show_arrows",
+        "label": "Show navigation arrows",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_arrows_mobile",
+        "label": "Show arrows on mobile",
+        "default": true
+      },
+      {
+        "type": "range",
+        "id": "transition_speed",
+        "label": "Transition speed",
+        "min": 200,
+        "max": 1500,
+        "step": 50,
+        "unit": "ms",
+        "default": 700
+      },
+      {
+        "type": "header",
+        "content": "Layout & spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top padding",
+        "default": 10,
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "px"
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom padding",
+        "default": 10,
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "px"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_position",
+        "label": "Enable custom horizontal position (desktop)",
+        "info": "When on, use the slider below to nudge the announcement messages left or right within the bar on desktop. Mobile is always centered.",
+        "default": false
+      },
+      {
+        "type": "range",
+        "id": "desktop_horizontal_offset",
+        "label": "Desktop horizontal offset",
+        "min": -40,
+        "max": 40,
+        "step": 1,
+        "unit": "%",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin (desktop px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin (desktop px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_mobile",
+        "label": "Top margin (mobile px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_mobile",
+        "label": "Bottom margin (mobile px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Advanced spacing"
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      }
+    ],
+    "max_blocks": 3,
+    "blocks": [
+      {
+        "type": "store_information",
+        "name": "Contact info",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "paragraph",
+            "content": "t:sections.all.blocks.store_info.info"
+          },
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "checkbox",
+            "id": "show_email",
+            "label": "t:sections.top-bar.blocks.store_information.settings.show_email.label",
+            "default": true
+          },
+          {
+            "type": "checkbox",
+            "id": "show_phone",
+            "label": "t:sections.top-bar.blocks.store_information.settings.show_phone.label",
+            "default": true
+          },
+          {
+            "type": "header",
+            "content": "Mobile layout"
+          },
+          {
+            "type": "checkbox",
+            "id": "hidden_on_mobile",
+            "label": "t:sections.top-bar.blocks.hidden_on_mobile.label",
+            "default": true
+          }
+        ]
+      },
+      {
+        "type": "socials",
+        "name": "Social media",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "paragraph",
+            "content": "t:sections.all.blocks.socials.info"
+          },
+          {
+            "type": "header",
+            "content": "Mobile layout"
+          },
+          {
+            "type": "checkbox",
+            "id": "hidden_on_mobile",
+            "label": "t:sections.top-bar.blocks.hidden_on_mobile.label",
+            "default": true
+          }
+        ]
+      },
+      {
+        "type": "text_slider",
+        "name": "Announcement messages",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content — Slide 1"
+          },
+          {
+            "type": "inline_richtext",
+            "id": "text1",
+            "label": "Text 1 (desktop)",
+            "default": "Free shipping on orders over $99 — no code needed"
+          },
+          {
+            "type": "inline_richtext",
+            "id": "text1_mobile",
+            "label": "Text 1 (mobile)",
+            "info": "Optional. Leave blank to reuse the desktop text."
+          },
+          {
+            "type": "header",
+            "content": "Content — Slide 2"
+          },
+          {
+            "type": "inline_richtext",
+            "id": "text2",
+            "label": "Text 2 (desktop)",
+            "default": "New season collection — explore the latest drop"
+          },
+          {
+            "type": "inline_richtext",
+            "id": "text2_mobile",
+            "label": "Text 2 (mobile)",
+            "info": "Optional. Leave blank to reuse the desktop text."
+          },
+          {
+            "type": "header",
+            "content": "Content — Slide 3"
+          },
+          {
+            "type": "inline_richtext",
+            "id": "text3",
+            "label": "Text 3 (desktop)",
+            "default": "Members get 15% off their first order. <a href=\"/account/register\"><strong>Sign up</strong></a>"
+          },
+          {
+            "type": "inline_richtext",
+            "id": "text3_mobile",
+            "label": "Text 3 (mobile)",
+            "info": "Optional. Leave blank to reuse the desktop text."
+          },
+          {
+            "type": "header",
+            "content": "Behavior & animation"
+          },
+          {
+            "type": "range",
+            "id": "change_every",
+            "min": 3,
+            "max": 6,
+            "step": 1,
+            "label": "t:sections.top-bar.blocks.text_slider.settings.change_every.label",
+            "unit": "s",
+            "default": 3
+          },
+          {
+            "type": "header",
+            "content": "Mobile layout"
+          },
+          {
+            "type": "checkbox",
+            "id": "hidden_on_mobile",
+            "label": "t:sections.top-bar.blocks.hidden_on_mobile.label"
+          }
+        ]
+      },
+      {
+        "type": "cur_lang",
+        "name": "Region & language",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "checkbox",
+            "id": "show_currency",
+            "label": "t:sections.top-bar.blocks.cur_lang.settings.show_currency.label",
+            "default": true
+          },
+          {
+            "type": "checkbox",
+            "id": "show_language",
+            "label": "t:sections.top-bar.blocks.cur_lang.settings.show_language.label",
+            "default": true
+          },
+          {
+            "type": "header",
+            "content": "Mobile layout"
+          },
+          {
+            "type": "checkbox",
+            "id": "hidden_on_mobile",
+            "label": "t:sections.top-bar.blocks.hidden_on_mobile.label",
+            "default": true
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Announcement Bar Pro 3",
+        "blocks": [
+          {
+            "type": "text_slider"
+          },
+          {
+            "type": "cur_lang"
+          }
+        ],
+        "category": "Header & navigation"
+      }
+    ]
+  }
+}
+</schema>

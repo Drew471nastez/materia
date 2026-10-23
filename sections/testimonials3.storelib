@@ -1,0 +1,1934 @@
+<template compat="shopify">
+{%- assign fb_accessibility_published = 'accessibility.published' | t -%}
+{%- assign fb_accessibility_customer = 'accessibility.customer' | t -%}
+{%- assign fb_accessibility_customer_photo = 'accessibility.customer_photo' | t -%}
+{%- comment -%}
+  Testimonials Showcase
+  ----------------------------------------------------
+  A polished testimonial carousel: heading + subheading above, then a row
+  of full-width testimonial cards with image, star rating, customer name,
+  date published, and review text. Prev/next arrows below for navigation.
+  Mobile shows 1 card, tablet 2, desktop up to 3. Block-driven.
+
+  Design ref: image #5 ("Our Happy Customers").
+{%- endcomment -%}
+
+{%- assign sid = section.id -%}
+{%- liquid
+  assign scroll_anim = settings.scroll_animation | default: 'none'
+-%}
+
+{%- assign block_eyebrow = blank -%}
+{%- assign block_heading = blank -%}
+{%- assign block_subheading = blank -%}
+{%- for b in section.blocks -%}
+  {%- case b.type -%}
+    {%- when 'eyebrow' -%}{%- assign block_eyebrow = b -%}
+    {%- when 'heading' -%}{%- assign block_heading = b -%}
+    {%- when 'subheading' -%}{%- assign block_subheading = b -%}
+  {%- endcase -%}
+{%- endfor -%}
+
+{%- if scroll_anim != blank and scroll_anim != 'none' and section.settings.reveal -%}
+<style>
+  #shopify-section-{{ sid }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ sid }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ scroll_anim | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+
+<style>
+  #shopify-section-{{ sid }} { position: static; }
+  .tsh-{{ sid }} {
+    background: {{ section.settings.section_bg | default: '#f5f5f5' }};
+    color: {{ section.settings.text_color | default: '#111111' }};
+    padding-top: {{ section.settings.padding_top | default: 70 }}px;
+    padding-bottom: {{ section.settings.padding_bottom | default: 70 }}px;
+    font-family: var(--body-font, inherit);
+    overflow: hidden;
+  }
+  .tsh-{{ sid }} *, .tsh-{{ sid }} *::before, .tsh-{{ sid }} *::after { box-sizing: border-box; }
+
+  .tsh-{{ sid }} .tsh-wrap {
+    max-width: {{ section.settings.max_width | default: 1280 }}px;
+    margin: 0 auto;
+    padding-inline: clamp(16px, 4vw, 32px);
+  }
+
+  .tsh-{{ sid }} .tsh-head {
+    text-align: {{ section.settings.text_align | default: 'center' }};
+    max-width: 720px;
+    margin: 0 auto 36px;
+  }
+  .tsh-{{ sid }} .tsh-eyebrow {
+    font-size: 12px;
+    /* No hard-coded weight — inherits the theme typography by default.
+       Turn on "Custom font weight" on the Eyebrow block to override. */
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    margin: 0 0 10px;
+  }
+  .tsh-{{ sid }} .tsh-heading {
+    font-family: var(--heading-font, inherit);
+    /* Inherits the theme heading weight by default; override via the block toggle. */
+    line-height: 1.1;
+    margin: 0 0 10px;
+  }
+  .tsh-{{ sid }} .tsh-subheading {
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  /* Carousel */
+  .tsh-{{ sid }} .tsh-rail {
+    position: relative;
+    overflow: hidden;
+    /* Browser handles vertical pan; horizontal goes to our JS swipe handler */
+    touch-action: pan-y;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .tsh-{{ sid }} .tsh-rail.is-dragging { cursor: grabbing; }
+  .tsh-{{ sid }} .tsh-track {
+    display: flex;
+    gap: {{ section.settings.card_gap | default: 20 }}px;
+    transition: transform .5s cubic-bezier(.4,0,.2,1);
+    will-change: transform;
+  }
+  .tsh-{{ sid }} .tsh-rail.is-dragging .tsh-track {
+    transition: none;
+  }
+  /* Block media drag so mouse can swipe through cards */
+  .tsh-{{ sid }} .tsh-card img,
+  .tsh-{{ sid }} .tsh-card video {
+    -webkit-user-drag: none;
+    pointer-events: none;
+  }
+  /* Re-enable pointer events for video control buttons */
+  .tsh-{{ sid }} .tsh-vbtn { pointer-events: auto; }
+  /* Desktop: 3 cards per view */
+  .tsh-{{ sid }} .tsh-card {
+    flex: 0 0 calc((100% - ({{ section.settings.card_gap | default: 20 }}px * 2)) / 3);
+    min-width: 0;
+    background: {{ section.settings.card_bg | default: '#ffffff' }};
+    border-radius: {{ section.settings.card_radius | default: 14 }}px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  }
+  /* Tablet */
+  @media (max-width: 1023px) {
+    .tsh-{{ sid }} .tsh-card {
+      flex: 0 0 calc((100% - {{ section.settings.card_gap | default: 20 }}px) / 2);
+    }
+  }
+  /* Mobile: configurable slides-per-row (1, 1.5, 2, etc) */
+  @media (max-width: 640px) {
+    .tsh-{{ sid }} .tsh-card {
+      {%- assign mpv = section.settings.mobile_per_view | default: 1 -%}
+      flex: 0 0 calc((100% - ({{ section.settings.card_gap | default: 20 }}px * ({{ mpv }} - 1))) / {{ mpv }});
+    }
+  }
+
+  .tsh-{{ sid }} .tsh-card-img {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    background: #e9eaec;
+    overflow: hidden;
+  }
+  .tsh-{{ sid }} .tsh-card-img img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+  }
+  .tsh-{{ sid }} .tsh-card-img .tsh-placeholder {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    color: #b8bec5;
+  }
+  .tsh-{{ sid }} .tsh-card-img .tsh-placeholder svg { width: 48px; height: 48px; }
+
+  /* Video tile */
+  .tsh-{{ sid }} .tsh-card-img.is-video { background: #000; }
+  .tsh-{{ sid }} .tsh-video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .tsh-{{ sid }} .tsh-vbtn {
+    position: absolute;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0, 0, 0, .55);
+    color: #fff;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .2s ease, transform .15s ease, opacity .2s ease;
+    z-index: 2;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+  .tsh-{{ sid }} .tsh-vbtn:hover { background: rgba(0, 0, 0, .75); transform: scale(1.05); }
+  .tsh-{{ sid }} .tsh-vbtn svg { width: 16px; height: 16px; display: block; }
+  .tsh-{{ sid }} .tsh-vbtn-play { bottom: 10px; left: 10px; }
+  .tsh-{{ sid }} .tsh-vbtn-mute { bottom: 10px; right: 10px; }
+  /* Toggle which icon shows */
+  .tsh-{{ sid }} .tsh-vbtn .tsh-icon-pause,
+  .tsh-{{ sid }} .tsh-vbtn .tsh-icon-mute { display: none; }
+  .tsh-{{ sid }} .tsh-vbtn[data-state="playing"] .tsh-icon-play { display: none; }
+  .tsh-{{ sid }} .tsh-vbtn[data-state="playing"] .tsh-icon-pause { display: block; }
+  .tsh-{{ sid }} .tsh-vbtn[data-state="muted"] .tsh-icon-vol { display: none; }
+  .tsh-{{ sid }} .tsh-vbtn[data-state="muted"] .tsh-icon-mute { display: block; }
+
+  .tsh-{{ sid }} .tsh-card-body {
+    padding: 20px;
+    display: flex; flex-direction: column;
+    gap: 10px;
+    flex: 1;
+  }
+
+  /* Half-star support (clip-path masking — pixel-perfect partial fills) */
+  .tsh-{{ sid }} .tsh-stars {
+    display: inline-flex; gap: 2px;
+    align-items: center;
+  }
+  .tsh-{{ sid }} .tsh-star {
+    width: {{ section.settings.star_size | default: 18 }}px;
+    height: {{ section.settings.star_size | default: 18 }}px;
+    position: relative;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .tsh-{{ sid }} .tsh-star svg {
+    width: 100%; height: 100%;
+    fill: {{ section.settings.star_empty_color | default: '#dcdcdc' }};
+    display: block;
+  }
+  .tsh-{{ sid }} .tsh-star::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: {{ section.settings.star_color | default: '#f5b301' }};
+    -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2l2.95 6.27L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l7.05-1z'/></svg>") no-repeat center / contain;
+            mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2l2.95 6.27L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l7.05-1z'/></svg>") no-repeat center / contain;
+    clip-path: inset(0 100% 0 0);
+    pointer-events: none;
+  }
+  .tsh-{{ sid }} .tsh-star.is-full::before { clip-path: inset(0 0 0 0); }
+  .tsh-{{ sid }} .tsh-star.is-half::before { clip-path: inset(0 50% 0 0); }
+
+  .tsh-{{ sid }} .tsh-name {
+    font-weight: 800;
+    font-size: {{ section.settings.name_size | default: 17 }}px;
+    color: {{ section.settings.name_color | default: '#111111' }};
+    margin: 4px 0 0;
+  }
+  .tsh-{{ sid }} .tsh-date {
+    font-size: 13px;
+    color: {{ section.settings.muted_color | default: '#7a8089' }};
+    margin: 0;
+  }
+  .tsh-{{ sid }} .tsh-body {
+    font-size: var(--tsh-body-d, 14px);
+    line-height: 1.55;
+    color: {{ section.settings.body_color | default: '#3a4046' }};
+    margin: 6px 0 0;
+  }
+  @media (max-width: 640px) {
+    .tsh-{{ sid }} .tsh-body { font-size: var(--tsh-body-m, 14px); }
+  }
+
+  /* Nav */
+  .tsh-{{ sid }} .tsh-nav {
+    display: flex; align-items: center; justify-content: center;
+    gap: 14px;
+    margin-top: 32px;
+  }
+  .tsh-{{ sid }} .tsh-arrow {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    border: 1px solid {{ section.settings.arrow_border | default: '#dcdfe3' }};
+    background: {{ section.settings.arrow_bg | default: '#ffffff' }};
+    color: {{ section.settings.arrow_color | default: '#111111' }};
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background .25s ease, color .25s ease, border-color .25s ease, transform .15s ease;
+  }
+  .tsh-{{ sid }} .tsh-arrow:hover:not(:disabled) {
+    background: {{ section.settings.arrow_bg_hover | default: '#111111' }};
+    color: {{ section.settings.arrow_color_hover | default: '#ffffff' }};
+    border-color: {{ section.settings.arrow_bg_hover | default: '#111111' }};
+    transform: translateY(-1px);
+  }
+  .tsh-{{ sid }} .tsh-arrow:disabled { opacity: .35; cursor: not-allowed; }
+  .tsh-{{ sid }} .tsh-arrow svg { width: 16px; height: 16px; }
+  .tsh-{{ sid }} .tsh-dots { display: inline-flex; gap: 8px; }
+  .tsh-{{ sid }} .tsh-dot {
+    width: 8px; height: 8px;
+    border: none; padding: 0;
+    border-radius: 50%;
+    background: {{ section.settings.dot_color | default: '#c9ced3' }};
+    cursor: pointer;
+    transition: background .25s ease, transform .15s ease;
+  }
+  .tsh-{{ sid }} .tsh-dot.is-active {
+    background: {{ section.settings.dot_active_color | default: '#111111' }};
+    transform: scale(1.25);
+  }
+{% comment %}{% endcomment %}</style>
+
+<div class="tsh-{{ sid }}">
+  <div class="tsh-wrap">
+    {%- if block_eyebrow != blank or block_heading != blank or block_subheading != blank -%}
+      <div class="tsh-head">
+        {%- if block_eyebrow != blank and block_eyebrow.settings.text != blank -%}
+          <p class="tsh-eyebrow"
+             style="color: {{ block_eyebrow.settings.color | default: '#666666' }};{% if block_eyebrow.settings.weight_enable %}font-weight: {{ block_eyebrow.settings.weight | default: 700 }};{% endif %}"
+             {{ block_eyebrow.shopify_attributes }}>{{ block_eyebrow.settings.text }}</p>
+        {%- endif -%}
+        {%- if block_heading != blank and block_heading.settings.text != blank -%}
+          <h2 class="tsh-heading"
+              style="font-size: clamp({{ block_heading.settings.size_mobile | default: 28 }}px, 4.4vw, {{ block_heading.settings.size | default: 44 }}px); color: {{ block_heading.settings.color | default: '#111111' }};{% if block_heading.settings.weight_enable %}font-weight: {{ block_heading.settings.weight | default: 800 }};{% endif %}"
+              {{ block_heading.shopify_attributes }}>{{ block_heading.settings.text }}</h2>
+        {%- endif -%}
+        {%- if block_subheading != blank and block_subheading.settings.text != blank -%}
+          <p class="tsh-subheading"
+             style="font-size: clamp({{ block_subheading.settings.size_mobile | default: 15 }}px, 2.4vw, {{ block_subheading.settings.size | default: 16 }}px); color: {{ block_subheading.settings.color | default: '#5b6470' }};{% if block_subheading.settings.weight_enable %}font-weight: {{ block_subheading.settings.weight | default: 400 }};{% endif %}"
+             {{ block_subheading.shopify_attributes }}>{{ block_subheading.settings.text }}</p>
+        {%- endif -%}
+      </div>
+    {%- endif -%}
+
+    {%- assign testimonial_blocks = section.blocks | where: 'type', 'testimonial' -%}
+    {%- if testimonial_blocks.size > 0 -%}
+      <div class="tsh-rail" data-tsh-rail>
+        <div class="tsh-track" data-tsh-track>
+          {%- for b in testimonial_blocks -%}
+            {%- assign rating = b.settings.rating | default: 5 -%}
+            {%- assign has_shopify_video = false -%}
+            {%- if b.settings.shopify_video != blank -%}{%- assign has_shopify_video = true -%}{%- endif -%}
+            {%- assign has_url_video = false -%}
+            {%- if b.settings.video_url != blank -%}{%- assign has_url_video = true -%}{%- endif -%}
+            {%- assign has_video = false -%}
+            {%- if has_shopify_video or has_url_video -%}{%- assign has_video = true -%}{%- endif -%}
+            <article class="tsh-card" {{ b.shopify_attributes }}>
+              <div class="tsh-card-img{% if has_video %} is-video{% endif %}">
+                {%- if has_video -%}
+                  {%- comment -%} Browser autoplay requires muted; we honor sound_on only if autoplay is off. {%- endcomment -%}
+                  {%- assign v_autoplay = b.settings.video_autoplay -%}
+                  {%- assign v_loop = b.settings.video_loop -%}
+                  {%- assign v_sound_on = b.settings.video_sound_on -%}
+                  {%- assign v_controls = b.settings.video_controls -%}
+                  {%- assign v_muted = true -%}
+                  {%- if v_sound_on and v_autoplay == false -%}{%- assign v_muted = false -%}{%- endif -%}
+                  {%- if v_sound_on == false -%}{%- assign v_muted = true -%}{%- endif -%}
+                  <video
+                    class="tsh-video"
+                    data-tsh-video
+                    preload="metadata"
+                    playsinline
+                    {% if b.settings.image != blank %}poster="{{ b.settings.image | image_url: width: 800 }}"{% endif %}
+                    {% if v_autoplay %}autoplay{% endif %}
+                    {% if v_loop %}loop{% endif %}
+                    {% if v_muted %}muted{% endif %}
+                    {% if v_controls %}controls controlsList="nodownload"{% endif %}>
+                    {%- if has_shopify_video -%}
+                      {%- for src in b.settings.shopify_video.sources -%}
+                        <source src="{{ src.url }}" type="{{ src.mime_type }}">
+                      {%- endfor -%}
+                    {%- elsif has_url_video -%}
+                      <source src="{{ b.settings.video_url }}" type="video/mp4">
+                    {%- endif -%}
+                  </video>
+                  {%- unless v_controls -%}
+                    <button type="button" class="tsh-vbtn tsh-vbtn-play" data-tsh-toggle-play aria-label="{{ 'accessibility.play_pause' | t }}">
+                      <svg class="tsh-icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                      <svg class="tsh-icon-pause" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+                    </button>
+                    <button type="button" class="tsh-vbtn tsh-vbtn-mute" data-tsh-toggle-mute aria-label="{{ 'accessibility.mute_unmute' | t }}">
+                      <svg class="tsh-icon-vol" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 00-2.5-4v8a4.5 4.5 0 002.5-4zM14 3.23v2.06a7 7 0 010 13.42v2.06A9 9 0 0014 3.23z"/></svg>
+                      <svg class="tsh-icon-mute" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12a4.5 4.5 0 00-2.5-4v2.18l2.45 2.45c.03-.21.05-.42.05-.63zM19 12c0 .94-.2 1.83-.54 2.64l1.51 1.51A8.96 8.96 0 0021 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73L16.25 17l-1.75 1.75L19.73 24l1.27-1.27L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+                    </button>
+                  {%- endunless -%}
+                {%- elsif b.settings.image != blank -%}
+                  {{ b.settings.image | image_url: width: 600 | image_tag:
+                      loading: 'lazy',
+                      widths: '300,450,600,800',
+                      sizes: '(min-width: 1024px) 33vw, (min-width: 641px) 50vw, 100vw',
+                      alt: b.settings.name | default: fb_accessibility_customer_photo }}
+                {%- else -%}
+                  <div class="tsh-placeholder">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                  </div>
+                {%- endif -%}
+              </div>
+              <div class="tsh-card-body">
+                <div class="tsh-stars" aria-label="{{ rating }} out of 5 stars">
+                  {%- for n in (1..5) -%}
+                    {%- assign half_threshold = n | minus: 0.5 -%}
+                    {%- if rating >= n -%}
+                      {%- assign cls = ' is-full' -%}
+                    {%- elsif rating >= half_threshold -%}
+                      {%- assign cls = ' is-half' -%}
+                    {%- else -%}
+                      {%- assign cls = '' -%}
+                    {%- endif -%}
+                    <span class="tsh-star{{ cls }}" aria-hidden="true">
+                      <svg viewBox="0 0 24 24"><path d="M12 2l2.95 6.27L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l7.05-1z"/></svg>
+                    </span>
+                  {%- endfor -%}
+                </div>
+                <h3 class="tsh-name">{{ b.settings.name | default: fb_accessibility_customer }}</h3>
+                {%- if b.settings.date != blank -%}
+                  <p class="tsh-date">{{ b.settings.date_prefix | default: fb_accessibility_published }} {{ b.settings.date }}</p>
+                {%- endif -%}
+                {%- if b.settings.body != blank -%}
+                  <p class="tsh-body" style="--tsh-body-d: {{ b.settings.body_size_desktop | default: 14 }}px; --tsh-body-m: {{ b.settings.body_size_mobile | default: 14 }}px;">{{ b.settings.body }}</p>
+                {%- endif -%}
+              </div>
+            </article>
+          {%- endfor -%}
+        </div>
+      </div>
+
+      {%- if testimonial_blocks.size > 1 and section.settings.show_nav -%}
+        <div class="tsh-nav">
+          <button type="button" class="tsh-arrow" data-tsh-prev aria-label="{{ 'accessibility.previous' | t }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          {%- if section.settings.show_dots -%}
+            <div class="tsh-dots" data-tsh-dots></div>
+          {%- endif -%}
+          <button type="button" class="tsh-arrow" data-tsh-next aria-label="{{ 'accessibility.next' | t }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+      {%- endif -%}
+    {%- endif -%}
+  </div>
+</div>
+
+<script>
+(function(){
+  const sectionId = '{{ sid }}';
+  const I18N = {
+    goToSlide: {{ 'accessibility.go_to_slide' | t | json }}
+  };
+  const root = document.querySelector('.tsh-' + sectionId);
+  if (!root) return;
+  const track = root.querySelector('[data-tsh-track]');
+  const prev = root.querySelector('[data-tsh-prev]');
+  const next = root.querySelector('[data-tsh-next]');
+  const dotsWrap = root.querySelector('[data-tsh-dots]');
+  if (!track) return;
+
+  let index = 0;
+  const mobilePerView = {{ section.settings.mobile_per_view | default: 1 }};
+  function perView() {
+    const w = window.innerWidth;
+    if (w < 641) return mobilePerView;
+    if (w < 1024) return 2;
+    return 3;
+  }
+  function maxIndex() {
+    const total = track.children.length;
+    return Math.max(0, total - perView());
+  }
+  function update() {
+    if (index < 0) index = 0;
+    const mx = maxIndex();
+    if (index > mx) index = mx;
+    const card = track.children[0];
+    if (!card) return;
+    const gap = parseFloat(getComputedStyle(track).gap || 0) || 20;
+    const step = card.getBoundingClientRect().width + gap;
+    track.style.transform = 'translateX(' + (-index * step) + 'px)';
+    if (prev) prev.disabled = index <= 0;
+    if (next) next.disabled = index >= mx;
+    if (dotsWrap) {
+      dotsWrap.innerHTML = '';
+      const pages = mx + 1;
+      for (let i = 0; i < pages; i++) {
+        const d = document.createElement('button');
+        d.type = 'button';
+        d.className = 'tsh-dot' + (i === index ? ' is-active' : '');
+        d.setAttribute('aria-label', I18N.goToSlide + ' ' + (i + 1));
+        d.addEventListener('click', () => { index = i; update(); });
+        dotsWrap.appendChild(d);
+      }
+    }
+  }
+  if (prev) prev.addEventListener('click', () => { index -= 1; update(); });
+  if (next) next.addEventListener('click', () => { index += 1; update(); });
+  window.addEventListener('resize', update);
+  if (window.Shopify && Shopify.designMode) {
+    document.addEventListener('shopify:section:load', (e) => {
+      if (e.detail && e.detail.sectionId === sectionId) { index = 0; update(); }
+    });
+  }
+
+  /* Touch swipe + mouse drag */
+  const rail = root.querySelector('[data-tsh-rail]');
+  if (rail) {
+    let isDown = false, moved = false, startX = 0, currentX = 0, startTransform = 0, isTouch = false;
+    const DRAG_THRESHOLD = 6;
+
+    function stepSize() {
+      const card = track.children[0];
+      if (!card) return 0;
+      const gap = parseFloat(getComputedStyle(track).gap || 0) || 20;
+      return card.getBoundingClientRect().width + gap;
+    }
+    function currentTranslate() {
+      const m = track.style.transform.match(/translateX\(([-0-9.]+)px\)/);
+      return m ? parseFloat(m[1]) : -index * stepSize();
+    }
+
+    function onStart(x, touch) {
+      isDown = true;
+      moved = false;
+      isTouch = touch;
+      startX = x;
+      currentX = x;
+      startTransform = currentTranslate();
+    }
+    function onMove(x) {
+      if (!isDown) return;
+      currentX = x;
+      const dx = x - startX;
+      if (!moved && Math.abs(dx) < DRAG_THRESHOLD) return;
+      if (!moved) {
+        moved = true;
+        rail.classList.add('is-dragging');
+      }
+      const step = stepSize();
+      const mx = maxIndex();
+      let next = startTransform + dx;
+      // Resistance at edges
+      const min = -mx * step;
+      const max = 0;
+      if (next > max) next = max + (next - max) * 0.3;
+      if (next < min) next = min + (next - min) * 0.3;
+      track.style.transform = 'translateX(' + next + 'px)';
+    }
+    function onEnd() {
+      if (!isDown) return;
+      isDown = false;
+      if (!moved) return;
+      rail.classList.remove('is-dragging');
+      const dx = currentX - startX;
+      const step = stepSize();
+      const mx = maxIndex();
+      // Snap: if moved more than 25% of a card width, advance by 1 (or more)
+      const movedSteps = Math.round(-dx / step);
+      let newIndex = Math.round(-startTransform / step) + movedSteps;
+      // Velocity-aware extra step
+      if (Math.abs(dx) > step * 0.6) {
+        newIndex = Math.round(-startTransform / step) + (dx < 0 ? Math.max(1, movedSteps) : Math.min(-1, movedSteps));
+      }
+      if (newIndex < 0) newIndex = 0;
+      if (newIndex > mx) newIndex = mx;
+      index = newIndex;
+      update();
+      // Block the next click so card links don't fire after a drag
+      const blocker = (e) => { e.preventDefault(); e.stopPropagation(); rail.removeEventListener('click', blocker, true); };
+      rail.addEventListener('click', blocker, true);
+      setTimeout(() => rail.removeEventListener('click', blocker, true), 60);
+    }
+
+    // Touch
+    rail.addEventListener('touchstart', (e) => {
+      onStart(e.touches[0].clientX, true);
+    }, { passive: true });
+    rail.addEventListener('touchmove', (e) => {
+      if (!isDown) return;
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - (rail.__startY || e.touches[0].clientY);
+      // If primarily horizontal, prevent vertical scroll
+      if (moved || Math.abs(dx) > Math.abs(dy)) {
+        if (e.cancelable) e.preventDefault();
+      }
+      onMove(e.touches[0].clientX);
+    }, { passive: false });
+    rail.addEventListener('touchstart', (e) => {
+      rail.__startY = e.touches[0].clientY;
+    }, { passive: true });
+    rail.addEventListener('touchend', onEnd);
+    rail.addEventListener('touchcancel', onEnd);
+
+    // Mouse
+    rail.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      onStart(e.clientX, false);
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!isDown || isTouch) return;
+      onMove(e.clientX);
+    });
+    window.addEventListener('mouseup', () => {
+      if (isTouch) return;
+      onEnd();
+    });
+    rail.addEventListener('mouseleave', () => {
+      if (isTouch) return;
+      onEnd();
+    });
+
+    // Keyboard
+    rail.tabIndex = 0;
+    rail.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') { index = Math.min(maxIndex(), index + 1); update(); e.preventDefault(); }
+      if (e.key === 'ArrowLeft')  { index = Math.max(0, index - 1); update(); e.preventDefault(); }
+    });
+  }
+  update();
+
+  /* Per-card video controls (play/pause + mute/unmute) */
+  root.querySelectorAll('[data-tsh-video]').forEach((video) => {
+    const cardImg = video.closest('.tsh-card-img');
+    if (!cardImg) return;
+    const playBtn = cardImg.querySelector('[data-tsh-toggle-play]');
+    const muteBtn = cardImg.querySelector('[data-tsh-toggle-mute]');
+
+    function syncPlayState() {
+      if (!playBtn) return;
+      playBtn.setAttribute('data-state', video.paused ? 'paused' : 'playing');
+    }
+    function syncMuteState() {
+      if (!muteBtn) return;
+      muteBtn.setAttribute('data-state', video.muted ? 'muted' : 'unmuted');
+    }
+    syncPlayState();
+    syncMuteState();
+
+    if (playBtn) {
+      playBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (video.paused) {
+          const p = video.play();
+          if (p && p.catch) p.catch(() => {});
+        } else {
+          video.pause();
+        }
+      });
+    }
+    if (muteBtn) {
+      muteBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        video.muted = !video.muted;
+        syncMuteState();
+      });
+    }
+    video.addEventListener('play', syncPlayState);
+    video.addEventListener('pause', syncPlayState);
+    video.addEventListener('volumechange', syncMuteState);
+  });
+})();
+{% comment %}{% endcomment %}</script>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "testimonials3",
+  "name": "Testimonials Showcase",
+  "settings": [
+    {
+      "type": "header",
+      "id": "hdr_1",
+      "label": "📝 Content lives in blocks below"
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "Layout"
+    },
+    {
+      "type": "select",
+      "id": "text_align",
+      "label": "Heading alignment",
+      "default": "center",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "max_width",
+      "min": 800,
+      "max": 1400,
+      "step": 10,
+      "unit": "px",
+      "label": "Content max width",
+      "default": 1280
+    },
+    {
+      "type": "range",
+      "id": "card_gap",
+      "min": 8,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "label": "Gap between cards",
+      "default": 20
+    },
+    {
+      "type": "select",
+      "id": "mobile_per_view",
+      "label": "Cards visible on mobile",
+      "info": "1.5 shows a peek of the next card.",
+      "default": "1",
+      "options": [
+        {
+          "value": "1",
+          "label": "1"
+        },
+        {
+          "value": "1.2",
+          "label": "1.2"
+        },
+        {
+          "value": "1.5",
+          "label": "1.5"
+        },
+        {
+          "value": "2",
+          "label": "2"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_7",
+      "label": "Card style"
+    },
+    {
+      "type": "color",
+      "id": "card_bg",
+      "label": "Card background",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "name_color",
+      "label": "Reviewer name color",
+      "default": "#111111"
+    },
+    {
+      "type": "range",
+      "id": "name_size",
+      "min": 12,
+      "max": 28,
+      "step": 1,
+      "unit": "px",
+      "label": "Reviewer name size",
+      "default": 17
+    },
+    {
+      "type": "color",
+      "id": "body_color",
+      "label": "Body text color",
+      "default": "#3a4046"
+    },
+    {
+      "type": "color",
+      "id": "muted_color",
+      "label": "Date / muted color",
+      "default": "#7a8089"
+    },
+    {
+      "type": "range",
+      "id": "card_radius",
+      "min": 0,
+      "max": 32,
+      "step": 1,
+      "unit": "px",
+      "label": "Card corner radius",
+      "default": 14
+    },
+    {
+      "type": "header",
+      "id": "hdr_14",
+      "label": "Stars"
+    },
+    {
+      "type": "color",
+      "id": "star_color",
+      "label": "Filled star color",
+      "default": "#f5b301"
+    },
+    {
+      "type": "color",
+      "id": "star_empty_color",
+      "label": "Empty star color",
+      "default": "#dcdcdc"
+    },
+    {
+      "type": "range",
+      "id": "star_size",
+      "min": 12,
+      "max": 28,
+      "step": 1,
+      "unit": "px",
+      "label": "Star size",
+      "default": 18
+    },
+    {
+      "type": "header",
+      "id": "hdr_18",
+      "label": "Navigation"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_nav",
+      "label": "Show prev / next arrows",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_dots",
+      "label": "Show pagination dots",
+      "default": false
+    },
+    {
+      "type": "color",
+      "id": "arrow_bg",
+      "label": "Arrow background",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "arrow_color",
+      "label": "Arrow icon",
+      "default": "#111111"
+    },
+    {
+      "type": "color",
+      "id": "arrow_border",
+      "label": "Arrow border",
+      "default": "#dcdfe3"
+    },
+    {
+      "type": "color",
+      "id": "arrow_bg_hover",
+      "label": "Arrow background on hover",
+      "default": "#111111"
+    },
+    {
+      "type": "color",
+      "id": "arrow_color_hover",
+      "label": "Arrow icon on hover",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "dot_color",
+      "label": "Dot color",
+      "default": "#c9ced3"
+    },
+    {
+      "type": "color",
+      "id": "dot_active_color",
+      "label": "Active dot color",
+      "default": "#111111"
+    },
+    {
+      "type": "header",
+      "id": "hdr_28",
+      "label": "Section style"
+    },
+    {
+      "type": "color",
+      "id": "section_bg",
+      "label": "Section background",
+      "default": "#f5f5f5"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Default text",
+      "default": "#111111"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding",
+      "default": 72
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding",
+      "default": 72
+    },
+    {
+      "type": "checkbox",
+      "id": "reveal",
+      "label": "Reveal on scroll",
+      "default": true
+    }
+  ],
+  "blocks": [
+    {
+      "type": "eyebrow",
+      "name": "Eyebrow",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Eyebrow text",
+          "default": "REVIEWS"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#666666"
+        },
+        {
+          "type": "checkbox",
+          "id": "weight_enable",
+          "label": "Custom font weight",
+          "default": false,
+          "info": "Off uses the theme's typography weight. Turn on to override."
+        },
+        {
+          "type": "select",
+          "id": "weight",
+          "label": "Weight",
+          "default": "700",
+          "visible_if": "{{ block.settings.weight_enable }}",
+          "options": [
+            {
+              "value": "300",
+              "label": "Light"
+            },
+            {
+              "value": "400",
+              "label": "Normal"
+            },
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semi-bold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            },
+            {
+              "value": "800",
+              "label": "Extra-bold"
+            }
+          ]
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "heading",
+      "name": "Heading",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Heading",
+          "default": "Our Happy Customers"
+        },
+        {
+          "type": "range",
+          "id": "size",
+          "min": 20,
+          "max": 72,
+          "step": 1,
+          "unit": "px",
+          "label": "Font size (desktop)",
+          "default": 44
+        },
+        {
+          "type": "range",
+          "id": "size_mobile",
+          "min": 16,
+          "max": 56,
+          "step": 1,
+          "unit": "px",
+          "label": "Font size (mobile)",
+          "default": 28
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#111111"
+        },
+        {
+          "type": "checkbox",
+          "id": "weight_enable",
+          "label": "Custom font weight",
+          "default": false,
+          "info": "Off uses the theme's typography weight. Turn on to override."
+        },
+        {
+          "type": "select",
+          "id": "weight",
+          "label": "Weight",
+          "default": "800",
+          "visible_if": "{{ block.settings.weight_enable }}",
+          "options": [
+            {
+              "value": "300",
+              "label": "Light"
+            },
+            {
+              "value": "400",
+              "label": "Normal"
+            },
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semi-bold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            },
+            {
+              "value": "800",
+              "label": "Extra-bold"
+            }
+          ]
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "subheading",
+      "name": "Subheading",
+      "settings": [
+        {
+          "type": "textarea",
+          "id": "text",
+          "label": "Subheading",
+          "default": "These are real voices from people who struggled, tried everything, and finally found something that works."
+        },
+        {
+          "type": "range",
+          "id": "size",
+          "min": 12,
+          "max": 28,
+          "step": 1,
+          "unit": "px",
+          "label": "Font size (desktop)",
+          "default": 16
+        },
+        {
+          "type": "range",
+          "id": "size_mobile",
+          "min": 11,
+          "max": 22,
+          "step": 1,
+          "unit": "px",
+          "label": "Font size (mobile)",
+          "default": 15
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#5b6470"
+        },
+        {
+          "type": "checkbox",
+          "id": "weight_enable",
+          "label": "Custom font weight",
+          "default": false,
+          "info": "Off uses the theme's typography weight. Turn on to override."
+        },
+        {
+          "type": "select",
+          "id": "weight",
+          "label": "Weight",
+          "default": "400",
+          "visible_if": "{{ block.settings.weight_enable }}",
+          "options": [
+            {
+              "value": "300",
+              "label": "Light"
+            },
+            {
+              "value": "400",
+              "label": "Normal"
+            },
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semi-bold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            }
+          ]
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "testimonial",
+      "name": "Testimonial card",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Image (used as poster if video is set)"
+        },
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Photo (4:3 works best)"
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Video (optional — replaces image when set)"
+        },
+        {
+          "type": "video",
+          "id": "shopify_video",
+          "label": "Video (Shopify hosted)"
+        },
+        {
+          "type": "url",
+          "id": "video_url",
+          "label": "External video URL (mp4 fallback)"
+        },
+        {
+          "type": "checkbox",
+          "id": "video_autoplay",
+          "label": "Autoplay",
+          "default": true,
+          "info": "Autoplay forces muted on most browsers."
+        },
+        {
+          "type": "checkbox",
+          "id": "video_loop",
+          "label": "Loop",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "video_sound_on",
+          "label": "Start with sound on",
+          "default": false,
+          "info": "Ignored when autoplay is on — browsers block autoplay with sound."
+        },
+        {
+          "type": "checkbox",
+          "id": "video_controls",
+          "label": "Show native browser controls",
+          "default": false,
+          "info": "When off, custom play/pause + mute buttons are shown."
+        },
+        {
+          "type": "header",
+          "id": "hdr_10",
+          "label": "Customer"
+        },
+        {
+          "type": "text",
+          "id": "name",
+          "label": "Name",
+          "default": "Johnny Doe"
+        },
+        {
+          "type": "text",
+          "id": "date_prefix",
+          "label": "Date prefix",
+          "default": "Published"
+        },
+        {
+          "type": "text",
+          "id": "date",
+          "label": "Date",
+          "default": "3/25/2026"
+        },
+        {
+          "type": "header",
+          "id": "hdr_14",
+          "label": "Review"
+        },
+        {
+          "type": "range",
+          "id": "rating",
+          "min": 0.5,
+          "max": 5,
+          "step": 0.5,
+          "label": "Star rating",
+          "info": "Supports half stars (0.5 increments).",
+          "default": 5
+        },
+        {
+          "type": "textarea",
+          "id": "body",
+          "label": "Review body",
+          "default": "It is a long established fact that a reader will be distracted by the readable content."
+        },
+        {
+          "type": "range",
+          "id": "body_size_desktop",
+          "min": 11,
+          "max": 28,
+          "step": 1,
+          "unit": "px",
+          "label": "Review font size (desktop)",
+          "default": 14
+        },
+        {
+          "type": "range",
+          "id": "body_size_mobile",
+          "min": 10,
+          "max": 24,
+          "step": 1,
+          "unit": "px",
+          "label": "Review font size (mobile)",
+          "default": 14
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Testimonials Showcase",
+      "category": "Testimonials",
+      "blocks": [
+        {
+          "type": "heading"
+        },
+        {
+          "type": "subheading"
+        },
+        {
+          "type": "testimonial",
+          "settings": {
+            "rating": 4,
+            "name": "Johnny Doe",
+            "date": "3/25/2026"
+          }
+        },
+        {
+          "type": "testimonial",
+          "settings": {
+            "rating": 4.5,
+            "name": "Johnny Doe",
+            "date": "3/25/2026"
+          }
+        },
+        {
+          "type": "testimonial",
+          "settings": {
+            "rating": 4,
+            "name": "Johnny Doe",
+            "date": "3/25/2026"
+          }
+        },
+        {
+          "type": "testimonial",
+          "settings": {
+            "rating": 5,
+            "name": "Johnny Doe",
+            "date": "3/25/2026"
+          }
+        }
+      ]
+    }
+  ],
+  "disabled_on": {
+    "groups": [
+      "header",
+      "footer"
+    ]
+  },
+  "shopify": {
+    "name": "Testimonials Showcase",
+    "tag": "section",
+    "class": "section-testimonials-showcase",
+    "disabled_on": {
+      "groups": [
+        "header",
+        "footer"
+      ]
+    },
+    "settings": [
+      {
+        "type": "header",
+        "content": "📝 Content lives in blocks below"
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "text_align",
+        "label": "Heading alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "max_width",
+        "min": 800,
+        "max": 1400,
+        "step": 10,
+        "unit": "px",
+        "label": "Content max width",
+        "default": 1280
+      },
+      {
+        "type": "range",
+        "id": "card_gap",
+        "min": 8,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "label": "Gap between cards",
+        "default": 20
+      },
+      {
+        "type": "select",
+        "id": "mobile_per_view",
+        "label": "Cards visible on mobile",
+        "info": "1.5 shows a peek of the next card.",
+        "default": "1",
+        "options": [
+          {
+            "value": "1",
+            "label": "1"
+          },
+          {
+            "value": "1.2",
+            "label": "1.2"
+          },
+          {
+            "value": "1.5",
+            "label": "1.5"
+          },
+          {
+            "value": "2",
+            "label": "2"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Card style"
+      },
+      {
+        "type": "color",
+        "id": "card_bg",
+        "label": "Card background",
+        "default": "#ffffff"
+      },
+      {
+        "type": "color",
+        "id": "name_color",
+        "label": "Reviewer name color",
+        "default": "#111111"
+      },
+      {
+        "type": "range",
+        "id": "name_size",
+        "min": 12,
+        "max": 28,
+        "step": 1,
+        "unit": "px",
+        "label": "Reviewer name size",
+        "default": 17
+      },
+      {
+        "type": "color",
+        "id": "body_color",
+        "label": "Body text color",
+        "default": "#3a4046"
+      },
+      {
+        "type": "color",
+        "id": "muted_color",
+        "label": "Date / muted color",
+        "default": "#7a8089"
+      },
+      {
+        "type": "range",
+        "id": "card_radius",
+        "min": 0,
+        "max": 32,
+        "step": 1,
+        "unit": "px",
+        "label": "Card corner radius",
+        "default": 14
+      },
+      {
+        "type": "header",
+        "content": "Stars"
+      },
+      {
+        "type": "color",
+        "id": "star_color",
+        "label": "Filled star color",
+        "default": "#f5b301"
+      },
+      {
+        "type": "color",
+        "id": "star_empty_color",
+        "label": "Empty star color",
+        "default": "#dcdcdc"
+      },
+      {
+        "type": "range",
+        "id": "star_size",
+        "min": 12,
+        "max": 28,
+        "step": 1,
+        "unit": "px",
+        "label": "Star size",
+        "default": 18
+      },
+      {
+        "type": "header",
+        "content": "Navigation"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_nav",
+        "label": "Show prev / next arrows",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_dots",
+        "label": "Show pagination dots",
+        "default": false
+      },
+      {
+        "type": "color",
+        "id": "arrow_bg",
+        "label": "Arrow background",
+        "default": "#ffffff"
+      },
+      {
+        "type": "color",
+        "id": "arrow_color",
+        "label": "Arrow icon",
+        "default": "#111111"
+      },
+      {
+        "type": "color",
+        "id": "arrow_border",
+        "label": "Arrow border",
+        "default": "#dcdfe3"
+      },
+      {
+        "type": "color",
+        "id": "arrow_bg_hover",
+        "label": "Arrow background on hover",
+        "default": "#111111"
+      },
+      {
+        "type": "color",
+        "id": "arrow_color_hover",
+        "label": "Arrow icon on hover",
+        "default": "#ffffff"
+      },
+      {
+        "type": "color",
+        "id": "dot_color",
+        "label": "Dot color",
+        "default": "#c9ced3"
+      },
+      {
+        "type": "color",
+        "id": "dot_active_color",
+        "label": "Active dot color",
+        "default": "#111111"
+      },
+      {
+        "type": "header",
+        "content": "Section style"
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Section background",
+        "default": "#f5f5f5"
+      },
+      {
+        "type": "color",
+        "id": "text_color",
+        "label": "Default text",
+        "default": "#111111"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "label": "Top padding",
+        "default": 72
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "label": "Bottom padding",
+        "default": 72
+      },
+      {
+        "type": "checkbox",
+        "id": "reveal",
+        "label": "Reveal on scroll",
+        "default": true
+      }
+    ],
+    "blocks": [
+      {
+        "type": "eyebrow",
+        "name": "Eyebrow",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Eyebrow text",
+            "default": "REVIEWS"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#666666"
+          },
+          {
+            "type": "checkbox",
+            "id": "weight_enable",
+            "label": "Custom font weight",
+            "default": false,
+            "info": "Off uses the theme's typography weight. Turn on to override."
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Weight",
+            "default": "700",
+            "visible_if": "{{ block.settings.weight_enable }}",
+            "options": [
+              {
+                "value": "300",
+                "label": "Light"
+              },
+              {
+                "value": "400",
+                "label": "Normal"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi-bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              },
+              {
+                "value": "800",
+                "label": "Extra-bold"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Heading",
+            "default": "Our Happy Customers"
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "min": 20,
+            "max": 72,
+            "step": 1,
+            "unit": "px",
+            "label": "Font size (desktop)",
+            "default": 44
+          },
+          {
+            "type": "range",
+            "id": "size_mobile",
+            "min": 16,
+            "max": 56,
+            "step": 1,
+            "unit": "px",
+            "label": "Font size (mobile)",
+            "default": 28
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#111111"
+          },
+          {
+            "type": "checkbox",
+            "id": "weight_enable",
+            "label": "Custom font weight",
+            "default": false,
+            "info": "Off uses the theme's typography weight. Turn on to override."
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Weight",
+            "default": "800",
+            "visible_if": "{{ block.settings.weight_enable }}",
+            "options": [
+              {
+                "value": "300",
+                "label": "Light"
+              },
+              {
+                "value": "400",
+                "label": "Normal"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi-bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              },
+              {
+                "value": "800",
+                "label": "Extra-bold"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "subheading",
+        "name": "Subheading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "textarea",
+            "id": "text",
+            "label": "Subheading",
+            "default": "These are real voices from people who struggled, tried everything, and finally found something that works."
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "min": 12,
+            "max": 28,
+            "step": 1,
+            "unit": "px",
+            "label": "Font size (desktop)",
+            "default": 16
+          },
+          {
+            "type": "range",
+            "id": "size_mobile",
+            "min": 11,
+            "max": 22,
+            "step": 1,
+            "unit": "px",
+            "label": "Font size (mobile)",
+            "default": 15
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#5b6470"
+          },
+          {
+            "type": "checkbox",
+            "id": "weight_enable",
+            "label": "Custom font weight",
+            "default": false,
+            "info": "Off uses the theme's typography weight. Turn on to override."
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Weight",
+            "default": "400",
+            "visible_if": "{{ block.settings.weight_enable }}",
+            "options": [
+              {
+                "value": "300",
+                "label": "Light"
+              },
+              {
+                "value": "400",
+                "label": "Normal"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi-bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "testimonial",
+        "name": "Testimonial card",
+        "settings": [
+          {
+            "type": "header",
+            "content": "Image (used as poster if video is set)"
+          },
+          {
+            "type": "image_picker",
+            "id": "image",
+            "label": "Photo (4:3 works best)"
+          },
+          {
+            "type": "header",
+            "content": "Video (optional — replaces image when set)"
+          },
+          {
+            "type": "video",
+            "id": "shopify_video",
+            "label": "Video (Shopify hosted)"
+          },
+          {
+            "type": "url",
+            "id": "video_url",
+            "label": "External video URL (mp4 fallback)"
+          },
+          {
+            "type": "checkbox",
+            "id": "video_autoplay",
+            "label": "Autoplay",
+            "default": true,
+            "info": "Autoplay forces muted on most browsers."
+          },
+          {
+            "type": "checkbox",
+            "id": "video_loop",
+            "label": "Loop",
+            "default": true
+          },
+          {
+            "type": "checkbox",
+            "id": "video_sound_on",
+            "label": "Start with sound on",
+            "default": false,
+            "info": "Ignored when autoplay is on — browsers block autoplay with sound."
+          },
+          {
+            "type": "checkbox",
+            "id": "video_controls",
+            "label": "Show native browser controls",
+            "default": false,
+            "info": "When off, custom play/pause + mute buttons are shown."
+          },
+          {
+            "type": "header",
+            "content": "Customer"
+          },
+          {
+            "type": "text",
+            "id": "name",
+            "label": "Name",
+            "default": "Johnny Doe"
+          },
+          {
+            "type": "text",
+            "id": "date_prefix",
+            "label": "Date prefix",
+            "default": "Published"
+          },
+          {
+            "type": "text",
+            "id": "date",
+            "label": "Date",
+            "default": "3/25/2026"
+          },
+          {
+            "type": "header",
+            "content": "Review"
+          },
+          {
+            "type": "range",
+            "id": "rating",
+            "min": 0.5,
+            "max": 5,
+            "step": 0.5,
+            "label": "Star rating",
+            "info": "Supports half stars (0.5 increments).",
+            "default": 5
+          },
+          {
+            "type": "textarea",
+            "id": "body",
+            "label": "Review body",
+            "default": "It is a long established fact that a reader will be distracted by the readable content."
+          },
+          {
+            "type": "range",
+            "id": "body_size_desktop",
+            "min": 11,
+            "max": 28,
+            "step": 1,
+            "unit": "px",
+            "label": "Review font size (desktop)",
+            "default": 14
+          },
+          {
+            "type": "range",
+            "id": "body_size_mobile",
+            "min": 10,
+            "max": 24,
+            "step": 1,
+            "unit": "px",
+            "label": "Review font size (mobile)",
+            "default": 14
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Testimonials Showcase",
+        "category": "Testimonials",
+        "blocks": [
+          {
+            "type": "heading"
+          },
+          {
+            "type": "subheading"
+          },
+          {
+            "type": "testimonial",
+            "settings": {
+              "rating": 4,
+              "name": "Johnny Doe",
+              "date": "3/25/2026"
+            }
+          },
+          {
+            "type": "testimonial",
+            "settings": {
+              "rating": 4.5,
+              "name": "Johnny Doe",
+              "date": "3/25/2026"
+            }
+          },
+          {
+            "type": "testimonial",
+            "settings": {
+              "rating": 4,
+              "name": "Johnny Doe",
+              "date": "3/25/2026"
+            }
+          },
+          {
+            "type": "testimonial",
+            "settings": {
+              "rating": 5,
+              "name": "Johnny Doe",
+              "date": "3/25/2026"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

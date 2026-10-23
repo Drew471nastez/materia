@@ -1,0 +1,2113 @@
+<template compat="shopify">
+{%- assign fb_accessibility_spin_again = 'accessibility.spin_again' | t -%}
+{%- assign fb_accessibility_you_won = 'accessibility.you_won' | t -%}
+{%- assign fb_accessibility_spin_to_win = 'accessibility.spin_to_win' | t -%}
+{%- assign fb_accessibility_enter_your_email = 'accessibility.enter_your_email' | t -%}
+{%- comment -%}
+  Spin Wheel Popup
+  --------------------------------------------------------------
+  A gamified discount popup. Visitor enters their email (+ optional
+  phone with country code), clicks Spin, the wheel animates and
+  lands on one of the prize segments. The winning segment's coupon
+  code is revealed and copyable. Submission posts to Shopify's
+  customer endpoint so the email + phone are captured.
+
+  Structure:
+    Section-level: trigger / overlay / layout / colors / fonts
+    Blocks:
+      - heading        (limit 1)
+      - description    (limit 1)
+      - prize          (up to 8, ordered, each with label + coupon code + color)
+      - form           (limit 1) — email + optional phone
+      - dismiss        (limit 1)
+
+  All popups follow the same z-index (2147483647), position:static
+  wrapper, body-scroll-lock, focus management and editor-mode pattern.
+{%- endcomment -%}
+
+{%- assign sw_open_mode = section.settings.open_mode | default: 'delay' -%}
+{%- assign sw_delay_s = section.settings.delay_s | default: 5 -%}
+{%- assign sw_after_dismiss = section.settings.after_dismiss | default: 'after_days' -%}
+{%- assign sw_hide_days = section.settings.hide_days | default: 1 -%}
+{%- assign sw_mobile_gutter = section.settings.mobile_gutter | default: 32 -%}
+{%- assign sw_editor_mode = section.settings.editor_mode -%}
+
+{%- assign block_heading = blank -%}
+{%- assign block_description = blank -%}
+{%- assign block_form = blank -%}
+{%- assign block_dismiss = blank -%}
+{%- assign prize_blocks = '' | split: '' -%}
+{%- for b in section.blocks -%}
+  {%- case b.type -%}
+    {%- when 'heading' -%}{%- assign block_heading = b -%}
+    {%- when 'description' -%}{%- assign block_description = b -%}
+    {%- when 'form' -%}{%- assign block_form = b -%}
+    {%- when 'dismiss' -%}{%- assign block_dismiss = b -%}
+    {%- when 'prize' -%}{%- assign prize_blocks = prize_blocks | concat: b.id | join: ',' -%}
+  {%- endcase -%}
+{%- endfor -%}
+
+{%- comment -%} Collect prize blocks in order so the wheel + JS use the same array {%- endcomment -%}
+
+<style>
+  #shopify-section-{{ section.id }} { position: static; }
+
+  .sw-{{ section.id }} { font-family: var(--body-font, inherit); }
+  .sw-{{ section.id }} *, .sw-{{ section.id }} *::before, .sw-{{ section.id }} *::after { box-sizing: border-box; }
+
+  .sw-overlay-{{ section.id }} {
+    position: fixed; inset: 0;
+    background: {{ section.settings.overlay_color | default: '#000000' }};
+    opacity: 0; pointer-events: none;
+    transition: opacity .3s ease;
+    z-index: 2147483646;
+  }
+  .sw-{{ section.id }}.sw-open .sw-overlay-{{ section.id }} {
+    opacity: {{ section.settings.overlay_opacity | default: 60 | times: 0.01 }};
+    pointer-events: auto;
+  }
+
+  .sw-card-{{ section.id }} {
+    position: fixed; left: 50%; top: 50%;
+    transform: translate(-50%, -50%) scale(.96);
+    opacity: 0; pointer-events: none;
+    transition: transform .3s ease, opacity .3s ease;
+    z-index: 2147483647;
+    width: min(calc(100vw - {{ sw_mobile_gutter }}px), {{ section.settings.popup_width | default: 920 }}px);
+    max-height: calc(100vh - 24px);
+    overflow: hidden;
+    background: {{ section.settings.card_bg | default: '#ffffff' }};
+    color: {{ section.settings.text_color | default: '#111111' }};
+    border-radius: {{ section.settings.popup_radius | default: 16 }}px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.2);
+  }
+  .sw-{{ section.id }}.sw-open .sw-card-{{ section.id }} {
+    opacity: 1; pointer-events: auto;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  @media (min-width: 750px) {
+    .sw-card-{{ section.id }} {
+      width: min(92vw, {{ section.settings.popup_width | default: 920 }}px);
+    }
+  }
+
+  .sw-grid-{{ section.id }} {
+    display: grid;
+    grid-template-columns: {% if section.settings.wheel_side == 'wheel-right' %}1.05fr .95fr{% else %}.95fr 1.05fr{% endif %};
+    align-items: stretch;
+    gap: 0;
+  }
+  .sw-grid-{{ section.id }}.sw-wheel-right .sw-text-{{ section.id }} { order: 1; }
+  .sw-grid-{{ section.id }}.sw-wheel-right .sw-wheel-col-{{ section.id }} { order: 2; }
+  @media (max-width: 749px) {
+    .sw-grid-{{ section.id }} {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto;
+    }
+    .sw-grid-{{ section.id }} .sw-wheel-col-{{ section.id }} { order: 1; }
+    .sw-grid-{{ section.id }} .sw-text-{{ section.id }} { order: 2; }
+  }
+
+  .sw-text-{{ section.id }} {
+    padding: 28px 28px;
+    display: flex; flex-direction: column;
+    justify-content: center;
+    text-align: {{ section.settings.text_align | default: 'left' }};
+    {% if section.settings.text_align == 'center' %}align-items: center;{% endif %}
+    min-height: 0;
+  }
+  @media (max-width: 749px) {
+    .sw-text-{{ section.id }} { padding: 20px 22px; }
+  }
+
+  .sw-heading-{{ section.id }} { font-weight: 800; font-size: 28px; line-height: 1.1; margin: 0 0 10px; }
+  .sw-description-{{ section.id }} { font-size: 15px; line-height: 1.45; margin: 0 0 16px; }
+  @media (max-width: 749px) {
+    .sw-heading-{{ section.id }} { font-size: 22px; }
+    .sw-description-{{ section.id }} { font-size: 14px; }
+  }
+
+  .sw-close-{{ section.id }} {
+    position: absolute; top: 12px; right: 12px;
+    width: 34px; height: 34px;
+    border: none; border-radius: 50%;
+    background: rgba(255,255,255,.95);
+    color: {{ section.settings.close_color | default: '#111111' }};
+    font-size: 20px; line-height: 1;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,.1);
+    transition: transform .2s ease, background .2s ease;
+    z-index: 2;
+  }
+  .sw-close-{{ section.id }}:hover { transform: scale(1.05); background: #fff; }
+
+  /* Wheel area */
+  .sw-wheel-col-{{ section.id }} {
+    background: {{ section.settings.wheel_panel_bg | default: '#f8f6ff' }};
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    overflow: hidden;
+  }
+  .sw-wheel-{{ section.id }} {
+    position: relative;
+    width: 100%;
+    max-width: 320px;
+    aspect-ratio: 1 / 1;
+  }
+  .sw-wheel-svg-{{ section.id }} {
+    width: 100%; height: 100%;
+    border-radius: 50%;
+    position: relative;
+    transform: rotate(0deg);
+    transition: transform {{ section.settings.spin_duration_s | default: 5 }}s cubic-bezier(.17,.67,.27,1);
+    display: block;
+    overflow: hidden;
+    border: 6px solid {{ section.settings.hub_color | default: '#ffffff' }};
+    box-shadow: 0 6px 24px rgba(0,0,0,.18);
+  }
+  /* Hub border on each segment is rendered via SVG <line> elements in the
+     labels overlay below (`.sw-wheel-divider`). Kept as SVG for crisp rendering
+     and reliable cross-browser support. */
+  .sw-wheel-svg-{{ section.id }} .sw-wheel-divider {
+    stroke: {{ section.settings.segment_divider | default: 'rgba(0,0,0,0.06)' }};
+    stroke-width: 1;
+  }
+  /* SVG label overlay — text is positioned at the mid-radius of each
+     segment and rotated to read radially. Sized via CSS to match wheel. */
+  .sw-wheel-labels-{{ section.id }} {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+  .sw-wheel-labels-{{ section.id }} text {
+    font-weight: 800;
+    letter-spacing: .04em;
+    font-family: var(--body-font, inherit);
+  }
+  .sw-wheel-pointer-{{ section.id }} {
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 14px solid transparent;
+    border-right: 14px solid transparent;
+    border-top: 22px solid {{ section.settings.pointer_color | default: '#111111' }};
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,.25));
+    z-index: 3;
+  }
+  /* Center hub — decorative button-style ring with brand mark in the middle.
+     Sits above the conic-gradient and labels (z-index: 2) so it covers the
+     center where labels would otherwise crowd. */
+  .sw-wheel-hub-{{ section.id }} {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 24%; height: 24%;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 30% 30%, rgba(255,255,255,.95) 0%, {{ section.settings.hub_color | default: '#ffffff' }} 65%);
+    box-shadow:
+      0 4px 12px rgba(0,0,0,.18),
+      inset 0 0 0 6px {{ section.settings.pointer_color | default: '#111111' }},
+      inset 0 0 0 8px rgba(255,255,255,.85);
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--body-font, inherit);
+  }
+  .sw-wheel-hub-{{ section.id }}::after {
+    content: "{{ section.settings.hub_text | default: '%' }}";
+    color: {{ section.settings.pointer_color | default: '#111111' }};
+    font-weight: 900;
+    font-size: clamp(14px, 4.4vw, 30px);
+    line-height: 1;
+    letter-spacing: -.02em;
+  }
+  /* Subtle bounce-in animation when the popup opens */
+  @keyframes sw-hub-pop-{{ section.id }} {
+    0%   { transform: translate(-50%, -50%) scale(.6); opacity: 0; }
+    60%  { transform: translate(-50%, -50%) scale(1.08); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1); }
+  }
+  .sw-{{ section.id }}.sw-open .sw-wheel-hub-{{ section.id }} {
+    animation: sw-hub-pop-{{ section.id }} .55s cubic-bezier(.4,0,.2,1) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sw-{{ section.id }}.sw-open .sw-wheel-hub-{{ section.id }} { animation: none; }
+  }
+
+  /* Form & button */
+  .sw-form-{{ section.id }} { display: flex; flex-direction: column; gap: 12px; max-width: 420px; {% if section.settings.text_align == 'center' %}margin-inline: auto;{% endif %} }
+  .sw-form-{{ section.id }} > form { display: flex; flex-direction: column; gap: 12px; }
+  .sw-form-{{ section.id }} input[type="email"] {
+    width: 100%; padding: 12px 14px;
+    border-radius: 8px; border: 1px solid #cccccc;
+    font-size: 15px; background: #fff; color: #111;
+    outline: none;
+  }
+  /* Ghost-text placeholder — light gray, full opacity (Firefox default
+     gives placeholders reduced opacity which can read as off-white on
+     some forms; force 1 so the colour stays consistent across browsers). */
+  .sw-form-{{ section.id }} input[type="email"]::placeholder {
+    color: #9aa0a6;
+    opacity: 1;
+  }
+  .sw-form-{{ section.id }} input[type="email"]::-webkit-input-placeholder { color: #9aa0a6; opacity: 1; }
+  .sw-form-{{ section.id }} input[type="email"]::-moz-placeholder         { color: #9aa0a6; opacity: 1; }
+  .sw-form-{{ section.id }} input[type="email"]:-ms-input-placeholder      { color: #9aa0a6; opacity: 1; }
+  .sw-form-{{ section.id }} input[type="email"]:focus {
+    border-color: color-mix(in srgb, #111111 40%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, #111111 8%, transparent);
+  }
+  .sw-spin-btn-{{ section.id }} {
+    width: 100%; padding: 14px 20px;
+    border-radius: 10px; border: none;
+    font-weight: 800; font-size: 16px;
+    background: {{ section.settings.spin_btn_bg | default: '#111111' }};
+    color: {{ section.settings.spin_btn_text | default: '#ffffff' }};
+    cursor: pointer;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    transition: background-color .25s ease, color .25s ease, transform .15s ease;
+  }
+  .sw-spin-btn-{{ section.id }}:hover {
+    background: {{ section.settings.spin_btn_bg_hover | default: '#000000' }};
+    color: {{ section.settings.spin_btn_text_hover | default: '#ffffff' }};
+    transform: translateY(-1px);
+  }
+  .sw-spin-btn-{{ section.id }}:disabled {
+    opacity: .6; cursor: not-allowed; transform: none;
+  }
+
+  /* Pre/Post panes */
+  .sw-pre-{{ section.id }} { display: block; }
+  .sw-{{ section.id }}.sw-spun .sw-pre-{{ section.id }} { display: none; }
+  .sw-post-{{ section.id }} { display: none; }
+  .sw-{{ section.id }}.sw-spun .sw-post-{{ section.id }} { display: block; }
+
+  /* Re-spin button — hidden by default, only shown when the visitor lands
+     on a no-code slice (e.g. TRY AGAIN) AND there are retries left. */
+  .sw-respin-btn-{{ section.id }} {
+    display: none;
+    margin-top: 14px;
+    padding: 12px 20px;
+    border-radius: 10px; border: none;
+    font-weight: 800; font-size: 15px;
+    background: {{ section.settings.spin_btn_bg | default: '#111111' }};
+    color: {{ section.settings.spin_btn_text | default: '#ffffff' }};
+    cursor: pointer;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    transition: background-color .25s ease, color .25s ease, transform .15s ease;
+  }
+  .sw-respin-btn-{{ section.id }}:hover {
+    background: {{ section.settings.spin_btn_bg_hover | default: '#000000' }};
+    color: {{ section.settings.spin_btn_text_hover | default: '#ffffff' }};
+    transform: translateY(-1px);
+  }
+  .sw-{{ section.id }}.sw-can-respin .sw-respin-btn-{{ section.id }} { display: inline-block; }
+
+  .sw-win-label-{{ section.id }} { font-size: 14px; font-weight: 600; opacity: .85; margin: 0 0 6px; letter-spacing: .04em; text-transform: uppercase; }
+  .sw-win-title-{{ section.id }} { font-size: 28px; font-weight: 800; margin: 0 0 12px; line-height: 1.1; }
+  .sw-win-code-{{ section.id }} {
+    display: inline-block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-weight: 700; letter-spacing: .12em; font-size: 17px;
+    padding: 10px 14px;
+    border: 2px dashed currentColor;
+    border-radius: 8px;
+    cursor: pointer; user-select: all;
+    background: transparent;
+    transition: background .2s ease, color .2s ease, border-color .2s ease;
+  }
+  .sw-win-code-{{ section.id }}.is-copied {
+    background: #1c8d3a; color: #fff; border-color: #1c8d3a;
+  }
+
+  .sw-dismiss-wrap-{{ section.id }} { margin-top: 12px; text-align: {{ section.settings.dismiss_align | default: 'center' }}; }
+  .sw-dismiss-{{ section.id }} {
+    background: none; border: none; cursor: pointer;
+    font-size: 13px; text-decoration: underline;
+    color: inherit; opacity: .7;
+    padding: 4px 0;
+    transition: opacity .2s ease;
+  }
+  .sw-dismiss-{{ section.id }}:hover { opacity: 1; }
+
+  body.sw-no-scroll-{{ section.id }} { overflow: hidden; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sw-card-{{ section.id }}, .sw-overlay-{{ section.id }},
+    .sw-spin-btn-{{ section.id }}, .sw-win-code-{{ section.id }}, .sw-close-{{ section.id }} {
+      transition: none !important;
+    }
+    .sw-wheel-svg-{{ section.id }} { transition: transform 0.001ms !important; }
+  }
+{% comment %}{% endcomment %}</style>
+
+<section class="sw-{{ section.id }}"
+         data-sw-section="{{ section.id }}"
+         aria-hidden="true">
+  <div class="sw-overlay-{{ section.id }}" aria-hidden="true"></div>
+  <div class="sw-card-{{ section.id }}" role="dialog" aria-modal="true"
+       aria-labelledby="sw-title-{{ section.id }}" tabindex="-1">
+    <button type="button" class="sw-close-{{ section.id }}" aria-label="{{ 'accessibility.close_popup' | t }}">×</button>
+
+    <div class="sw-grid-{{ section.id }}{% if section.settings.wheel_side == 'wheel-right' %} sw-wheel-right{% endif %}">
+      <div class="sw-text-{{ section.id }}">
+        {%- if block_heading != blank and block_heading.settings.text != blank -%}
+          <h2 class="sw-heading-{{ section.id }}" id="sw-title-{{ section.id }}"
+              style="color: {{ block_heading.settings.color | default: '#111' }};"
+              {{ block_heading.shopify_attributes }}>{{ block_heading.settings.text }}</h2>
+        {%- endif -%}
+        {%- if block_description != blank and block_description.settings.text != blank -%}
+          <p class="sw-description-{{ section.id }}"
+             style="color: {{ block_description.settings.color | default: '#444' }};"
+             {{ block_description.shopify_attributes }}>{{ block_description.settings.text }}</p>
+        {%- endif -%}
+
+        <div class="sw-pre-{{ section.id }}">
+          {%- if block_form != blank -%}
+            {%- assign sw_form_id = 'sw-form-' | append: section.id -%}
+            {%- assign sw_form_class = 'sw-formel-' | append: section.id -%}
+            <div class="sw-form-{{ section.id }}" {{ block_form.shopify_attributes }}>
+              {%- form 'customer', id: sw_form_id, class: sw_form_class -%}
+                <input type="hidden" name="contact[tags]" value="newsletter,spin-wheel">
+                {%- assign sw_email_ph = block_form.settings.email_placeholder | default: 'Email address' -%}
+                <input type="email" name="contact[email]" required
+                       autocomplete="email"
+                       placeholder="{{ sw_email_ph | escape }}"
+                       aria-label="{{ sw_email_ph | escape }}">
+                {%- if block_form.settings.collect_phone -%}
+                  {%- if block_form.settings.phone_required -%}{%- assign sw_phone_req = 'true' -%}{%- else -%}{%- assign sw_phone_req = 'false' -%}{%- endif -%}
+                  {%- render 'cpnb-phone-field',
+                      scope: section.id,
+                      default_country: block_form.settings.phone_default_country,
+                      phone_placeholder: block_form.settings.phone_placeholder,
+                      required: sw_phone_req -%}
+                {%- endif -%}
+                <button type="submit" class="sw-spin-btn-{{ section.id }}">
+                  {{ block_form.settings.spin_label | default: fb_accessibility_spin_to_win }}
+                </button>
+                {%- comment -%}
+                  Reload fallback: if for any reason the JS preventDefault doesn't
+                  intercept the submit and the page reloads back here, this marker
+                  tells the boot code to immediately re-open the popup in the
+                  "spinning..." state and complete the spin client-side.
+                {%- endcomment -%}
+                {%- if form.posted_successfully? -%}
+                  <span data-sw-just-submitted="true" style="display:none;"></span>
+                {%- endif -%}
+              {%- endform -%}
+            </div>
+          {%- endif -%}
+
+          {%- if block_dismiss != blank and block_dismiss.settings.text != blank -%}
+            <div class="sw-dismiss-wrap-{{ section.id }}" {{ block_dismiss.shopify_attributes }}>
+              <button type="button" class="sw-dismiss-{{ section.id }}">{{ block_dismiss.settings.text }}</button>
+            </div>
+          {%- endif -%}
+        </div>
+
+        <div class="sw-post-{{ section.id }}" aria-live="polite">
+          <p class="sw-win-label-{{ section.id }}" data-sw-win-label-text>{{ section.settings.win_label | default: fb_accessibility_you_won }}</p>
+          <h3 class="sw-win-title-{{ section.id }}" data-sw-win-title></h3>
+          <button type="button" class="sw-win-code-{{ section.id }}" data-sw-win-code></button>
+          {%- comment -%}
+            Re-spin CTA — only shown when the visitor lands on a no-code slice
+            (TRY AGAIN). JS toggles its visibility via the .sw-can-respin
+            class on the root.
+          {%- endcomment -%}
+          <button type="button" class="sw-respin-btn-{{ section.id }}" data-sw-respin>
+            {{ section.settings.respin_label | default: fb_accessibility_spin_again }}
+          </button>
+        </div>
+      </div>
+
+      <div class="sw-wheel-col-{{ section.id }}">
+        <div class="sw-wheel-{{ section.id }}">
+          <div class="sw-wheel-pointer-{{ section.id }}"></div>
+          {%- assign prize_count = 0 -%}
+          {%- for b in section.blocks -%}{% if b.type == 'prize' %}{%- assign prize_count = prize_count | plus: 1 -%}{% endif %}{%- endfor -%}
+          {%- comment -%}
+            Wheel uses a conic-gradient for segment colors. Labels are absolutely
+            positioned and rotated so each sits at its segment's center angle.
+            All math is degree-based (Liquid has no trig); CSS handles the
+            polar→cartesian conversion via rotate() transforms.
+          {%- endcomment -%}
+          {%- if prize_count == 0 -%}
+            <div class="sw-wheel-svg-{{ section.id }}" style="background:#eee; display:flex; align-items:center; justify-content:center;">
+              <span style="color:#999; font-size:12px;">{{ 'accessibility.add_prize_blocks' | t }}</span>
+            </div>
+          {%- else -%}
+            {%- capture gradient -%}
+              {%- assign idx = 0 -%}
+              {%- for b in section.blocks -%}
+                {%- if b.type == 'prize' -%}
+                  {%- assign start_deg = idx | times: 360 | divided_by: prize_count -%}
+                  {%- assign end_deg = idx | plus: 1 | times: 360 | divided_by: prize_count -%}
+                  {%- assign segment_color = b.settings.color | default: '#ffffff' -%}
+                  {%- if idx > 0 -%}, {% endif -%}{{ segment_color }} {{ start_deg }}deg {{ end_deg }}deg
+                  {%- assign idx = idx | plus: 1 -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endcapture -%}
+            <div class="sw-wheel-svg-{{ section.id }}" style="background: conic-gradient(from -90deg, {{ gradient | strip }});">
+              {%- comment -%}
+                SVG label overlay. Each <text> sits at (100, 36) inside a 200×200
+                viewBox (so y=36 is 64 units above the wheel center cy=100, putting
+                the label at 64% radius). The transform rotates each label by its
+                segment's mid-angle around the wheel center (100, 100), placing
+                the text radially in its segment.
+              {%- endcomment -%}
+              <svg class="sw-wheel-labels-{{ section.id }}" viewBox="0 0 200 200" aria-hidden="true">
+                {%- comment -%}
+                  Label radial position: percentage of radius (0–100). y=100-radius
+                  puts the text-anchor that far above the wheel center.
+                {%- endcomment -%}
+                {%- assign label_radius_pct = section.settings.label_radius | default: 68 -%}
+                {%- assign label_y = 100 | minus: label_radius_pct -%}
+                {%- assign label_font_size = section.settings.label_font_size | default: 10 -%}
+                {%- comment -%}
+                  Cap the merchant's font-size based on segment count. With more
+                  segments, each slice is narrower so a smaller font is needed.
+                  Cap formula: ~70 / N gives a sensible upper bound in viewBox
+                  units. JS then fine-tunes via getBBox-based auto-fit.
+                {%- endcomment -%}
+                {%- assign cap = 60 | divided_by: prize_count -%}
+                {%- if label_font_size > cap -%}
+                  {%- assign label_font_size = cap -%}
+                {%- endif -%}
+                {%- assign idx = 0 -%}
+                {%- for b in section.blocks -%}
+                  {%- if b.type == 'prize' -%}
+                    {%- assign half_step = 360 | divided_by: prize_count | divided_by: 2 -%}
+                    {%- assign mid_deg = idx | times: 360 | divided_by: prize_count | plus: half_step -%}
+                    {%- comment -%}
+                      Divider lines between slices intentionally omitted — the
+                      conic-gradient already produces a clean boundary between
+                      colors. Adding SVG lines on top creates a busy look.
+                    {%- endcomment -%}
+                    {%- comment -%}
+                      Position the label at (100, label_y) — that's directly
+                      above the wheel center at the configured radius — then
+                      rotate the whole label by the segment's mid-angle around
+                      the wheel center. A second inverse rotation around the
+                      label's own anchor keeps the text axis-aligned (upright)
+                      so it never appears tilted or upside-down regardless of
+                      which slice it's in.
+                    {%- endcomment -%}
+                    <text
+                      data-sw-segment="{{ idx }}"
+                      data-sw-code="{{ b.settings.code | escape }}"
+                      data-sw-label="{{ b.settings.label | default: '?' | escape }}"
+                      data-sw-weight="{{ b.settings.weight | default: 1 }}"
+                      x="100"
+                      y="{{ label_y }}"
+                      text-anchor="middle"
+                      dominant-baseline="middle"
+                      font-size="{{ label_font_size }}"
+                      fill="{{ b.settings.text_color | default: '#111111' }}"
+                      transform="rotate({{ mid_deg }} 100 100) rotate({{ mid_deg | times: -1 }} 100 {{ label_y }})"
+                    >{{ b.settings.label | default: '?' }}</text>
+                    {%- assign idx = idx | plus: 1 -%}
+                  {%- endif -%}
+                {%- endfor -%}
+              </svg>
+            </div>
+          {%- endif -%}
+          <div class="sw-wheel-hub-{{ section.id }}"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function(){
+  const SECTION_ID = '{{ section.id }}';
+  const lsKey = 'sw_dismissed_' + SECTION_ID;
+  const subKey = 'sw_subscribed_' + SECTION_ID;
+  const wonKey = 'sw_won_' + SECTION_ID;
+  const neverKey = 'sw_never_' + SECTION_ID;
+  const bodyLockClass = 'sw-no-scroll-' + SECTION_ID;
+  const afterDismiss = '{{ sw_after_dismiss }}';
+  const hideDays = {{ sw_hide_days }};
+  const openMode = '{{ sw_open_mode }}';
+  const delayMs = {{ sw_delay_s }} * 1000;
+  const editorModeOn = {% if sw_editor_mode %}true{% else %}false{% endif %};
+  const spinDurationMs = {{ section.settings.spin_duration_s | default: 5 }} * 1000;
+  const spinFullTurns = {{ section.settings.spin_full_turns | default: 5 }};
+  const closeAfterCopy = {% if section.settings.close_after_copy %}true{% else %}false{% endif %};
+  const closeAfterCopyMs = {{ section.settings.close_after_copy_delay_s | default: 10 }} * 1000;
+  const noWinLabel = {{ section.settings.no_win_label | default: 'Better luck next time' | json }};
+  const maxRespins = {{ section.settings.max_respins | default: 2 }};
+  const copyDoneLabel = {{ section.settings.copy_done_label | default: 'Copied!' | json }};
+
+  const LS = {
+    get: function(k){ try { return localStorage.getItem(k); } catch(_){ return null; } },
+    set: function(k,v){ try { localStorage.setItem(k, v); } catch(_){} },
+    rm:  function(k){ try { localStorage.removeItem(k); } catch(_){} }
+  };
+
+  let controller = null;
+
+  function init() {
+    const root = document.querySelector('.sw-' + SECTION_ID);
+    if (!root) return;
+    if (root.__swInited) return;
+    root.__swInited = true;
+
+    const card = root.querySelector('.sw-card-' + SECTION_ID);
+    const overlay = root.querySelector('.sw-overlay-' + SECTION_ID);
+    const closeBtn = root.querySelector('.sw-close-' + SECTION_ID);
+    const dismissBtn = root.querySelector('.sw-dismiss-' + SECTION_ID);
+    const formEl = root.querySelector('.sw-formel-' + SECTION_ID);
+    const wheelSvg = root.querySelector('.sw-wheel-svg-' + SECTION_ID);
+    const winTitleEl = root.querySelector('[data-sw-win-title]');
+    const winCodeEl = root.querySelector('[data-sw-win-code]');
+    const segments = root.querySelectorAll('[data-sw-segment]');
+    const inDesign = !!(window.Shopify && Shopify.designMode);
+    const forceEditor = editorModeOn && inDesign;
+
+    const wasWon = LS.get(wonKey) === '1';
+
+    function isSuppressed() {
+      if (forceEditor) return false;
+      if (wasWon) return true;
+      if (LS.get(neverKey) === '1') return true;
+      if (afterDismiss === 'every_visit') return false;
+      const until = parseInt(LS.get(lsKey) || '0', 10);
+      return !!(until && Date.now() < until);
+    }
+    function persistDismiss() {
+      if (forceEditor) return;
+      if (afterDismiss === 'never') LS.set(neverKey, '1');
+      else if (afterDismiss === 'after_days' && hideDays > 0) {
+        LS.set(lsKey, String(Date.now() + hideDays * 24 * 60 * 60 * 1000));
+      }
+    }
+    function lockBody(){ if (!inDesign) document.body.classList.add(bodyLockClass); }
+    function unlockBody(){ document.body.classList.remove(bodyLockClass); }
+
+    let prevActive = null;
+    function show() {
+      if (isSuppressed()) return;
+      root.classList.add('sw-open');
+      root.setAttribute('aria-hidden','false');
+      lockBody();
+      prevActive = document.activeElement;
+      requestAnimationFrame(() => {
+        const focusables = card.querySelectorAll('input,button,[tabindex]:not([tabindex="-1"])');
+        if (focusables[0]) { try { focusables[0].focus({preventScroll: true}); } catch(_){} }
+        // Re-fit labels now that the popup is visible (getBBox returns 0 on display:none)
+        if (typeof root.__swAutoFit === 'function') root.__swAutoFit();
+      });
+    }
+    function hide() {
+      root.classList.remove('sw-open');
+      root.setAttribute('aria-hidden','true');
+      unlockBody();
+      if (prevActive && prevActive.focus) { try { prevActive.focus({preventScroll: true}); } catch(_){} }
+      persistDismiss();
+    }
+
+    const listeners = [];
+    function on(target, type, fn, opts) {
+      if (!target) return;
+      target.addEventListener(type, fn, opts);
+      listeners.push({ target, type, fn, opts });
+    }
+
+    on(closeBtn, 'click', hide);
+    on(dismissBtn, 'click', hide);
+    on(overlay, 'click', hide);
+    on(document, 'keydown', (e) => {
+      if (e.key === 'Escape' && root.classList.contains('sw-open')) hide();
+    });
+
+    // ---- Auto-fit wheel labels --------------------------------------------
+    // Iteratively shrink each label's font-size until it fits inside its
+    // segment. Runs multiple times because getBBox() returns 0 for SVG that
+    // hasn't been painted yet (some browsers return 0 while the popup is
+    // still display/opacity-hidden).
+    function autoFitLabels() {
+      if (segments.length === 0) return false;
+      // Conservative ceiling: 65% of the segment's arc-length AND 65% of
+      // its chord length. The chord (straight-line) constraint matters
+      // because labels are axis-aligned (not curved along the arc).
+      const labelRadiusPct = {{ section.settings.label_radius | default: 72 }};
+      const N = segments.length;
+      const arcPerSegment = (2 * Math.PI * labelRadiusPct) / N;
+      const chordPerSegment = 2 * labelRadiusPct * Math.sin(Math.PI / N);
+      const maxWidth = Math.min(arcPerSegment, chordPerSegment) * 0.65;
+      // Vertical constraint: labels shouldn't exceed segment height either
+      const maxHeight = labelRadiusPct * 0.35;
+      let anyMeasured = false;
+      segments.forEach(text => {
+        let fontSize = parseFloat(text.getAttribute('font-size')) || 11;
+        for (let i = 0; i < 18; i++) {
+          let bbox;
+          try { bbox = text.getBBox(); } catch (_) { break; }
+          if (bbox.width === 0 && bbox.height === 0) break; // not measurable yet
+          anyMeasured = true;
+          if (bbox.width <= maxWidth && bbox.height <= maxHeight) break;
+          if (fontSize <= 5) break;
+          fontSize -= 1;
+          text.setAttribute('font-size', fontSize);
+        }
+      });
+      return anyMeasured;
+    }
+    // Try right away, then again on rAF, then once more after a delay —
+    // covers all browsers / paint timings.
+    autoFitLabels();
+    requestAnimationFrame(() => { if (!autoFitLabels()) setTimeout(autoFitLabels, 250); });
+    // Expose so show() can re-run it after the popup actually paints
+    root.__swAutoFit = autoFitLabels;
+
+    // Spin logic — weighted random based on each segment's data-sw-weight.
+    // A weight of 0 means "never land here" (e.g. you can suppress a TRY AGAIN
+    // slice from ever winning while still showing it visually).
+    function pickWinner() {
+      if (segments.length === 0) return null;
+      const weights = Array.from(segments).map(s => {
+        const w = parseFloat(s.getAttribute('data-sw-weight') || '1');
+        return isFinite(w) && w >= 0 ? w : 1;
+      });
+      const total = weights.reduce((a, b) => a + b, 0);
+      if (total <= 0) {
+        // All zero → fall back to uniform random
+        const idx = Math.floor(Math.random() * segments.length);
+        return { idx, el: segments[idx] };
+      }
+      let r = Math.random() * total;
+      for (let i = 0; i < weights.length; i++) {
+        r -= weights[i];
+        if (r <= 0) return { idx: i, el: segments[i] };
+      }
+      const last = weights.length - 1;
+      return { idx: last, el: segments[last] };
+    }
+
+    function spinWheel(callback) {
+      if (!wheelSvg || segments.length === 0) { callback && callback(null); return; }
+      const winner = pickWinner();
+      const segAngle = 360 / segments.length;
+      // The pointer is at the top (12 o'clock). To land segment idx under the pointer,
+      // we rotate so the segment's mid-angle ends up at -90deg (12 o'clock).
+      // Each segment occupies [idx*segAngle, (idx+1)*segAngle] starting from 3 o'clock.
+      // Mid angle = (idx + 0.5) * segAngle. To bring mid to 12 o'clock (270deg), we
+      // rotate by (270 - mid) mod 360, then add several full turns for the animation.
+      // Segment idx's mid-angle in wheel-local coords (0° = top, clockwise).
+      // We want that mid to land at screen 0° (under the pointer). CSS
+      // rotate(R) rotates clockwise, so screen_angle = local_angle + R.
+      // Setting screen_angle = 0 gives R = (-mid + 360) % 360.
+      const mid = (winner.idx + 0.5) * segAngle;
+      const target = ((360 - mid) % 360 + 360) % 360;
+      const totalRotation = spinFullTurns * 360 + target;
+      wheelSvg.style.transform = 'rotate(' + totalRotation + 'deg)';
+      // Wait the configured spin duration + a small buffer for the easing tail
+      setTimeout(() => { callback && callback(winner); }, spinDurationMs + 100);
+    }
+
+    // ---- Spin flow ---------------------------------------------------------
+    // We bind BOTH the form-submit (for keyboard Enter) AND the button-click
+    // (most reliable for mouse/touch). Both call startSpin which is idempotent
+    // via the `running` guard.
+
+    // Track remaining re-spins. Resets to maxRespins each time the popup
+    // re-initializes; persisted in localStorage so a page reload mid-game
+    // doesn't grant the visitor a fresh budget of retries.
+    const respinKey = 'sw_respins_' + SECTION_ID;
+    let respinsLeft = (function(){
+      const stored = parseInt(LS.get(respinKey) || '', 10);
+      return isFinite(stored) ? stored : maxRespins;
+    })();
+    const respinBtn = root.querySelector('[data-sw-respin]');
+    const winLabelTextEl = root.querySelector('[data-sw-win-label-text]');
+
+    function revealWinner(winner) {
+      root.classList.add('sw-spun');
+      if (!winner) return;
+      const label = winner.el.getAttribute('data-sw-label') || '';
+      const code = winner.el.getAttribute('data-sw-code') || '';
+      const isWin = !!code;
+
+      if (winTitleEl) winTitleEl.textContent = isWin ? label : noWinLabel;
+      if (winLabelTextEl) {
+        // Hide the celebratory "YOU WON!" label on no-win slices
+        winLabelTextEl.style.display = isWin ? '' : 'none';
+      }
+      if (winCodeEl) {
+        if (isWin) {
+          winCodeEl.textContent = code;
+          winCodeEl.dataset.code = code;
+          winCodeEl.style.display = '';
+        } else {
+          winCodeEl.style.display = 'none';
+          winCodeEl.dataset.code = '';
+        }
+      }
+      // Re-spin button: shown only on a no-win result if the visitor still has
+      // retries left (and not in editor mode — editor previews the no-win
+      // state, then the post-pane auto-resets after 8s).
+      if (!isWin && respinsLeft > 0 && !forceEditor) {
+        root.classList.add('sw-can-respin');
+      } else {
+        root.classList.remove('sw-can-respin');
+      }
+    }
+
+    function runSpinFlow(opts) {
+      opts = opts || {};
+      const submitBtn = formEl ? formEl.querySelector('button.sw-spin-btn-' + SECTION_ID) : null;
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Spinning…'; }
+      if (opts.submitToShopify !== false && formEl && !forceEditor) {
+        const fd = new FormData(formEl);
+        try {
+          fetch(formEl.action || '/contact', {
+            method: 'POST',
+            headers: { 'Accept': 'application/json, text/html;q=0.9, */*;q=0.8' },
+            body: fd,
+            credentials: 'same-origin',
+            redirect: 'manual'
+          }).catch(() => {});
+        } catch(_) {}
+      }
+      spinWheel((winner) => {
+        revealWinner(winner);
+        const isWin = !!(winner && winner.el.getAttribute('data-sw-code'));
+        // Only mark "won" on an actual winning slice. No-win results don't
+        // suppress the popup so the visitor can come back later.
+        if (isWin && !forceEditor) LS.set(wonKey, '1');
+        if (submitBtn) submitBtn.disabled = false;
+        running = false;   // allow re-spin
+        if (forceEditor) {
+          setTimeout(() => {
+            root.classList.remove('sw-spun');
+            root.classList.remove('sw-can-respin');
+            if (wheelSvg) wheelSvg.style.transform = 'rotate(0deg)';
+          }, 8000);
+        }
+      });
+    }
+
+    let running = false;
+    function startSpin(e) {
+      if (e) {
+        e.preventDefault();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        e.stopPropagation();
+      }
+      if (running) return false;
+      // HTML5 email validation guard
+      if (formEl) {
+        const emailField = formEl.querySelector('input[type="email"]');
+        if (emailField && typeof emailField.checkValidity === 'function' && !emailField.checkValidity()) {
+          if (typeof emailField.reportValidity === 'function') emailField.reportValidity();
+          return false;
+        }
+      }
+      running = true;
+      if (!forceEditor) LS.set(subKey, '1');
+      runSpinFlow();
+      return false;
+    }
+
+    // Re-spin handler — fires when the visitor clicks "Spin again" on a no-win
+    // result. Resets the visual state, decrements the retry counter, and runs
+    // the spin flow without re-submitting to Shopify (already captured).
+    function startRespin(e) {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      if (running) return false;
+      if (respinsLeft <= 0) return false;
+      respinsLeft -= 1;
+      if (!forceEditor) LS.set(respinKey, String(respinsLeft));
+      // Reset the visual state — wheel goes back to 0deg, post-pane hides,
+      // pre-pane stays hidden too (we'll re-spin and show post-pane again).
+      root.classList.remove('sw-spun');
+      root.classList.remove('sw-can-respin');
+      if (wheelSvg) {
+        // Snap back to 0 without animation, then runSpinFlow re-applies the
+        // CSS transition for the next spin.
+        const t = wheelSvg.style.transition;
+        wheelSvg.style.transition = 'none';
+        wheelSvg.style.transform = 'rotate(0deg)';
+        // Force reflow so the next transform is animated
+        // eslint-disable-next-line no-unused-expressions
+        wheelSvg.offsetHeight;
+        wheelSvg.style.transition = t;
+      }
+      running = true;
+      runSpinFlow({ submitToShopify: false });
+      return false;
+    }
+
+    if (formEl) {
+      on(formEl, 'submit', startSpin, true);
+      const spinBtn = formEl.querySelector('button.sw-spin-btn-' + SECTION_ID);
+      if (spinBtn) on(spinBtn, 'click', startSpin, true);
+    }
+    if (respinBtn) on(respinBtn, 'click', startRespin);
+
+    // Reload fallback: if the page navigated away and came back with the Shopify
+    // success marker, run the spin flow without resubmitting.
+    if (!forceEditor) {
+      const justSubmittedMarker = root.querySelector('[data-sw-just-submitted]');
+      if (justSubmittedMarker && LS.get(wonKey) !== '1') {
+        if (!root.classList.contains('sw-open')) {
+          root.classList.add('sw-open');
+          root.setAttribute('aria-hidden','false');
+          lockBody();
+        }
+        running = true;
+        runSpinFlow({ submitToShopify: false });
+      }
+    }
+
+    // Bulletproof copy-to-clipboard with secure-context detection + fallback
+    function swCopy(text) {
+      return new Promise((resolve, reject) => {
+        if (!text) { reject(new Error('empty')); return; }
+        const useAsync = navigator.clipboard
+          && typeof navigator.clipboard.writeText === 'function'
+          && (window.isSecureContext === true || window.isSecureContext === undefined);
+        const fallback = () => {
+          try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            // Make textarea focusable & off-screen but actually rendered (some
+            // browsers reject execCommand('copy') if the source is display:none).
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.top = '0';
+            ta.style.left = '0';
+            ta.style.width = '2em';
+            ta.style.height = '2em';
+            ta.style.padding = '0';
+            ta.style.border = 'none';
+            ta.style.outline = 'none';
+            ta.style.boxShadow = 'none';
+            ta.style.background = 'transparent';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            ta.setSelectionRange(0, text.length);
+            const ok = document.execCommand && document.execCommand('copy');
+            document.body.removeChild(ta);
+            if (ok) resolve(); else reject(new Error('execCommand failed'));
+          } catch (err) { reject(err); }
+        };
+        if (useAsync) {
+          navigator.clipboard.writeText(text).then(resolve).catch(fallback);
+        } else {
+          fallback();
+        }
+      });
+    }
+
+    // Copy code → flash confirmation → optionally auto-close.
+    if (winCodeEl) {
+      on(winCodeEl, 'click', () => {
+        const code = (winCodeEl.dataset.code || '').trim();
+        if (!code) return; // No-win slice — nothing to copy
+        const original = winCodeEl.textContent;
+        const finishOk = () => {
+          winCodeEl.classList.add('is-copied');
+          winCodeEl.textContent = copyDoneLabel;
+          if (closeAfterCopy && !forceEditor) {
+            setTimeout(() => { hide(); }, closeAfterCopyMs);
+          } else {
+            setTimeout(() => {
+              winCodeEl.classList.remove('is-copied');
+              winCodeEl.textContent = original;
+            }, 2200);
+          }
+        };
+        swCopy(code).then(finishOk).catch(() => {
+          // Even on failure, show "Copied!" so the visitor still sees feedback.
+          // The code remains visible so they can manually select + Ctrl/Cmd-C.
+          finishOk();
+        });
+      });
+    }
+
+    // Hooks
+    window['SW_open_' + SECTION_ID] = show;
+    window['SW_close_' + SECTION_ID] = hide;
+    window['SW_reset_' + SECTION_ID] = function() {
+      [lsKey, subKey, wonKey, neverKey, respinKey].forEach(LS.rm);
+      respinsLeft = maxRespins;
+      root.classList.remove('sw-spun');
+      if (wheelSvg) wheelSvg.style.transform = 'rotate(0deg)';
+    };
+
+    // Initial state
+    if (forceEditor) {
+      root.classList.add('sw-open');
+      root.setAttribute('aria-hidden','false');
+    } else if (!isSuppressed()) {
+      if (openMode === 'immediate') show();
+      else if (openMode === 'delay') setTimeout(show, delayMs > 0 ? delayMs : 0);
+      else if (openMode === 'exit') {
+        const h = (e) => { if (e.clientY <= 8) { show(); document.removeEventListener('mousemove', h); } };
+        on(document, 'mousemove', h, { passive: true });
+      } else if (openMode === 'manual') {
+        document.querySelectorAll('[data-sw-trigger="' + SECTION_ID + '"]').forEach(el => {
+          on(el, 'click', (ev) => { ev.preventDefault(); show(); });
+        });
+      }
+    }
+
+    controller = {
+      destroy() {
+        listeners.forEach(({ target, type, fn, opts }) => { target.removeEventListener(type, fn, opts); });
+        unlockBody();
+        delete window['SW_open_' + SECTION_ID];
+        delete window['SW_close_' + SECTION_ID];
+        delete window['SW_reset_' + SECTION_ID];
+        root.__swInited = false;
+      }
+    };
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else { init(); }
+  window.addEventListener('pageshow', (e) => { if (e.persisted) { if (controller) controller.destroy(); controller = null; init(); } });
+  if (window.Shopify && Shopify.designMode) {
+    document.addEventListener('shopify:section:load', (e) => {
+      if (e.detail && e.detail.sectionId === SECTION_ID) { if (controller) controller.destroy(); controller = null; init(); }
+    });
+    document.addEventListener('shopify:section:unload', (e) => {
+      if (e.detail && e.detail.sectionId === SECTION_ID && controller) { controller.destroy(); controller = null; }
+    });
+  }
+})();
+{% comment %}{% endcomment %}</script>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "spin-wheel-popup",
+  "name": "Spin Wheel Popup",
+  "settings": [
+    {
+      "type": "header",
+      "id": "hdr_1",
+      "label": "📝 Content lives in blocks below"
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "💡 Connect codes to Shopify discounts"
+    },
+    {
+      "type": "header",
+      "id": "hdr_3",
+      "label": "Trigger"
+    },
+    {
+      "type": "select",
+      "id": "open_mode",
+      "label": "When to open",
+      "default": "delay",
+      "options": [
+        {
+          "value": "immediate",
+          "label": "Immediately"
+        },
+        {
+          "value": "delay",
+          "label": "After delay"
+        },
+        {
+          "value": "exit",
+          "label": "Exit intent (desktop)"
+        },
+        {
+          "value": "manual",
+          "label": "Manual (button click)"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "delay_s",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "unit": "s",
+      "label": "Delay (seconds)",
+      "default": 5
+    },
+    {
+      "type": "select",
+      "id": "after_dismiss",
+      "label": "After dismiss / close — show again?",
+      "info": "Visitors who already won never see this popup again.",
+      "default": "after_days",
+      "options": [
+        {
+          "value": "every_visit",
+          "label": "Show on every visit"
+        },
+        {
+          "value": "after_days",
+          "label": "Hide for X days then show again"
+        },
+        {
+          "value": "never",
+          "label": "Never show again on this device"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "hide_days",
+      "min": 0,
+      "max": 30,
+      "step": 1,
+      "unit": "d",
+      "label": "Don't show again for (days)",
+      "default": 1
+    },
+    {
+      "type": "header",
+      "id": "hdr_8",
+      "label": "Editor"
+    },
+    {
+      "type": "checkbox",
+      "id": "editor_mode",
+      "label": "Editor mode (always show in Theme Editor preview)",
+      "info": "Only affects Theme Editor preview. In editor mode, spin doesn't submit to Shopify and resets after 8s so you can preview both states.",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_10",
+      "label": "Layout"
+    },
+    {
+      "type": "select",
+      "id": "wheel_side",
+      "label": "Wheel position (desktop)",
+      "default": "wheel-left",
+      "options": [
+        {
+          "value": "wheel-left",
+          "label": "Wheel on left"
+        },
+        {
+          "value": "wheel-right",
+          "label": "Wheel on right"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "text_align",
+      "label": "Text alignment",
+      "default": "left",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "dismiss_align",
+      "label": "Dismiss link alignment",
+      "default": "center",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "popup_width",
+      "min": 360,
+      "max": 1100,
+      "step": 10,
+      "unit": "px",
+      "label": "Popup max width",
+      "default": 780
+    },
+    {
+      "type": "range",
+      "id": "popup_radius",
+      "min": 0,
+      "max": 32,
+      "step": 1,
+      "unit": "px",
+      "label": "Popup corner radius",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "mobile_gutter",
+      "min": 0,
+      "max": 80,
+      "step": 4,
+      "unit": "px",
+      "label": "Mobile side gutter (total)",
+      "default": 32
+    },
+    {
+      "type": "header",
+      "id": "hdr_17",
+      "label": "Color"
+    },
+    {
+      "type": "color",
+      "id": "card_bg",
+      "label": "Card background",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Default text color",
+      "default": "#111111"
+    },
+    {
+      "type": "color",
+      "id": "close_color",
+      "label": "Close icon color",
+      "default": "#111111"
+    },
+    {
+      "type": "color",
+      "id": "overlay_color",
+      "label": "Overlay color",
+      "default": "#000000"
+    },
+    {
+      "type": "range",
+      "id": "overlay_opacity",
+      "min": 0,
+      "max": 90,
+      "step": 5,
+      "unit": "%",
+      "label": "Overlay opacity",
+      "default": 60
+    },
+    {
+      "type": "color",
+      "id": "wheel_panel_bg",
+      "label": "Wheel panel background",
+      "default": "#f8f6ff"
+    },
+    {
+      "type": "color",
+      "id": "pointer_color",
+      "label": "Wheel pointer color",
+      "default": "#111111"
+    },
+    {
+      "type": "color",
+      "id": "hub_color",
+      "label": "Wheel hub color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "text",
+      "id": "hub_text",
+      "label": "Hub center text / emoji",
+      "info": "Short text or emoji shown in the wheel's center hub (e.g. \"%\", \"🎁\", \"GO\", \"$\"). Keep it 1–2 characters for best fit.",
+      "default": "%"
+    },
+    {
+      "type": "color",
+      "id": "spin_btn_bg",
+      "label": "Spin button background",
+      "default": "#111111"
+    },
+    {
+      "type": "color",
+      "id": "spin_btn_text",
+      "label": "Spin button text",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "spin_btn_bg_hover",
+      "label": "Spin button background on hover",
+      "default": "#000000"
+    },
+    {
+      "type": "color",
+      "id": "spin_btn_text_hover",
+      "label": "Spin button text on hover",
+      "default": "#ffffff"
+    },
+    {
+      "type": "header",
+      "id": "hdr_31",
+      "label": "Wheel labels"
+    },
+    {
+      "type": "range",
+      "id": "label_font_size",
+      "min": 6,
+      "max": 22,
+      "step": 1,
+      "unit": "px",
+      "label": "Label font size (max)",
+      "info": "Upper bound. The wheel auto-shrinks each label so it fits inside its slice — so this is the maximum size, not the exact rendered size.",
+      "default": 10
+    },
+    {
+      "type": "range",
+      "id": "label_radius",
+      "min": 30,
+      "max": 85,
+      "step": 1,
+      "unit": "%",
+      "label": "Label radial position",
+      "info": "How far from the wheel center the label sits. Higher % = closer to the rim where each slice has more horizontal room.",
+      "default": 68
+    },
+    {
+      "type": "color",
+      "id": "segment_divider",
+      "label": "Segment divider color",
+      "info": "The thin line between wheel slices. Use a transparent or matching color to hide dividers."
+    },
+    {
+      "type": "header",
+      "id": "hdr_35",
+      "label": "Spin behavior"
+    },
+    {
+      "type": "range",
+      "id": "spin_duration_s",
+      "min": 2,
+      "max": 10,
+      "step": 1,
+      "unit": "s",
+      "label": "Spin duration",
+      "info": "How long the wheel takes to slow down and stop.",
+      "default": 5
+    },
+    {
+      "type": "range",
+      "id": "spin_full_turns",
+      "min": 3,
+      "max": 10,
+      "step": 1,
+      "label": "Full turns before stopping",
+      "info": "How many complete rotations the wheel makes during a spin. More turns = more suspense.",
+      "default": 5
+    },
+    {
+      "type": "checkbox",
+      "id": "close_after_copy",
+      "label": "Auto-close popup after coupon is copied",
+      "info": "When ON, the popup auto-closes after the visitor copies the won code. When OFF, the popup stays open until the visitor clicks the close ✕ button.",
+      "default": true
+    },
+    {
+      "type": "range",
+      "id": "close_after_copy_delay_s",
+      "min": 1,
+      "max": 30,
+      "step": 1,
+      "unit": "s",
+      "label": "Seconds before auto-close",
+      "info": "How long to keep the coupon visible after copy before closing the popup. Only applies if 'Auto-close after copy' is ON.",
+      "default": 10
+    },
+    {
+      "type": "header",
+      "id": "hdr_40",
+      "label": "Copy"
+    },
+    {
+      "type": "text",
+      "id": "win_label",
+      "label": "Winner label (small)",
+      "default": "YOU WON!"
+    },
+    {
+      "type": "text",
+      "id": "no_win_label",
+      "label": "Non-winning label",
+      "info": "Shown when the visitor lands on a slice with no coupon code (e.g. TRY AGAIN).",
+      "default": "Better luck next time"
+    },
+    {
+      "type": "range",
+      "id": "max_respins",
+      "min": 0,
+      "max": 5,
+      "step": 1,
+      "label": "Allowed re-spins on TRY AGAIN",
+      "info": "How many times the visitor can click 'Spin again' after landing on a no-code slice. Set to 0 to disable re-spinning entirely.",
+      "default": 2
+    },
+    {
+      "type": "text",
+      "id": "respin_label",
+      "label": "'Spin again' button label",
+      "default": "Spin again"
+    },
+    {
+      "type": "text",
+      "id": "copy_done_label",
+      "label": "After-copy label",
+      "info": "Brief confirmation shown on the coupon button after copy.",
+      "default": "Copied!"
+    }
+  ],
+  "blocks": [
+    {
+      "type": "heading",
+      "name": "Heading",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Heading",
+          "default": "Spin to reveal your discount"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#111111"
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "description",
+      "name": "Description",
+      "settings": [
+        {
+          "type": "textarea",
+          "id": "text",
+          "label": "Description",
+          "default": "Enter your email for a chance to win up to 15% off your order."
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#444444"
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "prize",
+      "name": "Prize segment",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Prize"
+        },
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Label",
+          "info": "What appears in the wheel slice. Keep it SHORT (≤6 chars) so neighboring labels don't visually crowd each other — e.g. \"10%\", \"15%\", \"FREE\", \"TRY\". Long labels like \"FREE SHIPPING\" usually overflow into adjacent slices.",
+          "default": "10%"
+        },
+        {
+          "type": "text",
+          "id": "code",
+          "label": "Coupon code",
+          "info": "Must match a real discount code in Shopify admin → Discounts. Leave empty for non-winning slices (e.g. TRY AGAIN).",
+          "default": "SPIN10"
+        },
+        {
+          "type": "header",
+          "id": "hdr_4",
+          "label": "Win chance"
+        },
+        {
+          "type": "range",
+          "id": "weight",
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "label": "Win chance (weight)",
+          "info": "Relative odds of landing here. Tip: if you make every prize's weights sum to 100, each weight is exactly the percentage probability — e.g. weight 80 on '15% OFF' + 20 split across the others = 80% chance to win 15% OFF. Set to 0 to make this slice visual-only (never wins).",
+          "default": 1
+        },
+        {
+          "type": "header",
+          "id": "hdr_6",
+          "label": "Color"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Segment color",
+          "default": "#ffd6e0"
+        },
+        {
+          "type": "color",
+          "id": "text_color",
+          "label": "Segment text color",
+          "default": "#111111"
+        }
+      ]
+    },
+    {
+      "type": "form",
+      "name": "Email form",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content"
+        },
+        {
+          "type": "text",
+          "id": "email_placeholder",
+          "label": "Email placeholder",
+          "default": "Email address",
+          "info": "Renders inside the email input as ghost text until the shopper starts typing."
+        },
+        {
+          "type": "text",
+          "id": "spin_label",
+          "label": "Spin button label",
+          "default": "Spin to win"
+        },
+        {
+          "type": "header",
+          "id": "hdr_4",
+          "label": "Phone collection (optional)"
+        },
+        {
+          "type": "checkbox",
+          "id": "collect_phone",
+          "label": "Also collect phone number",
+          "default": false
+        },
+        {
+          "type": "text",
+          "id": "phone_placeholder",
+          "label": "Phone placeholder",
+          "default": "Phone number"
+        },
+        {
+          "type": "text",
+          "id": "phone_default_country",
+          "label": "Default country (ISO code)",
+          "default": "US"
+        },
+        {
+          "type": "checkbox",
+          "id": "phone_required",
+          "label": "Make phone required",
+          "default": false
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "dismiss",
+      "name": "Dismiss link",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Dismiss link text",
+          "default": "No thanks"
+        }
+      ],
+      "limit": 1
+    }
+  ],
+  "presets": [],
+  "enabled_on": {
+    "groups": [
+      "overlay"
+    ]
+  },
+  "shopify": {
+    "name": "Spin Wheel Popup",
+    "tag": "section",
+    "class": "sw-section",
+    "enabled_on": {
+      "groups": [
+        "custom.overlay"
+      ]
+    },
+    "settings": [
+      {
+        "type": "header",
+        "content": "📝 Content lives in blocks below",
+        "info": "Heading, description, prizes, form and dismiss link are all configured per-block. Add at least 4–6 Prize blocks to populate the wheel."
+      },
+      {
+        "type": "header",
+        "content": "💡 Connect codes to Shopify discounts",
+        "info": "Each prize's 'Coupon code' should match a real discount code you've created in Shopify admin → Discounts. The discount % must match the prize label (e.g. SPIN15 → 15% off in Shopify). Leave the coupon code empty for non-winning slices like TRY AGAIN."
+      },
+      {
+        "type": "header",
+        "content": "Trigger"
+      },
+      {
+        "type": "select",
+        "id": "open_mode",
+        "label": "When to open",
+        "default": "delay",
+        "options": [
+          {
+            "value": "immediate",
+            "label": "Immediately"
+          },
+          {
+            "value": "delay",
+            "label": "After delay"
+          },
+          {
+            "value": "exit",
+            "label": "Exit intent (desktop)"
+          },
+          {
+            "value": "manual",
+            "label": "Manual (button click)"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "delay_s",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "s",
+        "label": "Delay (seconds)",
+        "default": 5
+      },
+      {
+        "type": "select",
+        "id": "after_dismiss",
+        "label": "After dismiss / close — show again?",
+        "info": "Visitors who already won never see this popup again.",
+        "default": "after_days",
+        "options": [
+          {
+            "value": "every_visit",
+            "label": "Show on every visit"
+          },
+          {
+            "value": "after_days",
+            "label": "Hide for X days then show again"
+          },
+          {
+            "value": "never",
+            "label": "Never show again on this device"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "hide_days",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "unit": "d",
+        "label": "Don't show again for (days)",
+        "default": 1
+      },
+      {
+        "type": "header",
+        "content": "Editor"
+      },
+      {
+        "type": "checkbox",
+        "id": "editor_mode",
+        "label": "Editor mode (always show in Theme Editor preview)",
+        "info": "Only affects Theme Editor preview. In editor mode, spin doesn't submit to Shopify and resets after 8s so you can preview both states.",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "wheel_side",
+        "label": "Wheel position (desktop)",
+        "default": "wheel-left",
+        "options": [
+          {
+            "value": "wheel-left",
+            "label": "Wheel on left"
+          },
+          {
+            "value": "wheel-right",
+            "label": "Wheel on right"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "text_align",
+        "label": "Text alignment",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "dismiss_align",
+        "label": "Dismiss link alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "popup_width",
+        "min": 360,
+        "max": 1100,
+        "step": 10,
+        "unit": "px",
+        "label": "Popup max width",
+        "default": 780
+      },
+      {
+        "type": "range",
+        "id": "popup_radius",
+        "min": 0,
+        "max": 32,
+        "step": 1,
+        "unit": "px",
+        "label": "Popup corner radius",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "mobile_gutter",
+        "min": 0,
+        "max": 80,
+        "step": 4,
+        "unit": "px",
+        "label": "Mobile side gutter (total)",
+        "default": 32
+      },
+      {
+        "type": "header",
+        "content": "Color"
+      },
+      {
+        "type": "color",
+        "id": "card_bg",
+        "label": "Card background",
+        "default": "#ffffff"
+      },
+      {
+        "type": "color",
+        "id": "text_color",
+        "label": "Default text color",
+        "default": "#111111"
+      },
+      {
+        "type": "color",
+        "id": "close_color",
+        "label": "Close icon color",
+        "default": "#111111"
+      },
+      {
+        "type": "color",
+        "id": "overlay_color",
+        "label": "Overlay color",
+        "default": "#000000"
+      },
+      {
+        "type": "range",
+        "id": "overlay_opacity",
+        "min": 0,
+        "max": 90,
+        "step": 5,
+        "unit": "%",
+        "label": "Overlay opacity",
+        "default": 60
+      },
+      {
+        "type": "color",
+        "id": "wheel_panel_bg",
+        "label": "Wheel panel background",
+        "default": "#f8f6ff"
+      },
+      {
+        "type": "color",
+        "id": "pointer_color",
+        "label": "Wheel pointer color",
+        "default": "#111111"
+      },
+      {
+        "type": "color",
+        "id": "hub_color",
+        "label": "Wheel hub color",
+        "default": "#ffffff"
+      },
+      {
+        "type": "text",
+        "id": "hub_text",
+        "label": "Hub center text / emoji",
+        "info": "Short text or emoji shown in the wheel's center hub (e.g. \"%\", \"🎁\", \"GO\", \"$\"). Keep it 1–2 characters for best fit.",
+        "default": "%"
+      },
+      {
+        "type": "color",
+        "id": "spin_btn_bg",
+        "label": "Spin button background",
+        "default": "#111111"
+      },
+      {
+        "type": "color",
+        "id": "spin_btn_text",
+        "label": "Spin button text",
+        "default": "#ffffff"
+      },
+      {
+        "type": "color",
+        "id": "spin_btn_bg_hover",
+        "label": "Spin button background on hover",
+        "default": "#000000"
+      },
+      {
+        "type": "color",
+        "id": "spin_btn_text_hover",
+        "label": "Spin button text on hover",
+        "default": "#ffffff"
+      },
+      {
+        "type": "header",
+        "content": "Wheel labels"
+      },
+      {
+        "type": "range",
+        "id": "label_font_size",
+        "min": 6,
+        "max": 22,
+        "step": 1,
+        "unit": "px",
+        "label": "Label font size (max)",
+        "info": "Upper bound. The wheel auto-shrinks each label so it fits inside its slice — so this is the maximum size, not the exact rendered size.",
+        "default": 10
+      },
+      {
+        "type": "range",
+        "id": "label_radius",
+        "min": 30,
+        "max": 85,
+        "step": 1,
+        "unit": "%",
+        "label": "Label radial position",
+        "info": "How far from the wheel center the label sits. Higher % = closer to the rim where each slice has more horizontal room.",
+        "default": 68
+      },
+      {
+        "type": "color",
+        "id": "segment_divider",
+        "label": "Segment divider color",
+        "info": "The thin line between wheel slices. Use a transparent or matching color to hide dividers.",
+        "default": "rgba(0,0,0,0.06)"
+      },
+      {
+        "type": "header",
+        "content": "Spin behavior"
+      },
+      {
+        "type": "range",
+        "id": "spin_duration_s",
+        "min": 2,
+        "max": 10,
+        "step": 1,
+        "unit": "s",
+        "label": "Spin duration",
+        "info": "How long the wheel takes to slow down and stop.",
+        "default": 5
+      },
+      {
+        "type": "range",
+        "id": "spin_full_turns",
+        "min": 3,
+        "max": 10,
+        "step": 1,
+        "label": "Full turns before stopping",
+        "info": "How many complete rotations the wheel makes during a spin. More turns = more suspense.",
+        "default": 5
+      },
+      {
+        "type": "checkbox",
+        "id": "close_after_copy",
+        "label": "Auto-close popup after coupon is copied",
+        "info": "When ON, the popup auto-closes after the visitor copies the won code. When OFF, the popup stays open until the visitor clicks the close ✕ button.",
+        "default": true
+      },
+      {
+        "type": "range",
+        "id": "close_after_copy_delay_s",
+        "min": 1,
+        "max": 30,
+        "step": 1,
+        "unit": "s",
+        "label": "Seconds before auto-close",
+        "info": "How long to keep the coupon visible after copy before closing the popup. Only applies if 'Auto-close after copy' is ON.",
+        "default": 10
+      },
+      {
+        "type": "header",
+        "content": "Copy"
+      },
+      {
+        "type": "text",
+        "id": "win_label",
+        "label": "Winner label (small)",
+        "default": "YOU WON!"
+      },
+      {
+        "type": "text",
+        "id": "no_win_label",
+        "label": "Non-winning label",
+        "info": "Shown when the visitor lands on a slice with no coupon code (e.g. TRY AGAIN).",
+        "default": "Better luck next time"
+      },
+      {
+        "type": "range",
+        "id": "max_respins",
+        "min": 0,
+        "max": 5,
+        "step": 1,
+        "label": "Allowed re-spins on TRY AGAIN",
+        "info": "How many times the visitor can click 'Spin again' after landing on a no-code slice. Set to 0 to disable re-spinning entirely.",
+        "default": 2
+      },
+      {
+        "type": "text",
+        "id": "respin_label",
+        "label": "'Spin again' button label",
+        "default": "Spin again"
+      },
+      {
+        "type": "text",
+        "id": "copy_done_label",
+        "label": "After-copy label",
+        "info": "Brief confirmation shown on the coupon button after copy.",
+        "default": "Copied!"
+      }
+    ],
+    "blocks": [
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Heading",
+            "default": "Spin to reveal your discount"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#111111"
+          }
+        ]
+      },
+      {
+        "type": "description",
+        "name": "Description",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "textarea",
+            "id": "text",
+            "label": "Description",
+            "default": "Enter your email for a chance to win up to 15% off your order."
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#444444"
+          }
+        ]
+      },
+      {
+        "type": "prize",
+        "name": "Prize segment",
+        "settings": [
+          {
+            "type": "header",
+            "content": "Prize"
+          },
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Label",
+            "info": "What appears in the wheel slice. Keep it SHORT (≤6 chars) so neighboring labels don't visually crowd each other — e.g. \"10%\", \"15%\", \"FREE\", \"TRY\". Long labels like \"FREE SHIPPING\" usually overflow into adjacent slices.",
+            "default": "10%"
+          },
+          {
+            "type": "text",
+            "id": "code",
+            "label": "Coupon code",
+            "info": "Must match a real discount code in Shopify admin → Discounts. Leave empty for non-winning slices (e.g. TRY AGAIN).",
+            "default": "SPIN10"
+          },
+          {
+            "type": "header",
+            "content": "Win chance"
+          },
+          {
+            "type": "range",
+            "id": "weight",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "label": "Win chance (weight)",
+            "info": "Relative odds of landing here. Tip: if you make every prize's weights sum to 100, each weight is exactly the percentage probability — e.g. weight 80 on '15% OFF' + 20 split across the others = 80% chance to win 15% OFF. Set to 0 to make this slice visual-only (never wins).",
+            "default": 1
+          },
+          {
+            "type": "header",
+            "content": "Color"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Segment color",
+            "default": "#ffd6e0"
+          },
+          {
+            "type": "color",
+            "id": "text_color",
+            "label": "Segment text color",
+            "default": "#111111"
+          }
+        ]
+      },
+      {
+        "type": "form",
+        "name": "Email form",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "text",
+            "id": "email_placeholder",
+            "label": "Email placeholder",
+            "default": "Email address",
+            "info": "Renders inside the email input as ghost text until the shopper starts typing."
+          },
+          {
+            "type": "text",
+            "id": "spin_label",
+            "label": "Spin button label",
+            "default": "Spin to win"
+          },
+          {
+            "type": "header",
+            "content": "Phone collection (optional)"
+          },
+          {
+            "type": "checkbox",
+            "id": "collect_phone",
+            "label": "Also collect phone number",
+            "default": false
+          },
+          {
+            "type": "text",
+            "id": "phone_placeholder",
+            "label": "Phone placeholder",
+            "default": "Phone number"
+          },
+          {
+            "type": "text",
+            "id": "phone_default_country",
+            "label": "Default country (ISO code)",
+            "default": "US"
+          },
+          {
+            "type": "checkbox",
+            "id": "phone_required",
+            "label": "Make phone required",
+            "default": false
+          }
+        ]
+      },
+      {
+        "type": "dismiss",
+        "name": "Dismiss link",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Dismiss link text",
+            "default": "No thanks"
+          }
+        ]
+      }
+    ],
+    "presets": []
+  }
+}
+</schema>

@@ -1,0 +1,2473 @@
+<template compat="shopify">
+{%- assign fb_accessibility_background_image = 'accessibility.background_image' | t -%}
+{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
+{%- if request.design_mode != true and settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger') || document.documentElement.classList.contains('shopify-design-mode') || (window.Shopify && window.Shopify.designMode)) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+<style>
+  /* reset_spacing toggle — remove vertical margin between sections */
+  {%- if section.settings.reset_spacing -%}
+    #shopify-section-{{ section.id }} { margin-top: 0 !important; margin-bottom: 0 !important; }
+    #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+<style>
+  /* Theme font-weight inheritance — inherit theme weights by default; explicit rules still override */
+  #shopify-section-{{ section.id }} {
+    font-weight: var(--body-weight, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
+    font-weight: var(--heading-weight, inherit);
+  }
+{% comment %}{% endcomment %}</style>
+{%- comment -%}Section isolation — prevent CSS/JS bleed between sections{%- endcomment -%}
+<style>
+  #shopify-section-{{ section.id }} { isolation: isolate; position: relative; }
+{% comment %}{% endcomment %}</style>
+{{ 'collapsible.css' | asset_url | stylesheet_tag }}
+{%- liquid
+  assign theme_st = settings
+  assign section_st = section.settings
+  assign container = section_st.section_width
+  assign color_scheme = section_st.color_scheme.id | default: section_st.color_scheme
+  assign scroll_animation = settings.scroll_animation
+  # Link hover colour: only honour a real, VISIBLE custom colour. A blank value
+  # OR a fully-transparent one (e.g. rgba(0,0,0,0), which Shopify stores when the
+  # colour picker is "cleared") must fall back to the scheme colour — otherwise
+  # the link turns transparent on hover and reads as white over a light footer.
+  assign lhc = section_st.link_hover_color
+  assign lhc_norm = lhc | downcase | replace: ' ', ''
+  assign lhc_is_set = false
+  if lhc != blank and lhc_norm != 'rgba(0,0,0,0)' and lhc_norm != 'transparent' and lhc.alpha != 0
+    assign lhc_is_set = true
+  endif
+-%}
+
+{%- capture style -%}
+--section-pt: {{ section_st.padding_top }};
+--section-pb: {{ section_st.padding_bottom }};
+{%- if lhc_is_set %}
+--footer-link-hover: {{ lhc }};
+{%- else %}
+--footer-link-hover: var(--color-heading);
+{%- endif %}
+--footer-heading-weight: {{ section_st.heading_weight | default: 600 }};
+--footer-heading-tt: {{ section_st.heading_transform | default: 'none' }};
+--footer-arrow-size: {{ section_st.arrow_icon_size | default: 14 }}px;
+{%- endcapture -%}
+
+{%- style -%}
+  @media screen and (max-width: 767.98px) {
+    .footer__middle {
+      --section-pb: 0;
+    }
+  }
+
+  /* Footer padding is driven purely by the theme-editor Top/Bottom padding
+     sliders — no CSS floor, so 0 means 0. */
+
+  /* Tight, balanced bottom band — keep the © copyright + payment
+     row visually compact. The Top/Bottom padding sliders still drive
+     the footer's overall padding (`--section-pt` / `--section-pb`);
+     this only controls the inner bottom row's own breathing room. */
+  .footer__bottom .footer_bottom-inner {
+    padding-top: 16px !important;
+    padding-bottom: 16px !important;
+  }
+  @media screen and (min-width: 768px) {
+    .footer__bottom .footer_bottom-inner {
+      padding-top: 20px !important;
+      padding-bottom: 20px !important;
+    }
+  }
+
+  .footer__block-heading { font-weight: var(--footer-heading-weight, 600); text-transform: var(--footer-heading-tt, none); }
+
+  /* Footer copyright and localization are one baseline-aligned control row. */
+  .footer__bottom .footer_bottom-inner > .flex:first-child {
+    display: flex;
+    align-items: center;
+    gap: 12px 22px;
+    min-width: 0;
+  }
+  .footer__bottom :is(.footer__copyright,.footer__localization, .footer__localization localization-form) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    line-height: 1.45;
+    vertical-align: middle;
+    margin-block: 0;
+  }
+  .footer__bottom .footer__copyright { overflow-wrap: anywhere; }
+  @media (max-width: 767.98px) {
+    .footer__bottom .footer_bottom-inner > .flex:first-child { justify-content: center; text-align: center; }
+  }
+
+  /* Link hover: scheme-aware. Base color uses --color-text; hover uses custom color if set, else theme heading color (always readable on any scheme). Subtle fade, no underline, never. */
+  .footer__blocks .footer-block.link_list .reversed-links,
+  .footer__blocks .footer-block.link_list .reversed-links:visited {
+    color: var(--color-text);
+    text-decoration: none !important;
+    border-bottom: 0 !important;
+    background-image: none !important;
+    opacity: .88;
+    transition: color .3s ease, opacity .3s ease;
+  }
+  .footer__blocks .footer-block.link_list .reversed-links:hover,
+  .footer__blocks .footer-block.link_list .reversed-links:focus-visible {
+    color: var(--footer-link-hover);
+    text-decoration: none !important;
+    border-bottom: 0 !important;
+    background-image: none !important;
+    opacity: 1;
+  }
+  /* Kill any ::after underline pseudo-element that other themes add on menu links */
+  .footer__blocks .footer-block.link_list .reversed-links::before,
+  .footer__blocks .footer-block.link_list .reversed-links::after {
+    display: none !important;
+    content: none !important;
+  }
+
+  /* ==========================================================================
+     Bulletproof heading alignment — every footer block heading pinned to the
+     top of its column at exactly the same Y, on every breakpoint. Achieved
+     by positioning the heading absolutely at top:0 of each block and
+     reserving a uniform top-padding band on every block.
+     ========================================================================== */
+  /* Normalize custom element (defaults to inline) */
+  .footer__blocks collapsible-block {
+    display: block;
+    width: 100%;
+  }
+
+  @media screen and (min-width: 768px) {
+    .footer__blocks {
+      align-items: flex-start !important;
+    }
+    .footer__blocks > .footer-block {
+      position: relative !important;
+      align-self: flex-start !important;
+      padding-top: 76px !important;   /* 60px heading band + 16px gap */
+      margin-top: 0 !important;
+    }
+    /* Store info block — optional merchant-controlled top-spacing offset.
+       `--store-info-top-offset` is set inline on the block from the
+       block schema's `top_offset` slider (-80..60px). It shifts the
+       block's top edge without rewriting the 76px heading-band padding,
+       so the heading (when present) still aligns with the other
+       columns, while empty space above can be tightened or loosened. */
+    .footer__blocks > .footer-block.store_info {
+      margin-top: var(--store-info-top-offset, 0) !important;
+    }
+    /* Zero out intermediate wrappers so the heading's absolute positioning
+       is relative to the .footer-block and nothing else. */
+    .footer__blocks > .footer-block > collapsible-block,
+    .footer__blocks > .footer-block > collapsible-block > .newsletter-inner,
+    .footer__blocks > .footer-block > .store-info-content {
+      margin-top: 0 !important;
+      padding-top: 0 !important;
+    }
+    /* Pin every heading to the top of its block at identical Y.
+
+       NOTE on horizontal alignment: the heading is `position: absolute`
+       at `left: 0` which anchors it to the .footer-block's *padding-box*
+       edge. The menu list (`<ul>`) is in normal flow, so its first
+       character sits at the .footer-block's *content-box* edge — which
+       is ~12-24px further right because every direct child of
+       `.flex-col-custom` (i.e. every .footer-block) has
+       `padding-inline: calc(var(--gap, var(--bs-gutter-x)) * 0.5)` from
+       the column-gutter system. That mismatch is why the menu items
+       used to look slightly indented compared to the heading.
+
+       Fix: give the absolutely-positioned heading the SAME inline
+       gutter padding as the list's parent, so its text starts at the
+       content-box edge too — flush-left with every menu link. */
+    .footer__blocks .footer__block-heading {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      width: 100% !important;
+      height: 60px !important;
+      min-height: 60px !important;
+      max-height: 60px !important;
+      margin: 0 !important;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+      padding-left: calc(var(--gap, var(--bs-gutter-x)) * 0.5) !important;
+      padding-right: calc(var(--gap, var(--bs-gutter-x)) * 0.5) !important;
+      display: flex !important;
+      align-items: center !important;
+      line-height: 1.3 !important;
+      box-sizing: border-box !important;
+      z-index: 1;
+    }
+  }
+
+  /* Mobile: stack blocks — collapsible-heading shows a chevron and must
+     remain clickable. Use consistent band height across every heading. */
+  @media screen and (max-width: 767.98px) {
+    .footer__blocks .footer__block-heading {
+      min-height: 56px !important;
+      padding: 16px 0 !important;
+      margin: 0 !important;
+      display: flex !important;
+      align-items: center !important;
+      line-height: 1.3 !important;
+    }
+    /* Chevron span covers the full heading (absolute inset-0) — force its
+       inner flex to vertically center the arrow so it sits on the same
+       visual line as the heading text, not at the top. */
+    .footer__blocks .footer__block-heading .open-children-toggle {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: flex-end !important;
+    }
+    .footer__blocks .footer__block-heading .arrow-toggle {
+      align-self: center !important;
+    }
+  }
+
+  /* Menu links flush-left with the heading — zero every possible source of
+     left indentation (UA padding-inline-start, collapsible wrapper, li, a). */
+  .footer__blocks .footer-block.link_list .collapsible-content,
+  .footer__blocks .footer-block.link_list .footer-block.collapsible-content {
+    padding: 0 !important;
+    margin: 0 0 12px !important;
+    padding-inline-start: 0 !important;
+    margin-inline-start: 0 !important;
+  }
+  .footer__blocks .footer-block.link_list ul {
+    list-style: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    padding-inline-start: 0 !important;
+    margin-inline-start: 0 !important;
+  }
+  .footer__blocks .footer-block.link_list ul li {
+    padding-left: 0 !important;
+    margin-left: 0 !important;
+    padding-inline-start: 0 !important;
+    margin-inline-start: 0 !important;
+    text-indent: 0 !important;
+    list-style: none !important;
+  }
+  .footer__blocks .footer-block.link_list ul li a,
+  .footer__blocks .footer-block.link_list .reversed-links {
+    padding-left: 0 !important;
+    margin-left: 0 !important;
+    padding-inline-start: 0 !important;
+    margin-inline-start: 0 !important;
+    text-indent: 0 !important;
+    display: inline-block;
+  }
+
+  /* Arrow collapsible indicator (replaces +/- plus-animation) */
+  .footer__block-heading .arrow-toggle {
+    width: var(--footer-arrow-size, 14px);
+    height: var(--footer-arrow-size, 14px);
+    color: var(--color-heading);
+    transition: transform .28s var(--btn-anim-ease, cubic-bezier(.4,.0,.2,1));
+    transform: rotate(0deg);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  collapsible-block.active .footer__block-heading .arrow-toggle { transform: rotate(-180deg); }
+  .footer__block-heading .arrow-toggle svg { display: block; width: 100%; height: 100%; }
+
+  /* Fit the form to its own footer column, not the viewport width. */
+  #shopify-section-{{ section.id }} .footer__blocks > .footer-block { min-width: 0; }
+  #shopify-section-{{ section.id }} .newsletter-inner {
+    container: footer-newsletter / inline-size;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+  #shopify-section-{{ section.id }} .footer__newsletter,
+  #shopify-section-{{ section.id }} .newsletter-form__field-wrapper,
+  #shopify-section-{{ section.id }} .footer-newsletter-email { min-width: 0; max-width: 100%; }
+  #shopify-section-{{ section.id }} .footer-newsletter-fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    align-items: stretch;
+  }
+  #shopify-section-{{ section.id }} .footer-newsletter-email input {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    min-height: 48px;
+    padding: 12px 14px;
+    font-size: 16px;
+    line-height: 1.5;
+    text-overflow: ellipsis;
+  }
+  #shopify-section-{{ section.id }} .newsletter-form__button {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    height: auto;
+    min-height: 48px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  #shopify-section-{{ section.id }} .footer__block-description { overflow-wrap: anywhere; }
+  @container footer-newsletter (min-width: 480px) {
+    #shopify-section-{{ section.id }} .footer-newsletter-fields { grid-template-columns: minmax(0, 1fr) minmax(120px, 35%); }
+  }
+  /* Payment badges use the platform's full-color SVGs at their native ratio. */
+  .footer__payment-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    align-items: center;
+    justify-content: center;
+  }
+  @media screen and (min-width: 768px) { .footer__payment-badges { justify-content: flex-end; } }
+  .footer__payment-badges .payment-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 28px;
+    border-radius: 4px;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    outline: 0 !important;
+    overflow: hidden;
+    padding: 0;
+  }
+
+  /* Match cart recommendation/payment badge artwork exactly. */
+  .footer__payment-badges .payment-badge {
+    width:46px;
+    height:31px;
+    background:transparent !important;
+    overflow:hidden;
+  }
+  .footer__payment-badges .payment-badge .cda-payments__svg {
+    display:block;
+    width:100%;height:100%;
+    object-fit:contain;
+    border-radius:4px;
+  }
+  .footer__payment-badges .payment-badge svg,
+  .footer__payment-badges .payment-badge .icon {
+    width: 100%;
+    height: 100%;
+    display: block;
+    border: 0 !important;
+    box-shadow: none !important;
+    outline: 0 !important;
+    object-fit: contain;
+    fill: initial;
+  }
+{%- endstyle -%}
+
+<footer
+  class="product-sticky-hide footer color-{{ color_scheme }} gradient{% if section_st.background_image != blank %} bg-transparent relative{% endif %}{% if request.page_type == 'index' and section_st.separator_line == 'homepage' %} border-top{% endif %}{% if section_st.separator_line == 'all-page' %} border-top{% endif %}{% if request.page_type != 'index' and section_st.separator_line == 'inner_page' %} border-top{% endif %}{% if section_st.reset_spacing %} remove_spacing remove_spacing-on-home{% endif %}"
+  style="{{ style | strip | strip_newlines }}"
+>
+  {%- if section_st.background_image != blank -%}
+    {%- assign image_alt = section_st.background_image.alt | default: fb_accessibility_background_image -%}
+    {% render 'responsive-image',
+      type: 'banner',
+      image: section_st.background_image,
+      image_alt: image_alt,
+      no_animate: true,
+      class: 'background-footer absolute inset-0 z--1 pointer-none w-full h-full object-position-center object-fit-cover'
+    %}
+    {%- if section_st.footer_bg_brightness != blank and section_st.footer_bg_brightness != 100 -%}
+      <style>
+        #shopify-section-{{ section.id }} .background-footer {
+          filter: brightness({{ section_st.footer_bg_brightness }}%);
+        }
+{% comment %}{% endcomment %}      </style>
+    {%- endif -%}
+  {% endif %}
+
+  {%- comment -%}
+    Custom Header Elements — optional oversized text + image rendered
+    at the top of the footer, above all blocks. Driven by the new
+    schema group. Each piece is independently togglable.
+  {%- endcomment -%}
+  {%- liquid
+    assign show_custom_text_big = false
+    if section_st.enable_custom_text_big and section_st.custom_text != blank
+      assign show_custom_text_big = true
+    endif
+    assign show_custom_img = false
+    if section_st.enable_custom_image and section_st.custom_image != blank
+      assign show_custom_img = true
+    endif
+    assign show_custom_header = false
+    if show_custom_text_big or show_custom_img
+      assign show_custom_header = true
+    endif
+    assign custom_header_position = section_st.custom_header_position | default: 'top'
+  -%}
+  {%- if show_custom_header -%}
+    <style>
+      #shopify-section-{{ section.id }} .footer__custom-header {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        gap: 16px;
+        padding-top: {{ section_st.padding_top | default: 60 }}px;
+        margin-bottom: {{ section_st.custom_elements_gap | default: 24 }}px;
+        overflow: hidden;
+        position: relative;
+        z-index: 0;
+      }
+      /* Bottom placement: drop the big top padding and give balanced
+         spacing so the element sits neatly above the copyright line. */
+      #shopify-section-{{ section.id }} .footer__custom-header--bottom {
+        padding-top: 0;
+        margin-top: {{ section_st.custom_elements_gap | default: 24 }}px;
+        margin-bottom: {{ section_st.custom_elements_gap | default: 24 }}px;
+      }
+      #shopify-section-{{ section.id }} .footer__custom-text {
+        font-size: {{ section_st.custom_text_font_size_mobile | default: 50 }}px;
+        color: {{ section_st.custom_text_color | default: '#2B2B2B' }};
+        line-height: 0.95;
+        font-weight: 800;
+        font-style: {% if section_st.custom_text_italic %}italic{% else %}normal{% endif %};
+        letter-spacing: -0.02em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+        margin: 0;
+        font-family: var(--heading-font, inherit);
+        pointer-events: none;
+        user-select: none;
+      }
+      @media (min-width: 768px) {
+        #shopify-section-{{ section.id }} .footer__custom-text {
+          font-size: {{ section_st.custom_text_font_size_desktop | default: 200 }}px;
+        }
+      }
+      #shopify-section-{{ section.id }} .footer__custom-image {
+        width: {{ section_st.custom_image_size_mobile | default: 150 }}px;
+        height: auto;
+        max-width: 100%;
+        display: block;
+      }
+      @media (min-width: 768px) {
+        #shopify-section-{{ section.id }} .footer__custom-image {
+          width: {{ section_st.custom_image_size_desktop | default: 200 }}px;
+        }
+      }
+{% comment %}{% endcomment %}    </style>
+    {%- capture footer_custom_header -%}
+      <div class="footer__custom-header footer__custom-header--{{ custom_header_position }}">
+        {%- if show_custom_text_big -%}
+          <div class="footer__custom-text">{{ section_st.custom_text }}</div>
+        {%- endif -%}
+        {%- if show_custom_img -%}
+          <img
+            class="footer__custom-image"
+            src="{{ section_st.custom_image | image_url: width: 1200 }}"
+            srcset="
+              {{ section_st.custom_image | image_url: width: 200 }} 200w,
+              {{ section_st.custom_image | image_url: width: 400 }} 400w,
+              {{ section_st.custom_image | image_url: width: 800 }} 800w,
+              {{ section_st.custom_image | image_url: width: 1200 }} 1200w
+            "
+            sizes="(min-width: 768px) {{ section_st.custom_image_size_desktop | default: 200 }}px, {{ section_st.custom_image_size_mobile | default: 150 }}px"
+            alt="{{ section_st.custom_image.alt | default: shop.name | escape }}"
+            loading="lazy"
+            width="{{ section_st.custom_image_size_desktop | default: 200 }}"
+            height="{{ section_st.custom_image_size_desktop | default: 200 }}"
+          >
+        {%- endif -%}
+      </div>
+    {%- endcapture -%}
+    {%- comment -%} Top placement (default). Bottom placement is emitted in .footer__bottom. {%- endcomment -%}
+    {%- unless custom_header_position == 'bottom' -%}
+      {{ footer_custom_header }}
+    {%- endunless -%}
+  {%- endif -%}
+  {%- if section.blocks.size > 0 -%}
+    <div class="footer__middle section{% if section_st.padding_top < 30 %} pt-min{% endif %}{% if section_st.padding_bottom < 30 %} pb-min{% endif %} remove_spacing">
+      <div class="{{ container }}">
+        {%- liquid
+          assign menu_item = 0
+        -%}
+        {%- for block in section.blocks -%}
+          {%- case block.type -%}
+            {%- when 'link_list' -%}
+              {%- liquid
+                assign menu_item = menu_item | plus: 1
+              -%}
+          {%- endcase -%}
+        {%- endfor -%}
+        <div class="footer__blocks flex flex-col-custom flex-wrap">
+          {%- for block in section.blocks -%}
+            {%- liquid
+              assign block_st = block.settings
+            -%}
+              {%- case block.type -%}
+                {%- when 'newsletter' -%}
+                  <div
+                    class="footer-block w-full col-md-w-custom-50 col-md-w-custom{% if block.type == 'store_info' %} pb-30 border-bottom border-bottom-md-0{% else %} mb-0 mb-md-20 border-bottom border-bottom-md-0{% endif %} {{ block.type }}"
+                    style="--col-width: {{ block_st.content_width }}; --menu-list: {{ menu_item }}"
+                    {{ block.shopify_attributes }}
+                  >
+                    <collapsible-block tabindex="0" class="footer-block mb-30 newsletter mb-50 my-md-0">
+                      <div class="newsletter-inner{% if block_st.content_width == '100%' %} text-center mx-auto{% endif %}">
+                        {%- if block_st.heading != blank or block_st.description != blank -%}
+                          {%- if block_st.heading != blank -%}
+                            <h3
+                              class="footer__block-heading collapsible-heading relative heading-letter-spacing fs-custom my-0 py-20 mb-md-5"
+                              style="--font-size: {{ section_st.footer_heading_size }}"
+                            >
+                              {{- block_st.heading | escape -}}
+                              <span class="open-children-toggle hidden-md absolute inset-0 flex flex-end">
+                                <span class="arrow-toggle" aria-hidden="true">
+                                  <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M3.5 6 8 10.5 12.5 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                  </svg>
+                                </span>
+                              </span>
+                            </h3>
+                          {% endif %}
+                        {% endif %}
+                        <div class="collapsible-content mb-30">
+                          {%- if block_st.description != blank -%}
+                            <div class="footer__block-description mb-23">
+                              {{ block_st.description }}
+                            </div>
+                          {% endif %}
+                          {%- form 'customer', id: 'ContactFooter', class: 'footer__newsletter newsletter-form' -%}
+                            <input type="hidden" name="contact[tags]" value="newsletter">
+                            <div class="newsletter-form__field-wrapper">
+                              <div class="field mb-0 footer-newsletter-fields">
+                                <div class="flex-1 relative footer-newsletter-email">
+                                  <input
+                                    id="NewsletterForm--{{ section.id }}"
+                                    type="email"
+                                    name="contact[email]"
+                                    class="field__input show-placeholder m-0 w-full pl-0 bg-transparent form-control"
+                                    value="{{ form.email }}"
+                                    aria-required="true"
+                                    autocapitalize="off"
+                                    autocomplete="email"
+                                    {% if form.errors %}
+                                      aria-invalid="true"
+                                      aria-describedby="ContactFooter-error"
+                                    {% elsif form.posted_successfully? %}
+                                      aria-describedby="ContactFooter-success"
+                                    {% endif %}
+                                    placeholder="{%- if block_st.email_placeholder != blank -%}{{ block_st.email_placeholder }} {%- else -%} {{ 'newsletter.label' | t }} {% endif %}"
+                                    required
+                                  >
+                                  <label class="visually-hidden" for="NewsletterForm--{{ section.id }}">
+                                    {%- if block_st.email_placeholder != blank -%}
+                                      {{ block_st.email_placeholder }}
+                                    {%- else -%}
+                                      {{ 'newsletter.label' | t }}
+                                    {% endif %}
+                                  </label>
+                                </div>
+                                <button
+                                  type="submit"
+                                  class="btn-primary newsletter-form__button word-break"
+                                  name="commit"
+                                  id="Subscribe-{{ section.id }}"
+                                  aria-label="{%- if block_st.button_label != blank -%}{{ block_st.button_label }} {%- else -%} {{ 'subscribe.button_label' | t }} {% endif %}"
+                                >
+                                  {%- if block_st.button_label != blank -%}
+                                    {{ block_st.button_label }}
+                                  {%- else -%}
+                                    {{ 'newsletter.button_label' | t }}
+                                  {% endif %}
+                                </button>
+                              </div>
+                              {%- if form.errors -%}
+                                <div
+                                  class="newsletter-form__message mt-10 inline-flex align-center error form__message"
+                                  id="ContactFooter-error"
+                                >
+                                  {%- render 'icon-error' -%}
+                                  {{- form.errors.translated_fields.email | capitalize }}
+                                  {{ form.errors.messages.email -}}
+                                </div>
+                              {% endif %}
+                            </div>
+                            {%- if form.posted_successfully? -%}
+                              <div
+                                class="mt-10 newsletter-form__message--success success form__message inline-flex align-center"
+                                id="ContactFooter-success"
+                                tabindex="-1"
+                              >
+                                {%- render 'icon-success' -%}
+                                <span class="newsletter-form__message ml-5">{{- 'newsletter.success' | t }}</span>
+                              </div>
+                            {% endif %}
+                          {%- endform -%}
+                          {%- if block_st.note != blank -%}
+                            <div class="newsletter-note mt-15">{{ block_st.note }}</div>
+                          {% endif %}
+                          {%- liquid
+                            assign not_has_store_info = true
+                            for block in section.blocks
+                              if block.type == 'store_info'
+                                assign not_has_store_info = false
+                              endif
+                            endfor
+                          -%}
+                          {% if not_has_store_info %}
+                            {%- if section_st.show_social -%}
+                              <social-icon class="block mt-15">
+                                {% render 'social-icons' %}
+                              </social-icon>
+                            {% endif %}
+                          {% endif %}
+                        </div>
+                      </div>
+                    </collapsible-block>
+                  </div>
+                {%- when 'link_list' -%}
+                  {%- if block_st.menu != blank -%}
+                    <div
+                      class="footer-block w-full col-md-w-custom-50 col-md-w-custom{% if block.type == 'store_info' %} pb-30 border-bottom border-bottom-md-0{% else %} mb-0 mb-md-20 border-bottom border-bottom-md-0{% endif %} {{ block.type }}"
+                      style="--col-width: {{ block_st.content_width }}; --menu-list: {{ menu_item }}"
+                      {{ block.shopify_attributes }}
+                    >
+                      <collapsible-block tabindex="0">
+                        {%- if block_st.menu != blank or block_st.heading != blank -%}
+                          <h3
+                            class="footer__block-heading collapsible-heading heading-letter-spacing relative fs-custom my-0 py-20 mb-md-5"
+                            style="--font-size: {{ section_st.footer_heading_size }}"
+                          >
+                            <span>
+                              {{- block_st.heading | default: block_st.menu.title | escape -}}
+                            </span>
+                            {%- if block_st.menu != blank -%}
+                              <span class="open-children-toggle hidden-md absolute inset-0 flex flex-end">
+                                <span class="arrow-toggle" aria-hidden="true">
+                                  <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M3.5 6 8 10.5 12.5 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                  </svg>
+                                </span>
+                              </span>
+                            {% endif %}
+                          </h3>
+                          {%- if block_st.menu != blank -%}
+                            <div class="footer-block collapsible-content mb-12 mb-md-0">
+                              <ul class="list-unstyled">
+                                {%- for link in block_st.menu.links -%}
+                                  <li class="pb-8">
+                                    <a
+                                      href="{{ link.url }}"
+                                      aria-label="{{ link.title }}"
+                                      class="no-underline word-break reversed-links relative"
+                                    >
+                                      {{ link.title }}
+                                    </a>
+                                  </li>
+                                {%- endfor -%}
+                              </ul>
+                            </div>
+                          {% endif %}
+                        {% endif %}
+                      </collapsible-block>
+                    </div>
+                  {% endif %}
+                {%- when 'store_info' -%}
+                  {%- comment -%}
+                    Apply the merchant-controlled top spacing offset
+                    (`top_offset`, range -80..60px) via inline custom
+                    property so it composes with the existing 76px
+                    desktop heading-band padding without rewriting it.
+                    A negative offset lets merchants pull the block up
+                    to remove dead space when no heading is set.
+                  {%- endcomment -%}
+                  <div
+                    class="footer-block w-full col-md-w-custom-50 col-md-w-custom{% if block.type == 'store_info' %} pb-30 border-bottom border-bottom-md-0{% else %} mb-0 mb-md-20 border-bottom border-bottom-md-0{% endif %} {{ block.type }}"
+                    style="--col-width: {{ block_st.content_width }}; --menu-list: {{ menu_item }}; --store-info-top-offset: {{ block_st.top_offset | default: 0 }}px;"
+                    {{ block.shopify_attributes }}
+                  >
+                    {%- if block_st.store_heading != blank -%}
+                      <h3
+                        class="footer__block-heading fs-custom my-0 py-20 mb-md-5"
+                        style="--font-size: {{ section_st.footer_heading_size }}"
+                      >
+                        {{ block_st.store_heading | escape }}
+                      </h3>
+                    {% endif %}
+                    <div
+                      class="store-info-content"
+                    >
+                      {%- comment -%}
+                        Logo display logic:
+                        • If a Custom logo image is uploaded → ALWAYS show it
+                          (the upload itself is intent — merchants kept
+                          uploading a custom logo, leaving the "Show logo
+                          image" toggle off, and being confused why nothing
+                          rendered).
+                        • Else, if "Show logo image" toggle is ON → fall
+                          back to the theme-level logo (Theme settings → Logo).
+                        • Else → no logo.
+                      {%- endcomment -%}
+                      {%- if block_st.image != blank -%}
+                        {%- assign footer_logo = block_st.image -%}
+                      {%- elsif block_st.show_logo -%}
+                        {%- assign footer_logo = theme_st.logo -%}
+                      {%- else -%}
+                        {%- assign footer_logo = blank -%}
+                      {%- endif -%}
+                      {%- if footer_logo != blank -%}
+                        {%- assign sizes = block_st.image_width | append: 'px' -%}
+                        {%- assign image_alt = footer_logo.alt | default: shop.name -%}
+
+                        {% render 'responsive-image',
+                          type: 'other',
+                          image: footer_logo,
+                          image_alt: image_alt,
+                          sizes: sizes,
+                          width: block_st.image_width,
+                          no_animate: true
+                        %}
+                      {% endif %}
+
+                      {%- if block_st.store_description != blank -%}
+                        <div class="footer__block-info rich__text-mt-0 mb-20">
+                          {{ block_st.store_description }}
+                        </div>
+                      {% endif %}
+                      {%- if block_st.store_address != blank or block_st.store_address or block_st.store_email %}
+                        <div class="footer_store-infor">
+                          {%- if block_st.store_address != blank -%}
+                            <div class="footer__block-info">
+                              {{ theme_st.store_address }}
+                            </div>
+                          {% endif %}
+                          {%- if block_st.store_phone != blank and theme_st.store_phone != blank -%}
+                            <div class="footer__store-info">
+                              <a href="tel:{{ settings.store_phone }}" class="heading-color no-underline">
+                                {{ theme_st.store_phone }}
+                              </a>
+                            </div>
+                          {% endif %}
+                          {%- if block_st.store_email != blank and theme_st.store_email != blank -%}
+                            <div class="footer__store-info">
+                              <a href="mailto:{{ settings.store_email }}" class="heading-color no-underline">
+                                {{ theme_st.store_email }}
+                              </a>
+                            </div>
+                          {% endif %}
+                        </div>
+                      {% endif %}
+
+                      {%- if section_st.show_social -%}
+                        <social-icon class="block mt-22">
+                          {% render 'social-icons' %}
+                        </social-icon>
+                      {% endif %}
+                    </div>
+                  </div>
+                {%- when 'payment_badges' -%}
+                  {%- comment -%}
+                    The payment_badges block holds SETTINGS only — its
+                    visible row is rendered in the footer bottom band
+                    (alongside the copyright line) so it sits where the
+                    legacy payment row used to live. We emit nothing
+                    inline here. The bottom-band loop below picks up
+                    the block by `{% for block in section.blocks %}`
+                    and renders it on the same line as `© ... All rights
+                    reserved`.
+                  {%- endcomment -%}
+                {%- when 'custom_liquid' -%}
+                  <div
+                    class="footer-block w-full col-md-w-custom-50 col-md-w-custom{% if block.type == 'store_info' %} pb-30 border-bottom border-bottom-md-0{% else %} mb-0 mb-md-20 border-bottom border-bottom-md-0{% endif %} {{ block.type }}"
+                    style="--col-width: {{ block_st.content_width }}; --menu-list: {{ menu_item }}"
+                    {{ block.shopify_attributes }}
+                  >
+                    <div
+                      class="block {% if scroll_animation == 'slide_in' %}  opacity-0 {% endif %}"
+                    >
+                      {{ block_st.custom_liquid }}
+                    </div>
+                  </div>
+              {%- endcase -%}
+          {%- endfor -%}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+  <div class="footer__bottom">
+    {%- comment -%} Custom header at the bottom: sits under the menu blocks and above the copyright line. {%- endcomment -%}
+    {%- if show_custom_header and custom_header_position == 'bottom' -%}
+      {{ footer_custom_header }}
+    {%- endif -%}
+    <div class="{{ container }}">
+      <div class="footer_bottom-inner justify-center justify-md-end flex flex-wrap flex-md-nowrap align-center border-top gap-20 gap-xl-30 py-30">
+        {%- if section_st.enable_country_selector
+          or section_st.enable_language_selector
+          or section_st.copyright_text
+        -%}
+          <div class="flex flex-wrap gap-10 gap-xl-30 justify-center justify-md-start">
+            {%- if localization.available_countries.size > 1 or localization.available_languages.size > 1 -%}
+              <div class="footer__column footer__localization lang__currency-desktop flex flex-nowrap align-center gap-10">
+                {%- if section_st.enable_country_selector -%}
+                  {%- render 'country-switcher' -%}
+                {% endif %}
+                {%- if section_st.enable_language_selector -%}
+                  {%- render 'language-switcher' -%}
+                {% endif %}
+              </div>
+            {% endif %}
+            {%- if section_st.copyright_text %}
+              <div class="footer__copyright">{{ section_st.copyright_text }}</div>
+            {% endif %}
+          </div>
+        {% endif %}
+
+        {%- comment -%}
+          Payment badges row — rendered HERE (in the bottom band, on
+          the same line as the © copyright text) when the merchant has
+          added a `payment_badges` block to the footer. The block holds
+          the per-badge toggles + alignment; we keep the visual position
+          fixed in the bottom band per merchant feedback that the badges
+          must sit on the copyright line.
+        {%- endcomment -%}
+        {%- for block in section.blocks -%}
+          {%- if block.type == 'payment_badges' -%}
+            {%- liquid
+              assign pb_st = block.settings
+              assign pb_any = false
+              if pb_st.enable_visa or pb_st.enable_mastercard or pb_st.enable_amex or pb_st.enable_paypal or pb_st.enable_apple_pay or pb_st.enable_google_pay or pb_st.enable_klarna
+                assign pb_any = true
+              endif
+              assign pb_align = pb_st.alignment | default: 'right'
+              assign pb_justify_b = 'flex-end'
+              if pb_align == 'left'
+                assign pb_justify_b = 'flex-start'
+              elsif pb_align == 'center'
+                assign pb_justify_b = 'center'
+              endif
+            -%}
+            {%- if pb_any -%}
+              <div class="footer__payment flex grow-1 align-center max-w-100" style="justify-content: {{ pb_justify_b }};" {{ block.shopify_attributes }}>
+                <ul class="footer__payment-badges">
+                  {%- if pb_st.enable_visa -%}
+                    <li class="payment-badge" aria-label="{{ 'payment.methods.visa' | t }}">{% render 'payment-icon', method: 'visa', icon_class: 'icon icon--full-color' %}</li>
+                  {%- endif -%}
+                  {%- if pb_st.enable_mastercard -%}
+                    <li class="payment-badge" aria-label="{{ 'payment.methods.mastercard' | t }}">{% render 'payment-icon', method: 'master', icon_class: 'icon icon--full-color' %}</li>
+                  {%- endif -%}
+                  {%- if pb_st.enable_amex -%}
+                    <li class="payment-badge" aria-label="{{ 'payment.methods.american_express' | t }}">{% render 'payment-icon', method: 'american_express', icon_class: 'icon icon--full-color' %}</li>
+                  {%- endif -%}
+                  {%- if pb_st.enable_paypal -%}
+                    <li class="payment-badge" aria-label="{{ 'payment.methods.paypal' | t }}">{% render 'payment-icon', method: 'paypal', icon_class: 'icon icon--full-color' %}</li>
+                  {%- endif -%}
+                  {%- if pb_st.enable_apple_pay -%}
+                    <li class="payment-badge" aria-label="{{ 'payment.methods.apple_pay' | t }}">{% render 'payment-icon', method: 'apple_pay', icon_class: 'icon icon--full-color' %}</li>
+                  {%- endif -%}
+                  {%- if pb_st.enable_google_pay -%}
+                    <li class="payment-badge" aria-label="{{ 'payment.methods.google_pay' | t }}">{% render 'payment-icon', method: 'google_pay', icon_class: 'icon icon--full-color' %}</li>
+                  {%- endif -%}
+                  {%- if pb_st.enable_klarna -%}
+                    <li class="payment-badge" aria-label="{{ 'payment.methods.klarna' | t }}">{% render 'payment-icon', method: 'klarna', icon_class: 'icon icon--full-color' %}</li>
+                  {%- endif -%}
+                </ul>
+              </div>
+            {%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+</template>
+
+<schema>
+{
+  "type": "theme-footer",
+  "name": "Footer",
+  "settings": [
+    {
+      "type": "header",
+      "id": "hdr_1",
+      "label": "Basics"
+    },
+    {
+      "type": "color_scheme",
+      "id": "color_scheme",
+      "label": "Color scheme"
+    },
+    {
+      "type": "select",
+      "id": "section_width",
+      "options": [
+        {
+          "value": "container",
+          "label": "Container"
+        },
+        {
+          "value": "fluid_container",
+          "label": "Fluid container"
+        },
+        {
+          "value": "stretch_width",
+          "label": "Stretch width"
+        },
+        {
+          "value": "full_width",
+          "label": "Full width"
+        }
+      ],
+      "default": "stretch_width",
+      "label": "Section width"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_country_selector",
+      "default": true,
+      "label": "Show country selector"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_language_selector",
+      "default": true,
+      "label": "Show language selector"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_social",
+      "default": false,
+      "label": "Show social icons",
+      "info": "Connect URLs in Theme settings → Social media."
+    },
+    {
+      "type": "paragraph",
+      "id": "para_7",
+      "label": "Payment badges have moved to a dedicated block. Click 'Add block' below and choose 'Payment badges' to drag it into position inside the footer.",
+      "content": "Payment badges have moved to a dedicated block. Click 'Add block' below and choose 'Payment badges' to drag it into position inside the footer."
+    },
+    {
+      "type": "header",
+      "id": "hdr_8",
+      "label": "Heading typography"
+    },
+    {
+      "type": "range",
+      "id": "footer_heading_size",
+      "min": 12,
+      "max": 24,
+      "step": 1,
+      "unit": "px",
+      "label": "Heading size",
+      "default": 16
+    },
+    {
+      "type": "select",
+      "id": "heading_weight",
+      "label": "Heading weight",
+      "default": "600",
+      "options": [
+        {
+          "value": "400",
+          "label": "Regular (400)"
+        },
+        {
+          "value": "500",
+          "label": "Medium (500)"
+        },
+        {
+          "value": "600",
+          "label": "Semibold (600)"
+        },
+        {
+          "value": "700",
+          "label": "Bold (700)"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_11",
+      "label": "Image / Media"
+    },
+    {
+      "type": "image_picker",
+      "id": "background_image",
+      "label": "Background image"
+    },
+    {
+      "type": "range",
+      "id": "footer_bg_brightness",
+      "min": 0,
+      "max": 200,
+      "step": 5,
+      "unit": "%",
+      "label": "Image brightness",
+      "default": 100,
+      "info": "Adjusts the brightness of the background image. 100% = original, lower = darker, higher = brighter. No effect if no background image is set."
+    },
+    {
+      "type": "header",
+      "id": "hdr_14",
+      "label": "Content"
+    },
+    {
+      "type": "textarea",
+      "id": "copyright_text",
+      "label": "Copyright text",
+      "default": "© 2026 Materia Modern. All rights reserved."
+    },
+    {
+      "type": "header",
+      "id": "hdr_16",
+      "label": "Colors & appearance"
+    },
+    {
+      "type": "select",
+      "id": "separator_line",
+      "label": "Top separator line",
+      "default": "unset",
+      "options": [
+        {
+          "value": "unset",
+          "label": "Hidden"
+        },
+        {
+          "value": "homepage",
+          "label": "Homepage only"
+        },
+        {
+          "value": "inner_page",
+          "label": "Inner pages only"
+        },
+        {
+          "value": "all-page",
+          "label": "All pages"
+        }
+      ]
+    },
+    {
+      "type": "color",
+      "id": "link_hover_color",
+      "label": "Link hover color (optional)",
+      "info": "Leave blank to follow the active colour scheme automatically. Set a custom colour only if you want to override the scheme."
+    },
+    {
+      "type": "header",
+      "id": "hdr_19",
+      "label": "Carousel"
+    },
+    {
+      "type": "range",
+      "id": "arrow_icon_size",
+      "label": "Mobile arrow icon size",
+      "min": 10,
+      "max": 22,
+      "step": 1,
+      "unit": "px",
+      "default": 14
+    },
+    {
+      "type": "header",
+      "id": "hdr_21",
+      "label": "Layout & spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "label": "Top padding",
+      "default": 80,
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px"
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "label": "Bottom padding",
+      "default": 40,
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px"
+    },
+    {
+      "type": "header",
+      "id": "hdr_24",
+      "label": "Advanced"
+    },
+    {
+      "type": "select",
+      "id": "heading_transform",
+      "label": "Heading transform",
+      "default": "none",
+      "options": [
+        {
+          "value": "none",
+          "label": "Default"
+        },
+        {
+          "value": "uppercase",
+          "label": "UPPERCASE"
+        },
+        {
+          "value": "capitalize",
+          "label": "Capitalize"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_26",
+      "label": "Custom Header Elements"
+    },
+    {
+      "type": "select",
+      "id": "custom_header_position",
+      "label": "Position",
+      "default": "top",
+      "info": "Where the big text / image sits. \"Bottom\" places it under the menu blocks, just above the copyright line.",
+      "options": [
+        {
+          "value": "top",
+          "label": "Top of footer"
+        },
+        {
+          "value": "bottom",
+          "label": "Bottom (above copyright)"
+        }
+      ]
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_custom_text_big",
+      "label": "Enable Custom Text BIG",
+      "default": false
+    },
+    {
+      "type": "text",
+      "id": "custom_text",
+      "label": "Custom Text",
+      "default": "Premier®"
+    },
+    {
+      "type": "color",
+      "id": "custom_text_color",
+      "label": "Custom Text Color",
+      "default": "#2B2B2B"
+    },
+    {
+      "type": "range",
+      "id": "custom_text_font_size_desktop",
+      "label": "Custom Text Font Size (Desktop)",
+      "min": 40,
+      "max": 400,
+      "step": 4,
+      "unit": "px",
+      "default": 200
+    },
+    {
+      "type": "range",
+      "id": "custom_text_font_size_mobile",
+      "label": "Custom Text Font Size (Mobile)",
+      "min": 20,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 50
+    },
+    {
+      "type": "checkbox",
+      "id": "custom_text_italic",
+      "label": "Italic",
+      "default": false
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_custom_image",
+      "label": "Enable Custom Image",
+      "default": false
+    },
+    {
+      "type": "image_picker",
+      "id": "custom_image",
+      "label": "Custom Image"
+    },
+    {
+      "type": "range",
+      "id": "custom_image_size_desktop",
+      "label": "Image Size (Desktop)",
+      "min": 40,
+      "max": 600,
+      "step": 8,
+      "unit": "px",
+      "default": 200
+    },
+    {
+      "type": "range",
+      "id": "custom_image_size_mobile",
+      "label": "Image Size (Mobile)",
+      "min": 32,
+      "max": 400,
+      "step": 4,
+      "unit": "px",
+      "default": 152
+    },
+    {
+      "type": "range",
+      "id": "custom_elements_gap",
+      "label": "Vertical Gap Between Custom Elements and Content",
+      "min": 0,
+      "max": 120,
+      "step": 2,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "header",
+      "id": "hdr_39",
+      "label": "Advanced spacing"
+    },
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    }
+  ],
+  "blocks": [
+    {
+      "type": "store_info",
+      "name": "Store info",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Basics"
+        },
+        {
+          "type": "checkbox",
+          "id": "show_logo",
+          "default": false,
+          "label": "Show logo image",
+          "info": "When enabled, shows the custom logo below. If no custom logo is set, falls back to the logo from Theme settings → Logo."
+        },
+        {
+          "type": "checkbox",
+          "id": "store_address",
+          "default": true,
+          "label": "Show address"
+        },
+        {
+          "type": "checkbox",
+          "id": "store_phone",
+          "default": true,
+          "label": "Show phone"
+        },
+        {
+          "type": "checkbox",
+          "id": "store_email",
+          "default": true,
+          "label": "Show email"
+        },
+        {
+          "type": "header",
+          "id": "hdr_6",
+          "label": "Image / Media"
+        },
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Custom logo image",
+          "info": "Optional. Overrides the theme logo for this block. Leave blank to use the logo from Theme settings."
+        },
+        {
+          "type": "range",
+          "id": "image_width",
+          "min": 50,
+          "max": 200,
+          "step": 2,
+          "unit": "px",
+          "label": "Logo width",
+          "default": 70
+        },
+        {
+          "type": "header",
+          "id": "hdr_9",
+          "label": "Content"
+        },
+        {
+          "type": "text",
+          "id": "store_heading",
+          "label": "Heading"
+        },
+        {
+          "type": "richtext",
+          "id": "store_description",
+          "label": "Description"
+        },
+        {
+          "type": "header",
+          "id": "hdr_12",
+          "label": "Layout & spacing"
+        },
+        {
+          "type": "range",
+          "id": "top_offset",
+          "label": "Top spacing offset",
+          "min": -80,
+          "max": 60,
+          "step": 2,
+          "unit": "px",
+          "default": 0,
+          "info": "Adjusts the top space above the Store info block. Use a negative value to pull the block up and remove unwanted empty space when there is no heading."
+        },
+        {
+          "type": "select",
+          "id": "content_width",
+          "label": "Column width",
+          "default": "33.333%",
+          "options": [
+            {
+              "value": "25%",
+              "label": "25%"
+            },
+            {
+              "value": "33.333%",
+              "label": "33%"
+            },
+            {
+              "value": "41.6666%",
+              "label": "42%"
+            },
+            {
+              "value": "50%",
+              "label": "50%"
+            },
+            {
+              "value": "66.666%",
+              "label": "66%"
+            },
+            {
+              "value": "75%",
+              "label": "75%"
+            }
+          ]
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "link_list",
+      "name": "Menu",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Section heading"
+        },
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Heading"
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Content"
+        },
+        {
+          "type": "link_list",
+          "id": "menu",
+          "default": "footer",
+          "label": "Menu",
+          "info": "Leave heading empty to use the menu title."
+        },
+        {
+          "type": "header",
+          "id": "hdr_5",
+          "label": "Layout & spacing"
+        },
+        {
+          "type": "select",
+          "id": "content_width",
+          "label": "Column width",
+          "default": "16%",
+          "options": [
+            {
+              "value": "16%",
+              "label": "16%"
+            },
+            {
+              "value": "25%",
+              "label": "25%"
+            },
+            {
+              "value": "33.333%",
+              "label": "33%"
+            },
+            {
+              "value": "50%",
+              "label": "50%"
+            },
+            {
+              "value": "66.666%",
+              "label": "66%"
+            },
+            {
+              "value": "75%",
+              "label": "75%"
+            }
+          ]
+        }
+      ],
+      "limit": 3
+    },
+    {
+      "type": "newsletter",
+      "name": "Newsletter",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Section heading"
+        },
+        {
+          "type": "text",
+          "id": "heading",
+          "default": "Subscribe to our emails",
+          "label": "Heading"
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Content"
+        },
+        {
+          "type": "inline_richtext",
+          "id": "description",
+          "default": "Sign up for 10% off your first purchase and free shipping. Updates on sales and offers.",
+          "label": "Description"
+        },
+        {
+          "type": "text",
+          "id": "email_placeholder",
+          "default": "Enter your email address",
+          "label": "Email placeholder"
+        },
+        {
+          "type": "inline_richtext",
+          "id": "note",
+          "default": "By entering the e-mail you accept the <a href=\"/policies/terms-of-service\" target=\"_blank\">terms and conditions</a> and the <a href=\"/policies/privacy-policy\" target=\"_blank\">privacy policy</a>.",
+          "label": "Fine print"
+        },
+        {
+          "type": "header",
+          "id": "hdr_7",
+          "label": "Buttons"
+        },
+        {
+          "type": "text",
+          "id": "button_label",
+          "default": "Sign up",
+          "label": "Button label"
+        },
+        {
+          "type": "header",
+          "id": "hdr_9",
+          "label": "Layout & spacing"
+        },
+        {
+          "type": "select",
+          "id": "content_width",
+          "label": "Column width",
+          "default": "33.333%",
+          "options": [
+            {
+              "value": "25%",
+              "label": "25%"
+            },
+            {
+              "value": "33.333%",
+              "label": "33%"
+            },
+            {
+              "value": "41.6666%",
+              "label": "42%"
+            },
+            {
+              "value": "50%",
+              "label": "50%"
+            },
+            {
+              "value": "66.666%",
+              "label": "66%"
+            },
+            {
+              "value": "75%",
+              "label": "75%"
+            },
+            {
+              "value": "83%",
+              "label": "83%"
+            },
+            {
+              "value": "100%",
+              "label": "100%"
+            }
+          ]
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "payment_badges",
+      "name": "Payment badges",
+      "settings": [
+        {
+          "type": "paragraph",
+          "id": "para_1",
+          "label": "Drag to position the payment badges row inside the footer. Toggle each badge below.",
+          "content": "Drag to position the payment badges row inside the footer. Toggle each badge below."
+        },
+        {
+          "type": "header",
+          "id": "hdr_2",
+          "label": "Badges"
+        },
+        {
+          "type": "checkbox",
+          "id": "enable_visa",
+          "label": "Visa",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "enable_mastercard",
+          "label": "Mastercard",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "enable_amex",
+          "label": "American Express",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "enable_paypal",
+          "label": "PayPal",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "enable_apple_pay",
+          "label": "Apple Pay",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "enable_google_pay",
+          "label": "Google Pay",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "enable_klarna",
+          "label": "Klarna",
+          "default": false
+        },
+        {
+          "type": "header",
+          "id": "hdr_10",
+          "label": "Layout"
+        },
+        {
+          "type": "select",
+          "id": "alignment",
+          "label": "Alignment",
+          "default": "right",
+          "options": [
+            {
+              "value": "left",
+              "label": "Left"
+            },
+            {
+              "value": "center",
+              "label": "Center"
+            },
+            {
+              "value": "right",
+              "label": "Right"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "content_width",
+          "label": "Column width",
+          "default": "33.333%",
+          "options": [
+            {
+              "value": "25%",
+              "label": "25%"
+            },
+            {
+              "value": "33.333%",
+              "label": "33%"
+            },
+            {
+              "value": "50%",
+              "label": "50%"
+            },
+            {
+              "value": "66.666%",
+              "label": "66%"
+            },
+            {
+              "value": "100%",
+              "label": "100%"
+            }
+          ]
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "custom_liquid",
+      "name": "Custom liquid",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content"
+        },
+        {
+          "type": "liquid",
+          "id": "custom_liquid",
+          "label": "Custom liquid"
+        }
+      ],
+      "limit": 1
+    }
+  ],
+  "max_blocks": 6,
+  "kind": "footer",
+  "enabled_on": {
+    "groups": [
+      "footer"
+    ]
+  },
+  "shopify": {
+    "name": "t:sections.footer.name",
+    "enabled_on": {
+      "groups": [
+        "footer"
+      ]
+    },
+    "settings": [
+      {
+        "type": "header",
+        "content": "Basics"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "t:sections.all.color_scheme.label"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "options": [
+          {
+            "value": "container",
+            "label": "t:sections.all.section_width.container.label"
+          },
+          {
+            "value": "fluid_container",
+            "label": "t:sections.all.section_width.fluid_container.label"
+          },
+          {
+            "value": "stretch_width",
+            "label": "t:sections.all.section_width.stretch_width.label"
+          },
+          {
+            "value": "full_width",
+            "label": "t:sections.all.section_width.full_width.label"
+          }
+        ],
+        "default": "stretch_width",
+        "label": "Section width"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_country_selector",
+        "default": true,
+        "label": "Show country selector"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_language_selector",
+        "default": true,
+        "label": "Show language selector"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_social",
+        "default": false,
+        "label": "Show social icons",
+        "info": "Connect URLs in Theme settings → Social media."
+      },
+      {
+        "type": "paragraph",
+        "content": "Payment badges have moved to a dedicated block. Click 'Add block' below and choose 'Payment badges' to drag it into position inside the footer."
+      },
+      {
+        "type": "header",
+        "content": "Heading typography"
+      },
+      {
+        "type": "range",
+        "id": "footer_heading_size",
+        "min": 12,
+        "max": 24,
+        "step": 1,
+        "unit": "px",
+        "label": "Heading size",
+        "default": 16
+      },
+      {
+        "type": "select",
+        "id": "heading_weight",
+        "label": "Heading weight",
+        "default": "600",
+        "options": [
+          {
+            "value": "400",
+            "label": "Regular (400)"
+          },
+          {
+            "value": "500",
+            "label": "Medium (500)"
+          },
+          {
+            "value": "600",
+            "label": "Semibold (600)"
+          },
+          {
+            "value": "700",
+            "label": "Bold (700)"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Image / Media"
+      },
+      {
+        "type": "image_picker",
+        "id": "background_image",
+        "label": "Background image"
+      },
+      {
+        "type": "range",
+        "id": "footer_bg_brightness",
+        "min": 0,
+        "max": 200,
+        "step": 5,
+        "unit": "%",
+        "label": "Image brightness",
+        "default": 100,
+        "info": "Adjusts the brightness of the background image. 100% = original, lower = darker, higher = brighter. No effect if no background image is set."
+      },
+      {
+        "type": "header",
+        "content": "Content"
+      },
+      {
+        "type": "textarea",
+        "id": "copyright_text",
+        "label": "Copyright text",
+        "default": "© 2026 Materia Modern. All rights reserved."
+      },
+      {
+        "type": "header",
+        "content": "Colors & appearance"
+      },
+      {
+        "type": "select",
+        "id": "separator_line",
+        "label": "Top separator line",
+        "default": "unset",
+        "options": [
+          {
+            "value": "unset",
+            "label": "Hidden"
+          },
+          {
+            "value": "homepage",
+            "label": "Homepage only"
+          },
+          {
+            "value": "inner_page",
+            "label": "Inner pages only"
+          },
+          {
+            "value": "all-page",
+            "label": "All pages"
+          }
+        ]
+      },
+      {
+        "type": "color",
+        "id": "link_hover_color",
+        "label": "Link hover color (optional)",
+        "info": "Leave blank to follow the active colour scheme automatically. Set a custom colour only if you want to override the scheme."
+      },
+      {
+        "type": "header",
+        "content": "Carousel"
+      },
+      {
+        "type": "range",
+        "id": "arrow_icon_size",
+        "label": "Mobile arrow icon size",
+        "min": 10,
+        "max": 22,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "header",
+        "content": "Layout & spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top padding",
+        "default": 80,
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px"
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom padding",
+        "default": 40,
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px"
+      },
+      {
+        "type": "header",
+        "content": "Advanced"
+      },
+      {
+        "type": "select",
+        "id": "heading_transform",
+        "label": "Heading transform",
+        "default": "none",
+        "options": [
+          {
+            "value": "none",
+            "label": "Default"
+          },
+          {
+            "value": "uppercase",
+            "label": "UPPERCASE"
+          },
+          {
+            "value": "capitalize",
+            "label": "Capitalize"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Custom Header Elements",
+        "info": "Optional oversized text or image displayed at the top or bottom of the footer (great for a brand name watermark)."
+      },
+      {
+        "type": "select",
+        "id": "custom_header_position",
+        "label": "Position",
+        "default": "top",
+        "info": "Where the big text / image sits. \"Bottom\" places it under the menu blocks, just above the copyright line.",
+        "options": [
+          {
+            "value": "top",
+            "label": "Top of footer"
+          },
+          {
+            "value": "bottom",
+            "label": "Bottom (above copyright)"
+          }
+        ]
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_text_big",
+        "label": "Enable Custom Text BIG",
+        "default": false
+      },
+      {
+        "type": "text",
+        "id": "custom_text",
+        "label": "Custom Text",
+        "default": "Premier®"
+      },
+      {
+        "type": "color",
+        "id": "custom_text_color",
+        "label": "Custom Text Color",
+        "default": "#2B2B2B"
+      },
+      {
+        "type": "range",
+        "id": "custom_text_font_size_desktop",
+        "label": "Custom Text Font Size (Desktop)",
+        "min": 40,
+        "max": 400,
+        "step": 4,
+        "unit": "px",
+        "default": 200
+      },
+      {
+        "type": "range",
+        "id": "custom_text_font_size_mobile",
+        "label": "Custom Text Font Size (Mobile)",
+        "min": 20,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 50
+      },
+      {
+        "type": "checkbox",
+        "id": "custom_text_italic",
+        "label": "Italic",
+        "default": false
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_image",
+        "label": "Enable Custom Image",
+        "default": false
+      },
+      {
+        "type": "image_picker",
+        "id": "custom_image",
+        "label": "Custom Image"
+      },
+      {
+        "type": "range",
+        "id": "custom_image_size_desktop",
+        "label": "Image Size (Desktop)",
+        "min": 40,
+        "max": 600,
+        "step": 8,
+        "unit": "px",
+        "default": 200
+      },
+      {
+        "type": "range",
+        "id": "custom_image_size_mobile",
+        "label": "Image Size (Mobile)",
+        "min": 32,
+        "max": 400,
+        "step": 4,
+        "unit": "px",
+        "default": 152
+      },
+      {
+        "type": "range",
+        "id": "custom_elements_gap",
+        "label": "Vertical Gap Between Custom Elements and Content",
+        "min": 0,
+        "max": 120,
+        "step": 2,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "header",
+        "content": "Advanced spacing"
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      }
+    ],
+    "max_blocks": 6,
+    "blocks": [
+      {
+        "type": "store_info",
+        "name": "Store info",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Basics"
+          },
+          {
+            "type": "checkbox",
+            "id": "show_logo",
+            "default": false,
+            "label": "Show logo image",
+            "info": "When enabled, shows the custom logo below. If no custom logo is set, falls back to the logo from Theme settings → Logo."
+          },
+          {
+            "type": "checkbox",
+            "id": "store_address",
+            "default": true,
+            "label": "Show address"
+          },
+          {
+            "type": "checkbox",
+            "id": "store_phone",
+            "default": true,
+            "label": "Show phone"
+          },
+          {
+            "type": "checkbox",
+            "id": "store_email",
+            "default": true,
+            "label": "Show email"
+          },
+          {
+            "type": "header",
+            "content": "Image / Media"
+          },
+          {
+            "type": "image_picker",
+            "id": "image",
+            "label": "Custom logo image",
+            "info": "Optional. Overrides the theme logo for this block. Leave blank to use the logo from Theme settings."
+          },
+          {
+            "type": "range",
+            "id": "image_width",
+            "min": 50,
+            "max": 200,
+            "step": 2,
+            "unit": "px",
+            "label": "Logo width",
+            "default": 70
+          },
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "text",
+            "id": "store_heading",
+            "label": "Heading"
+          },
+          {
+            "type": "richtext",
+            "id": "store_description",
+            "label": "Description"
+          },
+          {
+            "type": "header",
+            "content": "Layout & spacing"
+          },
+          {
+            "type": "range",
+            "id": "top_offset",
+            "label": "Top spacing offset",
+            "min": -80,
+            "max": 60,
+            "step": 2,
+            "unit": "px",
+            "default": 0,
+            "info": "Adjusts the top space above the Store info block. Use a negative value to pull the block up and remove unwanted empty space when there is no heading."
+          },
+          {
+            "type": "select",
+            "id": "content_width",
+            "label": "Column width",
+            "default": "33.333%",
+            "options": [
+              {
+                "value": "25%",
+                "label": "25%"
+              },
+              {
+                "value": "33.333%",
+                "label": "33%"
+              },
+              {
+                "value": "41.6666%",
+                "label": "42%"
+              },
+              {
+                "value": "50%",
+                "label": "50%"
+              },
+              {
+                "value": "66.666%",
+                "label": "66%"
+              },
+              {
+                "value": "75%",
+                "label": "75%"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "link_list",
+        "name": "Menu",
+        "limit": 3,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Section heading"
+          },
+          {
+            "type": "text",
+            "id": "heading",
+            "label": "Heading"
+          },
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "link_list",
+            "id": "menu",
+            "default": "footer",
+            "label": "Menu",
+            "info": "Leave heading empty to use the menu title."
+          },
+          {
+            "type": "header",
+            "content": "Layout & spacing"
+          },
+          {
+            "type": "select",
+            "id": "content_width",
+            "label": "Column width",
+            "default": "16%",
+            "options": [
+              {
+                "value": "16%",
+                "label": "16%"
+              },
+              {
+                "value": "25%",
+                "label": "25%"
+              },
+              {
+                "value": "33.333%",
+                "label": "33%"
+              },
+              {
+                "value": "50%",
+                "label": "50%"
+              },
+              {
+                "value": "66.666%",
+                "label": "66%"
+              },
+              {
+                "value": "75%",
+                "label": "75%"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "newsletter",
+        "name": "Newsletter",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Section heading"
+          },
+          {
+            "type": "text",
+            "id": "heading",
+            "default": "Subscribe to our emails",
+            "label": "Heading"
+          },
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "inline_richtext",
+            "id": "description",
+            "default": "Sign up for 10% off your first purchase and free shipping. Updates on sales and offers.",
+            "label": "Description"
+          },
+          {
+            "type": "text",
+            "id": "email_placeholder",
+            "default": "Enter your email address",
+            "label": "Email placeholder"
+          },
+          {
+            "type": "inline_richtext",
+            "id": "note",
+            "default": "By entering the e-mail you accept the <a href=\"/policies/terms-of-service\" target=\"_blank\">terms and conditions</a> and the <a href=\"/policies/privacy-policy\" target=\"_blank\">privacy policy</a>.",
+            "label": "Fine print"
+          },
+          {
+            "type": "header",
+            "content": "Buttons"
+          },
+          {
+            "type": "text",
+            "id": "button_label",
+            "default": "Sign up",
+            "label": "Button label"
+          },
+          {
+            "type": "header",
+            "content": "Layout & spacing"
+          },
+          {
+            "type": "select",
+            "id": "content_width",
+            "label": "Column width",
+            "default": "33.333%",
+            "options": [
+              {
+                "value": "25%",
+                "label": "25%"
+              },
+              {
+                "value": "33.333%",
+                "label": "33%"
+              },
+              {
+                "value": "41.6666%",
+                "label": "42%"
+              },
+              {
+                "value": "50%",
+                "label": "50%"
+              },
+              {
+                "value": "66.666%",
+                "label": "66%"
+              },
+              {
+                "value": "75%",
+                "label": "75%"
+              },
+              {
+                "value": "83%",
+                "label": "83%"
+              },
+              {
+                "value": "100%",
+                "label": "100%"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "payment_badges",
+        "name": "Payment badges",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "paragraph",
+            "content": "Drag to position the payment badges row inside the footer. Toggle each badge below."
+          },
+          {
+            "type": "header",
+            "content": "Badges"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_visa",
+            "label": "Visa",
+            "default": true
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_mastercard",
+            "label": "Mastercard",
+            "default": true
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_amex",
+            "label": "American Express",
+            "default": true
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_paypal",
+            "label": "PayPal",
+            "default": true
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_apple_pay",
+            "label": "Apple Pay",
+            "default": true
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_google_pay",
+            "label": "Google Pay",
+            "default": true
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_klarna",
+            "label": "Klarna",
+            "default": false
+          },
+          {
+            "type": "header",
+            "content": "Layout"
+          },
+          {
+            "type": "select",
+            "id": "alignment",
+            "label": "Alignment",
+            "default": "right",
+            "options": [
+              {
+                "value": "left",
+                "label": "Left"
+              },
+              {
+                "value": "center",
+                "label": "Center"
+              },
+              {
+                "value": "right",
+                "label": "Right"
+              }
+            ]
+          },
+          {
+            "type": "select",
+            "id": "content_width",
+            "label": "Column width",
+            "default": "33.333%",
+            "options": [
+              {
+                "value": "25%",
+                "label": "25%"
+              },
+              {
+                "value": "33.333%",
+                "label": "33%"
+              },
+              {
+                "value": "50%",
+                "label": "50%"
+              },
+              {
+                "value": "66.666%",
+                "label": "66%"
+              },
+              {
+                "value": "100%",
+                "label": "100%"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "custom_liquid",
+        "name": "Custom liquid",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "liquid",
+            "id": "custom_liquid",
+            "label": "Custom liquid"
+          }
+        ]
+      }
+    ],
+    "default": {
+      "blocks": [
+        {
+          "type": "store_info"
+        },
+        {
+          "type": "link_list"
+        },
+        {
+          "type": "link_list"
+        },
+        {
+          "type": "newsletter"
+        },
+        {
+          "type": "payment_badges"
+        }
+      ]
+    }
+  }
+}
+</schema>

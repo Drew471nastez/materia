@@ -1,0 +1,1686 @@
+<template compat="shopify">
+{%- assign fb_accessibility_featured_product = 'accessibility.featured_product' | t -%}
+{%- assign fb_accessibility_product_label = 'accessibility.product_label' | t -%}
+{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- comment -%}
+  Materia Themes — Product Shop The Look
+  A modern "shop the look" layout: a large lifestyle image on one side
+  and a stacked list of featured product cards on the other. Each
+  product is a Product block; the layout, image, and headline live in
+  the section settings.
+{%- endcomment -%}
+
+{%- liquid
+  assign s   = section.settings
+  assign sid = section.id
+  assign reset_spacing = ''
+  if s.reset_spacing
+    assign reset_spacing = ' remove_spacing'
+  endif
+
+  assign image_position = s.image_position | default: 'left'
+  assign products_per_view_desktop = s.products_per_view_desktop | default: 2
+
+  assign product_blocks = section.blocks | where: 'type', 'product'
+  assign heading_blocks = section.blocks | where: 'type', 'heading'
+  assign subheading_blocks = section.blocks | where: 'type', 'subheading'
+  assign eyebrow_blocks = section.blocks | where: 'type', 'eyebrow'
+-%}
+
+<style>
+  {%- if s.reset_spacing -%}
+    #shopify-section-{{ sid }} { margin-top: 0 !important; margin-bottom: 0 !important; }
+    #shopify-section-{{ sid }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif -%}
+
+  #shopify-section-{{ sid }} { isolation: isolate; position: relative; }
+
+  #shopify-section-{{ sid }} .pstl {
+    container-type: inline-size;
+    container-name: pstl;
+    padding: {{ s.padding_top | default: 49 }}px {{ s.side_padding_desktop | default: 24 }}px {{ s.padding_bottom | default: 49 }}px;
+    background: {{ s.section_bg | default: 'transparent' }};
+  }
+  @container pstl (max-width: 760px) {
+    #shopify-section-{{ sid }} .pstl {
+      padding-left: {{ s.side_padding_mobile | default: 16 }}px;
+      padding-right: {{ s.side_padding_mobile | default: 16 }}px;
+    }
+  }
+
+  #shopify-section-{{ sid }} .pstl__inner {
+    max-width: var(--page-width, 1300px);
+    margin-inline: auto;
+    display: flex;
+    flex-direction: column;
+    gap: {{ s.gap_mobile | default: 28 }}px;
+  }
+  @container pstl (min-width: 760px) {
+    #shopify-section-{{ sid }} .pstl__inner {
+      flex-direction: {% if image_position == 'right' %}row-reverse{% else %}row{% endif %};
+      gap: {{ s.gap_desktop | default: 48 }}px;
+      align-items: {{ s.column_valign | default: 'flex-start' }};
+    }
+  }
+  @media (min-width: 900px) {
+    #shopify-section-{{ sid }} .pstl__inner {
+      flex-direction: {% if image_position == 'right' %}row-reverse{% else %}row{% endif %};
+      gap: {{ s.gap_desktop | default: 48 }}px;
+      align-items: {{ s.column_valign | default: 'flex-start' }};
+    }
+  }
+
+  /* Image column */
+  #shopify-section-{{ sid }} .pstl__media {
+    flex: 0 0 100%;
+    width: 100%;
+    min-width: 0;
+    border-radius: {{ s.image_radius | default: 16 }}px;
+    overflow: hidden;
+    background: {{ s.image_bg | default: '#F4EEE7' }};
+    aspect-ratio: {{ s.image_aspect | default: '4 / 5' }};
+    position: relative;
+  }
+  {%- comment -%}
+    Desktop image sizing — two distinct modes governed by the new
+    `image_aspect_desktop` selector:
+
+      • "auto" (default) — height is driven by the `image_min_height`
+        slider. Using `height` (not `min-height`) on the flex item +
+        `align-self: flex-start` so the slider IS the visible height
+        regardless of how tall the products column gets. Previously
+        the rule used `align-self: stretch` + `min-height`, which made
+        the slider invisible whenever the products column happened to
+        be taller — the bug the merchant described as "slider doesn't
+        work".
+
+      • Any aspect ratio (1/1, 4/5, 3/4, etc.) — height is derived
+        from the column width × ratio. The min-height slider is
+        unused in this mode, but stays in the schema so switching
+        back to "auto" instantly restores the merchant's saved value.
+  {%- endcomment -%}
+  @container pstl (min-width: 760px) {
+    #shopify-section-{{ sid }} .pstl__media {
+      flex: 0 0 calc({{ s.image_width_pct | default: 50 }}% - {{ s.gap_desktop | default: 48 | divided_by: 2 }}px);
+      max-width: calc({{ s.image_width_pct | default: 50 }}% - {{ s.gap_desktop | default: 48 | divided_by: 2 }}px);
+      {%- if s.image_aspect_desktop and s.image_aspect_desktop != 'auto' -%}
+        aspect-ratio: {{ s.image_aspect_desktop }};
+        align-self: flex-start;
+        min-height: 0;
+        height: auto;
+      {%- else -%}
+        aspect-ratio: auto;
+        align-self: flex-start;
+        height: {{ s.image_min_height | default: 520 }}px;
+        min-height: {{ s.image_min_height | default: 520 }}px;
+      {%- endif -%}
+    }
+  }
+  @media (min-width: 900px) {
+    #shopify-section-{{ sid }} .pstl__media {
+      flex: 0 0 calc({{ s.image_width_pct | default: 50 }}% - {{ s.gap_desktop | default: 48 | divided_by: 2 }}px);
+      max-width: calc({{ s.image_width_pct | default: 50 }}% - {{ s.gap_desktop | default: 48 | divided_by: 2 }}px);
+      {%- if s.image_aspect_desktop and s.image_aspect_desktop != 'auto' -%}
+        aspect-ratio: {{ s.image_aspect_desktop }};
+        align-self: flex-start;
+        min-height: 0;
+        height: auto;
+      {%- else -%}
+        aspect-ratio: auto;
+        align-self: flex-start;
+        height: {{ s.image_min_height | default: 520 }}px;
+        min-height: {{ s.image_min_height | default: 520 }}px;
+      {%- endif -%}
+    }
+  }
+  #shopify-section-{{ sid }} .pstl__media img,
+  #shopify-section-{{ sid }} .pstl__media svg {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  /* Products column */
+  #shopify-section-{{ sid }} .pstl__col {
+    flex: 1 1 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: {{ s.text_gap | default: 18 }}px;
+  }
+  @container pstl (min-width: 760px) {
+    #shopify-section-{{ sid }} .pstl__col {
+      flex: 1 1 0;
+    }
+  }
+  @media (min-width: 900px) {
+    #shopify-section-{{ sid }} .pstl__col {
+      flex: 1 1 0;
+    }
+  }
+
+  #shopify-section-{{ sid }} .pstl__eyebrow {
+    margin: 0;
+    text-transform: uppercase;
+  }
+  #shopify-section-{{ sid }} .pstl__heading {
+    margin: 0;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+  @container pstl (min-width: 760px) {
+    #shopify-section-{{ sid }} .pstl__heading {
+      font-size: var(--h-size-desk, 40px) !important;
+    }
+  }
+  @media (min-width: 900px) {
+    #shopify-section-{{ sid }} .pstl__heading {
+      font-size: var(--h-size-desk, 40px) !important;
+    }
+  }
+  #shopify-section-{{ sid }} .pstl__sub {
+    margin: 0;
+    line-height: 1.55;
+  }
+  #shopify-section-{{ sid }} .pstl__sub p { margin: 0 0 0.5em; }
+  #shopify-section-{{ sid }} .pstl__sub p:last-child { margin: 0; }
+
+  /* Product cards list */
+  #shopify-section-{{ sid }} .pstl__products {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: {{ s.product_gap | default: 16 }}px;
+    margin-top: {{ s.products_margin_top | default: 8 }}px;
+  }
+
+  #shopify-section-{{ sid }} .pstl__card {
+    display: grid;
+    grid-template-columns: {{ s.card_image_size | default: 96 }}px 1fr auto;
+    align-items: center;
+    gap: {{ s.card_gap | default: 16 }}px;
+    padding: {{ s.card_padding | default: 12 }}px;
+    background: {{ s.card_bg | default: '#FFFFFF' }};
+    border: 1px solid {{ s.card_border | default: 'rgba(0,0,0,0.08)' }};
+    border-radius: {{ s.card_radius | default: 14 }}px;
+    color: inherit;
+    text-decoration: none;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  }
+  #shopify-section-{{ sid }} .pstl__card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    border-color: {{ s.card_border_hover | default: 'rgba(0,0,0,0.16)' }};
+  }
+  #shopify-section-{{ sid }} .pstl__card-image {
+    width: {{ s.card_image_size | default: 96 }}px;
+    height: {{ s.card_image_size | default: 96 }}px;
+    border-radius: {{ s.card_image_radius | default: 10 }}px;
+    overflow: hidden;
+    background: {{ s.card_image_bg | default: '#F4EEE7' }};
+    flex-shrink: 0;
+  }
+  #shopify-section-{{ sid }} .pstl__card-image img,
+  #shopify-section-{{ sid }} .pstl__card-image svg {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  #shopify-section-{{ sid }} .pstl__card-info {
+    min-width: 0;
+    display: flex; flex-direction: column;
+    gap: 4px;
+  }
+  #shopify-section-{{ sid }} .pstl__card-vendor {
+    font-size: {{ s.vendor_size | default: 11 }}px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: {{ s.vendor_color | default: 'rgba(0,0,0,0.55)' }};
+    margin: 0;
+  }
+  #shopify-section-{{ sid }} .pstl__card-title {
+    margin: 0;
+    font-weight: 600;
+    font-size: {{ s.card_title_size | default: 15 }}px;
+    line-height: 1.25;
+    color: {{ s.card_title_color | default: 'inherit' }};
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  #shopify-section-{{ sid }} .pstl__card-price {
+    margin: 0;
+    font-size: {{ s.price_size | default: 14 }}px;
+    color: {{ s.price_color | default: 'inherit' }};
+    font-weight: 600;
+  }
+  #shopify-section-{{ sid }} .pstl__card-price del {
+    color: {{ s.price_compare_color | default: 'rgba(0,0,0,0.45)' }};
+    margin-right: 4px;
+    font-weight: 400;
+  }
+  #shopify-section-{{ sid }} .pstl__card-cta {
+    align-self: center;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    background: {{ s.cta_bg | default: '#111111' }};
+    color: {{ s.cta_color | default: '#FFFFFF' }};
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.18s ease, background 0.18s ease;
+  }
+  #shopify-section-{{ sid }} .pstl__card:hover .pstl__card-cta {
+    background: {{ s.cta_bg_hover | default: '#000000' }};
+    transform: scale(1.05);
+  }
+  #shopify-section-{{ sid }} .pstl__card-cta svg {
+    width: 16px; height: 16px;
+  }
+
+  @container pstl (max-width: 480px) {
+    #shopify-section-{{ sid }} .pstl__card {
+      grid-template-columns: 72px 1fr auto;
+      gap: 12px;
+      padding: 10px;
+    }
+    #shopify-section-{{ sid }} .pstl__card-image {
+      width: 72px;
+      height: 72px;
+    }
+  }
+{% comment %}{% endcomment %}</style>
+
+<div class="section{{ reset_spacing }}">
+  <div class="pstl" data-section-id="{{ sid }}">
+    <div class="pstl__inner">
+
+      <div class="pstl__media">
+        {%- if s.image != blank -%}
+          {{ s.image | image_url: width: 1200 | image_tag: loading: 'lazy', sizes: '(max-width: 760px) 100vw, 50vw', widths: '480, 720, 960, 1200, 1600' }}
+        {%- else -%}
+          <img src="{{ s.placeholder_url | default: 'https://2dbags.co/wp-content/uploads/revslider/lookbook1-demo_slider/placeholder.jpg' }}" alt="" loading="lazy">
+        {%- endif -%}
+      </div>
+
+      <div class="pstl__col">
+        {%- for block in section.blocks -%}
+          {%- assign bs = block.settings -%}
+          {%- case block.type -%}
+            {%- when 'eyebrow' -%}
+              {%- if bs.text != blank -%}
+                <p class="pstl__eyebrow"
+                   style="color: {{ bs.color | default: '#000000' }}; font-size: {{ bs.size | default: 12 }}px; letter-spacing: {{ bs.letter_spacing | default: 0.2 }}em;"
+                   {{ block.shopify_attributes }}>{{ bs.text | escape }}</p>
+              {%- endif -%}
+            {%- when 'heading' -%}
+              {%- if bs.text != blank -%}
+                <{{ bs.tag | default: 'h2' }} class="pstl__heading"
+                   style="color: {{ bs.color | default: '#000000' }}; font-size: {{ bs.size_mobile | default: 28 }}px; --h-size-desk: {{ bs.size_desktop | default: 40 }}px;"
+                   {{ block.shopify_attributes }}>{{ bs.text | escape }}</{{ bs.tag | default: 'h2' }}>
+              {%- endif -%}
+            {%- when 'subheading' -%}
+              {%- if bs.text != blank -%}
+                <div class="pstl__sub"
+                     style="color: {{ bs.color | default: '#000000' }}; font-size: {{ bs.size | default: 15 }}px; max-width: {{ bs.max_width | default: 560 }}px;"
+                     {{ block.shopify_attributes }}>{{ bs.text }}</div>
+              {%- endif -%}
+          {%- endcase -%}
+        {%- endfor -%}
+
+        {%- if product_blocks.size > 0 -%}
+          <div class="pstl__products">
+            {%- for block in product_blocks -%}
+              {%- assign p = block.settings.product -%}
+              {%- assign placeholder_src = s.placeholder_url | default: 'https://2dbags.co/wp-content/uploads/revslider/lookbook1-demo_slider/placeholder.jpg' -%}
+              <a href="{{ p.url | default: '#' }}" class="pstl__card" {{ block.shopify_attributes }} aria-label="{{ p.title | default: block.settings.custom_title | default: fb_accessibility_product_label | escape }}">
+                  <div class="pstl__card-image">
+                    {%- if p.featured_image -%}
+                      {{ p.featured_image | image_url: width: 240 | image_tag: loading: 'lazy', alt: p.title, widths: '120, 240, 360' }}
+                    {%- else -%}
+                      <img src="{{ placeholder_src }}" alt="" loading="lazy">
+                    {%- endif -%}
+                  </div>
+                  <div class="pstl__card-info">
+                    {%- if s.show_vendor and p.vendor != blank -%}
+                      <p class="pstl__card-vendor">{{ p.vendor }}</p>
+                    {%- endif -%}
+                    <p class="pstl__card-title">{{ block.settings.custom_title | default: p.title | default: fb_accessibility_featured_product | escape }}</p>
+                    {%- if s.show_price -%}
+                      <p class="pstl__card-price">
+                        {%- if p != blank -%}
+                          {%- if p.compare_at_price > p.price -%}<del>{{ p.compare_at_price | money }}</del>{%- endif -%}
+                          {{ p.price | money }}
+                        {%- else -%}
+                          {{ block.settings.fallback_price | default: '$0.00' | escape }}
+                        {%- endif -%}
+                      </p>
+                    {%- endif -%}
+                  </div>
+                  <span class="pstl__card-cta" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+                  </span>
+                </a>
+            {%- endfor -%}
+          </div>
+        {%- endif -%}
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "product-shop-the-look",
+  "name": "Product Shop The Look",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "Layout"
+    },
+    {
+      "type": "select",
+      "id": "image_position",
+      "label": "Image position (desktop)",
+      "default": "left",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "column_valign",
+      "label": "Column vertical alignment (desktop)",
+      "default": "flex-start",
+      "options": [
+        {
+          "value": "flex-start",
+          "label": "Top"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "stretch",
+          "label": "Stretch"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "image_width_pct",
+      "label": "Image column width (desktop)",
+      "min": 30,
+      "max": 70,
+      "step": 1,
+      "unit": "%",
+      "default": 50
+    },
+    {
+      "type": "range",
+      "id": "gap_desktop",
+      "label": "Column gap (desktop)",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "default": 48
+    },
+    {
+      "type": "range",
+      "id": "gap_mobile",
+      "label": "Column gap (mobile)",
+      "min": 0,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 28
+    },
+    {
+      "type": "range",
+      "id": "text_gap",
+      "label": "Vertical gap inside text column",
+      "min": 0,
+      "max": 60,
+      "step": 2,
+      "unit": "px",
+      "default": 18
+    },
+    {
+      "type": "header",
+      "id": "hdr_9",
+      "label": "Lifestyle image"
+    },
+    {
+      "type": "image_picker",
+      "id": "image",
+      "label": "Image"
+    },
+    {
+      "type": "url",
+      "id": "placeholder_url",
+      "label": "Fallback image URL",
+      "info": "Used when no image is picked. Defaults to a sample lookbook placeholder."
+    },
+    {
+      "type": "select",
+      "id": "image_aspect",
+      "label": "Image aspect ratio (Mobile)",
+      "default": "4 / 5",
+      "options": [
+        {
+          "value": "1 / 1",
+          "label": "Square (1:1)"
+        },
+        {
+          "value": "4 / 5",
+          "label": "Portrait (4:5)"
+        },
+        {
+          "value": "3 / 4",
+          "label": "3:4"
+        },
+        {
+          "value": "2 / 3",
+          "label": "2:3"
+        },
+        {
+          "value": "16 / 9",
+          "label": "16:9"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "image_aspect_desktop",
+      "label": "Image aspect ratio (Desktop)",
+      "default": "auto",
+      "info": "Auto = use the 'Image height (Desktop)' slider below. Pick a ratio to size the image by aspect ratio instead.",
+      "options": [
+        {
+          "value": "auto",
+          "label": "Auto (use height slider)"
+        },
+        {
+          "value": "1 / 1",
+          "label": "Square (1:1)"
+        },
+        {
+          "value": "4 / 5",
+          "label": "Portrait (4:5)"
+        },
+        {
+          "value": "3 / 4",
+          "label": "3:4"
+        },
+        {
+          "value": "2 / 3",
+          "label": "2:3"
+        },
+        {
+          "value": "3 / 2",
+          "label": "3:2 (landscape)"
+        },
+        {
+          "value": "4 / 3",
+          "label": "4:3 (landscape)"
+        },
+        {
+          "value": "16 / 9",
+          "label": "16:9 (widescreen)"
+        },
+        {
+          "value": "21 / 9",
+          "label": "21:9 (ultra-wide)"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "image_min_height",
+      "label": "Image height (Desktop)",
+      "min": 240,
+      "max": 900,
+      "step": 10,
+      "unit": "px",
+      "default": 520,
+      "info": "Only applies when Image aspect ratio (Desktop) is set to Auto."
+    },
+    {
+      "type": "range",
+      "id": "image_radius",
+      "label": "Image corner radius",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "color",
+      "id": "image_bg",
+      "label": "Image placeholder background",
+      "default": "#F4EEE7"
+    },
+    {
+      "type": "header",
+      "id": "hdr_17",
+      "label": "Product cards"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_vendor",
+      "label": "Show vendor",
+      "default": false
+    },
+    {
+      "type": "checkbox",
+      "id": "show_price",
+      "label": "Show price",
+      "default": true
+    },
+    {
+      "type": "color",
+      "id": "card_bg",
+      "label": "Card background",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "color",
+      "id": "card_border",
+      "label": "Card border"
+    },
+    {
+      "type": "color",
+      "id": "card_border_hover",
+      "label": "Card border (hover)"
+    },
+    {
+      "type": "color",
+      "id": "card_image_bg",
+      "label": "Card image bg",
+      "default": "#F4EEE7"
+    },
+    {
+      "type": "color",
+      "id": "card_title_color",
+      "label": "Card title color",
+      "default": "#000000"
+    },
+    {
+      "type": "color",
+      "id": "vendor_color",
+      "label": "Vendor color"
+    },
+    {
+      "type": "color",
+      "id": "price_color",
+      "label": "Price color",
+      "default": "#000000"
+    },
+    {
+      "type": "color",
+      "id": "price_compare_color",
+      "label": "Compare price color"
+    },
+    {
+      "type": "color",
+      "id": "cta_bg",
+      "label": "Arrow button bg",
+      "default": "#111111"
+    },
+    {
+      "type": "color",
+      "id": "cta_color",
+      "label": "Arrow button icon color",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "color",
+      "id": "cta_bg_hover",
+      "label": "Arrow button bg (hover)",
+      "default": "#000000"
+    },
+    {
+      "type": "range",
+      "id": "card_image_size",
+      "label": "Card image size",
+      "min": 56,
+      "max": 160,
+      "step": 4,
+      "unit": "px",
+      "default": 96
+    },
+    {
+      "type": "range",
+      "id": "card_image_radius",
+      "label": "Card image radius",
+      "min": 0,
+      "max": 30,
+      "step": 1,
+      "unit": "px",
+      "default": 10
+    },
+    {
+      "type": "range",
+      "id": "card_radius",
+      "label": "Card corner radius",
+      "min": 0,
+      "max": 30,
+      "step": 1,
+      "unit": "px",
+      "default": 14
+    },
+    {
+      "type": "range",
+      "id": "card_padding",
+      "label": "Card padding",
+      "min": 4,
+      "max": 24,
+      "step": 1,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "range",
+      "id": "card_gap",
+      "label": "Card inner gap",
+      "min": 4,
+      "max": 28,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "card_title_size",
+      "label": "Card title size",
+      "min": 12,
+      "max": 22,
+      "step": 1,
+      "unit": "px",
+      "default": 15
+    },
+    {
+      "type": "range",
+      "id": "vendor_size",
+      "label": "Vendor size",
+      "min": 9,
+      "max": 14,
+      "step": 1,
+      "unit": "px",
+      "default": 11
+    },
+    {
+      "type": "range",
+      "id": "price_size",
+      "label": "Price size",
+      "min": 11,
+      "max": 20,
+      "step": 1,
+      "unit": "px",
+      "default": 14
+    },
+    {
+      "type": "range",
+      "id": "product_gap",
+      "label": "Gap between product cards",
+      "min": 0,
+      "max": 32,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "products_margin_top",
+      "label": "Space above product list",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 8
+    },
+    {
+      "type": "header",
+      "id": "hdr_41",
+      "label": "Section spacing + colors"
+    },
+    {
+      "type": "color",
+      "id": "section_bg",
+      "label": "Section background",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "label": "Top padding",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 49
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "label": "Bottom padding",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 49
+    },
+    {
+      "type": "range",
+      "id": "side_padding_desktop",
+      "label": "Horizontal padding (desktop)",
+      "min": 0,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "range",
+      "id": "side_padding_mobile",
+      "label": "Horizontal padding (mobile)",
+      "min": 0,
+      "max": 40,
+      "step": 2,
+      "unit": "px",
+      "default": 16
+    }
+  ],
+  "blocks": [
+    {
+      "type": "eyebrow",
+      "name": "Eyebrow",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Eyebrow text",
+          "default": "Shop the look"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#000000"
+        },
+        {
+          "type": "range",
+          "id": "size",
+          "label": "Font size",
+          "min": 9,
+          "max": 20,
+          "step": 1,
+          "unit": "px",
+          "default": 12
+        },
+        {
+          "type": "range",
+          "id": "letter_spacing",
+          "label": "Letter spacing",
+          "min": 0,
+          "max": 0.4,
+          "step": 0.1,
+          "unit": "em",
+          "default": 0.2
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "heading",
+      "name": "Heading",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Heading text",
+          "default": "Get the look"
+        },
+        {
+          "type": "select",
+          "id": "tag",
+          "label": "Heading tag",
+          "default": "h2",
+          "options": [
+            {
+              "value": "h1",
+              "label": "H1"
+            },
+            {
+              "value": "h2",
+              "label": "H2"
+            },
+            {
+              "value": "h3",
+              "label": "H3"
+            }
+          ]
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#000000"
+        },
+        {
+          "type": "range",
+          "id": "size_desktop",
+          "label": "Size (desktop)",
+          "min": 20,
+          "max": 80,
+          "step": 1,
+          "unit": "px",
+          "default": 40
+        },
+        {
+          "type": "range",
+          "id": "size_mobile",
+          "label": "Size (mobile)",
+          "min": 18,
+          "max": 56,
+          "step": 1,
+          "unit": "px",
+          "default": 28
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "subheading",
+      "name": "Subheading",
+      "settings": [
+        {
+          "type": "richtext",
+          "id": "text",
+          "label": "Subheading text",
+          "default": "<p>Everything you need, hand-picked into one easy-to-shop edit.</p>"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#000000"
+        },
+        {
+          "type": "range",
+          "id": "size",
+          "label": "Font size",
+          "min": 12,
+          "max": 22,
+          "step": 1,
+          "unit": "px",
+          "default": 15
+        },
+        {
+          "type": "range",
+          "id": "max_width",
+          "label": "Max width",
+          "min": 240,
+          "max": 720,
+          "step": 10,
+          "unit": "px",
+          "default": 560
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "product",
+      "name": "Product",
+      "settings": [
+        {
+          "type": "product",
+          "id": "product",
+          "label": "Product"
+        },
+        {
+          "type": "text",
+          "id": "custom_title",
+          "label": "Custom title (optional)",
+          "info": "Overrides the product title shown in the card."
+        },
+        {
+          "type": "text",
+          "id": "fallback_price",
+          "label": "Fallback price (when no product set)",
+          "default": "$0.00"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Product Shop The Look",
+      "category": "Products",
+      "blocks": [
+        {
+          "type": "eyebrow",
+          "settings": {
+            "text": "Shop the look"
+          }
+        },
+        {
+          "type": "heading",
+          "settings": {
+            "text": "Get the look"
+          }
+        },
+        {
+          "type": "subheading",
+          "settings": {
+            "text": "<p>Everything you need, hand-picked into one easy-to-shop edit.</p>"
+          }
+        },
+        {
+          "type": "product"
+        },
+        {
+          "type": "product"
+        },
+        {
+          "type": "product"
+        }
+      ]
+    }
+  ],
+  "shopify": {
+    "name": "Product Shop The Look",
+    "tag": "section",
+    "class": "section",
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "image_position",
+        "label": "Image position (desktop)",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "column_valign",
+        "label": "Column vertical alignment (desktop)",
+        "default": "flex-start",
+        "options": [
+          {
+            "value": "flex-start",
+            "label": "Top"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "stretch",
+            "label": "Stretch"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "image_width_pct",
+        "label": "Image column width (desktop)",
+        "min": 30,
+        "max": 70,
+        "step": 1,
+        "unit": "%",
+        "default": 50
+      },
+      {
+        "type": "range",
+        "id": "gap_desktop",
+        "label": "Column gap (desktop)",
+        "min": 0,
+        "max": 120,
+        "step": 4,
+        "unit": "px",
+        "default": 48
+      },
+      {
+        "type": "range",
+        "id": "gap_mobile",
+        "label": "Column gap (mobile)",
+        "min": 0,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 28
+      },
+      {
+        "type": "range",
+        "id": "text_gap",
+        "label": "Vertical gap inside text column",
+        "min": 0,
+        "max": 60,
+        "step": 2,
+        "unit": "px",
+        "default": 18
+      },
+      {
+        "type": "header",
+        "content": "Lifestyle image"
+      },
+      {
+        "type": "image_picker",
+        "id": "image",
+        "label": "Image"
+      },
+      {
+        "type": "url",
+        "id": "placeholder_url",
+        "label": "Fallback image URL",
+        "info": "Used when no image is picked. Defaults to a sample lookbook placeholder."
+      },
+      {
+        "type": "select",
+        "id": "image_aspect",
+        "label": "Image aspect ratio (Mobile)",
+        "default": "4 / 5",
+        "options": [
+          {
+            "value": "1 / 1",
+            "label": "Square (1:1)"
+          },
+          {
+            "value": "4 / 5",
+            "label": "Portrait (4:5)"
+          },
+          {
+            "value": "3 / 4",
+            "label": "3:4"
+          },
+          {
+            "value": "2 / 3",
+            "label": "2:3"
+          },
+          {
+            "value": "16 / 9",
+            "label": "16:9"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "image_aspect_desktop",
+        "label": "Image aspect ratio (Desktop)",
+        "default": "auto",
+        "info": "Auto = use the 'Image height (Desktop)' slider below. Pick a ratio to size the image by aspect ratio instead.",
+        "options": [
+          {
+            "value": "auto",
+            "label": "Auto (use height slider)"
+          },
+          {
+            "value": "1 / 1",
+            "label": "Square (1:1)"
+          },
+          {
+            "value": "4 / 5",
+            "label": "Portrait (4:5)"
+          },
+          {
+            "value": "3 / 4",
+            "label": "3:4"
+          },
+          {
+            "value": "2 / 3",
+            "label": "2:3"
+          },
+          {
+            "value": "3 / 2",
+            "label": "3:2 (landscape)"
+          },
+          {
+            "value": "4 / 3",
+            "label": "4:3 (landscape)"
+          },
+          {
+            "value": "16 / 9",
+            "label": "16:9 (widescreen)"
+          },
+          {
+            "value": "21 / 9",
+            "label": "21:9 (ultra-wide)"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "image_min_height",
+        "label": "Image height (Desktop)",
+        "min": 240,
+        "max": 900,
+        "step": 10,
+        "unit": "px",
+        "default": 520,
+        "info": "Only applies when Image aspect ratio (Desktop) is set to Auto."
+      },
+      {
+        "type": "range",
+        "id": "image_radius",
+        "label": "Image corner radius",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "color",
+        "id": "image_bg",
+        "label": "Image placeholder background",
+        "default": "#F4EEE7"
+      },
+      {
+        "type": "header",
+        "content": "Product cards"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_vendor",
+        "label": "Show vendor",
+        "default": false
+      },
+      {
+        "type": "checkbox",
+        "id": "show_price",
+        "label": "Show price",
+        "default": true
+      },
+      {
+        "type": "color",
+        "id": "card_bg",
+        "label": "Card background",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "card_border",
+        "label": "Card border",
+        "default": "rgba(0,0,0,0.08)"
+      },
+      {
+        "type": "color",
+        "id": "card_border_hover",
+        "label": "Card border (hover)",
+        "default": "rgba(0,0,0,0.16)"
+      },
+      {
+        "type": "color",
+        "id": "card_image_bg",
+        "label": "Card image bg",
+        "default": "#F4EEE7"
+      },
+      {
+        "type": "color",
+        "id": "card_title_color",
+        "label": "Card title color",
+        "default": "#000000"
+      },
+      {
+        "type": "color",
+        "id": "vendor_color",
+        "label": "Vendor color",
+        "default": "rgba(0,0,0,0.55)"
+      },
+      {
+        "type": "color",
+        "id": "price_color",
+        "label": "Price color",
+        "default": "#000000"
+      },
+      {
+        "type": "color",
+        "id": "price_compare_color",
+        "label": "Compare price color",
+        "default": "rgba(0,0,0,0.45)"
+      },
+      {
+        "type": "color",
+        "id": "cta_bg",
+        "label": "Arrow button bg",
+        "default": "#111111"
+      },
+      {
+        "type": "color",
+        "id": "cta_color",
+        "label": "Arrow button icon color",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "cta_bg_hover",
+        "label": "Arrow button bg (hover)",
+        "default": "#000000"
+      },
+      {
+        "type": "range",
+        "id": "card_image_size",
+        "label": "Card image size",
+        "min": 56,
+        "max": 160,
+        "step": 4,
+        "unit": "px",
+        "default": 96
+      },
+      {
+        "type": "range",
+        "id": "card_image_radius",
+        "label": "Card image radius",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "unit": "px",
+        "default": 10
+      },
+      {
+        "type": "range",
+        "id": "card_radius",
+        "label": "Card corner radius",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "range",
+        "id": "card_padding",
+        "label": "Card padding",
+        "min": 4,
+        "max": 24,
+        "step": 1,
+        "unit": "px",
+        "default": 12
+      },
+      {
+        "type": "range",
+        "id": "card_gap",
+        "label": "Card inner gap",
+        "min": 4,
+        "max": 28,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "card_title_size",
+        "label": "Card title size",
+        "min": 12,
+        "max": 22,
+        "step": 1,
+        "unit": "px",
+        "default": 15
+      },
+      {
+        "type": "range",
+        "id": "vendor_size",
+        "label": "Vendor size",
+        "min": 9,
+        "max": 14,
+        "step": 1,
+        "unit": "px",
+        "default": 11
+      },
+      {
+        "type": "range",
+        "id": "price_size",
+        "label": "Price size",
+        "min": 11,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "range",
+        "id": "product_gap",
+        "label": "Gap between product cards",
+        "min": 0,
+        "max": 32,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "products_margin_top",
+        "label": "Space above product list",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 8
+      },
+      {
+        "type": "header",
+        "content": "Section spacing + colors"
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Section background",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top padding",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "default": 49
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom padding",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "default": 49
+      },
+      {
+        "type": "range",
+        "id": "side_padding_desktop",
+        "label": "Horizontal padding (desktop)",
+        "min": 0,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "range",
+        "id": "side_padding_mobile",
+        "label": "Horizontal padding (mobile)",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "default": 16
+      }
+    ],
+    "blocks": [
+      {
+        "type": "eyebrow",
+        "name": "Eyebrow",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Eyebrow text",
+            "default": "Shop the look"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#000000"
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "label": "Font size",
+            "min": 9,
+            "max": 20,
+            "step": 1,
+            "unit": "px",
+            "default": 12
+          },
+          {
+            "type": "range",
+            "id": "letter_spacing",
+            "label": "Letter spacing",
+            "min": 0,
+            "max": 0.4,
+            "step": 0.1,
+            "unit": "em",
+            "default": 0.2
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Heading text",
+            "default": "Get the look"
+          },
+          {
+            "type": "select",
+            "id": "tag",
+            "label": "Heading tag",
+            "default": "h2",
+            "options": [
+              {
+                "value": "h1",
+                "label": "H1"
+              },
+              {
+                "value": "h2",
+                "label": "H2"
+              },
+              {
+                "value": "h3",
+                "label": "H3"
+              }
+            ]
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#000000"
+          },
+          {
+            "type": "range",
+            "id": "size_desktop",
+            "label": "Size (desktop)",
+            "min": 20,
+            "max": 80,
+            "step": 1,
+            "unit": "px",
+            "default": 40
+          },
+          {
+            "type": "range",
+            "id": "size_mobile",
+            "label": "Size (mobile)",
+            "min": 18,
+            "max": 56,
+            "step": 1,
+            "unit": "px",
+            "default": 28
+          }
+        ]
+      },
+      {
+        "type": "subheading",
+        "name": "Subheading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "richtext",
+            "id": "text",
+            "label": "Subheading text",
+            "default": "<p>Everything you need, hand-picked into one easy-to-shop edit.</p>"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#000000"
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "label": "Font size",
+            "min": 12,
+            "max": 22,
+            "step": 1,
+            "unit": "px",
+            "default": 15
+          },
+          {
+            "type": "range",
+            "id": "max_width",
+            "label": "Max width",
+            "min": 240,
+            "max": 720,
+            "step": 10,
+            "unit": "px",
+            "default": 560
+          }
+        ]
+      },
+      {
+        "type": "product",
+        "name": "Product",
+        "settings": [
+          {
+            "type": "product",
+            "id": "product",
+            "label": "Product"
+          },
+          {
+            "type": "text",
+            "id": "custom_title",
+            "label": "Custom title (optional)",
+            "info": "Overrides the product title shown in the card."
+          },
+          {
+            "type": "text",
+            "id": "fallback_price",
+            "label": "Fallback price (when no product set)",
+            "default": "$0.00"
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Product Shop The Look",
+        "category": "Products",
+        "blocks": [
+          {
+            "type": "eyebrow",
+            "settings": {
+              "text": "Shop the look"
+            }
+          },
+          {
+            "type": "heading",
+            "settings": {
+              "text": "Get the look"
+            }
+          },
+          {
+            "type": "subheading",
+            "settings": {
+              "text": "<p>Everything you need, hand-picked into one easy-to-shop edit.</p>"
+            }
+          },
+          {
+            "type": "product"
+          },
+          {
+            "type": "product"
+          },
+          {
+            "type": "product"
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

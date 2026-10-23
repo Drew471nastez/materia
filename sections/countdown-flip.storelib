@@ -1,0 +1,2132 @@
+<template compat="shopify">
+{%- assign fb_accessibility_hours = 'accessibility.hours' | t -%}
+{%- assign fb_accessibility_days = 'accessibility.days' | t -%}
+{%- assign fb_accessibility_seconds = 'accessibility.seconds' | t -%}
+{%- assign fb_accessibility_minutes = 'accessibility.minutes' | t -%}
+{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- comment -%}
+  Materia Themes — Countdown Timer Flip
+  Flip-clock-style countdown with split-flap digits. Each unit (days,
+  hours, minutes, seconds) renders as a card with two stacked halves
+  divided by a thin gap line, evoking a mechanical flip counter.
+
+  Block-organized: heading + subheading + button (CTA) + per-unit
+  toggle blocks. End-time configurable as a fixed date/time string. JS
+  recomputes the digits each tick. Section can render as inline (small)
+  or hero (centered with CTA). Renders fully without JS — server prints
+  the initial digits so previews and crawlers see numbers.
+{%- endcomment -%}
+
+{%- liquid
+  assign st  = section.settings
+  assign sid = section.id
+  assign cta = nil
+  for b in section.blocks
+    if b.type == 'cta' and cta == nil
+      assign cta = b
+    endif
+  endfor
+  assign align = st.header_align | default: 'center'
+  case align
+    when 'left'
+      assign flex_align = 'flex-start'
+    when 'right'
+      assign flex_align = 'flex-end'
+    else
+      assign flex_align = 'center'
+  endcase
+
+  comment
+    Compute initial digits server-side so the section is never empty on
+    first paint. We derive remaining seconds from end_iso when possible;
+    fallback to a fixed 24h example.
+  endcomment
+  assign end_iso = st.end_iso | default: ''
+  assign initial_seconds = st.initial_seconds_fallback | default: 86400
+  if end_iso != blank
+    assign end_time_t = end_iso | date: '%s' | plus: 0
+    assign now_t = 'now' | date: '%s' | plus: 0
+    assign initial_seconds = end_time_t | minus: now_t
+    if initial_seconds < 0
+      assign initial_seconds = 0
+    endif
+  endif
+  assign d = initial_seconds | divided_by: 86400
+  assign rem = initial_seconds | modulo: 86400
+  assign h = rem | divided_by: 3600
+  assign rem = rem | modulo: 3600
+  assign m = rem | divided_by: 60
+  assign s = rem | modulo: 60
+-%}
+
+<style>
+  /* Section isolation */
+  #shopify-section-{{ sid }} { isolation: isolate; position: relative; }
+  :where(#shopify-section-{{ sid }}) { font-family: var(--body-font, inherit); }
+  :where(#shopify-section-{{ sid }}) :is(h1, h2, h3, h4, h5, h6) { font-family: var(--heading-font, inherit); }
+  #shopify-section-{{ sid }} *, #shopify-section-{{ sid }} *:before, #shopify-section-{{ sid }} *:after { box-sizing: border-box; }
+
+  /* Margins */
+  #shopify-section-{{ sid }} {
+    margin-top: {{ st.section_margin_top_mobile | default: 0 }}px;
+    margin-bottom: {{ st.section_margin_bottom_mobile | default: 0 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} {
+      margin-top: {{ st.section_margin_top_desktop | default: 0 }}px;
+      margin-bottom: {{ st.section_margin_bottom_desktop | default: 0 }}px;
+    }
+  }
+  {%- if st.reset_spacing -%}
+    #shopify-section-{{ sid }} { margin-top: 0 !important; margin-bottom: 0 !important; }
+    #shopify-section-{{ sid }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif -%}
+
+  /* Outer */
+  #shopify-section-{{ sid }} .cdf {
+    background: {{ st.section_bg | default: '#FFFFFF' }} !important;
+    padding-top: {{ st.padding_top_mobile | default: 56 }}px;
+    padding-bottom: {{ st.padding_bottom_mobile | default: 56 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .cdf {
+      padding-top: {{ st.padding_top_desktop | default: 96 }}px;
+      padding-bottom: {{ st.padding_bottom_desktop | default: 96 }}px;
+    }
+  }
+
+  /* Section width */
+  #shopify-section-{{ sid }} .cdf__inner {
+    max-width: {{ st.section_max_width_mobile | default: 560 }}px;
+    margin-inline: auto;
+    padding-inline: 1.25rem;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .cdf__inner {
+      max-width: {{ st.section_max_width_tablet | default: 800 }}px;
+      padding-inline: 1.5rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    #shopify-section-{{ sid }} .cdf__inner {
+      max-width: {{ st.section_max_width_desktop | default: 960 }}px;
+    }
+  }
+
+  /* Header */
+  #shopify-section-{{ sid }} .cdf__header {
+    display: flex;
+    flex-direction: column;
+    align-items: {{ flex_align }};
+    text-align: {{ align }};
+    margin: 0 auto {{ st.gap_subheading_clock_mobile | default: 28 }}px;
+    gap: {{ st.heading_sub_gap_mobile | default: 8 }}px;
+    width: 100%;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .cdf__header {
+      margin-bottom: {{ st.gap_subheading_clock | default: 40 }}px;
+      gap: {{ st.heading_sub_gap_desktop | default: 14 }}px;
+    }
+  }
+  #shopify-section-{{ sid }} .cdf__header > *,
+  #shopify-section-{{ sid }} .cdf__header :is(h1, h2, h3, h4, h5, h6, p, div, span) {
+    margin-block: 0 !important;
+    margin-block-start: 0 !important;
+    margin-block-end: 0 !important;
+    padding-block: 0 !important;
+  }
+
+  /* Clock row */
+  #shopify-section-{{ sid }} .cdf__clock {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: {{ flex_align }};
+    align-items: stretch;
+    gap: {{ st.unit_gap_mobile | default: 10 }}px;
+    text-align: center;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .cdf__clock {
+      gap: {{ st.unit_gap_desktop | default: 16 }}px;
+    }
+  }
+
+  /* One unit (Days, Hours...) */
+  #shopify-section-{{ sid }} .cdf__unit {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* The flip card itself */
+  #shopify-section-{{ sid }} .cdf__card {
+    position: relative;
+    background: {{ st.card_bg | default: '#0F0F0F' }};
+    color: {{ st.digit_color | default: '#FFFFFF' }};
+    border-radius: {{ st.card_radius | default: 10 }}px;
+    box-shadow: {{ st.card_shadow | default: '0 6px 16px -8px rgba(0,0,0,.35)' }};
+    overflow: hidden;
+    width: {{ st.card_width_mobile | default: 70 }}px;
+    height: {{ st.card_height_mobile | default: 80 }}px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .cdf__card {
+      width: {{ st.card_width_desktop | default: 100 }}px;
+      height: {{ st.card_height_desktop | default: 100 }}px;
+    }
+  }
+
+  /* Split horizontal line in the middle (flip-clock illusion) */
+  #shopify-section-{{ sid }} .cdf__card::before {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    top: 50%;
+    height: {{ st.card_split_height | default: 2 }}px;
+    background: {{ st.card_split_color | default: 'rgba(0,0,0,0.65)' }};
+    transform: translateY(-50%);
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  /* Optional inset highlight on top half */
+  {%- if st.show_highlight -%}
+    #shopify-section-{{ sid }} .cdf__card::after {
+      content: '';
+      position: absolute;
+      inset: 0 0 50% 0;
+      background: linear-gradient(180deg, rgba(255,255,255,.06) 0%, rgba(255,255,255,0) 100%);
+      pointer-events: none;
+      z-index: 1;
+    }
+  {%- endif -%}
+
+  /* Digits */
+  #shopify-section-{{ sid }} .cdf__digits {
+    position: relative;
+    z-index: 0;
+    font-weight: {{ st.digit_weight | default: 800 }};
+    font-size: {{ st.digit_size_mobile | default: 30 }}px;
+    line-height: 1;
+    letter-spacing: 0.04em;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .cdf__digits {
+      font-size: {{ st.digit_size_desktop | default: 44 }}px;
+    }
+  }
+
+  /* Unit labels */
+  #shopify-section-{{ sid }} .cdf__label {
+    font-size: {{ st.label_size | default: 12 }}px;
+    font-weight: {{ st.label_weight | default: 500 }};
+    color: {{ st.label_color | default: '#475569' }};
+    text-transform: {{ st.label_transform | default: 'capitalize' }};
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+  }
+
+  /* Optional separator dots between units */
+  {%- if st.show_separators -%}
+    #shopify-section-{{ sid }} .cdf__sep {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      color: {{ st.separator_color | default: '#0F0F0F' }};
+      font-size: {{ st.digit_size_mobile | default: 30 }}px;
+      font-weight: 800;
+      align-self: center;
+      min-height: {{ st.card_height_mobile | default: 80 }}px;
+    }
+    @media (min-width: 768px) {
+      #shopify-section-{{ sid }} .cdf__sep {
+        font-size: {{ st.digit_size_desktop | default: 44 }}px;
+        min-height: {{ st.card_height_desktop | default: 100 }}px;
+      }
+    }
+  {%- else -%}
+    #shopify-section-{{ sid }} .cdf__sep { display: none; }
+  {%- endif -%}
+
+  /* CTA button */
+  #shopify-section-{{ sid }} .cdf__cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: {{ flex_align }};
+    text-decoration: none;
+    background: {{ st.cta_bg | default: '#FFFFFF' }};
+    color: {{ st.cta_color | default: '#0F172A' }};
+    border: {{ st.cta_border_width | default: 1 }}px solid {{ st.cta_border_color | default: '#0F172A' }};
+    padding: {{ st.cta_pad_y | default: 12 }}px {{ st.cta_pad_x | default: 28 }}px;
+    border-radius: {{ st.cta_radius | default: 999 }}px;
+    font-weight: 600;
+    font-size: {{ st.cta_size | default: 15 }}px;
+    margin-top: {{ st.gap_clock_cta | default: 24 }}px;
+    transition: background .2s ease, color .2s ease, transform .15s ease;
+  }
+  #shopify-section-{{ sid }} .cdf__cta:hover {
+    background: {{ st.cta_bg_hover | default: '#0F172A' }};
+    color: {{ st.cta_color_hover | default: '#FFFFFF' }};
+    transform: translateY(-1px);
+  }
+
+  /* Show / hide by device */
+  {%- if st.show_section_on == 'mobile' -%}
+    #shopify-section-{{ sid }} .cdf { display: none; }
+    @media (max-width: 767px) { #shopify-section-{{ sid }} .cdf { display: block; } }
+  {%- elsif st.show_section_on == 'desktop' -%}
+    #shopify-section-{{ sid }} .cdf { display: none; }
+    @media (min-width: 768px) { #shopify-section-{{ sid }} .cdf { display: block; } }
+  {%- endif -%}
+
+  /* When timer expires, optionally hide whole section or show only the
+     "expired" message */
+  #shopify-section-{{ sid }}.cdf-expired .cdf__clock,
+  #shopify-section-{{ sid }}.cdf-expired .cdf__cta { display: none; }
+  #shopify-section-{{ sid }} .cdf__expired-msg { display: none; }
+  #shopify-section-{{ sid }}.cdf-expired .cdf__expired-msg {
+    display: block;
+    text-align: {{ align }};
+    color: {{ st.expired_color | default: '#475569' }};
+    font-size: 16px;
+    margin-top: 16px;
+  }
+{% comment %}{% endcomment %}</style>
+
+<section class="cdf" id="cdf-{{ sid }}">
+  <div class="cdf__inner" style="display:flex;flex-direction:column;align-items:{{ flex_align }};">
+
+    {%- comment -%}========== HEADER ==========={%- endcomment -%}
+    {%- assign has_header = false -%}
+    {%- for b in section.blocks -%}
+      {%- if b.type == 'heading' or b.type == 'subheading' -%}
+        {%- assign has_header = true -%}
+      {%- endif -%}
+    {%- endfor -%}
+
+    {%- if has_header -%}
+      <div class="cdf__header">
+        {%- for block in section.blocks -%}
+          {%- assign bs = block.settings -%}
+          {%- case block.type -%}
+
+            {%- when 'heading' -%}
+              {%- if bs.text != blank -%}
+                <{{ bs.tag | default: 'h2' }} id="block-{{ block.id }}" class="cdf__heading" {{ block.shopify_attributes }}>{{ bs.text }}</{{ bs.tag | default: 'h2' }}>
+                <style>
+                  #shopify-section-{{ sid }} #block-{{ block.id }} {
+                    margin: 0 !important;
+                    margin-block: 0 !important;
+                    padding: 0 !important;
+                    color: {{ bs.color | default: '#0F172A' }} !important;
+                    font-weight: {{ bs.weight | default: 600 }};
+                    line-height: {{ bs.line_height | default: 1.2 }};
+                    font-size: {{ bs.size_mobile | default: 24 }}px !important;
+                  }
+                  @media (min-width: 768px) {
+                    #shopify-section-{{ sid }} #block-{{ block.id }} { font-size: {{ bs.size_desktop | default: 32 }}px !important; }
+                  }
+{% comment %}{% endcomment %}                </style>
+              {%- endif -%}
+
+            {%- when 'subheading' -%}
+              {%- if bs.text != blank -%}
+                <div id="block-{{ block.id }}" class="cdf__sub" {{ block.shopify_attributes }}>{{ bs.text }}</div>
+                <style>
+                  #shopify-section-{{ sid }} #block-{{ block.id }} {
+                    margin: 0 !important;
+                    margin-block: 0 !important;
+                    padding: 0 !important;
+                    color: {{ bs.color | default: '#475569' }} !important;
+                    font-size: {{ bs.size | default: 16 }}px;
+                    line-height: 1.5;
+                    max-width: {{ bs.max_width | default: 600 }}px;
+                  }
+                  #shopify-section-{{ sid }} #block-{{ block.id }} > * { margin: 0 !important; padding: 0 !important; }
+{% comment %}{% endcomment %}                </style>
+              {%- endif -%}
+
+          {%- endcase -%}
+        {%- endfor -%}
+      </div>
+    {%- endif -%}
+
+    {%- comment -%}========== CLOCK ==========={%- endcomment -%}
+    {%- liquid
+      comment
+        Build a list of visible units so separators only render between
+        consecutive visible cards (never trailing).
+      endcomment
+      assign units_visible = '' | split: ','
+      if st.show_days
+        assign units_visible = units_visible | concat: 'd' | split: ''
+      endif
+      assign visible_count = 0
+      if st.show_days
+        assign visible_count = visible_count | plus: 1
+      endif
+      if st.show_hours
+        assign visible_count = visible_count | plus: 1
+      endif
+      if st.show_minutes
+        assign visible_count = visible_count | plus: 1
+      endif
+      if st.show_seconds
+        assign visible_count = visible_count | plus: 1
+      endif
+    -%}
+    <div class="cdf__clock"
+         data-cdf-clock
+         data-end="{{ end_iso | escape }}">
+
+      {%- assign rendered_count = 0 -%}
+
+      {%- if st.show_days -%}
+        <div class="cdf__unit">
+          <div class="cdf__card"><span class="cdf__digits" data-cdf-d>{%- if d < 10 -%}0{%- endif -%}{{ d }}</span></div>
+          <div class="cdf__label">{{ st.label_days | default: fb_accessibility_days }}</div>
+        </div>
+        {%- assign rendered_count = rendered_count | plus: 1 -%}
+        {%- if rendered_count < visible_count -%}<div class="cdf__sep" aria-hidden="true">:</div>{%- endif -%}
+      {%- endif -%}
+
+      {%- if st.show_hours -%}
+        <div class="cdf__unit">
+          <div class="cdf__card"><span class="cdf__digits" data-cdf-h>{%- if h < 10 -%}0{%- endif -%}{{ h }}</span></div>
+          <div class="cdf__label">{{ st.label_hours | default: fb_accessibility_hours }}</div>
+        </div>
+        {%- assign rendered_count = rendered_count | plus: 1 -%}
+        {%- if rendered_count < visible_count -%}<div class="cdf__sep" aria-hidden="true">:</div>{%- endif -%}
+      {%- endif -%}
+
+      {%- if st.show_minutes -%}
+        <div class="cdf__unit">
+          <div class="cdf__card"><span class="cdf__digits" data-cdf-m>{%- if m < 10 -%}0{%- endif -%}{{ m }}</span></div>
+          <div class="cdf__label">{{ st.label_minutes | default: fb_accessibility_minutes }}</div>
+        </div>
+        {%- assign rendered_count = rendered_count | plus: 1 -%}
+        {%- if rendered_count < visible_count -%}<div class="cdf__sep" aria-hidden="true">:</div>{%- endif -%}
+      {%- endif -%}
+
+      {%- if st.show_seconds -%}
+        <div class="cdf__unit">
+          <div class="cdf__card"><span class="cdf__digits" data-cdf-s>{%- if s < 10 -%}0{%- endif -%}{{ s }}</span></div>
+          <div class="cdf__label">{{ st.label_seconds | default: fb_accessibility_seconds }}</div>
+        </div>
+      {%- endif -%}
+    </div>
+
+    {%- if cta and cta.settings.text != blank -%}
+      <a class="cdf__cta" href="{{ cta.settings.link | default: '#' }}" {{ cta.shopify_attributes }}>{{ cta.settings.text }}</a>
+    {%- endif -%}
+
+    {%- if st.expired_message != blank -%}
+      <div class="cdf__expired-msg">{{ st.expired_message }}</div>
+    {%- endif -%}
+
+  </div>
+</section>
+
+<script>
+(function(){
+  var root = document.getElementById('shopify-section-{{ sid }}');
+  if (!root || root.__cdfInit) return;
+  root.__cdfInit = true;
+
+  var clock = root.querySelector('[data-cdf-clock]');
+  if (!clock) return;
+  var endRaw = clock.getAttribute('data-end');
+  if (!endRaw) return;
+  var end = Date.parse(endRaw);
+  if (isNaN(end)) return;
+
+  var dEl = clock.querySelector('[data-cdf-d]');
+  var hEl = clock.querySelector('[data-cdf-h]');
+  var mEl = clock.querySelector('[data-cdf-m]');
+  var sEl = clock.querySelector('[data-cdf-s]');
+
+  function pad(n){ n = String(Math.max(0, Math.floor(n))); return n.length < 2 ? '0' + n : n; }
+
+  function tick(){
+    var diff = Math.max(0, Math.floor((end - Date.now()) / 1000));
+    var d = Math.floor(diff / 86400);
+    var h = Math.floor((diff % 86400) / 3600);
+    var m = Math.floor((diff % 3600) / 60);
+    var s = diff % 60;
+    if (dEl) dEl.textContent = pad(d);
+    if (hEl) hEl.textContent = pad(h);
+    if (mEl) mEl.textContent = pad(m);
+    if (sEl) sEl.textContent = pad(s);
+    if (diff <= 0) {
+      root.classList.add('cdf-expired');
+      clearInterval(iv);
+    }
+  }
+  tick();
+  var iv = setInterval(tick, 1000);
+})();
+{% comment %}{% endcomment %}</script>
+
+
+
+</template>
+
+<schema>
+{
+  "type": "countdown-flip",
+  "name": "Countdown Timer Flip",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "General"
+    },
+    {
+      "type": "select",
+      "id": "show_section_on",
+      "label": "Show section on",
+      "default": "all",
+      "options": [
+        {
+          "value": "all",
+          "label": "All Devices"
+        },
+        {
+          "value": "mobile",
+          "label": "Only Mobile"
+        },
+        {
+          "value": "desktop",
+          "label": "Only Desktop"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_4",
+      "label": "Section width"
+    },
+    {
+      "type": "range",
+      "id": "section_max_width_desktop",
+      "label": "Section width (desktop ≥1024px)",
+      "min": 600,
+      "max": 1500,
+      "step": 10,
+      "unit": "px",
+      "default": 960
+    },
+    {
+      "type": "range",
+      "id": "section_max_width_tablet",
+      "label": "Section width (tablet ≥768px)",
+      "min": 400,
+      "max": 1100,
+      "step": 10,
+      "unit": "px",
+      "default": 800
+    },
+    {
+      "type": "range",
+      "id": "section_max_width_mobile",
+      "label": "Section width (mobile)",
+      "min": 280,
+      "max": 800,
+      "step": 10,
+      "unit": "px",
+      "default": 560
+    },
+    {
+      "type": "header",
+      "id": "hdr_8",
+      "label": "Header layout"
+    },
+    {
+      "type": "select",
+      "id": "header_align",
+      "label": "Alignment",
+      "default": "center",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Center"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ],
+      "info": "Aligns heading, subheading, clock, and CTA."
+    },
+    {
+      "type": "range",
+      "id": "heading_sub_gap_desktop",
+      "label": "Gap heading → subheading (desktop)",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 14
+    },
+    {
+      "type": "range",
+      "id": "heading_sub_gap_mobile",
+      "label": "Gap heading → subheading (mobile)",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 8
+    },
+    {
+      "type": "range",
+      "id": "gap_subheading_clock",
+      "label": "Gap subheading → clock (desktop)",
+      "min": 0,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 40
+    },
+    {
+      "type": "range",
+      "id": "gap_subheading_clock_mobile",
+      "label": "Gap subheading → clock (mobile)",
+      "min": 0,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 28
+    },
+    {
+      "type": "range",
+      "id": "gap_clock_cta",
+      "label": "Gap clock → CTA",
+      "min": 0,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "header",
+      "id": "hdr_15",
+      "label": "End time"
+    },
+    {
+      "type": "text",
+      "id": "end_iso",
+      "label": "End date & time (ISO 8601)",
+      "default": "2026-12-31T23:59:00",
+      "info": "Format: YYYY-MM-DDTHH:MM:SS in the visitor's local time. Example: 2026-12-31T23:59:00"
+    },
+    {
+      "type": "text",
+      "id": "expired_message",
+      "label": "Expired message",
+      "default": "This offer has ended."
+    },
+    {
+      "type": "header",
+      "id": "hdr_18",
+      "label": "Units shown"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_days",
+      "label": "Show days",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_hours",
+      "label": "Show hours",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_minutes",
+      "label": "Show minutes",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_seconds",
+      "label": "Show seconds",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_separators",
+      "label": "Show colon separators between cards",
+      "default": false
+    },
+    {
+      "type": "color",
+      "id": "separator_color",
+      "label": "Separator color",
+      "default": "#0F0F0F"
+    },
+    {
+      "type": "header",
+      "id": "hdr_25",
+      "label": "Unit labels"
+    },
+    {
+      "type": "text",
+      "id": "label_days",
+      "label": "Days label",
+      "default": "Days"
+    },
+    {
+      "type": "text",
+      "id": "label_hours",
+      "label": "Hours label",
+      "default": "Hours"
+    },
+    {
+      "type": "text",
+      "id": "label_minutes",
+      "label": "Minutes label",
+      "default": "Minutes"
+    },
+    {
+      "type": "text",
+      "id": "label_seconds",
+      "label": "Seconds label",
+      "default": "Seconds"
+    },
+    {
+      "type": "color",
+      "id": "label_color",
+      "label": "Label color",
+      "default": "#475569"
+    },
+    {
+      "type": "range",
+      "id": "label_size",
+      "label": "Label size",
+      "min": 9,
+      "max": 20,
+      "step": 1,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "select",
+      "id": "label_weight",
+      "label": "Label weight",
+      "default": "500",
+      "options": [
+        {
+          "value": "400",
+          "label": "Normal"
+        },
+        {
+          "value": "500",
+          "label": "Medium"
+        },
+        {
+          "value": "600",
+          "label": "Semi-bold"
+        },
+        {
+          "value": "700",
+          "label": "Bold"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "label_transform",
+      "label": "Label transform",
+      "default": "capitalize",
+      "options": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "uppercase",
+          "label": "UPPERCASE"
+        },
+        {
+          "value": "lowercase",
+          "label": "lowercase"
+        },
+        {
+          "value": "capitalize",
+          "label": "Capitalize"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_34",
+      "label": "Card style"
+    },
+    {
+      "type": "color",
+      "id": "card_bg",
+      "label": "Card background",
+      "default": "#0F0F0F"
+    },
+    {
+      "type": "color",
+      "id": "digit_color",
+      "label": "Digit color",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "select",
+      "id": "digit_weight",
+      "label": "Digit weight",
+      "default": "800",
+      "options": [
+        {
+          "value": "500",
+          "label": "Medium"
+        },
+        {
+          "value": "600",
+          "label": "Semi-bold"
+        },
+        {
+          "value": "700",
+          "label": "Bold"
+        },
+        {
+          "value": "800",
+          "label": "Extra-bold"
+        },
+        {
+          "value": "900",
+          "label": "Black"
+        }
+      ]
+    },
+    {
+      "type": "color",
+      "id": "card_split_color",
+      "label": "Card split line color"
+    },
+    {
+      "type": "range",
+      "id": "card_split_height",
+      "label": "Card split line height",
+      "min": 0,
+      "max": 6,
+      "step": 1,
+      "unit": "px",
+      "default": 2
+    },
+    {
+      "type": "checkbox",
+      "id": "show_highlight",
+      "label": "Show top half highlight",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "card_shadow",
+      "label": "Card shadow",
+      "default": "0 6px 16px -8px rgba(0,0,0,.35)"
+    },
+    {
+      "type": "range",
+      "id": "card_radius",
+      "label": "Card corner radius",
+      "min": 0,
+      "max": 30,
+      "step": 1,
+      "unit": "px",
+      "default": 10
+    },
+    {
+      "type": "range",
+      "id": "card_width_desktop",
+      "label": "Card width (desktop)",
+      "min": 40,
+      "max": 160,
+      "step": 2,
+      "unit": "px",
+      "default": 100
+    },
+    {
+      "type": "range",
+      "id": "card_height_desktop",
+      "label": "Card height (desktop)",
+      "min": 50,
+      "max": 180,
+      "step": 2,
+      "unit": "px",
+      "default": 100
+    },
+    {
+      "type": "range",
+      "id": "card_width_mobile",
+      "label": "Card width (mobile)",
+      "min": 32,
+      "max": 120,
+      "step": 2,
+      "unit": "px",
+      "default": 70
+    },
+    {
+      "type": "range",
+      "id": "card_height_mobile",
+      "label": "Card height (mobile)",
+      "min": 40,
+      "max": 140,
+      "step": 2,
+      "unit": "px",
+      "default": 80
+    },
+    {
+      "type": "range",
+      "id": "digit_size_desktop",
+      "label": "Digit size (desktop)",
+      "min": 18,
+      "max": 90,
+      "step": 1,
+      "unit": "px",
+      "default": 44
+    },
+    {
+      "type": "range",
+      "id": "digit_size_mobile",
+      "label": "Digit size (mobile)",
+      "min": 14,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 30
+    },
+    {
+      "type": "range",
+      "id": "unit_gap_desktop",
+      "label": "Gap between cards (desktop)",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "unit_gap_mobile",
+      "label": "Gap between cards (mobile)",
+      "min": 0,
+      "max": 30,
+      "step": 1,
+      "unit": "px",
+      "default": 10
+    },
+    {
+      "type": "header",
+      "id": "hdr_51",
+      "label": "CTA button (optional)"
+    },
+    {
+      "type": "color",
+      "id": "cta_bg",
+      "label": "Background",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "color",
+      "id": "cta_color",
+      "label": "Text color",
+      "default": "#0F172A"
+    },
+    {
+      "type": "color",
+      "id": "cta_bg_hover",
+      "label": "Background (hover)",
+      "default": "#0F172A"
+    },
+    {
+      "type": "color",
+      "id": "cta_color_hover",
+      "label": "Text color (hover)",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "color",
+      "id": "cta_border_color",
+      "label": "Border color",
+      "default": "#0F172A"
+    },
+    {
+      "type": "range",
+      "id": "cta_border_width",
+      "label": "Border width",
+      "min": 0,
+      "max": 4,
+      "step": 1,
+      "unit": "px",
+      "default": 1
+    },
+    {
+      "type": "range",
+      "id": "cta_radius",
+      "label": "Corner radius",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 60
+    },
+    {
+      "type": "range",
+      "id": "cta_size",
+      "label": "Text size",
+      "min": 12,
+      "max": 22,
+      "step": 1,
+      "unit": "px",
+      "default": 15
+    },
+    {
+      "type": "range",
+      "id": "cta_pad_x",
+      "label": "Padding x",
+      "min": 12,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 28
+    },
+    {
+      "type": "range",
+      "id": "cta_pad_y",
+      "label": "Padding y",
+      "min": 6,
+      "max": 24,
+      "step": 1,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "header",
+      "id": "hdr_62",
+      "label": "Expired"
+    },
+    {
+      "type": "color",
+      "id": "expired_color",
+      "label": "Expired message color",
+      "default": "#475569"
+    },
+    {
+      "type": "header",
+      "id": "hdr_64",
+      "label": "Style"
+    },
+    {
+      "type": "color",
+      "id": "section_bg",
+      "label": "Section background",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "header",
+      "id": "hdr_66",
+      "label": "Layout & Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding_top_desktop",
+      "label": "Top padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 96
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_desktop",
+      "label": "Bottom padding (desktop)",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 96
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_desktop",
+      "label": "Top margin (desktop px)",
+      "min": -200,
+      "max": 300,
+      "step": 5,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_desktop",
+      "label": "Bottom margin (desktop px)",
+      "min": -200,
+      "max": 300,
+      "step": 5,
+      "default": 0
+    },
+    {
+      "type": "header",
+      "id": "hdr_71",
+      "label": "Mobile"
+    },
+    {
+      "type": "range",
+      "id": "padding_top_mobile",
+      "label": "Top padding (mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 56
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom_mobile",
+      "label": "Bottom padding (mobile)",
+      "min": 0,
+      "max": 200,
+      "step": 2,
+      "unit": "px",
+      "default": 56
+    }
+  ],
+  "blocks": [
+    {
+      "type": "heading",
+      "name": "Heading",
+      "settings": [
+        {
+          "type": "inline_richtext",
+          "id": "text",
+          "label": "Heading",
+          "default": "Limited time offer. Sale ends in"
+        },
+        {
+          "type": "select",
+          "id": "tag",
+          "label": "HTML tag",
+          "default": "h2",
+          "options": [
+            {
+              "value": "h1",
+              "label": "H1"
+            },
+            {
+              "value": "h2",
+              "label": "H2"
+            },
+            {
+              "value": "h3",
+              "label": "H3"
+            },
+            {
+              "value": "h4",
+              "label": "H4"
+            }
+          ]
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#0F172A"
+        },
+        {
+          "type": "select",
+          "id": "weight",
+          "label": "Weight",
+          "default": "600",
+          "options": [
+            {
+              "value": "400",
+              "label": "Normal"
+            },
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semi-bold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            },
+            {
+              "value": "800",
+              "label": "Extra-bold"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "size_desktop",
+          "label": "Size (desktop)",
+          "min": 14,
+          "max": 60,
+          "step": 1,
+          "unit": "px",
+          "default": 32
+        },
+        {
+          "type": "range",
+          "id": "size_mobile",
+          "label": "Size (mobile)",
+          "min": 14,
+          "max": 44,
+          "step": 1,
+          "unit": "px",
+          "default": 24
+        },
+        {
+          "type": "range",
+          "id": "line_height",
+          "label": "Line height",
+          "min": 0.9,
+          "max": 2,
+          "step": 0.1,
+          "default": 1.2
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "subheading",
+      "name": "Subheading",
+      "settings": [
+        {
+          "type": "richtext",
+          "id": "text",
+          "label": "Text",
+          "default": "<p>Free shipping on every order placed before the timer hits zero.</p>"
+        },
+        {
+          "type": "color",
+          "id": "color",
+          "label": "Color",
+          "default": "#475569"
+        },
+        {
+          "type": "range",
+          "id": "size",
+          "label": "Size",
+          "min": 12,
+          "max": 22,
+          "step": 1,
+          "unit": "px",
+          "default": 16
+        },
+        {
+          "type": "range",
+          "id": "max_width",
+          "label": "Max width",
+          "min": 200,
+          "max": 800,
+          "step": 10,
+          "unit": "px",
+          "default": 600
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "cta",
+      "name": "Button",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Button label",
+          "default": "Shop now"
+        },
+        {
+          "type": "url",
+          "id": "link",
+          "label": "Button link"
+        }
+      ],
+      "limit": 1
+    }
+  ],
+  "presets": [
+    {
+      "name": "Countdown Timer Flip",
+      "category": "Countdown Timers",
+      "blocks": [
+        {
+          "type": "heading"
+        },
+        {
+          "type": "subheading"
+        },
+        {
+          "type": "cta"
+        }
+      ]
+    }
+  ],
+  "shopify": {
+    "name": "Countdown Timer Flip",
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "select",
+        "id": "show_section_on",
+        "label": "Show section on",
+        "default": "all",
+        "options": [
+          {
+            "value": "all",
+            "label": "All Devices"
+          },
+          {
+            "value": "mobile",
+            "label": "Only Mobile"
+          },
+          {
+            "value": "desktop",
+            "label": "Only Desktop"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Section width"
+      },
+      {
+        "type": "range",
+        "id": "section_max_width_desktop",
+        "label": "Section width (desktop ≥1024px)",
+        "min": 600,
+        "max": 1500,
+        "step": 10,
+        "unit": "px",
+        "default": 960
+      },
+      {
+        "type": "range",
+        "id": "section_max_width_tablet",
+        "label": "Section width (tablet ≥768px)",
+        "min": 400,
+        "max": 1100,
+        "step": 10,
+        "unit": "px",
+        "default": 800
+      },
+      {
+        "type": "range",
+        "id": "section_max_width_mobile",
+        "label": "Section width (mobile)",
+        "min": 280,
+        "max": 800,
+        "step": 10,
+        "unit": "px",
+        "default": 560
+      },
+      {
+        "type": "header",
+        "content": "Header layout"
+      },
+      {
+        "type": "select",
+        "id": "header_align",
+        "label": "Alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ],
+        "info": "Aligns heading, subheading, clock, and CTA."
+      },
+      {
+        "type": "range",
+        "id": "heading_sub_gap_desktop",
+        "label": "Gap heading → subheading (desktop)",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "range",
+        "id": "heading_sub_gap_mobile",
+        "label": "Gap heading → subheading (mobile)",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 8
+      },
+      {
+        "type": "range",
+        "id": "gap_subheading_clock",
+        "label": "Gap subheading → clock (desktop)",
+        "min": 0,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 40
+      },
+      {
+        "type": "range",
+        "id": "gap_subheading_clock_mobile",
+        "label": "Gap subheading → clock (mobile)",
+        "min": 0,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 28
+      },
+      {
+        "type": "range",
+        "id": "gap_clock_cta",
+        "label": "Gap clock → CTA",
+        "min": 0,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "header",
+        "content": "End time"
+      },
+      {
+        "type": "text",
+        "id": "end_iso",
+        "label": "End date & time (ISO 8601)",
+        "default": "2026-12-31T23:59:00",
+        "info": "Format: YYYY-MM-DDTHH:MM:SS in the visitor's local time. Example: 2026-12-31T23:59:00"
+      },
+      {
+        "type": "text",
+        "id": "expired_message",
+        "label": "Expired message",
+        "default": "This offer has ended."
+      },
+      {
+        "type": "header",
+        "content": "Units shown"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_days",
+        "label": "Show days",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_hours",
+        "label": "Show hours",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_minutes",
+        "label": "Show minutes",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_seconds",
+        "label": "Show seconds",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_separators",
+        "label": "Show colon separators between cards",
+        "default": false
+      },
+      {
+        "type": "color",
+        "id": "separator_color",
+        "label": "Separator color",
+        "default": "#0F0F0F"
+      },
+      {
+        "type": "header",
+        "content": "Unit labels"
+      },
+      {
+        "type": "text",
+        "id": "label_days",
+        "label": "Days label",
+        "default": "Days"
+      },
+      {
+        "type": "text",
+        "id": "label_hours",
+        "label": "Hours label",
+        "default": "Hours"
+      },
+      {
+        "type": "text",
+        "id": "label_minutes",
+        "label": "Minutes label",
+        "default": "Minutes"
+      },
+      {
+        "type": "text",
+        "id": "label_seconds",
+        "label": "Seconds label",
+        "default": "Seconds"
+      },
+      {
+        "type": "color",
+        "id": "label_color",
+        "label": "Label color",
+        "default": "#475569"
+      },
+      {
+        "type": "range",
+        "id": "label_size",
+        "label": "Label size",
+        "min": 9,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 12
+      },
+      {
+        "type": "select",
+        "id": "label_weight",
+        "label": "Label weight",
+        "default": "500",
+        "options": [
+          {
+            "value": "400",
+            "label": "Normal"
+          },
+          {
+            "value": "500",
+            "label": "Medium"
+          },
+          {
+            "value": "600",
+            "label": "Semi-bold"
+          },
+          {
+            "value": "700",
+            "label": "Bold"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "label_transform",
+        "label": "Label transform",
+        "default": "capitalize",
+        "options": [
+          {
+            "value": "none",
+            "label": "None"
+          },
+          {
+            "value": "uppercase",
+            "label": "UPPERCASE"
+          },
+          {
+            "value": "lowercase",
+            "label": "lowercase"
+          },
+          {
+            "value": "capitalize",
+            "label": "Capitalize"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Card style"
+      },
+      {
+        "type": "color",
+        "id": "card_bg",
+        "label": "Card background",
+        "default": "#0F0F0F"
+      },
+      {
+        "type": "color",
+        "id": "digit_color",
+        "label": "Digit color",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "select",
+        "id": "digit_weight",
+        "label": "Digit weight",
+        "default": "800",
+        "options": [
+          {
+            "value": "500",
+            "label": "Medium"
+          },
+          {
+            "value": "600",
+            "label": "Semi-bold"
+          },
+          {
+            "value": "700",
+            "label": "Bold"
+          },
+          {
+            "value": "800",
+            "label": "Extra-bold"
+          },
+          {
+            "value": "900",
+            "label": "Black"
+          }
+        ]
+      },
+      {
+        "type": "color",
+        "id": "card_split_color",
+        "label": "Card split line color",
+        "default": "rgba(0,0,0,0.65)"
+      },
+      {
+        "type": "range",
+        "id": "card_split_height",
+        "label": "Card split line height",
+        "min": 0,
+        "max": 6,
+        "step": 1,
+        "unit": "px",
+        "default": 2
+      },
+      {
+        "type": "checkbox",
+        "id": "show_highlight",
+        "label": "Show top half highlight",
+        "default": true
+      },
+      {
+        "type": "text",
+        "id": "card_shadow",
+        "label": "Card shadow",
+        "default": "0 6px 16px -8px rgba(0,0,0,.35)"
+      },
+      {
+        "type": "range",
+        "id": "card_radius",
+        "label": "Card corner radius",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "unit": "px",
+        "default": 10
+      },
+      {
+        "type": "range",
+        "id": "card_width_desktop",
+        "label": "Card width (desktop)",
+        "min": 40,
+        "max": 160,
+        "step": 2,
+        "unit": "px",
+        "default": 100
+      },
+      {
+        "type": "range",
+        "id": "card_height_desktop",
+        "label": "Card height (desktop)",
+        "min": 50,
+        "max": 180,
+        "step": 2,
+        "unit": "px",
+        "default": 100
+      },
+      {
+        "type": "range",
+        "id": "card_width_mobile",
+        "label": "Card width (mobile)",
+        "min": 32,
+        "max": 120,
+        "step": 2,
+        "unit": "px",
+        "default": 70
+      },
+      {
+        "type": "range",
+        "id": "card_height_mobile",
+        "label": "Card height (mobile)",
+        "min": 40,
+        "max": 140,
+        "step": 2,
+        "unit": "px",
+        "default": 80
+      },
+      {
+        "type": "range",
+        "id": "digit_size_desktop",
+        "label": "Digit size (desktop)",
+        "min": 18,
+        "max": 90,
+        "step": 1,
+        "unit": "px",
+        "default": 44
+      },
+      {
+        "type": "range",
+        "id": "digit_size_mobile",
+        "label": "Digit size (mobile)",
+        "min": 14,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 30
+      },
+      {
+        "type": "range",
+        "id": "unit_gap_desktop",
+        "label": "Gap between cards (desktop)",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "unit_gap_mobile",
+        "label": "Gap between cards (mobile)",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "unit": "px",
+        "default": 10
+      },
+      {
+        "type": "header",
+        "content": "CTA button (optional)"
+      },
+      {
+        "type": "color",
+        "id": "cta_bg",
+        "label": "Background",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "cta_color",
+        "label": "Text color",
+        "default": "#0F172A"
+      },
+      {
+        "type": "color",
+        "id": "cta_bg_hover",
+        "label": "Background (hover)",
+        "default": "#0F172A"
+      },
+      {
+        "type": "color",
+        "id": "cta_color_hover",
+        "label": "Text color (hover)",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "color",
+        "id": "cta_border_color",
+        "label": "Border color",
+        "default": "#0F172A"
+      },
+      {
+        "type": "range",
+        "id": "cta_border_width",
+        "label": "Border width",
+        "min": 0,
+        "max": 4,
+        "step": 1,
+        "unit": "px",
+        "default": 1
+      },
+      {
+        "type": "range",
+        "id": "cta_radius",
+        "label": "Corner radius",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "range",
+        "id": "cta_size",
+        "label": "Text size",
+        "min": 12,
+        "max": 22,
+        "step": 1,
+        "unit": "px",
+        "default": 15
+      },
+      {
+        "type": "range",
+        "id": "cta_pad_x",
+        "label": "Padding x",
+        "min": 12,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 28
+      },
+      {
+        "type": "range",
+        "id": "cta_pad_y",
+        "label": "Padding y",
+        "min": 6,
+        "max": 24,
+        "step": 1,
+        "unit": "px",
+        "default": 12
+      },
+      {
+        "type": "header",
+        "content": "Expired"
+      },
+      {
+        "type": "color",
+        "id": "expired_color",
+        "label": "Expired message color",
+        "default": "#475569"
+      },
+      {
+        "type": "header",
+        "content": "Style"
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Section background",
+        "default": "#FFFFFF"
+      },
+      {
+        "type": "header",
+        "content": "Layout & Spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top_desktop",
+        "label": "Top padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 96
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_desktop",
+        "label": "Bottom padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 96
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin (desktop px)",
+        "min": -200,
+        "max": 300,
+        "step": 5,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin (desktop px)",
+        "min": -200,
+        "max": 300,
+        "step": 5,
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "range",
+        "id": "padding_top_mobile",
+        "label": "Top padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 56
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_mobile",
+        "label": "Bottom padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 56
+      }
+    ],
+    "blocks": [
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "inline_richtext",
+            "id": "text",
+            "label": "Heading",
+            "default": "Limited time offer. Sale ends in"
+          },
+          {
+            "type": "select",
+            "id": "tag",
+            "label": "HTML tag",
+            "default": "h2",
+            "options": [
+              {
+                "value": "h1",
+                "label": "H1"
+              },
+              {
+                "value": "h2",
+                "label": "H2"
+              },
+              {
+                "value": "h3",
+                "label": "H3"
+              },
+              {
+                "value": "h4",
+                "label": "H4"
+              }
+            ]
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#0F172A"
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Weight",
+            "default": "600",
+            "options": [
+              {
+                "value": "400",
+                "label": "Normal"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi-bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              },
+              {
+                "value": "800",
+                "label": "Extra-bold"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "size_desktop",
+            "label": "Size (desktop)",
+            "min": 14,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 32
+          },
+          {
+            "type": "range",
+            "id": "size_mobile",
+            "label": "Size (mobile)",
+            "min": 14,
+            "max": 44,
+            "step": 1,
+            "unit": "px",
+            "default": 24
+          },
+          {
+            "type": "range",
+            "id": "line_height",
+            "label": "Line height",
+            "min": 0.9,
+            "max": 2,
+            "step": 0.1,
+            "default": 1.2
+          }
+        ]
+      },
+      {
+        "type": "subheading",
+        "name": "Subheading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "richtext",
+            "id": "text",
+            "label": "Text",
+            "default": "<p>Free shipping on every order placed before the timer hits zero.</p>"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#475569"
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "label": "Size",
+            "min": 12,
+            "max": 22,
+            "step": 1,
+            "unit": "px",
+            "default": 16
+          },
+          {
+            "type": "range",
+            "id": "max_width",
+            "label": "Max width",
+            "min": 200,
+            "max": 800,
+            "step": 10,
+            "unit": "px",
+            "default": 600
+          }
+        ]
+      },
+      {
+        "type": "cta",
+        "name": "Button",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Button label",
+            "default": "Shop now"
+          },
+          {
+            "type": "url",
+            "id": "link",
+            "label": "Button link"
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Countdown Timer Flip",
+        "category": "Countdown Timers",
+        "blocks": [
+          {
+            "type": "heading"
+          },
+          {
+            "type": "subheading"
+          },
+          {
+            "type": "cta"
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

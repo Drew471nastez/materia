@@ -1,0 +1,331 @@
+/* Materia Themes. Developed By Materia Themes. */
+
+/* ──────────────────────────────────────────────────────────────────────
+   CHROME / LAYOUT SECTIONS — suppress theme scroll animation
+
+   The theme-level scroll animation (`settings.scroll_animation`) was
+   being applied to every section that opted in, including persistent
+   chrome layouts (header, footer, announcement bars, breadcrumbs).
+   That made the header fade/slide on every page load, the footer
+   briefly invisible until the user scrolled to it, and announcement
+   bars stutter into view. None of these are content sections —
+   they're always visible by definition and shouldn't animate.
+
+   Strategy: hard-disable the `.scroll-trigger` animation on these
+   specific section wrappers using two complementary selectors:
+
+     1. ID-substring match against the Shopify-generated section IDs
+        (`#shopify-section-sections--XYZ__header`, `__footer`, etc.).
+        Covers every announcement-bar variant via `__announcement`.
+     2. `:has()` against the chrome's inner root class — guards against
+        future custom variants where the merchant's section file uses
+        a non-standard handle in its section ID.
+
+   `animation: none`, `opacity: 1`, `transform: none`, `transition:
+   none` together neutralise every state the .scroll-trigger family
+   can put an element into (offscreen, armed-offscreen, fade-in,
+   slide-in, zoom-in). All scoped to `.scroll-trigger` so we don't
+   touch chrome sections that never opted in.
+   ────────────────────────────────────────────────────────────────── */
+/* Match by ID substring — broadened from the previous `__header` /
+   `__footer` patterns because Shopify section IDs can be generated with
+   several different separators (`__`, `-`, or just the raw section file
+   basename) depending on whether the section was added via a section
+   group, a template, or the in-editor "Add section" picker. Each of the
+   announcement-bar variants ends up with `announcement` somewhere in
+   its wrapper ID. */
+[id*="header"].scroll-trigger,
+[id*="footer"].scroll-trigger,
+[id*="announcement"].scroll-trigger,
+[id*="announcement_bar"].scroll-trigger,
+[id*="announcement-bar"].scroll-trigger,
+[id*="breadcrumb"].scroll-trigger,
+[id*="top-bar"].scroll-trigger,
+[id*="top_bar"].scroll-trigger,
+/* Match by inner element / class — robust against any future ID
+   pattern change. Covers all three announcement-bar variants:
+     • announcement-bar-basic.liquid → <section class="unique-announcement-bar">
+     • announcement-bar.liquid       → <announcement-bar> custom element
+     • announcement-bar-pro-4.liquid → <div class="abp4">
+   Plus the chrome root classes (.header / .footer / .breadcrumbs). */
+.scroll-trigger:has(> .header),
+.scroll-trigger:has(> .site-header),
+.scroll-trigger:has(> header),
+.scroll-trigger:has(> .footer),
+.scroll-trigger:has(> .site-footer),
+.scroll-trigger:has(> footer),
+.scroll-trigger:has(> .announcement-bar),
+.scroll-trigger:has(> .announcement),
+.scroll-trigger:has(> .unique-announcement-bar),
+.scroll-trigger:has(> .abp4),
+.scroll-trigger:has(> announcement-bar),
+.scroll-trigger:has(> .breadcrumbs),
+.scroll-trigger:has(> .breadcrumb),
+.scroll-trigger:has(> .top-bar) {
+  /* Suppress just the scroll-trigger animation pipeline — DO NOT use
+     `transition: none` here. The header section also carries
+     `.section-header.animate { transition: top 0.35s ease-in-out }`
+     for the sticky scroll-up reveal; a blanket `transition: none`
+     would override that and make the sticky header snap into view
+     instead of sliding smoothly. We only need to kill the animation
+     (which the fade_in / slide_in / zoom_in classes emit) and the
+     pre-armed opacity:0 state. The sticky `top` transition and any
+     other UI transitions stay intact. */
+  animation: none !important;
+  opacity: 1 !important;
+}
+
+/* Pre-armed `opacity: 0` state — also force visible. The JS sets this
+   class on first paint before IntersectionObserver fires; without an
+   override the chrome sections flash invisible for the first frame on
+   every page load. */
+[id*="header"].scroll-trigger.scroll-trigger--offscreen,
+[id*="footer"].scroll-trigger.scroll-trigger--offscreen,
+[id*="announcement"].scroll-trigger.scroll-trigger--offscreen,
+[id*="breadcrumb"].scroll-trigger.scroll-trigger--offscreen,
+[id*="top-bar"].scroll-trigger.scroll-trigger--offscreen,
+[id*="top_bar"].scroll-trigger.scroll-trigger--offscreen,
+.scroll-trigger.scroll-trigger--offscreen:has(> .unique-announcement-bar),
+.scroll-trigger.scroll-trigger--offscreen:has(> .abp4),
+.scroll-trigger.scroll-trigger--offscreen:has(> announcement-bar) {
+  opacity: 1 !important;
+}
+
+/* Zoom in image on scroll */
+.animate--zoom-in {
+  --zoom-in-ratio: 1;
+}
+
+.animate--zoom-in  img ,.animate--zoom-in  picture,
+.animate--zoom-in > svg {
+  transition: scale var(--duration-short) linear;
+  scale: var(--zoom-in-ratio);
+}
+:root {
+  --duration-announcement-bar: 250ms;
+  --duration-medium: 300ms;
+  --duration-long: 500ms;
+  --duration-extra-long: 700ms;
+  --duration-extra-longer: 850ms;
+  --duration-extended: 3s;
+  --ease-soft: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --animation-slide-in: slideIn var(--duration-extra-long) var(--ease-soft) both;
+  --animation-fade-in: fadeIn var(--duration-extra-long) var(--ease-soft) both;
+  --animation-zoom-in: zoomIn var(--duration-extra-longer) var(--ease-soft) both;
+}
+
+/* Animations */
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate--ambient > img,
+  .animate--ambient > svg {
+    animation: animateAmbient 30s linear infinite;
+  }
+
+  @keyframes animateAmbient {
+    0% {
+      transform: rotate(0deg) translateX(1em) rotate(0deg) scale(1.2);
+    }
+
+    100% {
+      transform: rotate(360deg) translateX(1em) rotate(-360deg) scale(1.2);
+    }
+  }
+  /* Default: visible. The animation only kicks in once JS arms it (adds
+     `.scroll-trigger--armed`). This means Shopify section-picker previews,
+     SSR snapshots, no-JS browsers and reduced-motion users all see the final
+     visible state — no blank thumbnails. */
+  .scroll-trigger.scroll-trigger--armed.scroll-trigger--offscreen:is(.zoom_in, .fade_in, .slide_in) {
+    opacity: 0;
+    will-change: opacity, transform;
+  }
+
+  .scroll-trigger.scroll-trigger--armed:not(.scroll-trigger--offscreen).zoom_in {
+    animation: var(--animation-zoom-in);
+    animation-delay: calc(var(--animation-order, 0) * 75ms);
+  }
+  .scroll-trigger.scroll-trigger--armed:not(.scroll-trigger--offscreen).fade_in {
+    animation: var(--animation-fade-in);
+  }
+  .scroll-trigger.scroll-trigger--armed:not(.scroll-trigger--offscreen).slide_in {
+    animation: var(--animation-slide-in);
+    animation-delay: calc(var(--animation-order, 0) * 75ms);
+  }
+
+  .scroll-trigger.scroll-trigger--design-mode.fade_in,
+  .scroll-trigger.scroll-trigger--design-mode.slide_in,
+  .scroll-trigger.scroll-trigger--design-mode .slider,
+  .scroll-trigger:not(.scroll-trigger--offscreen).scroll-trigger--cancel {
+    opacity: 1;
+    animation: none;
+    transition: none;
+  }
+  .scroll-trigger[animation-end],
+  .scroll-trigger[data-animation-done] {
+    opacity: 1 !important;
+    animation: none !important;
+  }
+  .scroll-trigger[data-animation-done].stagger_fade > * {
+    opacity: 1 !important;
+    animation: none !important;
+  }
+  /* .collection-tab__tab-content
+    .scroll-trigger:not(.scroll-trigger--offscreen).zoom_in {
+    animation-delay: calc(0.5s + var(--animation-order) * 75ms);
+  } */
+
+  @keyframes slideIn {
+    from {
+      transform: translate3d(0, 12px, 0);
+      opacity: 0;
+    }
+
+    to {
+      transform: translate3d(0, 0, 0);
+      opacity: 1;
+    }
+  }
+  @keyframes zoomIn {
+    from {
+      opacity: 0;
+      transform: scale(1.015);
+    }
+
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+}
+
+@media screen and (max-width: 989px) {
+  .scroll-trigger.scroll-trigger--armed:not(.scroll-trigger--offscreen) .slider--tablet {
+    animation: var(--animation-slide-in);
+  }
+}
+
+@media screen and (min-width: 990px) {
+  .scroll-trigger.scroll-trigger--armed:not(.scroll-trigger--offscreen) .slider--desktop {
+    animation: var(--animation-slide-in);
+  }
+}
+.scroll-trigger.scroll-trigger--design-mode.fade_in,
+.scroll-trigger.scroll-trigger--design-mode .slider,
+.scroll-trigger:not(.scroll-trigger--offscreen).scroll-trigger--cancel {
+  opacity: 1;
+  animation: none;
+  transition: none;
+}
+
+
+@keyframes slideIn {
+  from {
+    transform: translate3d(0, 12px, 0);
+    opacity: 0;
+  }
+
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate--ambient > img,.animate--ambient > picture,
+  .animate--ambient > .svg-wrapper {
+    animation: animateAmbient 30s linear infinite;
+  }
+
+  @keyframes animateAmbient {
+    0% {
+      transform: rotate(0deg) translateX(1em) rotate(0deg) scale(1.2);
+    }
+    100% {
+      transform: rotate(360deg) translateX(1em) rotate(-360deg) scale(1.2);
+    }
+  }
+
+}
+.animate-fixed-parent {
+  display: initial !important;
+}
+
+/* Fixed background */
+.animate--fixed {
+  clip-path: inset(0);
+}
+
+.animate--fixed > img:not(.zoom),.animate--fixed > picture:not(.zoom),
+.animate--fixed > svg:not(.zoom) {
+  position: fixed;
+  height: 100vh;
+}
+
+:root {
+  --animation-duration: 700ms;
+  --animation-delay-base: 0ms;
+  --animation-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* Extended hover effects (product card / image hover) */
+.hover_tilt .product-item__image,
+.hover_tilt .m-hover-target {
+  transition: transform 0.55s var(--animation-ease);
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.hover_tilt .product-item:hover .product-item__image,
+.hover_tilt:hover .m-hover-target {
+  transform: perspective(1000px) rotateX(4deg) rotateY(-4deg) translateZ(8px);
+}
+.hover_lift .product-item,
+.hover_lift .m-hover-target {
+  transition: transform 0.45s var(--animation-ease), box-shadow 0.45s var(--animation-ease);
+}
+.hover_lift .product-item:hover,
+.hover_lift:hover .m-hover-target {
+  transform: translateY(-6px);
+  box-shadow: 0 24px 48px -18px rgba(0, 0, 0, 0.18);
+}
+.hover_slide .product-item__image,
+.hover_slide .m-hover-target {
+  transition: transform 0.6s var(--animation-ease);
+  will-change: transform;
+}
+.hover_slide .product-item:hover .product-item__image img,
+.hover_slide:hover .m-hover-target img {
+  transform: translateX(-6%);
+}
+.hover_glow .product-item,
+.hover_glow .m-hover-target {
+  transition: box-shadow 0.45s var(--animation-ease);
+}
+.hover_glow .product-item:hover,
+.hover_glow:hover .m-hover-target {
+  box-shadow: 0 0 0 1px rgba(53, 53, 53, 0.06), 0 18px 44px -16px rgba(53, 53, 53, 0.35);
+}
+.hover_reveal .product-item__image-wrapper {
+  overflow: hidden;
+  position: relative;
+}
+.hover_reveal .product-item__image--second {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transform: scale(1.05);
+  transition: opacity 0.5s var(--animation-ease), transform 0.6s var(--animation-ease);
+}
+.hover_reveal .product-item:hover .product-item__image--second {
+  opacity: 1;
+  transform: scale(1);
+}

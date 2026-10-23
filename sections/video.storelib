@@ -1,0 +1,2440 @@
+<template compat="shopify">
+{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- comment -%}
+  Section background painted edge-to-edge on `#shopify-section-{id}`
+  + on the inner wrapper + on `#loud-{id}` so there are NO black /
+  empty bars on the left/right regardless of the chosen section width.
+  `section_bg` (new top-level setting) takes priority; the legacy
+  `section_background_color` is a fallback for instances saved before
+  the new setting existed.
+{%- endcomment -%}
+{%- liquid
+  assign __video_bg = section.settings.section_bg
+  if __video_bg == blank
+    assign __video_bg = section.settings.section_background_color
+  endif
+-%}
+{%- if __video_bg != blank -%}
+<style>
+  #shopify-section-{{ section.id }},
+  #shopify-section-{{ section.id }} > .ti-section-wrap,
+  #shopify-section-{{ section.id }} #loud-{{ section.id }} {
+    background-color: {{ __video_bg }} !important;
+  }
+  /* Section width should constrain the inner CONTENT only, not the
+     painted band. We let `.ti-section-wrap` keep its width-limit for
+     content centering, but the bg is on the outer section so it fills
+     the viewport edge-to-edge — no black bars. */
+  #shopify-section-{{ section.id }} > .ti-section-wrap {
+    background-color: transparent !important;
+  }
+{% comment %}{% endcomment %}</style>
+{%- endif -%}
+{%- liquid
+  assign __ti_scroll_animation = settings.scroll_animation | default: 'none'
+  assign __ti_reveal = section.settings.reveal
+-%}
+<style>
+  /* Section isolation — prevent CSS/JS bleed between sections */
+  #shopify-section-{{ section.id }} {
+    isolation: isolate;
+    position: relative;
+  }
+  /* Aggressive theme typography */
+  :where(#shopify-section-{{ section.id }}) {
+    font-family: var(--body-font, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :where(button, input, textarea, select, optgroup) {
+    font-family: inherit;
+  }
+  /* Theme font-weight inheritance — sections inherit theme weights by default.
+     Specific font-weight rules in section CSS still override these. */
+  #shopify-section-{{ section.id }} {
+    font-weight: var(--body-weight, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
+    font-weight: var(--heading-weight, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
+    font-family: var(--heading-font, inherit);
+  }
+  /* Section margin sliders (mobile-first) */
+  #shopify-section-{{ section.id }} {
+    margin-top: {{ section.settings.section_margin_top_mobile | default: 0 }}px;
+    margin-bottom: {{ section.settings.section_margin_bottom_mobile | default: 0 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ section.id }} {
+      margin-top: {{ section.settings.section_margin_top_desktop | default: 0 }}px;
+      margin-bottom: {{ section.settings.section_margin_bottom_desktop | default: 0 }}px;
+    }
+  }
+  /* Section wrapper spans its parent's full width without breaking out of
+     the editor preview. The section + first child span 100% so backgrounds
+     reach edge-to-edge but the editor inspector outline stays inside the
+     iframe viewport. */
+  #shopify-section-{{ section.id }} {
+    max-width: none !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    position: relative !important;
+    box-sizing: border-box !important;
+  }
+  #shopify-section-{{ section.id }} > :where(div, section, header, footer, aside, main, article):first-child {
+    max-width: none !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Section width — universal selector that works regardless of inner
+     markup. Targets both:
+       1) Theme container classes (.container/.fluid_container/etc.) — for
+          sections that have an inner wrapper with that class
+       2) The section's first-child div — for sections that don't have a
+          named inner wrapper. The padding-inline sets the max content
+          area while the wrapper itself stays 100% wide so any background
+          stays edge-to-edge. */
+  {%- case section.settings.section_width -%}
+    {%- when 'container' -%}
+      #shopify-section-{{ section.id }} .container,
+      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+        max-width: calc(var(--page-width, 1300px) + 3rem) !important;
+        margin-inline: auto !important;
+        box-sizing: border-box !important;
+      }
+    {%- when 'fluid_container' -%}
+      #shopify-section-{{ section.id }} .fluid_container,
+      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+        max-width: calc(var(--fluid-container-width, 1500px) + 3rem) !important;
+        margin-inline: auto !important;
+        box-sizing: border-box !important;
+      }
+    {%- when 'stretch_width' -%}
+      /* Stretched: no max-width; tighter side padding handled below */
+      @media (min-width: 1200px) {
+        #shopify-section-{{ section.id }} .stretch_width,
+        #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+          padding-inline: 3rem;
+        }
+      }
+    {%- when 'full_width' -%}
+      /* full bleed — no constraints */
+  {%- endcase -%}
+  /* Reset spacing */
+  {%- if section.settings.reset_spacing -%}
+    #shopify-section-{{ section.id }} { margin-bottom: 0 !important; margin-top: 0 !important; }
+    #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+<!-- ti-theme:start -->
+<div class="ti-section-wrap {{ section.settings.section_width | default: 'container' }}">
+<style>
+  {%- capture loud_content -%}
+  {% assign headline_block = section.blocks | where: 'type', 'headline' | first %}
+  {% assign text_block = section.blocks | where: 'type', 'subtext' | first %}
+
+  {% if headline_block.settings.override_font %}
+      {{ headline_block.settings.headline_font | font_face }}
+  {% endif %}
+  {% if text_block.settings.override_font %}
+      {{ text_block.settings.text_font | font_face }}
+  {% endif %}
+
+  /* Section Styles */
+  #loud-{{ section.id }} {
+      background-color: {{ section.settings.section_background_color }} !important;
+      {% if section.settings.section_background_image %}
+          background: {% if section.settings.section_background_image_color %}{{ section.settings.section_background_image_color }}{% endif %} url({{ section.settings.section_background_image | image_url }});
+          background-repeat: no-repeat;
+          background-position: center;
+          background-size: {{ section.settings.section_background_size }};
+      {% endif %}
+      width: 100%;
+      box-sizing: border-box;
+      padding: {{ section.settings.section_padding_top_bottom }}px {{ section.settings.section_padding_left_right }}px;
+      overflow: hidden;
+  }
+
+  @media (max-width: 800px) {
+      #loud-{{ section.id }} {
+        padding: {{ section.settings.mobile_section_padding_top_bottom }}px {{ section.settings.mobile_section_padding_left_right }}px;
+      }
+  }
+
+  {% if section.settings.show_on_device == 'mobile' %}
+    @media (min-width: 801px) {
+        #loud-{{ section.id }} {
+            display: none;
+        }
+    }
+  {% endif %}
+
+  {% if section.settings.show_on_device == 'desktop' %}
+    @media (max-width: 800px) {
+        #loud-{{ section.id }} {
+            display: none;
+        }
+    }
+  {% endif %}
+
+  /* Text Styles */
+  #loud-{{ section.id }} p {
+      font-size: {{ text_block.settings.text_size }}px;
+      {% if text_block.settings.override_font %}
+      font-family: {{ text_block.settings.text_font.family }}, {{ text_block.settings.text_font.fallback_families }};
+      font-weight: {{ text_block.settings.text_font.weight }};
+      {% endif %}
+      {% if text_block.settings.text_line_height != 'inherit' %}line-height: {{ text_block.settings.text_line_height }};{% endif %}
+      margin: 0 0 {{ section.settings.element_spacing }}px 0;
+      padding: 0;
+      color: {{ text_block.settings.text_color }} !important;
+  }
+
+  #loud-{{ section.id }} ul, #loud-{{ section.id }} ol {
+    margin: 0 0 {{ section.settings.element_spacing }}px 0;
+  }
+
+  #loud-{{ section.id }} li {
+    font-size: {{ text_block.settings.text_size }}px;
+    {% if text_block.settings.override_font %}
+    font-family: {{ text_block.settings.text_font.family }}, {{ text_block.settings.text_font.fallback_families }};
+    font-weight: {{ text_block.settings.text_font.weight }};
+    {% endif %}
+    {% if text_block.settings.text_line_height != 'inherit' %}line-height: {{ text_block.settings.text_line_height }};{% endif %}
+    margin: 0 0 5px 0;
+    padding: 0;
+    color: {{ text_block.settings.text_color }} !important;
+  }
+
+  #loud-{{ section.id }} li:last-child {
+    margin: 0;
+  }
+
+  #loud-{{ section.id }} p a,
+  #loud-{{ section.id }} p a:visited,
+  #loud-{{ section.id }} li a,
+  #loud-{{ section.id }} li a:visited {
+    color: {{ section.settings.link_color }} !important;
+  }
+
+  @media (max-width: 800px) {
+      #loud-{{ section.id }} p,
+      #loud-{{ section.id }} li {
+        font-size: {{ text_block.settings.mobile_text_size }}px;
+      }
+  }
+
+  /* Headline Styles */
+  #loud-{{ section.id }} h1,
+  #loud-{{ section.id }} h2,
+  #loud-{{ section.id }} h3,
+  #loud-{{ section.id }} h4,
+  #loud-{{ section.id }} h5 {
+      font-size: {{ headline_block.settings.headline_size }}px;
+      {% if headline_block.settings.override_font %}
+      font-family: {{ headline_block.settings.headline_font.family }}, {{ headline_block.settings.headline_font.fallback_families }};
+      font-weight: {{ headline_block.settings.font_weight }};
+      {% endif %}
+      {% if headline_block.settings.headline_line_height != 'inherit' %}line-height: {{ headline_block.settings.headline_line_height }};{% endif %}
+      margin: 0 0 {{ section.settings.element_spacing }}px 0;
+      padding: 0;
+      color: {{ headline_block.settings.headline_text_color }} !important;
+  }
+
+  @media (max-width: 800px) {
+      #loud-{{ section.id }} h1,
+      #loud-{{ section.id }} h2,
+      #loud-{{ section.id }} h3,
+      #loud-{{ section.id }} h4,
+      #loud-{{ section.id }} h5 {
+      font-size: {{ headline_block.settings.mobile_headline_size }}px;
+      }
+  }
+
+  #loud-{{ section.id }} h2 {
+      font-size: {{ headline_block.settings.headline_size | minus:5  | at_least:13 }}px;
+  }
+
+  #loud-{{ section.id }} h3 {
+      font-size: {{ headline_block.settings.headline_size | minus:10 | at_least:13 }}px;
+  }
+
+  #loud-{{ section.id }} h4 {
+      font-size: {{ headline_block.settings.headline_size | minus:15 | at_least:13 }}px;
+  }
+
+  #loud-{{ section.id }} h5 {
+      font-size: {{ headline_block.settings.headline_size | minus:20 | at_least:13 }}px;
+  }
+
+  @media (max-width: 800px) {
+      #loud-{{ section.id }} h2 {
+      font-size: {{ headline_block.settings.mobile_headline_size | minus:5 | at_least:13 }}px;
+      }
+
+      #loud-{{ section.id }} h3 {
+      font-size: {{ headline_block.settings.mobile_headline_size | minus:10 | at_least:13 }}px;
+      }
+
+      #loud-{{ section.id }} h4 {
+      font-size: {{ headline_block.settings.mobile_headline_size | minus:15 | at_least:13 }}px;
+      }
+
+      #loud-{{ section.id }} h5 {
+      font-size: {{ headline_block.settings.mobile_headline_size | minus:20 | at_least:13 }}px;
+      }
+  }
+
+  /* Container Styles */
+  #loud-{{ section.id }} .loud-container {
+      position: relative;
+      margin: 0 auto;
+      background-color: {{ section.settings.container_background_color }} !important;
+      border-radius: {{ section.settings.container_radius }}px;
+      {% if section.settings.container_shadow %}box-shadow: 0 0 5px 0 rgba(0,0,0,0.20);{% endif %}
+      border: {{ section.settings.container_border_size }}px solid {{ section.settings.container_border_color }};
+      max-width: {{ section.settings.container_max_width }}px;
+      padding: {{ section.settings.container_padding_top_bottom }}px {{ section.settings.container_padding_left_right }}px;
+  }
+
+  @media (max-width: 800px) {
+      #loud-{{ section.id }} .loud-container {
+      padding: {{ section.settings.mobile_container_padding_top_bottom }}px {{ section.settings.mobile_container_padding_left_right }}px;
+      }
+  }
+
+  /* Headline Section */
+  #loud-{{ section.id }} .loud-headline {
+    margin: 0;
+    padding: 0;
+  }
+
+  #loud-{{ section.id }} .loud-headline * {
+    text-align: {{ section.settings.text_alignment }};
+  }
+
+  @media only screen and (max-width: 800px) {
+    #loud-{{ section.id }} .loud-headline * {
+      text-align: {{ section.settings.mobile_text_alignment }};
+    }
+  }
+
+  /* Grid and Video Container */
+  #loud-{{ section.id }} .loud-grid {
+    display: block;
+    position: relative;
+    margin: 0 auto;
+    padding: 0;
+  }
+
+  /* Video Container with Adjustable Top/Bottom Margins */
+  #loud-{{ section.id }} .loud-video-container {
+    padding: 0;
+    display: flex;
+    justify-content: center; /* Horizontally center */
+    align-items: center;    /* Vertically center */
+    position: relative;     /* Required for aspect ratio padding */
+    width: 100%;            /* Ensure full width of the container */
+    height: 100%;           /* Ensure full height of the container */
+    margin: 0 auto;
+    {% if section.settings.video_aspect_ratio != 'none' %}
+      position: relative;
+      {% case section.settings.video_aspect_ratio %}
+        {% when '16:9' %}
+          padding-bottom: 56.25%;
+        {% when '4:3' %}
+          padding-bottom: 75%;
+        {% when '1:1' %}
+          padding-bottom: 100%;
+        {% when '21:9' %}
+          padding-bottom: 42.86%;
+        {% when '9:16' %}
+          padding-bottom: 177.78%;
+        {% when '3:2' %}
+          padding-bottom: 66.67%;
+        {% when '2:1' %}
+          padding-bottom: 50%;
+        {% when '5:4' %}
+          padding-bottom: 80%;
+        {% when '3:1' %}
+          padding-bottom: 33.33%;
+        {% when 'custom' %}
+          /* Custom aspect ratio requires additional handling */
+          padding-bottom: var(--custom-aspect-ratio);
+        {% else %}
+          padding-bottom: 0;
+      {% endcase %}
+      height: 0;
+    {% endif %}
+  }
+
+  @media (min-width: 801px) {
+      #loud-{{ section.id }} .loud-video-container {
+          margin-top: {{ section.settings.desktop_video_margin_top }}px;
+          margin-bottom: {{ section.settings.desktop_video_margin_bottom }}px;
+      }
+
+      /* Video Dimensions for Desktop */
+      #loud-{{ section.id }} .loud-container video,
+      #loud-{{ section.id }} .loud-container .placeholder-video {
+          width: {{ section.settings.desktop_video_width }}px;
+          height: {{ section.settings.desktop_video_height }}px;
+      }
+  }
+
+  @media (max-width: 800px) {
+      #loud-{{ section.id }} .loud-video-container {
+          margin-top: {{ section.settings.mobile_video_margin_top }}px;
+          margin-bottom: {{ section.settings.mobile_video_margin_bottom }}px;
+      }
+
+      /* Video Dimensions for Mobile */
+      #loud-{{ section.id }} .loud-container video,
+      #loud-{{ section.id }} .loud-container .placeholder-video {
+          width: {{ section.settings.mobile_video_width }}px;
+          height: {{ section.settings.mobile_video_height }}px;
+      }
+  }
+
+  /* Content Styles */
+  #loud-{{ section.id }} .loud-content {
+    padding: 0 25px 0 25px;
+    max-width: 60%;
+  }
+
+  @media only screen and (max-width: 800px) {
+    #loud-{{ section.id }} .loud-content {
+      padding: 0 10px 0 10px;
+      max-width: calc(100% - 20px);
+    }
+  }
+
+  /* Video Styles */
+  #loud-{{ section.id }} .loud-container video {
+    width: 100%;
+    {% if section.settings.video_aspect_ratio != 'none' %}
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+    {% endif %}
+    border-radius: {{ section.settings.media_radius }}px;
+    {% if section.settings.video_shadow == 'low' %}
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    {% elsif section.settings.video_shadow == 'medium' %}
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    {% elsif section.settings.video_shadow == 'high' %}
+      box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+    {% elsif section.settings.video_shadow == 'none' %}
+      box-shadow: none;
+    {% endif %}
+  }
+
+  /* Placeholder Video Styles */
+  #loud-{{ section.id }} .loud-container .placeholder-video {
+    width: 100%;
+    {% if section.settings.video_aspect_ratio != 'none' %}
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+    {% endif %}
+    background-color: #f0f0f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    text-align: center;
+    color: {{ text_block.settings.text_color | default: '#666666' }} !important;
+    font-size: {{ text_block.settings.text_size | default: 16 }}px;
+    border-radius: {{ section.settings.media_radius }}px;
+    {% if section.settings.video_shadow == 'low' %}
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    {% elsif section.settings.video_shadow == 'medium' %}
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    {% elsif section.settings.video_shadow == 'high' %}
+      box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+    {% elsif section.settings.video_shadow == 'none' %}
+      box-shadow: none;
+    {% endif %}
+  }
+
+  @media (max-width: 800px) {
+    #loud-{{ section.id }} .loud-container .placeholder-video {
+      font-size: {{ text_block.settings.mobile_text_size | default: 16 }}px;
+    }
+  }
+
+  /* Vertical Spacing Gap Between Text Subheading and Video */
+  /* Desktop Version */
+  @media (min-width: 801px) {
+      #loud-{{ section.id }} .loud-headline {
+          margin-bottom: {{ section.settings.desktop_spacing_gap | default: 0 }}px !important;
+      }
+  }
+
+  /* Mobile Version */
+  @media (max-width: 800px) {
+      #loud-{{ section.id }} .loud-headline {
+          margin-bottom: {{ section.settings.mobile_spacing_gap | default: 6 }}px !important;
+      }
+  }
+
+  {%- endcapture -%}
+
+  {%- liquid
+    assign chunks = loud_content | strip_newlines | split: ' ' | join: ' ' | split: '*/'
+    for chunk in chunks
+      assign mini = chunk | split: '/*' | first | strip | replace: ': ', ':' | replace: '; ', ';' | replace: '} ', '}' | replace: ' {', '{' | replace: ';}', '}'
+      echo mini
+    endfor
+  %}
+{% comment %}{% endcomment %}</style>
+
+<div id="loud-{{ section.id }}" class="loud-section" loud-section>
+  <div class="loud-container" loud-container>
+    {% assign headline_block = section.blocks | where: 'type', 'headline' | first %}
+    {% assign text_block = section.blocks | where: 'type', 'subtext' | first %}
+    {% if headline_block.settings.headline != blank or text_block.settings.text != blank %}
+      <div class="loud-headline" loud-column>
+        {% if headline_block.settings.headline != blank %}
+          <h2>{{ headline_block.settings.headline }}</h2>
+        {% endif %}
+        {% if text_block.settings.text != blank %}
+          <p>{{ text_block.settings.text }}</p>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    <div class="loud-grid" loud-column>
+      <div class="loud-video-container">
+        {% assign has_video = false %}
+        {% if section.settings.enable_custom_url_video == true and section.settings.custom_video_url != blank %}
+          {% assign has_video = true %}
+        {% elsif section.settings.video != blank %}
+          {% assign has_video = true %}
+        {% endif %}
+        {% if has_video %}
+          {%- assign video_loading_attr = 'auto' -%}
+          {% if section.settings.enable_lazy_loading %}
+            {%- assign video_loading_attr = 'lazy' -%}
+          {% endif %}
+          {% if section.settings.enable_custom_url_video and section.settings.custom_video_url != blank %}
+            <video src="{{ section.settings.custom_video_url }}" {% if section.settings.video_inline %}playsinline{% endif %} {% if section.settings.video_autoplay %}autoplay{% endif %} {% if section.settings.video_loop %}loop{% endif %} {% if section.settings.video_controls %}controls{% endif %} {% if section.settings.video_muted %}muted{% endif %} loading="{{ video_loading_attr }}" {% if section.settings.video_alt != blank %}aria-label="{{ section.settings.video_alt }}"{% endif %} {% if section.settings.video_metadata != blank %}title="{{ section.settings.video_metadata }}"{% endif %}>
+            </video>
+          {% else %}
+            {{
+              section.settings.video
+              | video_tag:
+                image_size: '1100x',
+                playsinline: section.settings.video_inline,
+                autoplay: section.settings.video_autoplay,
+                loop: section.settings.video_loop,
+                controls: section.settings.video_controls,
+                muted: section.settings.video_muted,
+                loading: video_loading_attr
+            }}
+          {% endif %}
+        {% else %}
+          <div class="placeholder-video">
+            <img src="https://2dbags.co/wp-content/uploads/revslider/lookbook1-demo_slider/placeholder.jpg" alt="{{ 'accessibility.placeholder' | t }}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;">
+          </div>
+        {% endif %}
+      </div>
+      <!-- /loud-video-container -->
+    </div>
+    <!-- /loud-grid -->
+  </div>
+  <!-- /loud-container -->
+</div>
+<!-- /loud-section -->
+
+{% if section.settings.big_play_pause_button %}
+  <!-- play/pause js -->
+  <style>
+    #loud-{{ section.id }} .loud-video-container {
+      position: relative;
+      cursor: pointer;
+    }
+
+    #loud-{{ section.id }} .loud-video-container svg.loud-play-button,
+    #loud-{{ section.id }} .loud-video-container svg.loud-pause-button {
+      position: absolute;
+      top: calc(50% - 30px);
+      left: calc(50% - 30px);
+      transition: all .3s;
+      visibility: hidden;
+      opacity: 0;
+      pointer-events: none;
+      filter: drop-shadow(1px 1px 2px rgba(0, 0, 0, 0.25));
+    }
+
+    #loud-{{ section.id }} .loud-video-container svg.loud-play-button *,
+    #loud-{{ section.id }} .loud-video-container svg.loud-pause-button * {
+      pointer-events: none;
+    }
+
+    #loud-{{ section.id }} .loud-video-container[data-state="paused"] svg.loud-play-button {
+      visibility: visible;
+      opacity: 0.9;
+    }
+
+    #loud-{{ section.id }} .loud-video-container[data-state="playing"]:hover svg.loud-pause-button {
+      visibility: visible;
+      opacity: 0.9;
+    }
+{% comment %}{% endcomment %}  </style>
+  <script>
+  
+    var loud_play_button = `
+    <svg class="loud-play-button" width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="30" cy="30" r="30" fill="rgba(0,0,0,0.5)"/>
+      <polygon points="22,18 22,42 42,30" fill="#fff"/>
+    </svg>`;
+
+    var loud_pause_button = `
+    <svg class="loud-pause-button" width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="30" cy="30" r="30" fill="rgba(0,0,0,0.5)"/>
+      <rect x="20" y="20" width="6" height="20" fill="#fff"/>
+      <rect x="34" y="20" width="6" height="20" fill="#fff"/>
+    </svg>`;
+
+    var loud_video_containers = document.querySelectorAll(`#loud-{{ section.id }} .loud-video-container`);
+
+    loud_video_containers.forEach(function(container) {
+      container.insertAdjacentHTML('beforeend', loud_play_button);
+      container.insertAdjacentHTML('beforeend', loud_pause_button);
+    });
+
+    var loud_videos = document.querySelectorAll(`#loud-{{ section.id }} .loud-video-container video`);
+
+    loud_videos.forEach(function(video) {
+      video.parentNode.setAttribute('data-state', video.autoplay ? 'playing' : 'paused');
+      
+      video.addEventListener('click', function() {
+        if (video.paused) {
+          video.play();
+          video.parentNode.setAttribute('data-state', 'playing');
+        }
+        else { 
+          video.pause();
+          video.parentNode.setAttribute('data-state', 'paused');    
+        }  
+      });
+      
+    });
+{% comment %}{% endcomment %}  </script>
+{% endif %}
+
+</div>
+<!-- ti-theme:end -->
+
+
+</template>
+
+<schema>
+{
+  "type": "video",
+  "name": "Video ",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "General"
+    },
+    {
+      "type": "select",
+      "id": "show_on_device",
+      "label": "Show Section",
+      "info": "Choose on which devices the video section will be visible.",
+      "options": [
+        {
+          "value": "all",
+          "label": "All Devices"
+        },
+        {
+          "value": "mobile",
+          "label": "Mobile Only"
+        },
+        {
+          "value": "desktop",
+          "label": "Desktop Only"
+        }
+      ],
+      "default": "all"
+    },
+    {
+      "type": "select",
+      "id": "section_width",
+      "label": "Section width",
+      "default": "fluid_container",
+      "options": [
+        {
+          "value": "container",
+          "label": "Default"
+        },
+        {
+          "value": "fluid_container",
+          "label": "Fluid container"
+        },
+        {
+          "value": "stretch_width",
+          "label": "Stretched"
+        },
+        {
+          "value": "full_width",
+          "label": "Full width"
+        }
+      ]
+    },
+    {
+      "type": "text_alignment",
+      "id": "text_alignment",
+      "label": "Text Alignment",
+      "info": "Align the text horizontally within the section.",
+      "default": "center"
+    },
+    {
+      "type": "header",
+      "id": "hdr_6",
+      "label": "Image / Video"
+    },
+    {
+      "type": "video",
+      "id": "video",
+      "label": "Hero Video",
+      "info": "Upload or select the video to be displayed as the hero background."
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_custom_url_video",
+      "label": "Enable Custom URL Video",
+      "info": "Enable to use a custom video URL instead of the uploaded video.",
+      "default": false
+    },
+    {
+      "type": "url",
+      "id": "custom_video_url",
+      "label": "Custom Video URL",
+      "info": "Enter the URL of the video (e.g., direct MP4 link)."
+    },
+    {
+      "type": "checkbox",
+      "id": "video_inline",
+      "label": "Play Inline",
+      "info": "Enable to play the video inline within the webpage.",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "video_autoplay",
+      "label": "Autoplay",
+      "info": "Enable the video to start playing automatically on page load.",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "video_loop",
+      "label": "Loop Video",
+      "info": "Enable the video to loop continuously.",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "video_muted",
+      "label": "Mute Video",
+      "info": "Start the video in a muted state.",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "video_controls",
+      "label": "Show Controls",
+      "info": "Display video controls.",
+      "default": false
+    },
+    {
+      "type": "select",
+      "id": "video_aspect_ratio",
+      "label": "Video Aspect Ratio",
+      "info": "Set the aspect ratio for the video player.",
+      "options": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "16:9",
+          "label": "16:9"
+        }
+      ],
+      "default": "none"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_lazy_loading",
+      "label": "Enable Lazy Loading",
+      "info": "Delay loading the video until it becomes visible on the screen.",
+      "default": false
+    },
+    {
+      "type": "text",
+      "id": "video_alt",
+      "label": "Video Alt Text",
+      "info": "Provide alternative text for the video for accessibility purposes."
+    },
+    {
+      "type": "textarea",
+      "id": "video_metadata",
+      "label": "Video Metadata",
+      "info": "Add metadata or additional information about the video."
+    },
+    {
+      "type": "header",
+      "id": "hdr_19",
+      "label": "Typography"
+    },
+    {
+      "type": "color",
+      "id": "link_color",
+      "label": "Link Color",
+      "default": "#0000EE"
+    },
+    {
+      "type": "header",
+      "id": "hdr_21",
+      "label": "Style & Colors"
+    },
+    {
+      "type": "color",
+      "id": "section_background_color",
+      "label": "Background Color",
+      "info": "Set the background color of the video section.",
+      "default": "#ffffff"
+    },
+    {
+      "type": "image_picker",
+      "id": "section_background_image",
+      "label": "Background Image",
+      "info": "Upload a background image for the video section."
+    },
+    {
+      "type": "color",
+      "id": "section_background_image_color",
+      "label": "Background Image Color",
+      "info": "Choose a color overlay for the background image.",
+      "default": "#ffffff"
+    },
+    {
+      "type": "select",
+      "id": "section_background_size",
+      "label": "Background Image Size",
+      "info": "Determine how the background image is displayed.",
+      "default": "cover",
+      "options": [
+        {
+          "value": "auto",
+          "label": "Auto"
+        },
+        {
+          "value": "cover",
+          "label": "Cover"
+        },
+        {
+          "value": "contain",
+          "label": "Contain"
+        },
+        {
+          "value": "fill",
+          "label": "Fill"
+        },
+        {
+          "value": "scale-down",
+          "label": "Scale Down"
+        }
+      ]
+    },
+    {
+      "type": "color",
+      "id": "container_background_color",
+      "label": "Container Background Color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "range",
+      "id": "container_radius",
+      "label": "Container Border Radius",
+      "min": 0,
+      "max": 50,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "checkbox",
+      "id": "container_shadow",
+      "label": "Container Shadow",
+      "default": false
+    },
+    {
+      "type": "range",
+      "id": "container_border_size",
+      "label": "Container Border Size",
+      "min": 0,
+      "max": 10,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "color",
+      "id": "container_border_color",
+      "label": "Container Border Color",
+      "default": "#000000"
+    },
+    {
+      "type": "select",
+      "id": "video_shadow",
+      "label": "Video Shadow",
+      "info": "Add a shadow effect to the video player.",
+      "options": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "low",
+          "label": "Low Shadow"
+        },
+        {
+          "value": "medium",
+          "label": "Medium Shadow"
+        },
+        {
+          "value": "high",
+          "label": "High Shadow"
+        }
+      ],
+      "default": "none"
+    },
+    {
+      "type": "range",
+      "id": "media_radius",
+      "label": "Video Border Radius",
+      "info": "Adjust the border radius of the video player for rounded corners.",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 13
+    },
+    {
+      "type": "header",
+      "id": "hdr_33",
+      "label": "Animation & Behavior"
+    },
+    {
+      "type": "checkbox",
+      "id": "reveal",
+      "label": "Reveal on scroll",
+      "default": true,
+      "info": "Uses your global Animations & motion setting."
+    },
+    {
+      "type": "checkbox",
+      "id": "big_play_pause_button",
+      "label": "Enable Play / Pause Button",
+      "info": "Display a large play/pause button over the video.",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_36",
+      "label": "Layout & Spacing"
+    },
+    {
+      "type": "range",
+      "id": "container_max_width",
+      "label": "Container Max Width",
+      "min": 200,
+      "max": 1600,
+      "step": 100,
+      "unit": "px",
+      "default": 1200
+    },
+    {
+      "type": "range",
+      "id": "section_padding_top_bottom",
+      "label": "Padding Top/Bottom",
+      "info": "Set the top and bottom padding of the section.",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 42
+    },
+    {
+      "type": "range",
+      "id": "section_padding_left_right",
+      "label": "Padding Left/Right",
+      "info": "Set the left and right padding of the section.",
+      "min": 0,
+      "max": 300,
+      "step": 30,
+      "unit": "px",
+      "default": 180
+    },
+    {
+      "type": "range",
+      "id": "container_padding_top_bottom",
+      "label": "Container Padding Top/Bottom",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "container_padding_left_right",
+      "label": "Container Padding Left/Right",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "element_spacing",
+      "label": "Spacing Between Elements",
+      "info": "Define the space between different elements within the section.",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "type": "range",
+      "id": "desktop_spacing_gap",
+      "label": "Vertical Spacing Gap Between Text Subheading and Video (Desktop)",
+      "info": "Set the vertical space between the subheading text and the video on desktop devices.",
+      "min": -100,
+      "max": 100,
+      "step": 10,
+      "unit": "px",
+      "default": -30
+    },
+    {
+      "type": "range",
+      "id": "desktop_video_margin_top",
+      "label": "Video Top Margin (Desktop)",
+      "info": "Adjust the top margin of the video on desktop. Negative values allow overlap.",
+      "min": -500,
+      "max": 500,
+      "step": 10,
+      "unit": "px",
+      "default": 60
+    },
+    {
+      "type": "range",
+      "id": "desktop_video_margin_bottom",
+      "label": "Video Bottom Margin (Desktop)",
+      "info": "Adjust the bottom margin of the video on desktop. Negative values allow overlap.",
+      "min": -500,
+      "max": 500,
+      "step": 10,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "desktop_video_width",
+      "label": "Video Width (Desktop)",
+      "info": "Set the width of the video player on desktop devices.",
+      "min": 100,
+      "max": 2000,
+      "step": 100,
+      "unit": "px",
+      "default": 1400
+    },
+    {
+      "type": "range",
+      "id": "desktop_video_height",
+      "label": "Video Height (Desktop)",
+      "info": "Set the height of the video player on desktop devices.",
+      "min": 100,
+      "max": 1080,
+      "step": 10,
+      "unit": "px",
+      "default": 500
+    },
+    {
+      "type": "header",
+      "id": "hdr_48",
+      "label": "Section margin (around the section)"
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_desktop",
+      "label": "Top margin (desktop px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_desktop",
+      "label": "Bottom margin (desktop px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_mobile",
+      "label": "Top margin (mobile px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_mobile",
+      "label": "Bottom margin (mobile px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "header",
+      "id": "hdr_53",
+      "label": "Mobile"
+    },
+    {
+      "type": "text_alignment",
+      "id": "mobile_text_alignment",
+      "label": "Mobile Text Alignment",
+      "info": "Align the text on mobile devices.",
+      "default": "center"
+    },
+    {
+      "type": "range",
+      "id": "mobile_section_padding_top_bottom",
+      "label": "Mobile Padding Top/Bottom",
+      "info": "Set the top and bottom padding of the section on mobile devices.",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 44
+    },
+    {
+      "type": "range",
+      "id": "mobile_section_padding_left_right",
+      "label": "Mobile Padding Left/Right",
+      "info": "Set the left and right padding of the section on mobile devices.",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 19
+    },
+    {
+      "type": "range",
+      "id": "mobile_container_padding_top_bottom",
+      "label": "Mobile Container Padding Top/Bottom",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "mobile_container_padding_left_right",
+      "label": "Mobile Container Padding Left/Right",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "mobile_spacing_gap",
+      "label": "Vertical Spacing Gap Between Text Subheading and Video (Mobile)",
+      "info": "Set the vertical space between the subheading text and the video on mobile devices.",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 6
+    },
+    {
+      "type": "range",
+      "id": "mobile_video_margin_top",
+      "label": "Video Top Margin (Mobile)",
+      "info": "Adjust the top margin of the video on mobile. Negative values allow overlap.",
+      "min": -500,
+      "max": 500,
+      "step": 10,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "mobile_video_margin_bottom",
+      "label": "Video Bottom Margin (Mobile)",
+      "info": "Adjust the bottom margin of the video on mobile. Negative values allow overlap.",
+      "min": -500,
+      "max": 500,
+      "step": 10,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "mobile_video_width",
+      "label": "Video Width (Mobile)",
+      "info": "Set the width of the video player on mobile devices.",
+      "min": 100,
+      "max": 800,
+      "step": 10,
+      "unit": "px",
+      "default": 800
+    },
+    {
+      "type": "range",
+      "id": "mobile_video_height",
+      "label": "Video Height (Mobile)",
+      "info": "Set the height of the video player on mobile devices.",
+      "min": 100,
+      "max": 800,
+      "step": 10,
+      "unit": "px",
+      "default": 190
+    },
+    {
+      "type": "color",
+      "id": "section_bg",
+      "label": "Section background color",
+      "info": "Background colour of the whole section. Set transparent to inherit the page.",
+      "default": "#FFFFFF"
+    }
+  ],
+  "blocks": [
+    {
+      "type": "headline",
+      "name": "Headline",
+      "settings": [
+        {
+          "type": "inline_richtext",
+          "id": "headline",
+          "label": "Headline",
+          "info": "Enter the main headline text for the video section.",
+          "default": "<b>Video Heading</b>"
+        },
+        {
+          "type": "range",
+          "id": "headline_size",
+          "label": "Headline Size",
+          "info": "Adjust the font size of the headline text.",
+          "min": 10,
+          "max": 75,
+          "step": 1,
+          "unit": "px",
+          "default": 37
+        },
+        {
+          "type": "range",
+          "id": "mobile_headline_size",
+          "label": "Mobile Headline Size",
+          "info": "Adjust the font size of the headline text on mobile devices.",
+          "min": 10,
+          "max": 75,
+          "step": 1,
+          "unit": "px",
+          "default": 37
+        },
+        {
+          "type": "select",
+          "id": "headline_line_height",
+          "label": "Headline Text Line Height",
+          "info": "Set the line height for the headline text.",
+          "options": [
+            {
+              "value": "0.75",
+              "label": "0.75"
+            },
+            {
+              "value": "1.0",
+              "label": "1.0"
+            },
+            {
+              "value": "1.1",
+              "label": "1.1"
+            },
+            {
+              "value": "1.2",
+              "label": "1.2"
+            },
+            {
+              "value": "1.3",
+              "label": "1.3"
+            },
+            {
+              "value": "1.4",
+              "label": "1.4"
+            },
+            {
+              "value": "1.5",
+              "label": "1.5"
+            },
+            {
+              "value": "1.6",
+              "label": "1.6"
+            },
+            {
+              "value": "1.7",
+              "label": "1.7"
+            },
+            {
+              "value": "1.8",
+              "label": "1.8"
+            },
+            {
+              "value": "1.9",
+              "label": "1.9"
+            },
+            {
+              "value": "2.0",
+              "label": "2.0"
+            },
+            {
+              "value": "inherit",
+              "label": "Inherit"
+            }
+          ],
+          "default": "inherit"
+        },
+        {
+          "type": "color",
+          "id": "headline_text_color",
+          "label": "Headline Text Color",
+          "info": "Choose the color of the headline text.",
+          "default": "#000000"
+        },
+        {
+          "type": "checkbox",
+          "id": "override_font",
+          "label": "Enable Custom Font",
+          "info": "Enable to use a custom font for the headline text.",
+          "default": false
+        },
+        {
+          "type": "font_picker",
+          "id": "headline_font",
+          "label": "Headline Text Font",
+          "info": "Select the font for the headline text.",
+          "default": "helvetica_n4"
+        },
+        {
+          "type": "select",
+          "id": "font_weight",
+          "label": "Headline Font Weight",
+          "info": "Select the font weight for the headline text.",
+          "options": [
+            {
+              "value": "300",
+              "label": "Light"
+            },
+            {
+              "value": "400",
+              "label": "Regular"
+            },
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semi-bold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            }
+          ],
+          "default": "400"
+        }
+      ]
+    },
+    {
+      "type": "subtext",
+      "name": "Subheading Text",
+      "settings": [
+        {
+          "type": "inline_richtext",
+          "id": "text",
+          "label": "Subheading Text",
+          "info": "Add subheading text or information about the video. Leave blank to remove.",
+          "default": "Add subheading text, info about the video."
+        },
+        {
+          "type": "range",
+          "id": "text_size",
+          "label": "Text Size",
+          "info": "Adjust the font size of the subheading text.",
+          "min": 10,
+          "max": 50,
+          "step": 1,
+          "unit": "px",
+          "default": 16
+        },
+        {
+          "type": "range",
+          "id": "mobile_text_size",
+          "label": "Mobile Text Size",
+          "info": "Adjust the font size of the subheading text on mobile devices.",
+          "min": 10,
+          "max": 50,
+          "step": 1,
+          "unit": "px",
+          "default": 16
+        },
+        {
+          "type": "select",
+          "id": "text_line_height",
+          "label": "Subheading Text Line Height",
+          "info": "Set the line height for the subheading text.",
+          "options": [
+            {
+              "value": "0.75",
+              "label": "0.75"
+            },
+            {
+              "value": "1.0",
+              "label": "1.0"
+            },
+            {
+              "value": "1.1",
+              "label": "1.1"
+            },
+            {
+              "value": "1.2",
+              "label": "1.2"
+            },
+            {
+              "value": "1.3",
+              "label": "1.3"
+            },
+            {
+              "value": "1.4",
+              "label": "1.4"
+            },
+            {
+              "value": "1.5",
+              "label": "1.5"
+            },
+            {
+              "value": "1.6",
+              "label": "1.6"
+            },
+            {
+              "value": "1.7",
+              "label": "1.7"
+            },
+            {
+              "value": "1.8",
+              "label": "1.8"
+            },
+            {
+              "value": "1.9",
+              "label": "1.9"
+            },
+            {
+              "value": "2.0",
+              "label": "2.0"
+            },
+            {
+              "value": "inherit",
+              "label": "Inherit"
+            }
+          ],
+          "default": "inherit"
+        },
+        {
+          "type": "color",
+          "id": "text_color",
+          "label": "Text Color",
+          "info": "Choose the color of the subheading text.",
+          "default": "#2C2C2C"
+        },
+        {
+          "type": "checkbox",
+          "id": "override_font",
+          "label": "Enable Custom Font",
+          "info": "Enable to use a custom font for the subheading text.",
+          "default": false
+        },
+        {
+          "type": "font_picker",
+          "id": "text_font",
+          "label": "Text Subheading Font",
+          "info": "Select the font for the subheading text.",
+          "default": "helvetica_n4"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Video ",
+      "category": "Media",
+      "blocks": [
+        {
+          "type": "headline",
+          "settings": {
+            "headline": "<b>Video Heading</b>"
+          }
+        },
+        {
+          "type": "subtext",
+          "settings": {
+            "text": "Add subheading text, info about the video."
+          }
+        }
+      ]
+    }
+  ],
+  "shopify": {
+    "name": "Video ",
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "select",
+        "id": "show_on_device",
+        "label": "Show Section",
+        "info": "Choose on which devices the video section will be visible.",
+        "options": [
+          {
+            "value": "all",
+            "label": "All Devices"
+          },
+          {
+            "value": "mobile",
+            "label": "Mobile Only"
+          },
+          {
+            "value": "desktop",
+            "label": "Desktop Only"
+          }
+        ],
+        "default": "all"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "fluid_container",
+        "options": [
+          {
+            "value": "container",
+            "label": "Default"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "text_alignment",
+        "id": "text_alignment",
+        "label": "Text Alignment",
+        "info": "Align the text horizontally within the section.",
+        "default": "center"
+      },
+      {
+        "type": "header",
+        "content": "Image / Video",
+        "info": "Configure the video player, its behavior, and appearance."
+      },
+      {
+        "type": "video",
+        "id": "video",
+        "label": "Hero Video",
+        "info": "Upload or select the video to be displayed as the hero background."
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_url_video",
+        "label": "Enable Custom URL Video",
+        "info": "Enable to use a custom video URL instead of the uploaded video.",
+        "default": false
+      },
+      {
+        "type": "url",
+        "id": "custom_video_url",
+        "label": "Custom Video URL",
+        "info": "Enter the URL of the video (e.g., direct MP4 link)."
+      },
+      {
+        "type": "checkbox",
+        "id": "video_inline",
+        "label": "Play Inline",
+        "info": "Enable to play the video inline within the webpage.",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "video_autoplay",
+        "label": "Autoplay",
+        "info": "Enable the video to start playing automatically on page load.",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "video_loop",
+        "label": "Loop Video",
+        "info": "Enable the video to loop continuously.",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "video_muted",
+        "label": "Mute Video",
+        "info": "Start the video in a muted state.",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "video_controls",
+        "label": "Show Controls",
+        "info": "Display video controls.",
+        "default": false
+      },
+      {
+        "type": "select",
+        "id": "video_aspect_ratio",
+        "label": "Video Aspect Ratio",
+        "info": "Set the aspect ratio for the video player.",
+        "options": [
+          {
+            "value": "none",
+            "label": "None"
+          },
+          {
+            "value": "16:9",
+            "label": "16:9"
+          }
+        ],
+        "default": "none"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_lazy_loading",
+        "label": "Enable Lazy Loading",
+        "info": "Delay loading the video until it becomes visible on the screen.",
+        "default": false
+      },
+      {
+        "type": "text",
+        "id": "video_alt",
+        "label": "Video Alt Text",
+        "info": "Provide alternative text for the video for accessibility purposes."
+      },
+      {
+        "type": "textarea",
+        "id": "video_metadata",
+        "label": "Video Metadata",
+        "info": "Add metadata or additional information about the video."
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "color",
+        "id": "link_color",
+        "label": "Link Color",
+        "default": "#0000EE"
+      },
+      {
+        "type": "header",
+        "content": "Style & Colors"
+      },
+      {
+        "type": "color",
+        "id": "section_background_color",
+        "label": "Background Color",
+        "info": "Set the background color of the video section.",
+        "default": "#ffffff"
+      },
+      {
+        "type": "image_picker",
+        "id": "section_background_image",
+        "label": "Background Image",
+        "info": "Upload a background image for the video section."
+      },
+      {
+        "type": "color",
+        "id": "section_background_image_color",
+        "label": "Background Image Color",
+        "info": "Choose a color overlay for the background image.",
+        "default": "#ffffff"
+      },
+      {
+        "type": "select",
+        "id": "section_background_size",
+        "label": "Background Image Size",
+        "info": "Determine how the background image is displayed.",
+        "default": "cover",
+        "options": [
+          {
+            "value": "auto",
+            "label": "Auto"
+          },
+          {
+            "value": "cover",
+            "label": "Cover"
+          },
+          {
+            "value": "contain",
+            "label": "Contain"
+          },
+          {
+            "value": "fill",
+            "label": "Fill"
+          },
+          {
+            "value": "scale-down",
+            "label": "Scale Down"
+          }
+        ]
+      },
+      {
+        "type": "color",
+        "id": "container_background_color",
+        "label": "Container Background Color",
+        "default": "#ffffff"
+      },
+      {
+        "type": "range",
+        "id": "container_radius",
+        "label": "Container Border Radius",
+        "min": 0,
+        "max": 50,
+        "step": 1,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "checkbox",
+        "id": "container_shadow",
+        "label": "Container Shadow",
+        "default": false
+      },
+      {
+        "type": "range",
+        "id": "container_border_size",
+        "label": "Container Border Size",
+        "min": 0,
+        "max": 10,
+        "step": 1,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "color",
+        "id": "container_border_color",
+        "label": "Container Border Color",
+        "default": "#000000"
+      },
+      {
+        "type": "select",
+        "id": "video_shadow",
+        "label": "Video Shadow",
+        "info": "Add a shadow effect to the video player.",
+        "options": [
+          {
+            "value": "none",
+            "label": "None"
+          },
+          {
+            "value": "low",
+            "label": "Low Shadow"
+          },
+          {
+            "value": "medium",
+            "label": "Medium Shadow"
+          },
+          {
+            "value": "high",
+            "label": "High Shadow"
+          }
+        ],
+        "default": "none"
+      },
+      {
+        "type": "range",
+        "id": "media_radius",
+        "label": "Video Border Radius",
+        "info": "Adjust the border radius of the video player for rounded corners.",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "default": 13
+      },
+      {
+        "type": "header",
+        "content": "Animation & Behavior"
+      },
+      {
+        "type": "checkbox",
+        "id": "reveal",
+        "label": "Reveal on scroll",
+        "default": true,
+        "info": "Uses your global Animations & motion setting."
+      },
+      {
+        "type": "checkbox",
+        "id": "big_play_pause_button",
+        "label": "Enable Play / Pause Button",
+        "info": "Display a large play/pause button over the video.",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Layout & Spacing"
+      },
+      {
+        "type": "range",
+        "id": "container_max_width",
+        "label": "Container Max Width",
+        "min": 200,
+        "max": 1600,
+        "step": 100,
+        "unit": "px",
+        "default": 1200
+      },
+      {
+        "type": "range",
+        "id": "section_padding_top_bottom",
+        "label": "Padding Top/Bottom",
+        "info": "Set the top and bottom padding of the section.",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "default": 42
+      },
+      {
+        "type": "range",
+        "id": "section_padding_left_right",
+        "label": "Padding Left/Right",
+        "info": "Set the left and right padding of the section.",
+        "min": 0,
+        "max": 300,
+        "step": 30,
+        "unit": "px",
+        "default": 180
+      },
+      {
+        "type": "range",
+        "id": "container_padding_top_bottom",
+        "label": "Container Padding Top/Bottom",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "container_padding_left_right",
+        "label": "Container Padding Left/Right",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "element_spacing",
+        "label": "Spacing Between Elements",
+        "info": "Define the space between different elements within the section.",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "default": 12
+      },
+      {
+        "type": "range",
+        "id": "desktop_spacing_gap",
+        "label": "Vertical Spacing Gap Between Text Subheading and Video (Desktop)",
+        "info": "Set the vertical space between the subheading text and the video on desktop devices.",
+        "min": -100,
+        "max": 100,
+        "step": 10,
+        "unit": "px",
+        "default": -30
+      },
+      {
+        "type": "range",
+        "id": "desktop_video_margin_top",
+        "label": "Video Top Margin (Desktop)",
+        "info": "Adjust the top margin of the video on desktop. Negative values allow overlap.",
+        "min": -500,
+        "max": 500,
+        "step": 10,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "range",
+        "id": "desktop_video_margin_bottom",
+        "label": "Video Bottom Margin (Desktop)",
+        "info": "Adjust the bottom margin of the video on desktop. Negative values allow overlap.",
+        "min": -500,
+        "max": 500,
+        "step": 10,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "desktop_video_width",
+        "label": "Video Width (Desktop)",
+        "info": "Set the width of the video player on desktop devices.",
+        "min": 100,
+        "max": 2000,
+        "step": 100,
+        "unit": "px",
+        "default": 1400
+      },
+      {
+        "type": "range",
+        "id": "desktop_video_height",
+        "label": "Video Height (Desktop)",
+        "info": "Set the height of the video player on desktop devices.",
+        "min": 100,
+        "max": 1080,
+        "step": 10,
+        "unit": "px",
+        "default": 500
+      },
+      {
+        "type": "header",
+        "content": "Section margin (around the section)"
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin (desktop px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin (desktop px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_mobile",
+        "label": "Top margin (mobile px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_mobile",
+        "label": "Bottom margin (mobile px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "text_alignment",
+        "id": "mobile_text_alignment",
+        "label": "Mobile Text Alignment",
+        "info": "Align the text on mobile devices.",
+        "default": "center"
+      },
+      {
+        "type": "range",
+        "id": "mobile_section_padding_top_bottom",
+        "label": "Mobile Padding Top/Bottom",
+        "info": "Set the top and bottom padding of the section on mobile devices.",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "default": 44
+      },
+      {
+        "type": "range",
+        "id": "mobile_section_padding_left_right",
+        "label": "Mobile Padding Left/Right",
+        "info": "Set the left and right padding of the section on mobile devices.",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "default": 19
+      },
+      {
+        "type": "range",
+        "id": "mobile_container_padding_top_bottom",
+        "label": "Mobile Container Padding Top/Bottom",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "mobile_container_padding_left_right",
+        "label": "Mobile Container Padding Left/Right",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "mobile_spacing_gap",
+        "label": "Vertical Spacing Gap Between Text Subheading and Video (Mobile)",
+        "info": "Set the vertical space between the subheading text and the video on mobile devices.",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "default": 6
+      },
+      {
+        "type": "range",
+        "id": "mobile_video_margin_top",
+        "label": "Video Top Margin (Mobile)",
+        "info": "Adjust the top margin of the video on mobile. Negative values allow overlap.",
+        "min": -500,
+        "max": 500,
+        "step": 10,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "mobile_video_margin_bottom",
+        "label": "Video Bottom Margin (Mobile)",
+        "info": "Adjust the bottom margin of the video on mobile. Negative values allow overlap.",
+        "min": -500,
+        "max": 500,
+        "step": 10,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "mobile_video_width",
+        "label": "Video Width (Mobile)",
+        "info": "Set the width of the video player on mobile devices.",
+        "min": 100,
+        "max": 800,
+        "step": 10,
+        "unit": "px",
+        "default": 800
+      },
+      {
+        "type": "range",
+        "id": "mobile_video_height",
+        "label": "Video Height (Mobile)",
+        "info": "Set the height of the video player on mobile devices.",
+        "min": 100,
+        "max": 800,
+        "step": 10,
+        "unit": "px",
+        "default": 190
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Section background color",
+        "info": "Background colour of the whole section. Set transparent to inherit the page.",
+        "default": "#FFFFFF"
+      }
+    ],
+    "blocks": [
+      {
+        "type": "headline",
+        "name": "Headline",
+        "settings": [
+          {
+            "type": "inline_richtext",
+            "id": "headline",
+            "label": "Headline",
+            "info": "Enter the main headline text for the video section.",
+            "default": "<b>Video Heading</b>"
+          },
+          {
+            "type": "range",
+            "id": "headline_size",
+            "label": "Headline Size",
+            "info": "Adjust the font size of the headline text.",
+            "min": 10,
+            "max": 75,
+            "step": 1,
+            "unit": "px",
+            "default": 37
+          },
+          {
+            "type": "range",
+            "id": "mobile_headline_size",
+            "label": "Mobile Headline Size",
+            "info": "Adjust the font size of the headline text on mobile devices.",
+            "min": 10,
+            "max": 75,
+            "step": 1,
+            "unit": "px",
+            "default": 37
+          },
+          {
+            "type": "select",
+            "id": "headline_line_height",
+            "label": "Headline Text Line Height",
+            "info": "Set the line height for the headline text.",
+            "options": [
+              {
+                "value": "0.75",
+                "label": "0.75"
+              },
+              {
+                "value": "1.0",
+                "label": "1.0"
+              },
+              {
+                "value": "1.1",
+                "label": "1.1"
+              },
+              {
+                "value": "1.2",
+                "label": "1.2"
+              },
+              {
+                "value": "1.3",
+                "label": "1.3"
+              },
+              {
+                "value": "1.4",
+                "label": "1.4"
+              },
+              {
+                "value": "1.5",
+                "label": "1.5"
+              },
+              {
+                "value": "1.6",
+                "label": "1.6"
+              },
+              {
+                "value": "1.7",
+                "label": "1.7"
+              },
+              {
+                "value": "1.8",
+                "label": "1.8"
+              },
+              {
+                "value": "1.9",
+                "label": "1.9"
+              },
+              {
+                "value": "2.0",
+                "label": "2.0"
+              },
+              {
+                "value": "inherit",
+                "label": "Inherit"
+              }
+            ],
+            "default": "inherit"
+          },
+          {
+            "type": "color",
+            "id": "headline_text_color",
+            "label": "Headline Text Color",
+            "info": "Choose the color of the headline text.",
+            "default": "#000000"
+          },
+          {
+            "type": "checkbox",
+            "id": "override_font",
+            "label": "Enable Custom Font",
+            "info": "Enable to use a custom font for the headline text.",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "headline_font",
+            "label": "Headline Text Font",
+            "info": "Select the font for the headline text.",
+            "default": "helvetica_n4"
+          },
+          {
+            "type": "select",
+            "id": "font_weight",
+            "label": "Headline Font Weight",
+            "info": "Select the font weight for the headline text.",
+            "options": [
+              {
+                "value": "300",
+                "label": "Light"
+              },
+              {
+                "value": "400",
+                "label": "Regular"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi-bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              }
+            ],
+            "default": "400"
+          }
+        ]
+      },
+      {
+        "type": "subtext",
+        "name": "Subheading Text",
+        "settings": [
+          {
+            "type": "inline_richtext",
+            "id": "text",
+            "label": "Subheading Text",
+            "info": "Add subheading text or information about the video. Leave blank to remove.",
+            "default": "Add subheading text, info about the video."
+          },
+          {
+            "type": "range",
+            "id": "text_size",
+            "label": "Text Size",
+            "info": "Adjust the font size of the subheading text.",
+            "min": 10,
+            "max": 50,
+            "step": 1,
+            "unit": "px",
+            "default": 16
+          },
+          {
+            "type": "range",
+            "id": "mobile_text_size",
+            "label": "Mobile Text Size",
+            "info": "Adjust the font size of the subheading text on mobile devices.",
+            "min": 10,
+            "max": 50,
+            "step": 1,
+            "unit": "px",
+            "default": 16
+          },
+          {
+            "type": "select",
+            "id": "text_line_height",
+            "label": "Subheading Text Line Height",
+            "info": "Set the line height for the subheading text.",
+            "options": [
+              {
+                "value": "0.75",
+                "label": "0.75"
+              },
+              {
+                "value": "1.0",
+                "label": "1.0"
+              },
+              {
+                "value": "1.1",
+                "label": "1.1"
+              },
+              {
+                "value": "1.2",
+                "label": "1.2"
+              },
+              {
+                "value": "1.3",
+                "label": "1.3"
+              },
+              {
+                "value": "1.4",
+                "label": "1.4"
+              },
+              {
+                "value": "1.5",
+                "label": "1.5"
+              },
+              {
+                "value": "1.6",
+                "label": "1.6"
+              },
+              {
+                "value": "1.7",
+                "label": "1.7"
+              },
+              {
+                "value": "1.8",
+                "label": "1.8"
+              },
+              {
+                "value": "1.9",
+                "label": "1.9"
+              },
+              {
+                "value": "2.0",
+                "label": "2.0"
+              },
+              {
+                "value": "inherit",
+                "label": "Inherit"
+              }
+            ],
+            "default": "inherit"
+          },
+          {
+            "type": "color",
+            "id": "text_color",
+            "label": "Text Color",
+            "info": "Choose the color of the subheading text.",
+            "default": "#2C2C2C"
+          },
+          {
+            "type": "checkbox",
+            "id": "override_font",
+            "label": "Enable Custom Font",
+            "info": "Enable to use a custom font for the subheading text.",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "text_font",
+            "label": "Text Subheading Font",
+            "info": "Select the font for the subheading text.",
+            "default": "helvetica_n4"
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Video ",
+        "category": "Media",
+        "blocks": [
+          {
+            "type": "headline",
+            "settings": {
+              "headline": "<b>Video Heading</b>"
+            }
+          },
+          {
+            "type": "subtext",
+            "settings": {
+              "text": "Add subheading text, info about the video."
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>

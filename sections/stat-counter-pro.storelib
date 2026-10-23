@@ -1,0 +1,1484 @@
+<template compat="shopify">
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- liquid
+  assign __ti_scroll_animation = settings.scroll_animation | default: 'none'
+  assign __ti_reveal = section.settings.reveal
+-%}
+<style>
+  /* Section isolation — prevent CSS/JS bleed between sections */
+  #shopify-section-{{ section.id }} {
+    isolation: isolate;
+    position: relative;
+  }
+  /* Aggressive theme typography */
+  :where(#shopify-section-{{ section.id }}) {
+    font-family: var(--body-font, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :where(button, input, textarea, select, optgroup) {
+    font-family: inherit;
+  }
+  /* Theme font-weight inheritance — sections inherit theme weights by default.
+     Specific font-weight rules in section CSS still override these. */
+  #shopify-section-{{ section.id }} {
+    font-weight: var(--body-weight, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
+    font-weight: var(--heading-weight, inherit);
+  }
+  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
+    font-family: var(--heading-font, inherit);
+  }
+  /* Section margin sliders (mobile-first) */
+  #shopify-section-{{ section.id }} {
+    margin-top: {{ section.settings.section_margin_top_mobile | default: 0 }}px;
+    margin-bottom: {{ section.settings.section_margin_bottom_mobile | default: 0 }}px;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ section.id }} {
+      margin-top: {{ section.settings.section_margin_top_desktop | default: 0 }}px;
+      margin-bottom: {{ section.settings.section_margin_bottom_desktop | default: 0 }}px;
+    }
+  }
+  /* Section wrapper spans its parent's full width without breaking out of
+     the editor preview. The section + first child span 100% so backgrounds
+     reach edge-to-edge but the editor inspector outline stays inside the
+     iframe viewport. */
+  #shopify-section-{{ section.id }} {
+    max-width: none !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    position: relative !important;
+    box-sizing: border-box !important;
+  }
+  #shopify-section-{{ section.id }} > :where(div, section, header, footer, aside, main, article):first-child {
+    max-width: none !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Section width — universal selector that works regardless of inner
+     markup. Targets both:
+       1) Theme container classes (.container/.fluid_container/etc.) — for
+          sections that have an inner wrapper with that class
+       2) The section's first-child div — for sections that don't have a
+          named inner wrapper. The padding-inline sets the max content
+          area while the wrapper itself stays 100% wide so any background
+          stays edge-to-edge. */
+  {%- case section.settings.section_width -%}
+    {%- when 'container' -%}
+      #shopify-section-{{ section.id }} .container,
+      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+        max-width: calc(var(--page-width, 1300px) + 3rem) !important;
+        margin-inline: auto !important;
+        box-sizing: border-box !important;
+      }
+    {%- when 'fluid_container' -%}
+      #shopify-section-{{ section.id }} .fluid_container,
+      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+        max-width: calc(var(--fluid-container-width, 1500px) + 3rem) !important;
+        margin-inline: auto !important;
+        box-sizing: border-box !important;
+      }
+    {%- when 'stretch_width' -%}
+      /* Stretched: no max-width; tighter side padding handled below */
+      @media (min-width: 1200px) {
+        #shopify-section-{{ section.id }} .stretch_width,
+        #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
+          padding-inline: 3rem;
+        }
+      }
+    {%- when 'full_width' -%}
+      /* full bleed — no constraints */
+  {%- endcase -%}
+  /* Reset spacing */
+  {%- if section.settings.reset_spacing -%}
+    #shopify-section-{{ section.id }} { margin-bottom: 0 !important; margin-top: 0 !important; }
+    #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+<!-- ti-theme:start -->
+{%- comment -%}
+  Materia Themes — Stat Counter Pro section.
+  A different take from Stat Counter:
+   - Big circular ring (SVG) around each number with progress fill
+   - Or "stacked badge" mode with colored chip + number underneath
+   - Animated count-up when scrolled into view
+   - Optional trend pill (▲ +12% / ▼ -3%) per stat
+   - Optional inline icon, prefix/suffix, decimal control
+{%- endcomment -%}
+{%- liquid
+  assign s = section.settings
+  assign section_width = s.section_width | default: 'container'
+  assign color_scheme = s.color_scheme | default: 'scheme-1'
+  if s.reset_spacing
+    assign reset_spacing = ' remove_spacing'
+  endif
+  assign style_mode = s.style_mode | default: 'ring'
+  assign columns = s.columns | default: 4
+  assign columns_mobile = s.columns_mobile | default: 2
+  assign column_gap = s.column_gap | default: 24
+  assign animate = s.animate
+  assign duration = s.duration | default: 1800
+  assign accent_color = s.accent_color | default: 'currentColor'
+  assign track_color = s.track_color | default: 'rgba(0,0,0,0.08)'
+  assign ring_size = s.ring_size | default: 140
+  assign ring_thickness = s.ring_thickness | default: 6
+  assign value_size = s.value_size | default: 36
+  assign label_size = s.label_size | default: 13
+  assign show_heading = false
+  if s.heading != blank or s.subheading != blank or s.description != blank
+    assign show_heading = true
+  endif
+  assign scroll_animation = settings.scroll_animation
+-%}
+{%- capture style -%}
+  --section-pt: {{ s.padding_top }};
+  --section-pb: {{ s.padding_bottom }};
+  --scp-cols: {{ columns }};
+  --scp-cols-mb: {{ columns_mobile }};
+  --scp-gap: {{ column_gap }}px;
+  --scp-accent: {{ accent_color }};
+  --scp-track: {{ track_color }};
+  --scp-ring: {{ ring_size }}px;
+  --scp-ring-th: {{ ring_thickness }}px;
+  --scp-value: {{ value_size }}px;
+  --scp-label: {{ label_size }}px;
+  --scp-card-bg: {{ s.card_bg | default: 'rgba(0,0,0,0.02)' }};
+  --scp-card-radius: {{ s.card_radius | default: 18 }}px;
+  --scp-item-padding: {{ s.custom_item_padding | default: 8 }}px;
+  --scp-max-width: {{ s.custom_max_width | default: 1280 }}px;
+  {%- if s.custom_section_bg != blank -%}--scp-section-bg: {{ s.custom_section_bg }};{%- endif -%}
+  {%- if s.custom_text_color != blank -%}--scp-text-override: {{ s.custom_text_color }};{%- endif -%}
+  {%- if s.custom_trend_up_bg != blank -%}--scp-trend-up: {{ s.custom_trend_up_bg }};{%- endif -%}
+  {%- if s.custom_trend_down_bg != blank -%}--scp-trend-down: {{ s.custom_trend_down_bg }};{%- endif -%}
+{%- endcapture -%}
+{%- style -%}
+  {%- if s.custom_section_bg != blank -%}
+    #shopify-section-{{ section.id }} > .section { background: var(--scp-section-bg) !important; }
+  {%- endif -%}
+  {%- if s.custom_text_color != blank -%}
+    #shopify-section-{{ section.id }} .scp-label,
+    #shopify-section-{{ section.id }} .section__header { color: var(--scp-text-override) !important; }
+  {%- endif -%}
+  {%- if s.custom_trend_up_bg != blank -%}
+    #shopify-section-{{ section.id }} .scp-trend--up { background: color-mix(in srgb, var(--scp-trend-up) 15%, transparent) !important; color: var(--scp-trend-up) !important; }
+  {%- endif -%}
+  {%- if s.custom_trend_down_bg != blank -%}
+    #shopify-section-{{ section.id }} .scp-trend--down { background: color-mix(in srgb, var(--scp-trend-down) 15%, transparent) !important; color: var(--scp-trend-down) !important; }
+  {%- endif -%}
+  {%- if s.custom_uppercase_label == false -%}
+    #shopify-section-{{ section.id }} .scp-label { text-transform: none; letter-spacing: 0; }
+  {%- endif -%}
+  #shopify-section-{{ section.id }} > .section > [class^="container"],
+  #shopify-section-{{ section.id }} > .section > [class*="container"] { max-width: var(--scp-max-width); }
+  #shopify-section-{{ section.id }} .scp-item { padding: var(--scp-item-padding) calc(var(--scp-item-padding) * 1.25); }
+  #shopify-section-{{ section.id }} .scp-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--scp-cols-mb), minmax(0, 1fr));
+    gap: var(--scp-gap);
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ section.id }} .scp-grid {
+      grid-template-columns: repeat(var(--scp-cols), minmax(0, 1fr));
+    }
+  }
+  #shopify-section-{{ section.id }} .scp-item {
+    text-align: center;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-start;
+    gap: 12px;
+    padding: 8px;
+    {%- if style_mode == 'card' -%}
+      background: var(--scp-card-bg);
+      border-radius: var(--scp-card-radius);
+      padding: 28px 18px;
+    {%- elsif style_mode == 'badge' -%}
+      padding: 8px;
+    {%- endif -%}
+  }
+  #shopify-section-{{ section.id }} .scp-ring {
+    width: var(--scp-ring);
+    height: var(--scp-ring);
+    position: relative;
+    flex-shrink: 0;
+  }
+  #shopify-section-{{ section.id }} .scp-ring svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+  #shopify-section-{{ section.id }} .scp-ring__track { fill: none; stroke: var(--scp-track); stroke-width: var(--scp-ring-th); }
+  #shopify-section-{{ section.id }} .scp-ring__fill {
+    fill: none;
+    stroke: var(--scp-accent);
+    stroke-width: var(--scp-ring-th);
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  #shopify-section-{{ section.id }} .scp-ring__inner {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4px;
+    color: var(--scp-accent);
+  }
+  #shopify-section-{{ section.id }} .scp-ring__inner svg { width: 22px; height: 22px; }
+  #shopify-section-{{ section.id }} .scp-value {
+    font-size: var(--scp-value);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--scp-accent);
+    display: inline-flex; align-items: baseline; gap: 2px;
+  }
+  #shopify-section-{{ section.id }} .scp-prefix,
+  #shopify-section-{{ section.id }} .scp-suffix { font-size: 0.6em; font-weight: 600; opacity: 0.85; }
+  #shopify-section-{{ section.id }} .scp-label {
+    font-size: var(--scp-label);
+    line-height: 1.4;
+    margin: 0;
+    opacity: 0.85;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  #shopify-section-{{ section.id }} .scp-trend {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  #shopify-section-{{ section.id }} .scp-trend--up    { background: rgba(34,197,94,0.12); color: rgb(22,163,74); }
+  #shopify-section-{{ section.id }} .scp-trend--down  { background: rgba(239,68,68,0.12); color: rgb(220,38,38); }
+  #shopify-section-{{ section.id }} .scp-trend--flat  { background: rgba(0,0,0,0.06); color: inherit; }
+  /* Badge mode */
+  #shopify-section-{{ section.id }} .scp-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 8px 16px; min-width: 76px;
+    border-radius: 999px;
+    background: var(--scp-accent);
+    color: #fff;
+    font-weight: 700;
+    font-size: var(--scp-value);
+    line-height: 1;
+    box-shadow: 0 8px 22px -8px var(--scp-accent);
+  }
+  /* Card mode big number */
+  #shopify-section-{{ section.id }} .scp-item--card .scp-value { font-size: calc(var(--scp-value) * 1.25); }
+{%- endstyle -%}
+
+<div
+  class="section{% if s.padding_top < 30 %} pt-min{% endif %}{% if s.padding_bottom < 30 %} pb-min{% endif %} color-{{ color_scheme }} gradient{{ reset_spacing }}"
+  style="{{ style | strip | strip_newlines }}"
+>
+  <div class="{{ section_width }}">
+    {% if show_heading %}
+      <div class="section__header text-{{ s.header_alignment | default: 'center' }} mb-30 mb-md-40">
+        {%- if s.subheading != blank -%}
+          <p class="m-0 mb-5 fs-custom subheading_weight">{{ s.subheading }}</p>
+        {%- endif -%}
+        {%- if s.heading != blank -%}
+          <h2 class="section__header-heading heading-letter-spacing mt-0 mb-10">{{ s.heading }}</h2>
+        {%- endif -%}
+        {%- if s.description != blank -%}
+          <div class="section__header-des rich__text-m0">{{ s.description }}</div>
+        {%- endif -%}
+      </div>
+    {% endif %}
+
+    {% if section.blocks.size > 0 %}
+      <div class="scp-grid">
+        {%- for block in section.blocks -%}
+          {%- assign b = block.settings -%}
+          {%- assign target_num = b.value | default: '0' | replace: ',', '' | replace: ' ', '' -%}
+          {%- assign max_num = b.ring_max | default: target_num -%}
+          {%- assign trend_class = 'flat' -%}
+          {%- if b.trend_value != blank -%}
+            {%- if b.trend_direction == 'up' -%}{%- assign trend_class = 'up' -%}
+            {%- elsif b.trend_direction == 'down' -%}{%- assign trend_class = 'down' -%}
+            {%- endif -%}
+          {%- endif -%}
+          <motion-element
+            data-motion="fade-up-sm"
+            data-motion-delay="{{ forloop.index0 | times: 80 }}"
+            {% if scroll_animation != 'slide_in' %}hold{% endif %}
+            class="scp-item scp-item--{{ style_mode }} {% if scroll_animation != 'none' %} scroll-trigger {{ scroll_animation }}{% endif %}"
+            {{ block.shopify_attributes }}
+            style="--animation-order: {{ forloop.index }};"
+          >
+            {%- case style_mode -%}
+              {%- when 'ring' -%}
+                <div class="scp-ring" data-target="{{ target_num }}" data-max="{{ max_num }}" data-decimals="{{ b.decimals | default: 0 }}" data-duration="{{ duration }}" data-animate="{{ animate }}">
+                  <svg viewBox="0 0 100 100" aria-hidden="true">
+                    <circle class="scp-ring__track" cx="50" cy="50" r="46"></circle>
+                    <circle class="scp-ring__fill" cx="50" cy="50" r="46"
+                      stroke-dasharray="289.03"
+                      stroke-dashoffset="{% if animate %}289.03{% else %}0{% endif %}"></circle>
+                  </svg>
+                  <div class="scp-ring__inner">
+                    {%- if b.icon != blank -%}{{ b.icon }}{%- endif -%}
+                    <span class="scp-value">
+                      {%- if b.prefix != blank -%}<span class="scp-prefix">{{ b.prefix }}</span>{%- endif -%}
+                      <span class="scp-number">{%- if animate -%}0{%- else -%}{{ b.value | default: 0 }}{%- endif -%}</span>
+                      {%- if b.suffix != blank -%}<span class="scp-suffix">{{ b.suffix }}</span>{%- endif -%}
+                    </span>
+                  </div>
+                </div>
+              {%- when 'badge' -%}
+                <div class="scp-badge" data-target="{{ target_num }}" data-decimals="{{ b.decimals | default: 0 }}" data-duration="{{ duration }}" data-animate="{{ animate }}">
+                  {%- if b.prefix != blank -%}<span class="scp-prefix">{{ b.prefix }}</span>{%- endif -%}
+                  <span class="scp-number">{%- if animate -%}0{%- else -%}{{ b.value | default: 0 }}{%- endif -%}</span>
+                  {%- if b.suffix != blank -%}<span class="scp-suffix">{{ b.suffix }}</span>{%- endif -%}
+                </div>
+              {%- else -%}
+                <div class="scp-value" data-target="{{ target_num }}" data-decimals="{{ b.decimals | default: 0 }}" data-duration="{{ duration }}" data-animate="{{ animate }}">
+                  {%- if b.prefix != blank -%}<span class="scp-prefix">{{ b.prefix }}</span>{%- endif -%}
+                  <span class="scp-number">{%- if animate -%}0{%- else -%}{{ b.value | default: 0 }}{%- endif -%}</span>
+                  {%- if b.suffix != blank -%}<span class="scp-suffix">{{ b.suffix }}</span>{%- endif -%}
+                </div>
+            {%- endcase -%}
+
+            {%- if b.label != blank -%}<p class="scp-label">{{ b.label }}</p>{%- endif -%}
+
+            {%- if b.trend_value != blank -%}
+              <span class="scp-trend scp-trend--{{ trend_class }}">
+                {%- case trend_class -%}
+                  {%- when 'up' -%}<svg viewBox="0 0 12 12" width="10" height="10" fill="currentColor"><path d="M6 2l4 5H7v3H5V7H2z"/></svg>
+                  {%- when 'down' -%}<svg viewBox="0 0 12 12" width="10" height="10" fill="currentColor"><path d="M6 10L2 5h3V2h2v3h3z"/></svg>
+                  {%- else -%}<svg viewBox="0 0 12 12" width="10" height="10" fill="currentColor"><rect x="2" y="5" width="8" height="2"/></svg>
+                {%- endcase -%}
+                {{ b.trend_value }}
+              </span>
+            {%- endif -%}
+          </motion-element>
+        {%- endfor -%}
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{%- if animate -%}
+<script>
+  (function () {
+    var section = document.getElementById('shopify-section-{{ section.id }}');
+    if (!section) return;
+    var items = section.querySelectorAll('[data-animate="true"]');
+    if (!items.length) return;
+    function easeOut(p) { return 1 - Math.pow(1 - p, 3); }
+    function format(val, decimals) {
+      return decimals > 0 ? val.toFixed(decimals) : Math.round(val).toLocaleString();
+    }
+    function animateRing(el) {
+      var target = parseFloat(el.getAttribute('data-target')) || 0;
+      var max = parseFloat(el.getAttribute('data-max')) || target || 1;
+      var decimals = parseInt(el.getAttribute('data-decimals'), 10) || 0;
+      var duration = parseInt(el.getAttribute('data-duration'), 10) || 1800;
+      var num = el.querySelector('.scp-number');
+      var fill = el.querySelector('.scp-ring__fill');
+      var circumference = 289.03; // 2 * pi * 46
+      var pct = Math.min(target / (max || 1), 1);
+      var endOffset = circumference * (1 - pct);
+      var start = null;
+      function step(ts) {
+        if (!start) start = ts;
+        var p = Math.min((ts - start) / duration, 1);
+        var eased = easeOut(p);
+        if (num) num.textContent = format(target * eased, decimals);
+        if (fill) fill.style.strokeDashoffset = (circumference - (circumference - endOffset) * eased).toFixed(2);
+        if (p < 1) requestAnimationFrame(step);
+        else {
+          if (num) num.textContent = format(target, decimals);
+          if (fill) fill.style.strokeDashoffset = endOffset.toFixed(2);
+        }
+      }
+      requestAnimationFrame(step);
+    }
+    function animateNumber(el) {
+      var target = parseFloat(el.getAttribute('data-target')) || 0;
+      var decimals = parseInt(el.getAttribute('data-decimals'), 10) || 0;
+      var duration = parseInt(el.getAttribute('data-duration'), 10) || 1800;
+      var num = el.querySelector('.scp-number');
+      var start = null;
+      function step(ts) {
+        if (!start) start = ts;
+        var p = Math.min((ts - start) / duration, 1);
+        var eased = easeOut(p);
+        if (num) num.textContent = format(target * eased, decimals);
+        if (p < 1) requestAnimationFrame(step);
+        else if (num) num.textContent = format(target, decimals);
+      }
+      requestAnimationFrame(step);
+    }
+    var run = function (el) {
+      if (el.classList.contains('scp-ring')) animateRing(el);
+      else animateNumber(el);
+    };
+    if ('IntersectionObserver' in window) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            run(entry.target);
+            io.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.3 });
+      items.forEach(function (el) { io.observe(el); });
+    } else {
+      items.forEach(run);
+    }
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+
+
+
+</template>
+
+<schema>
+{
+  "type": "stat-counter-pro",
+  "name": "Stat Counter Pro",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "reset_spacing",
+      "label": "Remove default space between sections",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_2",
+      "label": "General"
+    },
+    {
+      "type": "color_scheme",
+      "id": "color_scheme",
+      "label": "Color scheme",
+      "default": "scheme-1"
+    },
+    {
+      "type": "select",
+      "id": "section_width",
+      "label": "Section width",
+      "default": "full_width",
+      "options": [
+        {
+          "value": "container",
+          "label": "Container"
+        },
+        {
+          "value": "fluid_container",
+          "label": "Fluid container"
+        },
+        {
+          "value": "stretch_width",
+          "label": "Stretched"
+        },
+        {
+          "value": "full_width",
+          "label": "Full width"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_5",
+      "label": "Section Header"
+    },
+    {
+      "type": "text",
+      "id": "subheading",
+      "label": "Eyebrow text",
+      "default": "Why shop with us"
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Title",
+      "default": "Numbers we're proud of"
+    },
+    {
+      "type": "header",
+      "id": "hdr_8",
+      "label": "Image / Media"
+    },
+    {
+      "type": "range",
+      "id": "duration",
+      "label": "Animation duration",
+      "min": 600,
+      "max": 4000,
+      "step": 100,
+      "unit": "ms",
+      "default": 1800
+    },
+    {
+      "type": "header",
+      "id": "hdr_10",
+      "label": "Content"
+    },
+    {
+      "type": "richtext",
+      "id": "description",
+      "label": "Subtext"
+    },
+    {
+      "type": "checkbox",
+      "id": "custom_uppercase_label",
+      "label": "Uppercase labels",
+      "default": true
+    },
+    {
+      "type": "header",
+      "id": "hdr_13",
+      "label": "Typography"
+    },
+    {
+      "type": "range",
+      "id": "value_size",
+      "label": "Number size",
+      "min": 18,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 36
+    },
+    {
+      "type": "color",
+      "id": "custom_text_color",
+      "label": "Text / label color override"
+    },
+    {
+      "type": "header",
+      "id": "hdr_16",
+      "label": "Style & Colors"
+    },
+    {
+      "type": "color",
+      "id": "accent_color",
+      "label": "Accent color",
+      "info": "Number / ring fill / badge background."
+    },
+    {
+      "type": "color",
+      "id": "track_color",
+      "label": "Ring track color"
+    },
+    {
+      "type": "color",
+      "id": "card_bg",
+      "label": "Card background",
+      "info": "Used by Big number card mode."
+    },
+    {
+      "type": "range",
+      "id": "card_radius",
+      "label": "Card corner radius",
+      "min": 0,
+      "max": 30,
+      "step": 1,
+      "unit": "px",
+      "default": 18
+    },
+    {
+      "type": "color",
+      "id": "custom_section_bg",
+      "label": "Section background override"
+    },
+    {
+      "type": "color",
+      "id": "custom_trend_up_bg",
+      "label": "Up trend pill color"
+    },
+    {
+      "type": "color",
+      "id": "custom_trend_down_bg",
+      "label": "Down trend pill color"
+    },
+    {
+      "type": "header",
+      "id": "hdr_24",
+      "label": "Animation & Behavior"
+    },
+    {
+      "type": "checkbox",
+      "id": "reveal",
+      "label": "Reveal on scroll",
+      "default": true,
+      "info": "Uses your global Animations & motion setting."
+    },
+    {
+      "type": "header",
+      "id": "hdr_26",
+      "label": "Layout & Spacing"
+    },
+    {
+      "type": "range",
+      "id": "columns",
+      "label": "Items per row (desktop)",
+      "min": 2,
+      "max": 6,
+      "step": 1,
+      "default": 4
+    },
+    {
+      "type": "range",
+      "id": "column_gap",
+      "label": "Gap between items",
+      "min": 0,
+      "max": 80,
+      "step": 2,
+      "unit": "px",
+      "default": 24
+    },
+    {
+      "type": "range",
+      "id": "custom_item_padding",
+      "label": "Spacing inside each stat",
+      "min": 0,
+      "max": 60,
+      "step": 2,
+      "unit": "px",
+      "default": 8
+    },
+    {
+      "type": "range",
+      "id": "custom_max_width",
+      "label": "Max content width",
+      "min": 600,
+      "max": 1600,
+      "step": 20,
+      "unit": "px",
+      "default": 1280
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "label": "Top padding",
+      "min": 0,
+      "max": 100,
+      "step": 2,
+      "unit": "px",
+      "default": 40
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "label": "Bottom padding",
+      "min": 0,
+      "max": 100,
+      "step": 2,
+      "unit": "px",
+      "default": 40
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_desktop",
+      "label": "Top margin (desktop px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_desktop",
+      "label": "Bottom margin (desktop px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "header",
+      "id": "hdr_35",
+      "label": "Mobile"
+    },
+    {
+      "type": "range",
+      "id": "columns_mobile",
+      "label": "Items per row (mobile)",
+      "min": 1,
+      "max": 3,
+      "step": 1,
+      "default": 2
+    },
+    {
+      "type": "range",
+      "id": "section_margin_top_mobile",
+      "label": "Top margin (mobile px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "section_margin_bottom_mobile",
+      "label": "Bottom margin (mobile px)",
+      "min": 0,
+      "max": 300,
+      "step": 4,
+      "default": 0
+    },
+    {
+      "type": "header",
+      "id": "hdr_39",
+      "label": "Advanced"
+    },
+    {
+      "type": "select",
+      "id": "header_alignment",
+      "label": "Header alignment",
+      "default": "center",
+      "options": [
+        {
+          "value": "left",
+          "label": "Left"
+        },
+        {
+          "value": "center",
+          "label": "Centered"
+        },
+        {
+          "value": "right",
+          "label": "Right"
+        }
+      ]
+    },
+    {
+      "type": "select",
+      "id": "style_mode",
+      "label": "Visualization",
+      "default": "ring",
+      "info": "How each stat is shown.",
+      "options": [
+        {
+          "value": "ring",
+          "label": "Progress ring"
+        },
+        {
+          "value": "badge",
+          "label": "Solid badge"
+        },
+        {
+          "value": "card",
+          "label": "Big number card"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "ring_size",
+      "label": "Ring diameter",
+      "min": 80,
+      "max": 220,
+      "step": 4,
+      "unit": "px",
+      "default": 140
+    },
+    {
+      "type": "range",
+      "id": "ring_thickness",
+      "label": "Ring thickness",
+      "min": 2,
+      "max": 16,
+      "step": 1,
+      "unit": "px",
+      "default": 6
+    },
+    {
+      "type": "range",
+      "id": "label_size",
+      "label": "Label size",
+      "min": 10,
+      "max": 22,
+      "step": 1,
+      "unit": "px",
+      "default": 13
+    },
+    {
+      "type": "checkbox",
+      "id": "animate",
+      "label": "Animate when scrolled into view",
+      "default": true
+    }
+  ],
+  "blocks": [
+    {
+      "type": "stat",
+      "name": "Stat",
+      "settings": [
+        {
+          "type": "header",
+          "id": "hdr_1",
+          "label": "Content"
+        },
+        {
+          "type": "text",
+          "id": "value",
+          "label": "Number",
+          "default": "1200",
+          "info": "Digits only — commas/decimals stripped for animation."
+        },
+        {
+          "type": "text",
+          "id": "ring_max",
+          "label": "Ring max value",
+          "info": "Used by Progress ring mode. Leave empty to fill 100%.",
+          "default": "100"
+        },
+        {
+          "type": "text",
+          "id": "prefix",
+          "label": "Prefix",
+          "info": "e.g. $ or +"
+        },
+        {
+          "type": "text",
+          "id": "suffix",
+          "label": "Suffix",
+          "info": "e.g. %, K, M, +"
+        },
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Stat label",
+          "default": "Five-star reviews"
+        },
+        {
+          "type": "text",
+          "id": "trend_value",
+          "label": "Trend value",
+          "info": "e.g. +12% YoY. Leave empty to hide the pill."
+        },
+        {
+          "type": "header",
+          "id": "hdr_8",
+          "label": "Advanced"
+        },
+        {
+          "type": "range",
+          "id": "decimals",
+          "label": "Decimal places",
+          "min": 0,
+          "max": 2,
+          "step": 1,
+          "default": 0
+        },
+        {
+          "type": "select",
+          "id": "trend_direction",
+          "label": "Trend direction",
+          "default": "flat",
+          "options": [
+            {
+              "value": "up",
+              "label": "Up (green)"
+            },
+            {
+              "value": "down",
+              "label": "Down (red)"
+            },
+            {
+              "value": "flat",
+              "label": "Flat (neutral)"
+            }
+          ]
+        },
+        {
+          "type": "html",
+          "id": "icon",
+          "label": "Inline SVG",
+          "info": "Shown above the number inside the ring."
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Stat Counter Pro",
+      "category": "Stats",
+      "blocks": [
+        {
+          "type": "stat",
+          "settings": {
+            "value": "98",
+            "ring_max": "100",
+            "suffix": "%",
+            "label": "Five-star reviews",
+            "trend_direction": "up",
+            "trend_value": "+4% YoY"
+          }
+        },
+        {
+          "type": "stat",
+          "settings": {
+            "value": "24",
+            "ring_max": "48",
+            "suffix": "h",
+            "label": "Avg. ship time",
+            "trend_direction": "down",
+            "trend_value": "-30%"
+          }
+        },
+        {
+          "type": "stat",
+          "settings": {
+            "value": "1200",
+            "ring_max": "1500",
+            "suffix": "+",
+            "label": "Happy customers",
+            "trend_direction": "up",
+            "trend_value": "+18%"
+          }
+        },
+        {
+          "type": "stat",
+          "settings": {
+            "value": "50",
+            "ring_max": "100",
+            "suffix": "+",
+            "label": "Countries served",
+            "trend_direction": "flat",
+            "trend_value": "Global"
+          }
+        }
+      ]
+    }
+  ],
+  "disabled_on": {
+    "groups": [
+      "header",
+      "footer"
+    ]
+  },
+  "shopify": {
+    "name": "Stat Counter Pro",
+    "tag": "section",
+    "class": "section-stat-counter-pro",
+    "disabled_on": {
+      "groups": [
+        "header",
+        "footer"
+      ]
+    },
+    "settings": [
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "scheme-1"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "full_width",
+        "options": [
+          {
+            "value": "container",
+            "label": "Container"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Section Header"
+      },
+      {
+        "type": "text",
+        "id": "subheading",
+        "label": "Eyebrow text",
+        "default": "Why shop with us"
+      },
+      {
+        "type": "text",
+        "id": "heading",
+        "label": "Title",
+        "default": "Numbers we're proud of"
+      },
+      {
+        "type": "header",
+        "content": "Image / Media"
+      },
+      {
+        "type": "range",
+        "id": "duration",
+        "label": "Animation duration",
+        "min": 600,
+        "max": 4000,
+        "step": 100,
+        "unit": "ms",
+        "default": 1800
+      },
+      {
+        "type": "header",
+        "content": "Content"
+      },
+      {
+        "type": "richtext",
+        "id": "description",
+        "label": "Subtext"
+      },
+      {
+        "type": "checkbox",
+        "id": "custom_uppercase_label",
+        "label": "Uppercase labels",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "range",
+        "id": "value_size",
+        "label": "Number size",
+        "min": 18,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 36
+      },
+      {
+        "type": "color",
+        "id": "custom_text_color",
+        "label": "Text / label color override"
+      },
+      {
+        "type": "header",
+        "content": "Style & Colors"
+      },
+      {
+        "type": "color",
+        "id": "accent_color",
+        "label": "Accent color",
+        "info": "Number / ring fill / badge background."
+      },
+      {
+        "type": "color",
+        "id": "track_color",
+        "label": "Ring track color"
+      },
+      {
+        "type": "color",
+        "id": "card_bg",
+        "label": "Card background",
+        "info": "Used by Big number card mode."
+      },
+      {
+        "type": "range",
+        "id": "card_radius",
+        "label": "Card corner radius",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "unit": "px",
+        "default": 18
+      },
+      {
+        "type": "color",
+        "id": "custom_section_bg",
+        "label": "Section background override"
+      },
+      {
+        "type": "color",
+        "id": "custom_trend_up_bg",
+        "label": "Up trend pill color"
+      },
+      {
+        "type": "color",
+        "id": "custom_trend_down_bg",
+        "label": "Down trend pill color"
+      },
+      {
+        "type": "header",
+        "content": "Animation & Behavior"
+      },
+      {
+        "type": "checkbox",
+        "id": "reveal",
+        "label": "Reveal on scroll",
+        "default": true,
+        "info": "Uses your global Animations & motion setting."
+      },
+      {
+        "type": "header",
+        "content": "Layout & Spacing"
+      },
+      {
+        "type": "range",
+        "id": "columns",
+        "label": "Items per row (desktop)",
+        "min": 2,
+        "max": 6,
+        "step": 1,
+        "default": 4
+      },
+      {
+        "type": "range",
+        "id": "column_gap",
+        "label": "Gap between items",
+        "min": 0,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "range",
+        "id": "custom_item_padding",
+        "label": "Spacing inside each stat",
+        "min": 0,
+        "max": 60,
+        "step": 2,
+        "unit": "px",
+        "default": 8
+      },
+      {
+        "type": "range",
+        "id": "custom_max_width",
+        "label": "Max content width",
+        "min": 600,
+        "max": 1600,
+        "step": 20,
+        "unit": "px",
+        "default": 1280
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top padding",
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "unit": "px",
+        "default": 40
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom padding",
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "unit": "px",
+        "default": 40
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin (desktop px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin (desktop px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "range",
+        "id": "columns_mobile",
+        "label": "Items per row (mobile)",
+        "min": 1,
+        "max": 3,
+        "step": 1,
+        "default": 2
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_mobile",
+        "label": "Top margin (mobile px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_mobile",
+        "label": "Bottom margin (mobile px)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Advanced"
+      },
+      {
+        "type": "select",
+        "id": "header_alignment",
+        "label": "Header alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Centered"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "style_mode",
+        "label": "Visualization",
+        "default": "ring",
+        "info": "How each stat is shown.",
+        "options": [
+          {
+            "value": "ring",
+            "label": "Progress ring"
+          },
+          {
+            "value": "badge",
+            "label": "Solid badge"
+          },
+          {
+            "value": "card",
+            "label": "Big number card"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "ring_size",
+        "label": "Ring diameter",
+        "min": 80,
+        "max": 220,
+        "step": 4,
+        "unit": "px",
+        "default": 140
+      },
+      {
+        "type": "range",
+        "id": "ring_thickness",
+        "label": "Ring thickness",
+        "min": 2,
+        "max": 16,
+        "step": 1,
+        "unit": "px",
+        "default": 6
+      },
+      {
+        "type": "range",
+        "id": "label_size",
+        "label": "Label size",
+        "min": 10,
+        "max": 22,
+        "step": 1,
+        "unit": "px",
+        "default": 13
+      },
+      {
+        "type": "checkbox",
+        "id": "animate",
+        "label": "Animate when scrolled into view",
+        "default": true
+      }
+    ],
+    "blocks": [
+      {
+        "type": "stat",
+        "name": "Stat",
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "text",
+            "id": "value",
+            "label": "Number",
+            "default": "1200",
+            "info": "Digits only — commas/decimals stripped for animation."
+          },
+          {
+            "type": "text",
+            "id": "ring_max",
+            "label": "Ring max value",
+            "info": "Used by Progress ring mode. Leave empty to fill 100%.",
+            "default": "100"
+          },
+          {
+            "type": "text",
+            "id": "prefix",
+            "label": "Prefix",
+            "info": "e.g. $ or +"
+          },
+          {
+            "type": "text",
+            "id": "suffix",
+            "label": "Suffix",
+            "info": "e.g. %, K, M, +"
+          },
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Stat label",
+            "default": "Five-star reviews"
+          },
+          {
+            "type": "text",
+            "id": "trend_value",
+            "label": "Trend value",
+            "info": "e.g. +12% YoY. Leave empty to hide the pill."
+          },
+          {
+            "type": "header",
+            "content": "Advanced"
+          },
+          {
+            "type": "range",
+            "id": "decimals",
+            "label": "Decimal places",
+            "min": 0,
+            "max": 2,
+            "step": 1,
+            "default": 0
+          },
+          {
+            "type": "select",
+            "id": "trend_direction",
+            "label": "Trend direction",
+            "default": "flat",
+            "options": [
+              {
+                "value": "up",
+                "label": "Up (green)"
+              },
+              {
+                "value": "down",
+                "label": "Down (red)"
+              },
+              {
+                "value": "flat",
+                "label": "Flat (neutral)"
+              }
+            ]
+          },
+          {
+            "type": "html",
+            "id": "icon",
+            "label": "Inline SVG",
+            "info": "Shown above the number inside the ring."
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Stat Counter Pro",
+        "category": "Stats",
+        "blocks": [
+          {
+            "type": "stat",
+            "settings": {
+              "value": "98",
+              "ring_max": "100",
+              "suffix": "%",
+              "label": "Five-star reviews",
+              "trend_direction": "up",
+              "trend_value": "+4% YoY"
+            }
+          },
+          {
+            "type": "stat",
+            "settings": {
+              "value": "24",
+              "ring_max": "48",
+              "suffix": "h",
+              "label": "Avg. ship time",
+              "trend_direction": "down",
+              "trend_value": "-30%"
+            }
+          },
+          {
+            "type": "stat",
+            "settings": {
+              "value": "1200",
+              "ring_max": "1500",
+              "suffix": "+",
+              "label": "Happy customers",
+              "trend_direction": "up",
+              "trend_value": "+18%"
+            }
+          },
+          {
+            "type": "stat",
+            "settings": {
+              "value": "50",
+              "ring_max": "100",
+              "suffix": "+",
+              "label": "Countries served",
+              "trend_direction": "flat",
+              "trend_value": "Global"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>
