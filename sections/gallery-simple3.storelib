@@ -1,4 +1,8 @@
 <template compat="shopify">
+{% render 'theme-type' %}
+{%- liquid
+  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+-%}
 {%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
 {%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
 <style>
@@ -166,8 +170,8 @@
   /* Section wrapper: color, background, spacing */
   .loudecomz-section__{{sec_id}} {
     --loudecomz-gutter-x: {{section.settings.gutter}}px;
-    color: {{section.settings.text_color}} !important;
-    background-color: {{section.settings.background_color}} !important;
+    color: {% render 'scheme-color', color: section.settings.text_color, fallback: 'var(--color-text)' %} !important;
+    background-color: {% render 'scheme-color', color: section.settings.background_color, fallback: 'var(--color-background)' %} !important;
     line-height: 1.5;
 
     /* Desktop top/bottom and left/right padding */
@@ -179,7 +183,7 @@
     padding-right: 0;
 
     {% if section.settings.use_theme_font == true %}
-      font-family: var(--font-body), sans-serif;
+      font-family: var(--body-font, inherit);
     {% endif %}
   }
 
@@ -205,8 +209,8 @@
     margin-top: 0;
     margin-bottom: 40px;
     text-align: {{section.settings.text_align}};
-    color: {{section.settings.text_color}} !important;
-    font-weight: {{ section.settings.heading_font_weight }} !important;
+    color: {% render 'scheme-color', color: section.settings.text_color, fallback: 'var(--color-heading)' %} !important;
+    font-weight: {% if section.settings.heading_font_weight == 'inherit' or section.settings.heading_font_weight == blank %}var(--heading-weight, 700){% else %}{{ section.settings.heading_font_weight }}{% endif %} !important;
     line-height: 1.2;
     /* Heading size slider => set via font-size */
     font-size: {{section.settings.heading_size}}px !important;
@@ -254,7 +258,7 @@
 
   /* Button text color */
   .loudecomz-section__{{sec_id}} .loudecomz-gallery-link {
-    color: {{ section.settings.button_text_color }} !important;
+    color: {% render 'scheme-color', color: section.settings.button_text_color, fallback: '#ffffff' %} !important;
   }
 
   /* Basic hover - We'll apply different classes for the selected animation */
@@ -334,7 +338,7 @@
   {% assign hover_class = 'loudecomz-anim-' | append: section.settings.image_hover_animation %}
 {% endif %}
 
-<div class="loudecomz-section__{{sec_id}} {{ section.settings.custom_class }}">
+<div class="loudecomz-section__{{sec_id}} color-{{ color_scheme }} gradient {{ section.settings.custom_class }}">
   <div class="{{ container }}">
     {% if section.settings.heading_text != blank %}
       <{{ section.settings.heading_tag }} class="loudecomz-section-title">
@@ -791,9 +795,31 @@
     "class": "gallery-3",
     "settings": [
       {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "checkbox",
+        "id": "is_fullwidth",
+        "default": false,
+        "label": "Full width"
+      },
+      {
+        "type": "number",
+        "id": "container_max_width",
+        "label": "Content width (px)",
+        "default": 1320
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
         "type": "checkbox",
         "id": "reset_spacing",
-        "label": "Remove default space between sections",
+        "label": "Remove section spacing",
         "default": true
       },
       {
@@ -897,25 +923,14 @@
         "content": "Basic settings"
       },
       {
-        "type": "checkbox",
-        "id": "is_fullwidth",
-        "default": false,
-        "label": "Enable fullwidth",
-        "info": "Forces the section to span the entire width"
-      },
-      {
         "type": "color",
         "id": "text_color",
-        "label": "Select text color",
-        "info": "Choose the text color for this section",
-        "default": "#262424"
+        "label": "Text"
       },
       {
         "type": "color",
         "id": "background_color",
-        "label": "Select background color",
-        "info": "Pick a background color for the section",
-        "default": "transparent"
+        "label": "Background"
       },
       {
         "type": "range",
@@ -925,14 +940,12 @@
         "step": 1,
         "unit": "px",
         "label": "Gap between images",
-        "info": "Adjust the spacing between gallery images",
         "default": 10
       },
       {
         "type": "select",
         "id": "img_proportion",
         "label": "Image aspect ratio",
-        "info": "Select the aspect ratio for gallery images",
         "options": [
           {
             "value": "56%",
@@ -956,8 +969,7 @@
       {
         "type": "select",
         "id": "image_hover_animation",
-        "label": "Image Hover Animation",
-        "info": "Choose a hover effect for images",
+        "label": "Hover effect",
         "options": [
           {
             "value": "none",
@@ -989,8 +1001,7 @@
       {
         "type": "range",
         "id": "image_border_radius",
-        "label": "Images border radius",
-        "info": "Adjust the corner radius of the images",
+        "label": "Image corner radius",
         "min": 0,
         "max": 50,
         "step": 1,
@@ -1011,7 +1022,6 @@
         "type": "range",
         "id": "heading_size",
         "label": "Heading size",
-        "info": "Adjust the font size of the heading (in px)",
         "min": 10,
         "max": 80,
         "step": 1,
@@ -1022,7 +1032,6 @@
         "type": "select",
         "id": "text_align",
         "label": "Align heading text",
-        "info": "Choose alignment for the heading text",
         "options": [
           {
             "value": "left",
@@ -1039,14 +1048,18 @@
         "type": "checkbox",
         "id": "use_theme_font",
         "default": false,
-        "label": "Use theme's font"
+        "label": "Theme body font"
       },
       {
         "type": "select",
         "id": "heading_font_weight",
-        "label": "Heading text weight",
+        "label": "Heading weight",
         "info": "Select the heading text weight",
         "options": [
+          {
+            "value": "inherit",
+            "label": "Theme"
+          },
           {
             "value": "lighter",
             "label": "Light"
@@ -1060,25 +1073,17 @@
             "label": "Bold"
           }
         ],
-        "default": "bold"
+        "default": "inherit"
       },
       {
         "type": "header",
         "content": "Customization"
       },
       {
-        "type": "number",
-        "id": "container_max_width",
-        "label": "Section max width (px)",
-        "info": "Set the maximum container width in pixels",
-        "default": 1320
-      },
-      {
         "type": "text",
         "id": "custom_class",
         "label": "Custom CSS class",
-        "default": "/",
-        "info": "Add a custom CSS class for this section"
+        "default": "/"
       },
       {
         "type": "textarea",
@@ -1091,7 +1096,6 @@
         "type": "select",
         "id": "heading_tag",
         "label": "Heading tag",
-        "info": "Select the HTML tag for the heading",
         "options": [
           {
             "value": "h1",
@@ -1108,22 +1112,17 @@
         "type": "checkbox",
         "id": "lazyload",
         "default": true,
-        "label": "Enable lazyload",
-        "info": "Load images lazily to improve performance"
+        "label": "Lazy load images"
       },
       {
         "type": "color",
         "id": "button_text_color",
-        "label": "Button text color",
-        "info": "Pick the color of the button text",
-        "default": "#ffffff"
+        "label": "Link text"
       },
       {
         "type": "color",
         "id": "section_bg",
-        "label": "Section background color",
-        "info": "Background colour of the whole section. Set transparent to inherit the page.",
-        "default": "#FFFFFF"
+        "label": "Section background"
       }
     ],
     "blocks": [
