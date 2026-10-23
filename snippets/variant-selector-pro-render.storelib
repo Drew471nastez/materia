@@ -1,613 +1,276 @@
 <template compat="shopify">
 {%- comment -%}
-  ═══════════════════════════════════════════════════════════════════════
-  VARIANT SELECTOR PRO — RENDER SNIPPET
-  ═══════════════════════════════════════════════════════════════════════
-  Modern variant picker with custom images / colours per variant.
-  Auto-detects every variant on the product (no manual list) and lets
-  the merchant attach a custom thumbnail or swatch colour to each one.
-
-  When a shopper clicks a card:
-    1. The card's variant becomes the page's selected variant.
-    2. The product's underlying option pickers (Color, Size, …) are
-       updated to match so price / availability / Add-to-Cart wire
-       through Shopify's standard variant-change flow.
-    3. A `variant:change` event is dispatched so the theme's existing
-       price / sticky / etc. components react automatically.
-
-  ───────────────────────────────────────────────────────────────────────
-  HOW TO USE — for the merchant
-  ───────────────────────────────────────────────────────────────────────
-    • The grid auto-renders one card per product variant. No manual list.
-    • To attach a custom thumbnail to a variant, scroll to "Variant
-      slots" below. Slot 1 → first variant, Slot 2 → second variant, etc.
-      Leave a slot empty to use that variant's default featured image.
-    • To attach a flat colour swatch instead of an image, fill "Variant N
-      colour". The block uses that as the card background.
-    • For text-only swatches (e.g. "NONE"), leave both fields blank —
-      the variant title renders as a centered label.
-
-  ───────────────────────────────────────────────────────────────────────
-  INTEGRATION NOTES — for theme developers
-  ───────────────────────────────────────────────────────────────────────
-    • Selection is synced by updating the underlying option-level inputs
-      (variant-radios / variant-selects) AND firing their `change` events,
-      then setting `<input name="id">` on the form for completeness.
-    • A `variant:change` CustomEvent is fired with the chosen variant's
-      JSON so any other component listening for it reacts immediately.
-    • All hardcoded colours route through `--vsp-*` CSS variables so the
-      block stays in sync with the merchant's scheme + customizer values.
-
-  Inputs from main-product.liquid: block, section, product
+  Materia Themes. Variant Selector Pro: one row per option (Size, Colour...)
+  with the option name and the chosen value. Sizes are buttons, colours are
+  swatches drawn from each colour's variant picture, or its swatch colour,
+  or its name. The row markup is the theme's variant picker
+  (variant-radios-detail), so price, stock, the add button, the variant id,
+  the address and the gallery all follow a choice the same way.
+  Inputs: block, section, product
 {%- endcomment -%}
-{%- assign vsp = block.settings -%}
-{%- assign vsp_accent          = vsp.accent | default: '#111111' -%}
-{%- assign vsp_card_bg         = vsp.card_bg | default: '#FFFFFF' -%}
-{%- assign vsp_border          = vsp.border_color | default: '#E5E5E5' -%}
-{%- assign vsp_selected_border = vsp.selected_border | default: vsp_accent -%}
-{%- assign vsp_selected_bg     = vsp.selected_bg | default: '#FFF8EC' -%}
-{%- assign vsp_text            = vsp.text_color | default: '#111111' -%}
-{%- assign vsp_muted           = vsp.muted_color | default: '#666666' -%}
-{%- assign vsp_radius          = vsp.card_radius | default: 10 -%}
-{%- assign vsp_image_radius    = vsp.image_radius | default: 6 -%}
-{%- assign vsp_border_w        = vsp.selected_border_width | default: 2 -%}
-{%- comment -%}
-  Clamp the column count to the number of variants this product actually
-  has, so we never render empty grid cells when there are fewer variants
-  than the merchant's preferred desktop / mobile column count.
-{%- endcomment -%}
-{%- assign vsp_variant_count   = product.variants.size -%}
-{%- assign vsp_cols_d_raw      = vsp.cols_desktop | default: 4 -%}
-{%- assign vsp_cols_m_raw      = vsp.cols_mobile  | default: 4 -%}
-{%- if vsp_variant_count > 0 and vsp_variant_count < vsp_cols_d_raw -%}
-  {%- assign vsp_cols_d = vsp_variant_count -%}
-{%- else -%}
-  {%- assign vsp_cols_d = vsp_cols_d_raw -%}
-{%- endif -%}
-{%- if vsp_variant_count > 0 and vsp_variant_count < vsp_cols_m_raw -%}
-  {%- assign vsp_cols_m = vsp_variant_count -%}
-{%- else -%}
-  {%- assign vsp_cols_m = vsp_cols_m_raw -%}
-{%- endif -%}
-{%- assign vsp_card_gap        = vsp.card_gap | default: 8 -%}
-{%- assign vsp_card_gap_m      = vsp.card_gap_mobile | default: 6 -%}
-{%- assign vsp_image_aspect    = vsp.image_aspect | default: 'square' -%}
-{%- assign vsp_image_fit       = vsp.image_fit | default: 'cover' -%}
-{%- assign vsp_label_position  = vsp.label_position | default: 'below' -%}
-{%- assign vsp_hover_effect    = vsp.hover_effect | default: 'lift' -%}
-{%- assign vsp_selected_anim   = vsp.selected_anim | default: 'none' -%}
-{%- assign vsp_thumb_max       = vsp.thumb_max_size | default: 0 -%}
-{%- assign vsp_thumb_pad       = vsp.thumb_inner_padding | default: 0 -%}
-{%- assign vsp_hide_oos        = vsp.hide_unavailable -%}
-{%- assign vsp_sold_out_label  = vsp.sold_out_label -%}
-{%- assign vsp_option_size_d   = vsp.option_size_d | default: 0 -%}
-{%- assign vsp_option_size_m   = vsp.option_size_m | default: 0 -%}
-{%- assign vsp_selected_variant = product.selected_or_first_available_variant -%}
-
-{%- comment -%}
-  Compute the SSR display label for the initially-selected variant so
-  the dynamic title readout doesn't flash from `variant.title` to the
-  merchant's slot label after hydration. We walk the variants in order
-  to find the selected one's index, then check that slot's label
-  override; fall back to the variant's own title if no override.
-{%- endcomment -%}
-{%- assign vsp_initial_label = '' -%}
-{%- if vsp_selected_variant -%}
-  {%- for v in product.variants -%}
-    {%- if v.id == vsp_selected_variant.id -%}
-      {%- assign vsp_initial_slot_key = 'variant_' | append: forloop.index | append: '_label' -%}
-      {%- assign vsp_initial_label = vsp[vsp_initial_slot_key] | default: vsp_selected_variant.title -%}
-      {%- break -%}
-    {%- endif -%}
-  {%- endfor -%}
-{%- endif -%}
-
-<div id="VariantSelectorPro-{{ block.id }}"
-     class="vsp vsp--label-{{ vsp_label_position }} vsp--hover-{{ vsp_hover_effect }} vsp--anim-{{ vsp_selected_anim }}"
-     data-vsp
-     data-block-id="{{ block.id }}"
-     data-section-id="{{ section.id }}"
-     {{ block.shopify_attributes }}
-     style="
-       --vsp-accent: {{ vsp_accent }};
-       --vsp-card-bg: {{ vsp_card_bg }};
-       --vsp-border: {{ vsp_border }};
-       --vsp-selected-border: {{ vsp_selected_border }};
-       --vsp-selected-bg: {{ vsp_selected_bg }};
-       --vsp-text: {{ vsp_text }};
-       --vsp-muted: {{ vsp_muted }};
-       --vsp-radius: {{ vsp_radius }}px;
-       --vsp-image-radius: {{ vsp_image_radius }}px;
-       --vsp-border-w: {{ vsp_border_w }}px;
-       --vsp-card-gap: {{ vsp_card_gap }}px;
-       --vsp-card-gap-m: {{ vsp_card_gap_m }}px;
-       --vsp-cols-d: {{ vsp_cols_d }};
-       --vsp-cols-m: {{ vsp_cols_m }};
-       --vsp-mt: {{ vsp.mt | default: 16 }}px;
-       --vsp-mb: {{ vsp.mb | default: 16 }}px;
-       --vsp-header-gap: {{ vsp.header_gap | default: 10 }}px;
-     ">
-
-  {%- comment -%}
-    Header rendering — three modes controlled by `show_static_title`
-    and `show_current_variant`:
-      • show_static_title=false + show_current_variant=true (default):
-          only the live variant name renders. Cleanest look — the
-          shopper sees "Pink" → click another card → "Brown".
-      • show_static_title=true + show_current_variant=true:
-          "Select your option: Pink" — classic prefix + dynamic
-          readout pattern.
-      • show_static_title=true + show_current_variant=false:
-          static title only, no live readout.
-    Empty title with both flags off renders nothing.
-  {%- endcomment -%}
-  {%- if vsp.show_static_title and vsp.title != blank or vsp.show_current_variant -%}
-    <h3 class="vsp__title"
-        style="color: {{ vsp.title_color | default: vsp_text }};
-               font-size: {{ vsp.title_size | default: 13 }}px;
-               font-weight: {{ vsp.title_weight | default: 600 }};
-               text-align: {{ vsp.title_align | default: 'left' }};
-               letter-spacing: {{ vsp.title_letter_spacing | default: 0.0 }}em;
-               text-transform: {% if vsp.title_uppercase %}uppercase{% else %}none{% endif %};">
-      {%- if vsp.show_static_title and vsp.title != blank -%}
-        <span class="vsp__title-static">{{ vsp.title }}</span>
+{%- unless product == blank or product.has_only_default_variant -%}
+{%- liquid
+  assign vsp = block.settings
+  assign vsp_selected = product.selected_or_first_available_variant
+  assign vsp_style = vsp.swatch_style | default: 'image'
+  assign vsp_size = vsp.swatch_size | default: 44
+  if settings.color_swatch_trigger != blank
+    assign vsp_color_names = settings.color_swatch_trigger | downcase | split: ','
+  else
+    assign vsp_color_names = 'color,colour' | split: ','
+  endif
+-%}
+<variant-radios-detail
+  id="VariantSelectorPro-{{ block.id }}"
+  class="vsp block"
+  data-vsp
+  data-section="{{ section.id }}"
+  data-url="{{ product.url }}"
+  {{ block.shopify_attributes }}
+  style="--vsp-size: {{ vsp_size }}px; --vsp-mt: {{ vsp.mt | default: 0 }}px; --vsp-mb: {{ vsp.mb | default: 16 }}px;
+    {%- if vsp.vsp_custom_colors -%}
+      {%- if vsp.text_color != blank %} --vsp-text: {{ vsp.text_color }};{% endif -%}
+      {%- if vsp.border_color != blank %} --vsp-border: {{ vsp.border_color }};{% endif -%}
+      {%- if vsp.accent != blank %} --vsp-accent: {{ vsp.accent }};{% endif -%}
+      {%- if vsp.selected_bg != blank %} --vsp-selected-bg: {{ vsp.selected_bg }};{% endif -%}
+    {%- endif -%}"
+>
+  {%- for option in product.options_with_values -%}
+    {%- liquid
+      assign opt_pos = option.position | default: forloop.index | plus: 0
+      assign opt_key = 'option' | append: opt_pos
+      assign opt_name_down = option.name | downcase | strip
+      assign is_color = false
+      for cn in vsp_color_names
+        assign cn_clean = cn | strip
+        if cn_clean != blank and opt_name_down contains cn_clean
+          assign is_color = true
+        endif
+      endfor
+      assign opt_selected = option.selected_value | default: vsp_selected[opt_key]
+    -%}
+    <fieldset class="product-form__input vsp__option{% if is_color %} vsp__option--color{% else %} vsp__option--button{% endif %}">
+      <legend class="vsp__legend">
+        <span class="vsp__name">{{ option.name }}</span>
         {%- if vsp.show_current_variant -%}
-          <span class="vsp__title-separator" aria-hidden="true">{{ vsp.current_variant_separator | default: ':' }}</span>
+          <span class="vsp__sep" aria-hidden="true">:</span>
+          <span class="vsp__value option_value">{{ opt_selected }}</span>
         {%- endif -%}
-      {%- endif -%}
-      {%- if vsp.show_current_variant -%}
-        <span class="vsp__current"
-              data-vsp-current
-              style="color: {{ vsp.current_variant_color | default: vsp_accent }};
-                     font-weight: {{ vsp.current_variant_weight | default: 700 }};
-                     text-transform: {% if vsp.current_variant_uppercase %}uppercase{% else %}none{% endif %};">{{- vsp_initial_label | escape -}}</span>
-      {%- endif -%}
-    </h3>
-  {%- endif -%}
-
-  {%- if vsp.subtitle != blank -%}
-    <p class="vsp__subtitle"
-       style="color: {{ vsp.subtitle_color | default: vsp_muted }};
-              font-size: {{ vsp.subtitle_size | default: 12 }}px;
-              text-align: {{ vsp.title_align | default: 'left' }};">{{ vsp.subtitle }}</p>
-  {%- endif -%}
-
-  <div class="vsp__grid" role="radiogroup" aria-label="{{ vsp.aria_label | default: 'Choose variant' | escape }}">
-    {%- for variant in product.variants -%}
-      {%- if vsp_hide_oos and variant.available == false -%}{% continue %}{%- endif -%}
-      {%- assign idx = forloop.index -%}
-      {%- assign img_key   = 'variant_' | append: idx | append: '_image' -%}
-      {%- assign label_key = 'variant_' | append: idx | append: '_label' -%}
-      {%- assign color_key = 'variant_' | append: idx | append: '_color' -%}
-      {%- assign override_img   = vsp[img_key] -%}
-      {%- assign override_label = vsp[label_key] -%}
-      {%- assign override_color = vsp[color_key] -%}
-      {%- assign display_img    = override_img | default: variant.featured_image -%}
-      {%- assign display_label  = override_label | default: variant.title -%}
-
-      {%- assign is_selected = false -%}
-      {%- if vsp_selected_variant and variant.id == vsp_selected_variant.id -%}{% assign is_selected = true %}{%- endif -%}
-
-      <label class="vsp__card {% if is_selected %}is-selected{% endif %} {% unless variant.available %}is-unavailable{% endunless %}"
-             data-variant-id="{{ variant.id }}"
-             data-variant-title="{{ display_label | escape }}"
-             {% if override_color != blank %}style="--vsp-swatch: {{ override_color }};"{% endif %}>
-        <input type="radio"
-               name="vsp-{{ block.id }}"
-               value="{{ variant.id }}"
-               class="vsp__radio"
-               {% if is_selected %}checked{% endif %}
-               {% unless variant.available %}disabled{% endunless %}>
-
-        <span class="vsp__thumb"
-              aria-hidden="true"
-              style="border-radius: {{ vsp_image_radius }}px;">
-          {%- if display_img -%}
-            {{ display_img | image_url: width: 240 | image_tag: loading: 'lazy', class: 'vsp__img', alt: display_label }}
-          {%- elsif override_color != blank -%}
-            <span class="vsp__swatch" style="background: {{ override_color }};"></span>
-          {%- else -%}
-            <span class="vsp__placeholder">{{ display_label | escape }}</span>
-          {%- endif -%}
-
-          {%- unless variant.available -%}
-            <span class="vsp__cross" aria-hidden="true"></span>
-            {%- if vsp_sold_out_label != blank -%}
-              <span class="vsp__sold-out-badge"
-                    style="background: {{ vsp.sold_out_badge_bg | default: '#111111' }};
-                           color: {{ vsp.sold_out_badge_text | default: '#FFFFFF' }};">
-                {{ vsp_sold_out_label | escape }}
-              </span>
+      </legend>
+      <div class="vsp__values">
+        {%- for value in option.values -%}
+          {%- liquid
+            assign vsp_id = 'vsp-' | append: block.id | append: '-' | append: opt_pos | append: '-' | append: forloop.index0
+            assign value_available = false
+            assign value_image = blank
+            for v in product.variants
+              if v[opt_key] == value
+                if v.available
+                  assign value_available = true
+                endif
+                if value_image == blank and v.featured_image
+                  assign value_image = v.featured_image
+                endif
+              endif
+            endfor
+            assign value_checked = false
+            if opt_selected == value
+              assign value_checked = true
+            endif
+            assign swatch_color = ''
+            if value.swatch.color
+              assign swatch_color = value.swatch.color
+            endif
+            assign color_name = value | downcase | remove: ' ' | remove: '"' | remove: "'"
+          -%}
+          {%- if vsp.hide_unavailable and value_available == false and value_checked == false -%}{%- continue -%}{%- endif -%}
+          <input
+            type="radio"
+            class="vsp__radio visually-hidden{% unless value_available %} option-disabled{% endunless %}"
+            id="{{ vsp_id }}"
+            name="vsp-{{ block.id }}-{{ opt_pos }}"
+            value="{{ value | escape }}"
+            {% if value_checked %}checked{% endif %}
+          >
+          {%- if is_color -%}
+            {%- if vsp_style == 'image' and value_image != blank -%}
+              <label for="{{ vsp_id }}" class="vsp__chip vsp__chip--image" title="{{ value | escape }}" data-image="{{ value_image | image_url: width: 160 }}">
+                <img
+                  src="{{ value_image | image_url: width: 160 }}"
+                  alt=""
+                  width="80"
+                  height="80"
+                  loading="lazy"
+                  decoding="async"
+                >
+                <span class="visually-hidden">{{ value }}</span>
+              </label>
+            {%- elsif swatch_color != blank -%}
+              <label for="{{ vsp_id }}" class="vsp__chip vsp__chip--dot" title="{{ value | escape }}" style="--vsp-dot: {{ swatch_color }};">
+                <span class="visually-hidden">{{ value }}</span>
+              </label>
+            {%- else -%}
+              <label for="{{ vsp_id }}" class="vsp__chip vsp__chip--dot" title="{{ value | escape }}" data-vsp-color="{{ color_name | escape }}" style="--vsp-dot: {{ color_name | escape }};">
+                <span class="vsp__chip-text">{{ value }}</span>
+              </label>
             {%- endif -%}
-          {%- endunless -%}
-        </span>
-
-        {%- if vsp.show_label -%}
-          <span class="vsp__label">{{ display_label | escape }}</span>
-        {%- else -%}
-          <span class="vsp__label visually-hidden">{{ display_label | escape }}</span>
-        {%- endif -%}
-      </label>
-    {%- endfor -%}
-  </div>
-
-  {%- if vsp.footer_note != blank -%}
-    <p class="vsp__footer" style="color: {{ vsp.footer_color | default: vsp_muted }};">{{ vsp.footer_note }}</p>
-  {%- endif -%}
-</div>
+          {%- else -%}
+            <label for="{{ vsp_id }}" class="vsp__chip vsp__chip--button">
+              <span>{{ value }}</span>
+            </label>
+          {%- endif -%}
+        {%- endfor -%}
+      </div>
+    </fieldset>
+  {%- endfor -%}
+  <script type="application/json">
+    {{ product.variants | json }}
+{% comment %}{% endcomment %}  </script>
+  {%- render 'variant-price-map', product: product -%}
+</variant-radios-detail>
 
 <style>
   #VariantSelectorPro-{{ block.id }} {
+    --vsp-text: var(--color-text);
+    --vsp-heading: var(--color-heading);
+    --vsp-border: var(--color-border);
+    --vsp-accent: var(--color-heading);
+    --vsp-selected-bg: var(--color-background);
     margin: var(--vsp-mt) 0 var(--vsp-mb);
     color: var(--vsp-text);
-    font-family: var(--body-font, inherit);
+    font-family: var(--body-font);
+    font-weight: var(--body-weight);
   }
-  #VariantSelectorPro-{{ block.id }} *, #VariantSelectorPro-{{ block.id }} *::before, #VariantSelectorPro-{{ block.id }} *::after { box-sizing: border-box; }
-  #VariantSelectorPro-{{ block.id }} .vsp__title    { margin: 0 0 4px; }
-  #VariantSelectorPro-{{ block.id }} .vsp__subtitle { margin: 0 0 8px; }
-  /* Live readout: small space before separator, tighter space after.
-     The separator itself stays muted so the dynamic value pops. */
-  #VariantSelectorPro-{{ block.id }} .vsp__title-separator { margin: 0 4px 0 2px; opacity: .7; }
-  #VariantSelectorPro-{{ block.id }} .vsp__current { transition: color .2s ease; }
-  /* Grid layout — two modes:
-     1) Default (no option_size cap): equal-width columns that fill
-        the row. Cards stretch to fill their column.
-     2) With option_size cap: switch to flex with the merchant's
-        chosen `option_alignment` (default LEFT to match every other
-        block on the page) so cards pack tightly side-by-side at
-        their fixed width WITHOUT leaving huge gaps. */
-  {%- assign vsp_align = vsp.option_alignment | default: 'left' -%}
-  {%- if vsp_align == 'center' -%}{%- assign vsp_align_css = 'center' -%}
-  {%- elsif vsp_align == 'right' -%}{%- assign vsp_align_css = 'flex-end' -%}
-  {%- else -%}{%- assign vsp_align_css = 'flex-start' -%}{%- endif -%}
-  {%- if vsp_option_size_d and vsp_option_size_d > 0 -%}
-  #VariantSelectorPro-{{ block.id }} .vsp__grid {
+  #VariantSelectorPro-{{ block.id }} .vsp__option {
+    border: 0;
+    margin: 0 0 16px;
+    padding: 0;
+    min-width: 0;
+  }
+  #VariantSelectorPro-{{ block.id }} .vsp__option:last-of-type { margin-bottom: 0; }
+  #VariantSelectorPro-{{ block.id }} .vsp__legend {
     display: flex;
     flex-wrap: wrap;
-    justify-content: {{ vsp_align_css }};
-    gap: var(--vsp-card-gap);
-    margin-top: var(--vsp-header-gap);
+    align-items: baseline;
+    gap: 4px;
+    padding: 0;
+    margin: 0 0 10px;
+    line-height: 1.4;
   }
-  #VariantSelectorPro-{{ block.id }} .vsp__grid > .vsp__card {
-    flex: 0 0 {{ vsp_option_size_d }}px;
-    max-width: {{ vsp_option_size_d }}px;
+  #VariantSelectorPro-{{ block.id }} .vsp__name {
+    color: var(--vsp-heading);
+    font-weight: var(--heading-weight);
   }
-  {%- else -%}
-  #VariantSelectorPro-{{ block.id }} .vsp__grid {
-    display: grid;
-    grid-template-columns: repeat(var(--vsp-cols-d), minmax(0, 1fr));
-    gap: var(--vsp-card-gap);
-    margin-top: var(--vsp-header-gap);
-  }
-  {%- endif -%}
-  @media (max-width: 749px){
-    {%- if vsp_option_size_m and vsp_option_size_m > 0 -%}
-    #VariantSelectorPro-{{ block.id }} .vsp__grid {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: {{ vsp_align_css }};
-      gap: var(--vsp-card-gap-m);
-    }
-    #VariantSelectorPro-{{ block.id }} .vsp__grid > .vsp__card {
-      flex: 0 0 {{ vsp_option_size_m }}px;
-      max-width: {{ vsp_option_size_m }}px;
-    }
-    {%- else -%}
-    #VariantSelectorPro-{{ block.id }} .vsp__grid {
-      grid-template-columns: repeat(var(--vsp-cols-m), minmax(0, 1fr));
-      gap: var(--vsp-card-gap-m);
-    }
-    {%- endif -%}
-  }
-
-  /* Card — constant border-width on every state so there's no layout
-     jump on selection. Smooth easing on every property the cursor or
-     selection state can change.
-     `max-width` enforces the merchant's "overall option size" setting
-     when > 0; margin-inline:auto centres it within its grid track. */
-  #VariantSelectorPro-{{ block.id }} .vsp__card {
-    position: relative;
+  #VariantSelectorPro-{{ block.id }} .vsp__sep { margin-left: -2px; color: var(--vsp-heading); }
+  #VariantSelectorPro-{{ block.id }} .vsp__value { color: var(--vsp-text); }
+  #VariantSelectorPro-{{ block.id }} .vsp__values {
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: {{ vsp.card_padding | default: 4 }}px;
-    background: var(--vsp-card-bg);
-    border: var(--vsp-border-w) solid var(--vsp-border);
-    border-radius: var(--vsp-radius);
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    transition:
-      border-color .25s cubic-bezier(.4, 0, .2, 1),
-      background-color .25s cubic-bezier(.4, 0, .2, 1),
-      box-shadow .25s cubic-bezier(.4, 0, .2, 1),
-      transform .2s cubic-bezier(.4, 0, .2, 1);
+    flex-wrap: wrap;
+    gap: 8px;
   }
-  /* Default hover: subtle border tint — works for every hover_effect. */
-  #VariantSelectorPro-{{ block.id }} .vsp__card:hover {
-    border-color: color-mix(in srgb, var(--vsp-border) 60%, var(--vsp-accent) 40%);
-  }
-  /* Lift effect — translate up on hover. */
-  #VariantSelectorPro-{{ block.id }}.vsp--hover-lift .vsp__card:hover,
-  #VariantSelectorPro-{{ block.id }}.vsp--hover-both .vsp__card:hover {
-    transform: translateY(-1px);
-  }
-  /* Glow effect — soft shadow on hover. */
-  #VariantSelectorPro-{{ block.id }}.vsp--hover-glow .vsp__card:hover,
-  #VariantSelectorPro-{{ block.id }}.vsp--hover-both .vsp__card:hover {
-    box-shadow: 0 3px 10px -4px color-mix(in srgb, var(--vsp-text) 15%, transparent);
-  }
-  #VariantSelectorPro-{{ block.id }} .vsp__card.is-selected {
-    border-color: var(--vsp-selected-border);
-    background: var(--vsp-selected-bg);
-    transform: none;
-  }
-  /* Selected animations */
-  #VariantSelectorPro-{{ block.id }}.vsp--anim-pulse .vsp__card.is-selected {
-    animation: vspPulse-{{ block.id }} 1.6s cubic-bezier(.4, 0, .2, 1) 1;
-  }
-  #VariantSelectorPro-{{ block.id }}.vsp--anim-scale .vsp__card.is-selected {
-    transform: scale(1.03);
-  }
-  @keyframes vspPulse-{{ block.id }} {
-    0%   { box-shadow: 0 0 0 0    color-mix(in srgb, var(--vsp-selected-border) 35%, transparent); }
-    70%  { box-shadow: 0 0 0 10px color-mix(in srgb, var(--vsp-selected-border) 0%,  transparent); }
-    100% { box-shadow: 0 0 0 0    color-mix(in srgb, var(--vsp-selected-border) 0%,  transparent); }
-  }
-  {%- if vsp.selected_ring_size and vsp.selected_ring_size != 0 -%}
-  #VariantSelectorPro-{{ block.id }} .vsp__card.is-selected {
-    box-shadow: 0 0 0 {{ vsp.selected_ring_size }}px color-mix(in srgb, var(--vsp-selected-border) 22%, transparent);
-  }
-  {%- endif -%}
-  #VariantSelectorPro-{{ block.id }} .vsp__card.is-unavailable {
-    opacity: .55;
-    cursor: not-allowed;
-  }
-  #VariantSelectorPro-{{ block.id }} .vsp__radio { position: absolute; opacity: 0; pointer-events: none; }
-
-  /* Thumb — aspect-ratio + object-fit driven by per-block settings */
-  #VariantSelectorPro-{{ block.id }} .vsp__thumb {
+  #VariantSelectorPro-{{ block.id }} .vsp__chip {
     position: relative;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 100%;
-    {%- if vsp_thumb_max and vsp_thumb_max > 0 -%}
-    max-width: {{ vsp_thumb_max }}px;
-    max-height: {{ vsp_thumb_max }}px;
-    margin-left: auto;
-    margin-right: auto;
-    {%- endif -%}
-    {%- if vsp_thumb_pad and vsp_thumb_pad > 0 -%}
-    padding: {{ vsp_thumb_pad }}px;
-    {%- endif -%}
-    overflow: hidden;
-    background: {{ vsp.image_bg | default: '#F5F5F5' }};
+    min-width: 44px;
+    min-height: 44px;
+    margin: 0;
+    cursor: pointer;
+    color: var(--vsp-text);
+    -webkit-tap-highlight-color: transparent;
+    transition: border-color .2s ease, background-color .2s ease, color .2s ease, box-shadow .2s ease;
   }
-  /* Sold-out badge floats over the thumb on unavailable cards. */
-  #VariantSelectorPro-{{ block.id }} .vsp__sold-out-badge {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    z-index: 2;
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: .04em;
-    text-transform: uppercase;
-    padding: 2px 6px;
-    border-radius: 4px;
-    line-height: 1.1;
-    white-space: nowrap;
+  #VariantSelectorPro-{{ block.id }} .vsp__chip--button {
+    padding: 0 16px;
+    border: 1px solid var(--vsp-border);
+    border-radius: var(--btn-radius, 0);
+    background: var(--color-background);
+    font-family: var(--btn-font, var(--body-font));
+    font-weight: var(--btn-font-weight, var(--body-weight));
+    letter-spacing: var(--btn-letter-spacing, normal);
+    line-height: 1.2;
   }
-  /* Label-gap margin — ONLY applied when the label is actually
-     visible. Previously this margin was set unconditionally based on
-     the `label-below` position class, so it added an empty 6px strip
-     below every thumb even when `show_label` was OFF — that's the
-     "extra whitespace at the bottom of every variant card" bug. */
-  {%- if vsp.show_label -%}
-  #VariantSelectorPro-{{ block.id }}.vsp--label-below .vsp__thumb {
-    margin-bottom: {{ vsp.label_gap | default: 6 }}px;
+  #VariantSelectorPro-{{ block.id }} .vsp__chip--button:hover { border-color: var(--vsp-accent); }
+  #VariantSelectorPro-{{ block.id }} .vsp__radio:checked + .vsp__chip--button {
+    border-color: var(--vsp-accent);
+    background: var(--vsp-selected-bg);
+    box-shadow: inset 0 0 0 1px var(--vsp-accent);
+    color: var(--vsp-heading);
   }
-  {%- endif -%}
-  #VariantSelectorPro-{{ block.id }} .vsp__thumb {
-    {%- if vsp_image_aspect == 'square' -%}aspect-ratio: 1 / 1;
-    {%- elsif vsp_image_aspect == 'portrait' -%}aspect-ratio: 3 / 4;
-    {%- elsif vsp_image_aspect == 'landscape' -%}aspect-ratio: 4 / 3;
-    {%- else -%}aspect-ratio: 1 / 1;{%- endif -%}
+  #VariantSelectorPro-{{ block.id }} .vsp__chip--image,
+  #VariantSelectorPro-{{ block.id }} .vsp__chip--dot {
+    width: var(--vsp-size);
+    height: var(--vsp-size);
+    min-width: var(--vsp-size);
+    min-height: var(--vsp-size);
+    padding: 0;
+    border: 1px solid var(--vsp-border);
+    background: var(--color-background);
+    overflow: visible;
   }
-  #VariantSelectorPro-{{ block.id }} .vsp__img {
+  #VariantSelectorPro-{{ block.id }} .vsp__chip--image {
+    border-radius: var(--input-border-radius, 4px);
+  }
+  #VariantSelectorPro-{{ block.id }} .vsp__chip--image img {
     display: block;
     width: 100%;
     height: 100%;
-    {%- if vsp_image_fit == 'cover' -%}object-fit: cover;
-    {%- elsif vsp_image_fit == 'contain' -%}object-fit: contain;
-    {%- elsif vsp_image_fit == 'fill' -%}object-fit: fill;{%- endif -%}
+    object-fit: cover;
+    border-radius: inherit;
   }
-  #VariantSelectorPro-{{ block.id }} .vsp__swatch {
-    display: block;
-    width: 70%;
-    height: 70%;
-    border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--vsp-text) 8%, transparent);
+  #VariantSelectorPro-{{ block.id }} .vsp__chip--dot {
+    border-radius: 50%;
+    background: var(--vsp-dot, var(--color-background));
+    background-clip: padding-box;
   }
-  #VariantSelectorPro-{{ block.id }} .vsp__placeholder {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: {{ vsp.placeholder_size | default: 11 }}px;
-    font-weight: {{ vsp.placeholder_weight | default: 600 }};
-    text-transform: {% if vsp.placeholder_uppercase %}uppercase{% else %}none{% endif %};
-    letter-spacing: .03em;
-    color: var(--vsp-text);
-    text-align: center;
-    padding: 4px;
-    line-height: 1.1;
+  #VariantSelectorPro-{{ block.id }} .vsp__chip-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
-  #VariantSelectorPro-{{ block.id }} .vsp__cross {
+  /* A colour with no picture and no swatch colour reads as its name. */
+  #VariantSelectorPro-{{ block.id }} .vsp__chip--text {
+    width: auto;
+    padding: 0 16px;
+    border-radius: var(--btn-radius, 0);
+    background: var(--color-background);
+  }
+  #VariantSelectorPro-{{ block.id }} .vsp__chip--text .vsp__chip-text {
+    position: static;
+    width: auto;
+    height: auto;
+    clip: auto;
+  }
+  #VariantSelectorPro-{{ block.id }} .vsp__chip--image:hover,
+  #VariantSelectorPro-{{ block.id }} .vsp__chip--dot:hover { border-color: var(--vsp-accent); }
+  #VariantSelectorPro-{{ block.id }} .vsp__radio:checked + .vsp__chip--image,
+  #VariantSelectorPro-{{ block.id }} .vsp__radio:checked + .vsp__chip--dot {
+    border-color: var(--vsp-accent);
+    box-shadow: 0 0 0 2px var(--color-background), 0 0 0 3px var(--vsp-accent);
+  }
+  #VariantSelectorPro-{{ block.id }} .vsp__radio:checked + .vsp__chip--text {
+    box-shadow: inset 0 0 0 1px var(--vsp-accent);
+  }
+  #VariantSelectorPro-{{ block.id }} .vsp__radio:focus-visible + .vsp__chip {
+    outline: 2px solid var(--vsp-accent);
+    outline-offset: 3px;
+  }
+  #VariantSelectorPro-{{ block.id }} .vsp__radio.option-disabled + .vsp__chip { opacity: .5; }
+  #VariantSelectorPro-{{ block.id }} .vsp__radio.option-disabled + .vsp__chip::after {
+    content: "";
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background:
-      linear-gradient(to top right,
-        transparent calc(50% - 1px),
-        color-mix(in srgb, var(--vsp-text) 40%, transparent) calc(50% - 1px),
-        color-mix(in srgb, var(--vsp-text) 40%, transparent) calc(50% + 1px),
-        transparent calc(50% + 1px));
+    border-radius: inherit;
+    background: linear-gradient(to top left, transparent calc(50% - .5px), var(--vsp-text) calc(50% - .5px), var(--vsp-text) calc(50% + .5px), transparent calc(50% + .5px));
   }
-
-  /* Label below */
-  #VariantSelectorPro-{{ block.id }} .vsp__label {
-    font-size: {{ vsp.label_size | default: 11 }}px;
-    font-weight: {{ vsp.label_weight | default: 500 }};
-    color: var(--vsp-text);
-    text-transform: {% if vsp.label_uppercase %}uppercase{% else %}none{% endif %};
-    text-align: center;
-    line-height: 1.2;
-  }
-  #VariantSelectorPro-{{ block.id }} .vsp__label.visually-hidden {
-    clip: rect(0 0 0 0); width: 1px; height: 1px;
-    border: 0; padding: 0; margin: -1px;
-    overflow: hidden; position: absolute; white-space: nowrap;
-  }
-
-  /* Footer */
-  #VariantSelectorPro-{{ block.id }} .vsp__footer {
-    margin: 8px 0 0;
-    font-size: 12px;
-    text-align: center;
-  }
-
-  @media (prefers-reduced-motion: reduce){
-    #VariantSelectorPro-{{ block.id }} .vsp__card { transition: none !important; }
-    #VariantSelectorPro-{{ block.id }} .vsp__card:hover { transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    #VariantSelectorPro-{{ block.id }} .vsp__chip { transition: none; }
   }
 {% comment %}{% endcomment %}</style>
-
-<script>
-(function(){
-  const root = document.getElementById('VariantSelectorPro-{{ block.id }}');
-  if(!root || root.__vspInit) return;
-  root.__vspInit = true;
-
-  const sectionId = '{{ section.id }}';
-  const variants = {{ product.variants | json }};
-  const options  = {{ product.options | json }};
-  const vmap = new Map(variants.map(v => [String(v.id), v]));
-  const cards  = Array.from(root.querySelectorAll('.vsp__card'));
-
-  /* Pick the form scoped to this section so we don't fight forms on
-     other product cards (rare but possible). Falls back to first
-     /cart/add form on the page. */
-  function getForm(){
-    return document.querySelector('form[id^="product_form_"][data-section-id="' + sectionId + '"]')
-        || document.querySelector('form[id^="product_form_"]')
-        || document.querySelector('form[action*="/cart/add"]');
-  }
-
-  /* Update the underlying option-level pickers (variant-radios /
-     variant-selects) to match the chosen variant. Doing it through
-     the option pickers means Shopify's price/availability scripts
-     fire as they would on any other variant switch. */
-  function syncOptionPickers(variant){
-    if(!variant || !options) return;
-    options.forEach((optName, i) => {
-      const value = variant['option' + (i + 1)];
-      if(value == null) return;
-      // Radios — label/text match
-      document.querySelectorAll(
-        'fieldset[name="' + optName + '"] input[type="radio"], ' +
-        '.product-form__input--' + optName.toLowerCase() + ' input[type="radio"]'
-      ).forEach(input => {
-        if(input.value === value && !input.checked){
-          input.checked = true;
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      });
-      // Selects
-      document.querySelectorAll('select[name^="options[' + optName + ']"]').forEach(sel => {
-        if(sel.value !== value){
-          sel.value = value;
-          sel.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      });
-    });
-  }
-
-  /* Direct fallback — set the master id input on the product form so
-     Add-to-Cart posts the right variant even if the option-level radio
-     sync didn't catch (some themes use untagged radios). */
-  function syncMasterId(variant){
-    const form = getForm();
-    if(!form) return;
-    const idInput = form.querySelector('input[name="id"]');
-    if(idInput && String(idInput.value) !== String(variant.id)){
-      idInput.value = variant.id;
-      idInput.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-  }
-
-  /* DOM target for the dynamic current-variant readout in the title. */
-  const currentDisplay = root.querySelector('[data-vsp-current]');
-
-  function paintSelection(variantId){
-    let matchedTitle = '';
-    cards.forEach(c => {
-      const match = c.dataset.variantId === String(variantId);
-      c.classList.toggle('is-selected', match);
-      const r = c.querySelector('.vsp__radio');
-      if(r) r.checked = match;
-      if(match){
-        // Prefer the label override (data-variant-title) for the dynamic
-        // readout so merchants can clean up "Red light / Pink" → "Pink"
-        // by overriding the slot label.
-        matchedTitle = c.dataset.variantTitle || '';
-      }
-    });
-    if(currentDisplay && matchedTitle){
-      currentDisplay.textContent = matchedTitle;
-    }
-  }
-
-  function selectVariant(variant){
-    if(!variant) return;
-    paintSelection(variant.id);
-    syncOptionPickers(variant);
-    syncMasterId(variant);
-    // Dispatch a variant:change event so any other listening component
-    // (price, sticky, etc.) can react.
-    document.dispatchEvent(new CustomEvent('variant:change', {
-      detail: { variant, sectionId }
-    }));
-  }
-
-  // Wire each card.
-  cards.forEach(card => {
-    card.addEventListener('click', (e) => {
-      if(card.classList.contains('is-unavailable')) return;
-      e.preventDefault();
-      const v = vmap.get(String(card.dataset.variantId));
-      if(v) selectVariant(v);
-    });
-  });
-
-  // Listen for variant changes from elsewhere (option pickers, sticky)
-  // and keep our visual selection in sync.
-  function syncFromMasterId(){
-    const form = getForm();
-    if(!form) return;
-    const idInput = form.querySelector('input[name="id"]');
-    if(!idInput) return;
-    paintSelection(idInput.value);
-  }
-  document.addEventListener('variant:change', (e) => {
-    if(e.detail && e.detail.variant && e.detail.variant.id) paintSelection(e.detail.variant.id);
-  });
-  document.addEventListener('change', (e) => {
-    if(e.target && e.target.name === 'id') paintSelection(e.target.value);
-  });
-  // Initial paint after the page hydrates (option pickers may shift the
-  // selected variant from the SSR-rendered one).
-  setTimeout(syncFromMasterId, 0);
-})();
-{% comment %}{% endcomment %}</script>
-
+{%- endunless -%}
 </template>

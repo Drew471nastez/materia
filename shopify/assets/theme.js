@@ -5383,18 +5383,156 @@ class SwatchFunctions extends SwatchInit {
     this.addEventListener("change", this.onVariantChange);
   }
 
+  // Once in the page: grey out the values with no variant in stock, so the
+  // first state is right even if the page could not work it out.
+  connectedCallback() {
+    this.markNamedColours();
+    if (!this._onPeerChange) {
+      this._onPeerChange = (e) => {
+        const detail = e.detail || {};
+        if (e.target === this || !detail.variant) return;
+        if (String(detail.sectionId) !== String(this.dataset.section)) return;
+        this.applyVariant(detail.variant);
+      };
+    }
+    document.addEventListener("variant:change", this._onPeerChange);
+    if (!this.querySelector(".product-form__input")) return;
+    try {
+      this.updateVariantStatuses();
+    } catch (err) {}
+  }
+  disconnectedCallback() {
+    if (this._onPeerChange)
+      document.removeEventListener("variant:change", this._onPeerChange);
+  }
+  // A colour swatch with no picture and no swatch colour shows its name
+  // when the name is not a colour the browser knows.
+  markNamedColours() {
+    if (!window.CSS || typeof CSS.supports !== "function") return;
+    this.querySelectorAll("[data-vsp-color]").forEach((chip) => {
+      const name = chip.getAttribute("data-vsp-color");
+      chip.classList.toggle("vsp__chip--text", !name || !CSS.supports("color", name));
+    });
+  }
+  // Another picker of the same section chose a variant: show it here too,
+  // without announcing it again.
+  applyVariant(variant) {
+    const fieldsets = this.querySelectorAll("fieldset");
+    fieldsets.forEach((fieldset, index) => {
+      const value =
+        variant[`option${index + 1}`] ??
+        (Array.isArray(variant.options) ? variant.options[index] : null);
+      if (value == null) return;
+      fieldset.querySelectorAll('input[type="radio"]').forEach((input) => {
+        input.checked = String(input.value) === String(value);
+      });
+    });
+    const select = this.querySelector("select");
+    if (select && !select.closest("fieldset")) {
+      const opt = [...select.options].find(
+        (o) => String(o.dataset.variantId) === String(variant.id)
+      );
+      if (opt) opt.selected = true;
+    }
+    try {
+      this.updateOptions();
+      this.updateMasterId();
+      this.updateOptionLabels(null);
+      this.updateVariantStatuses();
+    } catch (err) {}
+  }
+
   onVariantChange(e) {
-    this.productTarget = this.closest(".product__item-js");
     const target = e.target;
-    const variantQtyData = JSON.parse(
-      this.productTarget.querySelector(".productVariantsQty").textContent
-    );
+    // Only option inputs drive a variant change (quantity, gift card and
+    // other inputs inside the picker must not).
+    if (!target || !target.matches || !target.matches('input[type="radio"], select')) return;
+    this.productTarget =
+      this.closest(".product__item-js") ||
+      this.closest(".shopify-section, [id^='shopify-section-'], section") ||
+      document.body;
+    // Storelib can render the quantity list with blank values, which is
+    // not valid JSON. A broken list must never stop the variant change.
+    let variantQtyData = [];
+    const qtyScript = this.productTarget.querySelector(".productVariantsQty");
+    if (qtyScript) {
+      try {
+        variantQtyData = JSON.parse(qtyScript.textContent) || [];
+      } catch (err) {
+        variantQtyData = [];
+      }
+    }
+    if (!Array.isArray(variantQtyData) || variantQtyData.length === 0) {
+      variantQtyData = this.getVariantData().map((v) => ({
+        id: v.id,
+        qty: Number(v.inventory_quantity) || (v.available ? 1 : 0),
+        available: !!v.available,
+      }));
+    }
     this.groupFunctionsInit();
+    // The picked value has no variant with the other choices: move to the
+    // closest one that has it, in stock first, so a tap always selects.
+    if (!this.currentVariant && target.matches('input[type="radio"]')) {
+      const fieldsets = [...this.querySelectorAll("fieldset")];
+      const index = fieldsets.indexOf(target.closest("fieldset"));
+      if (index > -1) {
+        const key = `option${index + 1}`;
+        const chosen = this.options || [];
+        const score = (v) => chosen.reduce((n, val, i) => n + (String(v[`option${i + 1}`]) === String(val) ? 1 : 0), 0);
+        const matches = this.getVariantData()
+          .filter((v) => String(v[key]) === String(target.value))
+          .sort((a, b) => (b.available ? 1 : 0) - (a.available ? 1 : 0) || score(b) - score(a));
+        if (matches[0]) {
+          this.applyVariant(matches[0]);
+          this.groupFunctionsInit();
+        }
+      }
+    }
+    this.updateOptionLabels(target);
     if (!this.currentVariant) {
       this.groupFunctionsUnavailable(target);
+      // Still move the gallery to the picked colour's picture.
+      if (typeof this.updateMedia === "function") this.updateMedia(false, target);
     } else {
       this.groupFunctionsAvailable(variantQtyData, target);
     }
+    this.dispatchEvent(
+      new CustomEvent("variant:change", {
+        bubbles: true,
+        detail: {
+          variant: this.currentVariant || null,
+          sectionId: this.dataset.section,
+          source: "variant-picker",
+        },
+      })
+    );
+  }
+  // Writes the chosen value next to each option name ("Size: M").
+  updateOptionLabels(target) {
+    const fieldsets = this.querySelectorAll("fieldset");
+    fieldsets.forEach((fieldset, index) => {
+      const checked = fieldset.querySelector("input:checked");
+      const value =
+        (this.currentVariant && this.currentVariant[`option${index + 1}`]) ||
+        (checked ? checked.value : "");
+      if (!value) return;
+      fieldset.querySelectorAll(".option_value").forEach((el) => {
+        el.textContent = value;
+      });
+    });
+    const dropdown = target && target.closest && target.closest("swatch-dropdown");
+    if (dropdown) dropdown.classList.remove("active");
+  }
+  // Re-reads variant data and swatch styles after the builder redraws.
+  refreshPicker() {
+    this.variantData = null;
+    this.priceMap = null;
+    this.markNamedColours();
+    this.querySelectorAll(".product__color-swatches--js").forEach((btn) => {
+      try {
+        this.checkSwatches(btn);
+      } catch (err) {}
+    });
   }
   groupFunctionsInit() {
     this.updateOptions();
@@ -5424,29 +5562,26 @@ class SwatchFunctions extends SwatchInit {
     const price = this.currentVariant.price;
     const unit_price = this.currentVariant.unit_price;
     const unit_price_measurement = this.currentVariant.unit_price_measurement;
-    const price_format = Shopify.formatMoney(
-      this.currentVariant.price,
-      themeGlobalVariables.settings.money_format
-    );
+    const price_format = this.formatVariantMoney(this.currentVariant, "price");
+    // The price block of this section first, so a price elsewhere in the
+    // section (upsell, sticky bar) is never the one rewritten.
+    const priceScope = p || productTarget;
     if (unit_price && unit_price_measurement) {
-      const price_num = Shopify.formatMoney(
-        unit_price,
-        themeGlobalVariables.settings.money_format
-      );
+      const price_num = this.formatVariantMoney(this.currentVariant, "unit_price");
       const price_unit =
         unit_price_measurement.reference_value != 1
           ? unit_price_measurement.reference_value
           : unit_price_measurement.reference_unit;
-      if (productTarget.querySelector(".unit-price .number")) {
-        productTarget.querySelector(".unit-price .number").innerHTML =
+      if (priceScope.querySelector(".unit-price .number")) {
+        priceScope.querySelector(".unit-price .number").innerHTML =
           price_num;
       }
-      if (productTarget.querySelector(".unit-price .unit")) {
-        productTarget.querySelector(".unit-price .unit").innerHTML = price_unit;
+      if (priceScope.querySelector(".unit-price .unit")) {
+        priceScope.querySelector(".unit-price .unit").innerHTML = price_unit;
       }
     }
-    if (productTarget.querySelector(".price-regular .price")) {
-      productTarget.querySelector(".price-regular .price").innerHTML =
+    if (priceScope.querySelector(".price-regular .price")) {
+      priceScope.querySelector(".price-regular .price").innerHTML =
         price_format;
     }
     if (productTarget.classList.contains("video-item__popup")) {
@@ -5454,11 +5589,17 @@ class SwatchFunctions extends SwatchInit {
         ".shopable-video__product-information .price-regular .price"
       ).innerHTML = price_format;
     }
-    let bls__price = productTarget.querySelector(".card-product-price");
+    let bls__price = priceScope.querySelector(".card-product-price");
     if (productTarget.classList.contains("video-item__popup")) {
       bls__price = productTarget.querySelector(
         ".shopable-video__product-information .card-product-price"
       );
+    }
+    const sticky = productTarget.querySelector("sticky-add-cart");
+    if (sticky) {
+      sticky.querySelectorAll(".price-regular .price").forEach((el) => {
+        el.innerHTML = price_format;
+      });
     }
     if (bls__price) {
       if (!bls__price.querySelector(".compare-price")) {
@@ -5474,10 +5615,10 @@ class SwatchFunctions extends SwatchInit {
       const cpp = bls__price.querySelector(".compare-price");
 
       if (cpp) {
-        if (compare_at_price && compare_at_price > price) {
-          const compare_format = Shopify.formatMoney(
-            compare_at_price,
-            themeGlobalVariables.settings.money_format
+        if (compare_at_price && Number(compare_at_price) > Number(price)) {
+          const compare_format = this.formatVariantMoney(
+            this.currentVariant,
+            "compare_at_price"
           );
           cpp.innerHTML = compare_format;
           if (bls__price.querySelector(".price-regular")) {
@@ -5534,8 +5675,10 @@ class SwatchFunctions extends SwatchInit {
     const button = document.getElementById(
       `product-form-${this.dataset.section}`
     );
-    const addButton = button.querySelector('[name="add"]');
-    const addButtonText = button.querySelector('[name="add"] > span');
+    const addButton = button ? button.querySelector('[name="add"]') : null;
+    const addButtonText = button
+      ? button.querySelector('[name="add"] > span')
+      : null;
     const price = document.getElementById(`price-${this.dataset.section}`);
     const inventory = document.getElementById(
       `Inventory-${this.dataset.section}`
@@ -5554,13 +5697,25 @@ class SwatchFunctions extends SwatchInit {
       `Quantity-Rules-${this.dataset.section}`
     );
 
-    if (target) {
+    if (target && target.closest) {
       const fieldset = target.closest("fieldset");
-      const val = target.value;
-      const optionSelected = fieldset.querySelector(".option_value");
-      optionSelected.textContent = val;
+      const optionSelected = fieldset
+        ? fieldset.querySelector(".option_value")
+        : null;
+      if (optionSelected) optionSelected.textContent = target.value;
     }
-    if (!addButton) return;
+    // Every add button of this product reads Unavailable, not only the form's.
+    if (this.productTarget) {
+      this.productTarget
+        .querySelectorAll(".product_submit_button")
+        .forEach((btn) => {
+          btn.disabled = true;
+          const label = btn.querySelector(".btn-label");
+          if (label && window.variantStrings)
+            label.textContent = window.variantStrings.unavailable;
+        });
+    }
+    if (!addButton || !addButtonText) return;
     addButtonText.textContent = window.variantStrings.unavailable;
     if (price) price.classList.add("hidden");
     if (inventory) inventory.classList.add("hidden");
@@ -5604,53 +5759,141 @@ class SwatchFunctions extends SwatchInit {
     if (qtyRules && qtyRules.classList.contains("hidden"))
       qtyRules.classList.remove("hidden");
   }
-  updateMedia(variantGroup = false) {
-    if (!this.productTarget) return;
-    const mediaGalleries = this.productTarget.querySelector("media-gallery");
-    const layout = mediaGalleries?.dataset.layout;
-    if (!layout) return;
-    if (layout === "thumbnail") {
-      const swiper = mediaGalleries.querySelector("slide-with-thumbs");
-      if (!swiper) return;
-      const slide_items = swiper.querySelectorAll(
-        ".swiper-wrapper-preview .media-gallery__image.swiper-slide"
-      );
-
-      if (slide_items.length == 0) return;
-
-      if (!this.currentVariant?.featured_media) return;
-      slide_items.forEach((e, index) => {
-        const mediaId = e.getAttribute("data-media-id");
-        if (
-          mediaId &&
-          mediaId ===
-            `${this.dataset.section}-${this.currentVariant.featured_media.id}`
-        ) {
-          const position = e.getAttribute("data-position");
-          swiper.functionGoto(!variantGroup ? position - 1 : index);
-        }
-      });
-    } else {
-      // mediaGalleries.setActiveMedia(
-      //   `${this.dataset.section}-${this.currentVariant.featured_media.id}`,
-      //   true
-      // );
-      const mediaElement = document.querySelector(
-        `[data-media-id="${this.dataset.section}-${this.currentVariant.featured_media.id}"]`
-      );
-      if (mediaElement) {
-        mediaElement.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
+  // The variant to show pictures for: the chosen one, or, when that
+  // combination does not exist, the first one with the value just picked.
+  variantForTarget(target) {
+    if (this.currentVariant) return this.currentVariant;
+    if (!target || !target.closest) return null;
+    const fieldset = target.closest("fieldset");
+    const fieldsets = [...this.querySelectorAll("fieldset")];
+    const pos = fieldsets.indexOf(fieldset) + 1;
+    if (pos < 1) return null;
+    const value = String(target.value);
+    const list = this.getVariantData();
+    return (
+      list.find((v) => String(v[`option${pos}`]) === value && v.available) ||
+      list.find((v) => String(v[`option${pos}`]) === value) ||
+      null
+    );
+  }
+  // A picture's address without size, crop or query, to compare two of them.
+  mediaKey(url) {
+    if (!url || typeof url !== "string") return "";
+    let file = url.split("?")[0].split("#")[0].split("/").pop() || "";
+    file = file.replace(/\.(jpe?g|png|gif|webp|avif|heic)$/i, "");
+    file = file.replace(/_(\d+x\d*|x\d+|\d+x)(_crop_[a-z]+)?(@\dx)?$/i, "");
+    return file.toLowerCase();
+  }
+  findVariantMediaSlide(scope, variant, target) {
+    if (!scope) return null;
+    const slides = [...scope.querySelectorAll("[data-media-id]")].filter(
+      (el) => !el.closest(".media-thumb-swiper, .thumbnail-slide")
+    );
+    if (!slides.length) return null;
+    const section = this.dataset.section;
+    const ids = [];
+    if (variant) {
+      if (variant.featured_media && variant.featured_media.id != null)
+        ids.push(String(variant.featured_media.id));
+      if (variant.featured_image && variant.featured_image.id != null)
+        ids.push(String(variant.featured_image.id));
+      if (variant.image_id != null) ids.push(String(variant.image_id));
     }
+    for (const id of ids) {
+      const hit = slides.find((el) => {
+        const mid = el.getAttribute("data-media-id") || "";
+        return mid === `${section}-${id}` || mid.endsWith(`-${id}`) || mid === id;
+      });
+      if (hit) return hit;
+    }
+    const urls = [];
+    if (variant) {
+      const fm = variant.featured_media;
+      if (fm && fm.preview_image && fm.preview_image.src) urls.push(fm.preview_image.src);
+      if (fm && fm.src) urls.push(fm.src);
+      const fi = variant.featured_image;
+      if (fi && typeof fi === "object" && fi.src) urls.push(fi.src);
+      if (typeof fi === "string") urls.push(fi);
+      if (typeof variant.image === "string") urls.push(variant.image);
+      if (variant.image && variant.image.src) urls.push(variant.image.src);
+    }
+    if (target && target.id) {
+      const label = this.querySelector(`label[for="${CSS.escape(target.id)}"]`);
+      if (label && label.dataset.image) urls.push(label.dataset.image);
+    }
+    const keys = urls.map((u) => this.mediaKey(u)).filter(Boolean);
+    if (!keys.length) return null;
+    return (
+      slides.find((el) => {
+        const img = el.querySelector("img");
+        if (!img) return false;
+        const srcs = [img.currentSrc, img.src, img.getAttribute("data-src")];
+        (img.getAttribute("srcset") || "").split(",").forEach((part) => {
+          srcs.push(part.trim().split(" ")[0]);
+        });
+        return srcs.some((s) => keys.includes(this.mediaKey(s)));
+      }) || null
+    );
+  }
+  updateMedia(variantGroup = false, target = null) {
+    if (!this.productTarget) return;
+    const variant = this.variantForTarget(target);
+    if (!variant) return;
+    const gallery = this.productTarget.querySelector("media-gallery");
+    if (!gallery) return;
+    const slide = this.findVariantMediaSlide(gallery, variant, target);
+    if (!slide) return;
+    const reduce =
+      window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const behavior = reduce ? "auto" : "smooth";
+    const thumbs = gallery.querySelector("slide-with-thumbs");
+    const main = thumbs && thumbs.globalSlide;
+    if (thumbs && main && main.slides) {
+      const list = Array.from(main.slides);
+      let index = list.indexOf(slide.closest(".swiper-slide") || slide);
+      if (index < 0) return;
+      if (main.params && main.params.loop && typeof main.slideToLoop === "function") {
+        const real = slide.closest(".swiper-slide")?.getAttribute("data-swiper-slide-index");
+        main.slideToLoop(real != null ? Number(real) : index, reduce ? 0 : 500);
+      } else {
+        main.slideTo(index, reduce ? 0 : 500);
+      }
+      if (thumbs.thumbnailSlide && typeof thumbs.thumbnailSlide.slideTo === "function") {
+        thumbs.thumbnailSlide.slideTo(index, reduce ? 0 : 500);
+      }
+      return;
+    }
+    // Grid and stack: a row that scrolls sideways (phones) slides to the
+    // picture; a column of pictures brings it into view without a jump.
+    const scroller = slide.closest(".grid_scroll");
+    if (scroller && scroller.scrollWidth > scroller.clientWidth + 1) {
+      const sRect = scroller.getBoundingClientRect();
+      const rect = slide.getBoundingClientRect();
+      const pad = parseFloat(getComputedStyle(scroller).paddingLeft) || 0;
+      scroller.scrollTo({
+        left: scroller.scrollLeft + (rect.left - sRect.left) - pad,
+        behavior,
+      });
+      return;
+    }
+    const rect = slide.getBoundingClientRect();
+    const fullyVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+    if (!fullyVisible) slide.scrollIntoView({ behavior, block: "nearest" });
   }
   updateMediaSticky() {
     if (!this.productTarget) return;
     if (!this.currentVariant) return;
     const stickyAddCart = this.productTarget.querySelector("sticky-add-cart");
     if (!stickyAddCart) return;
-    if (!this.currentVariant.featured_media) return;
+    const fm = this.currentVariant.featured_media;
+    const src =
+      (fm && fm.preview_image && fm.preview_image.src) ||
+      (this.currentVariant.featured_image && this.currentVariant.featured_image.src);
+    if (!src) return;
     const imgQuery = stickyAddCart.querySelector("img");
-    imgQuery.src = this.currentVariant.featured_media.preview_image.src;
+    if (!imgQuery) return;
+    imgQuery.src = src;
     imgQuery.removeAttribute("srcset");
     imgQuery.removeAttribute("sizes");
   }
@@ -5669,43 +5912,13 @@ class SwatchFunctions extends SwatchInit {
     const price = this.currentVariant.price;
     let avaiable = productTarget.querySelector(".available-value");
     let sku_area = productTarget.querySelector(".product__sku");
-    // Update option labels
-    const productDetailPicker = productTarget.querySelector(
-      ".product-detail__variant-picker"
-    );
-    if (productDetailPicker) {
-      const type = productDetailPicker.dataset.type || "swatches";
-
-      const updateOptionValues = (selector) => {
-        const optionElements = productTarget.querySelectorAll(selector);
-        optionElements.forEach((element, index) => {
-          const optionValue = this.currentVariant[`option${index + 1}`];
-          if (optionValue) {
-            element.innerHTML = optionValue;
-          }
-        });
-      };
-
-      if (type === "swatches") {
-        updateOptionValues(".option_value");
-      } else {
-        updateOptionValues(".option_drop_value .option_value");
-        updateOptionValues("swatch-dropdown-select-value .option_value");
-
-        const closestSwatchDropdown = target.closest("swatch-dropdown");
-        if (
-          closestSwatchDropdown &&
-          closestSwatchDropdown.classList.contains("active")
-        ) {
-          closestSwatchDropdown.classList.remove("active");
-        }
-      }
-    }
+    // Option labels are written per fieldset by updateOptionLabels(), so a
+    // second picker in the section (sticky bar, selector pro) is untouched.
 
     if (sku_area) sku_area.innerHTML = sku ? sku : "N/A";
-    variantQtyData.find((variantQty) => {
-      if (variantQty.id === this.currentVariant.id) {
-        qty = variantQty.qty;
+    (variantQtyData || []).find((variantQty) => {
+      if (String(variantQty.id) === String(this.currentVariant.id)) {
+        qty = Number(variantQty.qty) || 0;
       }
     });
 
@@ -5989,26 +6202,31 @@ class SwatchFunctions extends SwatchInit {
       }
     });
   }
+  // Greys out the values that make no available variant with the values
+  // chosen in the options before them. Every option is checked, the first
+  // one against stock alone.
   updateVariantStatuses() {
-    const selectedOptionOneVariants = this.variantData.filter(
-      (variant) => this.querySelector(":checked").value === variant.option1
-    );
+    const variants = this.getVariantData();
     const inputWrappers = [...this.querySelectorAll(".product-form__input")];
-    inputWrappers.forEach((option, index) => {
-      if (index === 0) return;
+    const chosen = inputWrappers.map((wrapper) => {
+      const checked = wrapper.querySelector("input:checked");
+      return checked ? String(checked.value) : null;
+    });
+    inputWrappers.forEach((wrapper, index) => {
       const optionInputs = [
-        ...option.querySelectorAll('input[type="radio"], option'),
+        ...wrapper.querySelectorAll('input[type="radio"], option'),
       ];
-      const previousOptionSelected =
-        inputWrappers[index - 1].querySelector(":checked").value;
-      const availableOptionInputsValue = selectedOptionOneVariants
-        .filter(
-          (variant) =>
-            variant.available &&
-            variant[`option${index}`] === previousOptionSelected
-        )
-        .map((variantOption) => variantOption[`option${index + 1}`]);
-      this.setInputAvailability(optionInputs, availableOptionInputsValue);
+      const availableValues = variants
+        .filter((variant) => {
+          if (!variant.available) return false;
+          for (let i = 0; i < index; i++) {
+            if (chosen[i] != null && String(variant[`option${i + 1}`]) !== chosen[i])
+              return false;
+          }
+          return true;
+        })
+        .map((variant) => String(variant[`option${index + 1}`]));
+      this.setInputAvailability(optionInputs, availableValues);
     });
   }
   setInputAvailability(elementList, availableValuesList) {
@@ -6019,12 +6237,11 @@ class SwatchFunctions extends SwatchInit {
       if (element.tagName === "INPUT") {
         element.classList.toggle("option-disabled", !availableElement);
       } else if (element.tagName === "OPTION") {
-        element.innerText = availableElement
-          ? value
-          : window.variantStrings.unavailable_with_option.replace(
-              "[value]",
-              value
-            );
+        const strings = window.variantStrings || {};
+        element.innerText =
+          availableElement || !strings.unavailable_with_option
+            ? value
+            : strings.unavailable_with_option.replace("[value]", value);
       }
     });
   }
@@ -6032,34 +6249,38 @@ class SwatchFunctions extends SwatchInit {
     this.options = [];
     Array.from(this.querySelectorAll("select, fieldset"), (element) => {
       if (element.tagName === "SELECT") {
+        // A select inside a fieldset is read with that fieldset.
+        if (element.closest("fieldset")) return;
         let array = element.value.split(" / ");
         array.forEach((item) => this.options.push(item));
       }
       if (element.tagName === "FIELDSET") {
-        this.options.push(
-          Array.from(element.querySelectorAll("input")).find(
-            (radio) => radio.checked
-          )?.value
+        const select = element.querySelector("select");
+        const checked = Array.from(element.querySelectorAll("input")).find(
+          (radio) => radio.checked
         );
+        this.options.push(checked ? checked.value : select ? select.value : undefined);
       }
     });
   }
   updateMasterId() {
-    this.currentVariant = this.getVariantData().find((variant) => {
-      return !variant.options
-        .map((option, index) => {
-          return this.options[index] === option;
-        })
-        .includes(false);
-    });
+    const chosen = this.options || [];
+    this.currentVariant = this.getVariantData().find((variant) =>
+      chosen.every(
+        (value, index) =>
+          value == null || String(variant[`option${index + 1}`]) === String(value)
+      )
+    );
   }
   updateURL() {
     if (!this.currentVariant || this.dataset.updateUrl === "false") return;
-    window.history.replaceState(
-      {},
-      "",
-      `${this.dataset.url}?variant=${this.currentVariant.id}`
-    );
+    const base = this.dataset.url || window.location.pathname;
+    try {
+      const url = new URL(base, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      url.searchParams.set("variant", this.currentVariant.id);
+      window.history.replaceState(window.history.state, "", url.toString());
+    } catch (err) {}
   }
   updateVariantInput() {
     const productForms = document.querySelectorAll(
@@ -6067,6 +6288,7 @@ class SwatchFunctions extends SwatchInit {
     );
     productForms.forEach((productForm) => {
       const input = productForm.querySelector('input[name="id"]');
+      if (!input) return;
       input.value = this.currentVariant.id;
       input.dispatchEvent(new Event("change", { bubbles: true }));
     });
@@ -6086,6 +6308,7 @@ class SwatchFunctions extends SwatchInit {
   updatePickupAvailability() {
     const pickUpAvailability = document.querySelector("pickup-availability");
     if (!pickUpAvailability) return;
+    if (typeof pickUpAvailability.fetchAvailability !== "function") return;
 
     if (this.currentVariant && this.currentVariant.available) {
       pickUpAvailability.fetchAvailability(this.currentVariant.id);
@@ -6094,12 +6317,139 @@ class SwatchFunctions extends SwatchInit {
       pickUpAvailability.innerHTML = "";
     }
   }
+  // Variants as the picker needs them, whatever shape the page wrote:
+  // option1..option3 and options[] both filled, ids and stock settled.
   getVariantData() {
-    this.variantData =
-      this.variantData ||
-      JSON.parse(this.querySelector('[type="application/json"]').textContent);
+    if (this.variantData) return this.variantData;
+    let list = null;
+    const own = this.querySelector(
+      'script[type="application/json"]:not([data-variant-prices])'
+    );
+    if (own) {
+      try {
+        list = JSON.parse(own.textContent);
+      } catch (err) {
+        list = null;
+      }
+    }
+    if (!Array.isArray(list)) {
+      const scope = this.closest(".product__item-js") || document;
+      const productJson = scope.querySelector("[data-product-json]");
+      if (productJson) {
+        try {
+          const product = JSON.parse(productJson.textContent);
+          list = product && Array.isArray(product.variants) ? product.variants : null;
+        } catch (err) {
+          list = null;
+        }
+      }
+    }
+    this.variantData = SwatchFunctions.normalizeVariants(list || []);
     return this.variantData;
   }
+  static normalizeVariants(list) {
+    return list
+      .filter((v) => v && typeof v === "object")
+      .map((v) => {
+        const variant = Object.assign({}, v);
+        let options = Array.isArray(v.options) ? v.options.slice() : null;
+        if (options && options.length && typeof options[0] === "object") {
+          options = options.map((o) => (o && (o.value ?? o.name)) ?? "");
+        }
+        if (!options || !options.length) {
+          options = [v.option1, v.option2, v.option3].filter(
+            (o) => o !== undefined && o !== null && o !== ""
+          );
+        }
+        if ((!options || !options.length) && typeof v.title === "string") {
+          options = v.title.split(" / ");
+        }
+        options = options.map((o) => String(o));
+        variant.options = options;
+        for (let i = 0; i < 3; i++) {
+          const key = `option${i + 1}`;
+          if (variant[key] === undefined || variant[key] === null || variant[key] === "") {
+            variant[key] = options[i] !== undefined ? options[i] : null;
+          } else {
+            variant[key] = String(variant[key]);
+          }
+        }
+        if (variant.available === undefined) {
+          variant.available =
+            variant.inventory_quantity === undefined ||
+            Number(variant.inventory_quantity) > 0 ||
+            variant.inventory_policy === "continue";
+        } else {
+          variant.available =
+            variant.available === true || variant.available === "true" || variant.available === 1;
+        }
+        if (
+          variant.inventory_management === undefined ||
+          variant.inventory_management === ""
+        ) {
+          variant.inventory_management = null;
+        }
+        if (typeof variant.id === "string" && /^\d+$/.test(variant.id)) {
+          variant.id = Number(variant.id);
+        }
+        return variant;
+      });
+  }
+  // Money as the page printed it for this variant when it can, so the
+  // shop's own currency format is kept; otherwise the theme's formatter.
+  formatVariantMoney(variant, key) {
+    if (!variant) return "";
+    if (this.priceMap === undefined || this.priceMap === null) {
+      this.priceMap = {};
+      const el = this.querySelector("script[data-variant-prices]");
+      if (el) {
+        try {
+          this.priceMap = JSON.parse(el.textContent) || {};
+        } catch (err) {
+          this.priceMap = {};
+        }
+      }
+    }
+    const printed = this.priceMap[String(variant.id)];
+    if (printed && printed[key]) return printed[key];
+    const cents = variant[key];
+    const format =
+      (window.themeGlobalVariables &&
+        themeGlobalVariables.settings &&
+        themeGlobalVariables.settings.money_format) ||
+      "${{amount}}";
+    try {
+      if (window.Shopify && typeof Shopify.formatMoney === "function") {
+        return Shopify.formatMoney(cents, format);
+      }
+    } catch (err) {}
+    return String(cents == null ? "" : cents);
+  }
+}
+// The builder redraws a section in place; the pickers in it read their
+// variants and swatches again so a changed product or setting shows.
+if (!window.__materiaPickerReload) {
+  window.__materiaPickerReload = true;
+  const refreshPickers = (event) => {
+    const root =
+      (event && event.target && event.target.querySelectorAll && event.target) ||
+      document;
+    const scope = root === document ? document : root;
+    scope
+      .querySelectorAll(
+        "variant-radios-detail, variant-radios-single, variant-group-detail, variant-radios-sticky, variant-group-sticky"
+      )
+      .forEach((picker) => {
+        if (typeof picker.refreshPicker === "function") {
+          picker.refreshPicker();
+          try {
+            picker.updateVariantStatuses();
+          } catch (err) {}
+        }
+      });
+  };
+  document.addEventListener("storelib:section-load", refreshPickers);
+  document.addEventListener("shopify:section:load", refreshPickers);
 }
 //Function click dropdown variant
 class SwatchDropdownSelectValue extends HTMLElement {
@@ -6488,10 +6838,14 @@ class VariantRadiosDetail extends SwatchFunctions {
     const detailRadio = this.productTarget.querySelector(
       "variant-radios-detail, variant-group-detail"
     );
-    if (!select && detailRadio) return;
+    if (!select || !detailRadio) return;
 
     for (let i = 0; i < select.options.length; i++) {
-      if (select.options[i].value === this.currentVariant.title) {
+      const opt = select.options[i];
+      if (
+        String(opt.dataset.variantId) === String(this.currentVariant.id) ||
+        opt.value === this.currentVariant.title
+      ) {
         select.options[i].selected = true;
 
         detailRadio.querySelectorAll("fieldset").forEach((fieldset, index) => {
