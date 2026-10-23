@@ -214,3 +214,120 @@
   syncTerms();
   initStickyTopbars();
 })();
+
+/* Shipping estimate, Storelib's own. The cart page and drawer forms used
+   Shopify's country list and /cart/shipping_rates.json, neither of which
+   exists here. Countries come from the browser (named in the visitor's
+   language), rates from Theme settings > Shopping Cart > Shipping rates
+   ("DE, AT = 4.90", "* = 9.90"), free shipping from the free-shipping
+   amount. A country without a rate is told shipping is set at checkout. */
+(() => {
+  if (window.__materiaShippingReady) return;
+  window.__materiaShippingReady = true;
+  const CODES = 'AD AE AF AG AI AL AM AO AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GT GU GW GY HK HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW'.split(' ');
+  let data = null;
+  const read = () => {
+    if (data) return data;
+    try { data = JSON.parse(document.getElementById('materia-shipping-data')?.textContent || '{}'); } catch (e) { data = {}; }
+    data.text = data.text || {};
+    return data;
+  };
+  const lang = () => document.documentElement.lang || navigator.language || 'en';
+  const names = (() => { try { return new Intl.DisplayNames([lang()], {type: 'region'}); } catch (e) { return null; } })();
+  const nameOf = code => (names && names.of(code)) || code;
+  const fill = (text, values) => String(text || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => values[k] ?? '');
+  const money = (amount, currency) => {
+    try { return new Intl.NumberFormat(lang(), {style: 'currency', currency: currency || 'EUR'}).format(amount); }
+    catch (e) { return amount.toFixed(2) + ' ' + (currency || ''); }
+  };
+  /* "DE, AT, FR = 4.90" per line; "*" is every other country. */
+  const rateFor = (code) => {
+    let fallback = null;
+    for (const line of String(read().rates || '').split(/\r?\n/)) {
+      const [left, right] = line.split('=');
+      if (right == null) continue;
+      const price = parseFloat(right.replace(/[^\d.,]/g, '').replace(',', '.'));
+      if (!isFinite(price)) continue;
+      const codes = left.split(/[,\s]+/).map(c => c.trim().toUpperCase()).filter(Boolean);
+      if (codes.includes(code)) return price;
+      if (codes.includes('*')) fallback = price;
+    }
+    return fallback;
+  };
+  const visitorCountry = () => {
+    const set = String(read().country || '').toUpperCase();
+    if (CODES.includes(set)) return set;
+    const region = (navigator.language || '').split('-')[1];
+    return region && CODES.includes(region.toUpperCase()) ? region.toUpperCase() : '';
+  };
+  function prepare(root) {
+    if (root.dataset.materiaShipping) return;
+    root.dataset.materiaShipping = 'ready';
+    const select = root.querySelector('select[name="address[country]"]');
+    if (!select) return;
+    select.removeAttribute('data-default');
+    const chosen = select.value && CODES.includes(select.value) ? select.value : visitorCountry();
+    const options = CODES.map(code => [code, nameOf(code)]).sort((a, b) => a[1].localeCompare(b[1], lang()));
+    select.innerHTML = '';
+    const blank = new Option(read().text.choose || '', '');
+    blank.disabled = true;
+    select.add(blank);
+    for (const [code, label] of options) select.add(new Option(label, code));
+    select.value = chosen || '';
+    if (!select.value) blank.selected = true;
+  }
+  async function subtotal() {
+    try {
+      const res = await fetch((window.routes?.cart_url || '/cart') + '.js', {headers: {Accept: 'application/json'}});
+      const cart = await res.json();
+      if (typeof cart.total_price === 'number') return {cents: cart.total_price, currency: cart.currency};
+    } catch (e) {}
+    return {cents: Number(read().subtotal) || 0, currency: read().currency};
+  }
+  async function estimate(button) {
+    const box = button.closest('cart-estimate, .cart__addon-content, #shipping') || document;
+    const root = box.querySelector('[data-address="root"]');
+    const select = root?.querySelector('select[name="address[country]"]');
+    const out = box.querySelector('.addon-message') || (() => { const d = document.createElement('div'); d.className = 'addon-message mt-15'; box.querySelector('.addon-actions')?.after(d); return d; })();
+    const d = read(), t = d.text;
+    out.setAttribute('role', 'status');
+    out.classList.add('materia-ship-result');
+    if (!select || !select.value) { out.textContent = t.choose || ''; select?.focus(); return; }
+    const code = select.value, country = nameOf(code);
+    const price = rateFor(code);
+    if (price == null) { out.textContent = fill(t.atCheckout, {country}); return; }
+    button.setAttribute('aria-busy', 'true');
+    const {cents, currency} = await subtotal();
+    button.removeAttribute('aria-busy');
+    const cur = currency || d.currency;
+    const freeMin = parseFloat(String(box.closest('#minicart_wrapper, cart-notification') ? d.freeDrawer : d.freePage).replace(',', '.'));
+    const free = price === 0 || (isFinite(freeMin) && freeMin > 0 && cents / 100 >= freeMin);
+    out.innerHTML = '';
+    const line = document.createElement('p');
+    line.className = 'materia-ship-result__line';
+    const label = document.createElement('span');
+    label.textContent = fill(t.rateTo, {country});
+    const value = document.createElement('strong');
+    value.textContent = free ? (t.free || '0') : money(price, cur);
+    line.append(label, value);
+    out.append(line);
+    if (d.delivery) { const p = document.createElement('p'); p.className = 'materia-ship-result__note'; p.textContent = d.delivery; out.append(p); }
+    if (!free && isFinite(freeMin) && freeMin > 0) { const p = document.createElement('p'); p.className = 'materia-ship-result__note'; p.textContent = fill(t.freeOver, {amount: money(freeMin, cur)}); out.append(p); }
+  }
+  const scan = (scope = document) => scope.querySelectorAll('[data-address="root"]').forEach(prepare);
+  /* Capture phase: answer before the theme's Shopify-only handlers. */
+  document.addEventListener('click', event => {
+    const button = event.target.closest('[data-action="shipping"], .btn-save[data-action="shipping"]');
+    if (!button || !button.closest('cart-estimate, .cart__addon-content, #shipping')) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    scan(button.closest('cart-estimate, .cart__addon-content, #shipping'));
+    estimate(button);
+  }, true);
+  /* Opening the drawer's shipping sheet or redrawing the cart brings new forms. */
+  let queued = 0;
+  new MutationObserver(() => { if (!queued) queued = requestAnimationFrame(() => { queued = 0; scan(); }); })
+    .observe(document.documentElement, {childList: true, subtree: true});
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => scan());
+  else scan();
+})();

@@ -137,7 +137,7 @@ Shopify.CountryProvinceSelector.prototype = {
     var opt = this.countryEl.options[this.countryEl.selectedIndex];
     if (!opt) return; // no countries listed (or none chosen): nothing to fill in
     var raw = opt.getAttribute("data-provinces");
-    var provinces = JSON.parse(raw);
+    var provinces = JSON.parse(raw) || []; // a country listed without provinces
 
     this.clearOptions(this.provinceEl);
     if (provinces && provinces.length == 0) {
