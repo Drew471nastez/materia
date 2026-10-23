@@ -1,4 +1,8 @@
 <template compat="shopify">
+{% render 'theme-type' %}
+{%- liquid
+  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+-%}
 {%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
 {%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
 <style>
@@ -58,7 +62,11 @@
 {%- endcomment -%}
 {%- liquid
   assign st = section.settings
-  assign infomation_meta = product.metafields.custom.information_product_tab
+  assign pit_product = product
+  if pit_product == blank
+    assign pit_product = page.product
+  endif
+  assign infomation_meta = pit_product.metafields.custom.information_product_tab
   assign reset_spacing = ''
   if st.reset_spacing
     assign reset_spacing = ' remove_spacing'
@@ -67,7 +75,8 @@
 {%- if section.blocks.size > 0 -%}
   <div
     id="{{ section.id }}"
-    class="section gradient {{ reset_spacing }} bls__product-tabs "
+    class="section color-{{ color_scheme }} gradient {{ reset_spacing }} bls__product-tabs "
+    {% unless st.reveal %}data-ti-no-reveal{% endunless %}
     data-section-type="tabs"
     data-section-id="{{ section.id }}"
   >
@@ -101,7 +110,11 @@
                     tab-review-app
                   {%- endif -%}
                 >
-                  {{- bk_st.title -}}
+                  {%- if block.type == 'description' and bk_st.title == blank -%}
+                    Description
+                  {%- else -%}
+                    {{- bk_st.title -}}
+                  {%- endif -%}
                   {%- if block.type == '@app' -%}
                     {{ 'products.product.review_app' | t }}
                   {%- endif -%}
@@ -128,10 +141,10 @@
                     {%- when '@app' -%}
                       {% render block %}
                     {%- when 'description' -%}
-                      {{ product.description }}
+                      <div class="rte">{{ pit_product.description }}</div>
                     {%- when 'review' -%}
-                      <div id="shopify-product-reviews" data-id="{{ product.id }}">
-                        {{ product.metafields.spr.reviews }}
+                      <div id="shopify-product-reviews" data-id="{{ pit_product.id }}">
+                        {{ pit_product.metafields.spr.reviews }}
                       </div>
                     {%- when 'custom_tab' -%}
                       {% assign tab_content = bk_st.tab_content %}
@@ -165,6 +178,40 @@
 {%- endif -%}
 
 <script src="{{ 'product_tab.js' | asset_url }}" defer></script>
+<script>
+  (function () {
+    /* product_tab.js binds once on load; a section redrawn in the builder binds its own tabs here. */
+    function bindTabs(root) {
+      if (!root || root.__pitTabs) return;
+      root.__pitTabs = true;
+      root.addEventListener('click', function (e) {
+        var a = e.target.closest('.nav-tabs a[data-block-id]');
+        if (!a || !root.contains(a)) return;
+        e.preventDefault();
+        var li = a.closest('.data.item');
+        if (li && li.classList.contains('active')) return;
+        root.querySelectorAll('.nav-tabs .data.item').forEach(function (it) { it.classList.remove('active'); });
+        root.querySelectorAll('.tab-content .tab-item').forEach(function (it) {
+          it.classList.remove('active');
+          var p = it.querySelector('.tab-panel'); if (p) p.style.display = 'none';
+        });
+        var panel = root.querySelector('#' + a.getAttribute('data-block-id'));
+        if (panel) {
+          panel.classList.add('active');
+          var pp = panel.querySelector('.tab-panel'); if (pp) pp.style.display = 'block';
+        }
+        if (li) li.classList.add('active');
+      });
+    }
+    if (window.__pitListen) return;
+    window.__pitListen = true;
+    document.addEventListener('storelib:section-load', function (e) {
+      var sec = e.target && e.target.closest ? e.target.closest('.shopify-section') : null;
+      if (!sec && e.detail && e.detail.sectionId) sec = document.getElementById('shopify-section-' + e.detail.sectionId);
+      if (sec && sec.querySelector('.bls__product-tabs')) bindTabs(sec.querySelector('.bls__product-tabs'));
+    });
+  })();
+{% comment %}{% endcomment %}</script>
 
 
 </template>
@@ -310,38 +357,44 @@
     "class": "section",
     "settings": [
       {
-        "type": "checkbox",
-        "id": "reset_spacing",
-        "label": "Remove default space between sections",
-        "default": true
-      },
-      {
         "type": "header",
-        "content": "General"
+        "content": "Layout"
       },
       {
         "type": "select",
         "id": "section_width",
-        "label": "t:sections.all.section_width.label",
+        "label": "Section width",
         "default": "container",
         "options": [
           {
             "value": "container",
-            "label": "t:sections.all.section_width.container.label"
+            "label": "Default"
           },
           {
             "value": "fluid_container",
-            "label": "t:sections.all.section_width.fluid_container.label"
+            "label": "Fluid container"
           },
           {
             "value": "stretch_width",
-            "label": "t:sections.all.section_width.stretch_width.label"
+            "label": "Stretched"
           },
           {
             "value": "full_width",
-            "label": "t:sections.all.section_width.full_width.label"
+            "label": "Full width"
           }
         ]
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
       },
       {
         "type": "header",
@@ -351,12 +404,7 @@
         "type": "checkbox",
         "id": "reveal",
         "label": "Reveal on scroll",
-        "info": "Animates the section into view using Theme settings → Animations.",
         "default": true
-      },
-      {
-        "type": "header",
-        "content": "Layout & Spacing"
       }
     ],
     "blocks": [
@@ -375,7 +423,7 @@
           {
             "type": "text",
             "id": "title",
-            "label": "t:sections.product-information-tabs.settings.description"
+            "label": "Tab title"
           }
         ]
       },
@@ -431,6 +479,23 @@
                 "label": "t:sections.product-information-tabs.blocks.custom_tab.settings.tab_content.options__3.label"
               }
             ]
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "t:sections.product-information-tabs.name",
+        "category": "Product",
+        "blocks": [
+          {
+            "type": "description",
+            "settings": {
+              "title": "Description"
+            }
+          },
+          {
+            "type": "custom_tab"
           }
         ]
       }
