@@ -5482,6 +5482,10 @@ class SwatchFunctions extends SwatchInit {
       fieldset.querySelectorAll('input[type="radio"]').forEach((input) => {
         input.checked = String(input.value) === String(value);
       });
+      // A dropdown picker keeps its option list in a select.
+      fieldset.querySelectorAll("select").forEach((sel) => {
+        if ([...sel.options].some((o) => String(o.value) === String(value))) sel.value = value;
+      });
     });
     const select = this.querySelector("select");
     if (select && !select.closest("fieldset")) {
@@ -5528,7 +5532,7 @@ class SwatchFunctions extends SwatchInit {
     this.groupFunctionsInit();
     // The picked value has no variant with the other choices: move to the
     // closest one that has it, in stock first, so a tap always selects.
-    if (!this.currentVariant && target.matches('input[type="radio"]')) {
+    if (!this.currentVariant && target.matches('input[type="radio"], fieldset select')) {
       const fieldsets = [...this.querySelectorAll("fieldset")];
       const index = fieldsets.indexOf(target.closest("fieldset"));
       if (index > -1) {
@@ -5568,9 +5572,10 @@ class SwatchFunctions extends SwatchInit {
     const fieldsets = this.querySelectorAll("fieldset");
     fieldsets.forEach((fieldset, index) => {
       const checked = fieldset.querySelector("input:checked");
+      const fsSelect = fieldset.querySelector("select");
       const value =
         (this.currentVariant && this.currentVariant[`option${index + 1}`]) ||
-        (checked ? checked.value : "");
+        (checked ? checked.value : fsSelect ? fsSelect.value : "");
       if (!value) return;
       fieldset.querySelectorAll(".option_value").forEach((el) => {
         el.textContent = value;
@@ -6266,7 +6271,8 @@ class SwatchFunctions extends SwatchInit {
     const inputWrappers = [...this.querySelectorAll(".product-form__input")];
     const chosen = inputWrappers.map((wrapper) => {
       const checked = wrapper.querySelector("input:checked");
-      return checked ? String(checked.value) : null;
+      const sel = checked ? null : wrapper.querySelector("select");
+      return checked ? String(checked.value) : sel ? String(sel.value) : null;
     });
     inputWrappers.forEach((wrapper, index) => {
       const optionInputs = [
@@ -6911,6 +6917,9 @@ class VariantRadiosDetail extends SwatchFunctions {
               input.checked = true;
             }
           });
+          const fsSelect = fieldset.querySelector("select");
+          const want = this.currentVariant[`option${index + 1}`];
+          if (fsSelect && want != null && fsSelect.value !== String(want)) fsSelect.value = want;
         });
         break;
       }
@@ -8726,39 +8735,47 @@ class SlideWithThumbs extends HTMLElement {
     });
   }
 
+  // Pauses this gallery's videos when its slide changes (not every video
+  // on the page).
   pauseMedia() {
+    const root = this;
     this.globalSlide.on("slideChange", function () {
-      window.pauseAllMedia();
+      root.querySelectorAll("video").forEach((v) => {
+        try {
+          v.pause();
+        } catch (e) {}
+      });
+      root.querySelectorAll("iframe.js-youtube, iframe.js-vimeo").forEach((f) => {
+        if (!f.contentWindow) return;
+        const msg = f.classList.contains("js-youtube")
+          ? '{"event":"command","func":"pauseVideo","args":""}'
+          : '{"method":"pause"}';
+        try {
+          f.contentWindow.postMessage(msg, "*");
+        } catch (e) {}
+      });
     });
   }
 
+  // With autoplay on, the video of the slide that comes in plays muted.
   playMedia() {
     const autoplay = this?.dataset.autoPlayVideo === "true";
     if (!autoplay) return;
-    // Load Vimeo API
-    var vimeoTag = document.createElement("script");
-    vimeoTag.src = "https://player.vimeo.com/api/player.js";
-    document.head.appendChild(vimeoTag);
     this.globalSlide.on("slideChangeTransitionEnd", function () {
-      var activeSlide = this.slides[this.activeIndex];
-      var video = activeSlide.querySelector(".media-video");
-      if (video) {
-        if (video.tagName === "VIDEO") {
-          video.play();
-        } else if (video.tagName === "IFRAME") {
-          // Play Vimeo
-          if (video.src.includes("vimeo")) {
-            var vimeoPlayer = new Vimeo.Player(video);
-            vimeoPlayer.play();
-          }
-          // Play YouTube
-          if (video.src.includes("youtube")) {
-            video.contentWindow.postMessage(
-              '{"event":"command","func":"playVideo","args":""}',
-              "*"
-            );
-          }
-        }
+      const activeSlide = this.slides[this.activeIndex];
+      const video = activeSlide && activeSlide.querySelector(".media-video");
+      if (!video) return;
+      if (video.tagName === "VIDEO") {
+        video.muted = true;
+        const p = video.play();
+        if (p && p.catch) p.catch(() => {});
+      } else if (video.tagName === "IFRAME" && video.contentWindow) {
+        const msg = video.src.includes("youtube")
+          ? '{"event":"command","func":"playVideo","args":""}'
+          : '{"method":"play"}';
+        try {
+          video.contentWindow.postMessage(msg, "*");
+        } catch (e) {}
       }
     });
   }
@@ -8893,6 +8910,7 @@ function pauseAllMedia() {
     if (model.modelViewerUI) model.modelViewerUI.pause();
   });
 }
+window.pauseAllMedia = pauseAllMedia;
 
 var BlsCustomer = (function () {
   return {

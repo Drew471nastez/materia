@@ -20,6 +20,8 @@ class ZoomAction extends HTMLElement {
   }
   initLightBox() {
     if (this.lightbox !== null) return;
+    // Galleries marked data-mt-lightbox open in product-page-ui.js instead.
+    if (this.closest('[data-mt-lightbox]')) return;
     this.querySelectorAll('a.media-gallery__image').forEach((a) => {
       var position = 0;
       a.addEventListener('click', (e) => {

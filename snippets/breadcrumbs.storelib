@@ -19,6 +19,7 @@
     endif
   endif
   assign next_product = false
+  assign next_prev = next_prev | default: section_st.next_prev
 %}
 {%- unless template == 'index' or template == '404' -%}
   {%- assign t = template | split: '.' | first -%}
@@ -106,29 +107,33 @@
         assign previous_product = collection.previous_product
         assign next_product = collection.next_product
         assign collection_list = collection
-        if previous_product or next_product
-        else
-          assign collection_list = product.collections[0]
-          assign collection_list_product = collection_list.handle
-          assign previous_product = null
-          assign next_product = null
-          assign last = collections[collection_list_product].products_count
-          for p in collections[collection_list_product].products
-            if p.handle == product.handle
-              assign prev = forloop.index | minus: 2
-              assign next = forloop.index
-              if prev >= 0
-                assign previous_product = collections[collection_list_product].products[prev]
+        if previous_product == blank and next_product == blank
+          comment
+            Opened outside a collection: walk the product's first collection
+            to find the products on either side.
+          endcomment
+          assign collection_list = product.collections.first
+          if collection_list
+            assign found = false
+            for p in collection_list.products
+              if found
+                assign next_product = p
+                break
               endif
-              if last >= next
-                assign next_product = collections[collection_list_product].products[next]
+              if p.handle == product.handle
+                assign found = true
+              else
+                assign previous_product = p
               endif
-              break
-            endif
-          endfor
+            endfor
+            unless found
+              assign previous_product = blank
+            endunless
+          endif
         endif
+        assign all_products_url = collection_list.url | default: routes.all_products_collection_url | default: '/collections/all'
       -%}
-      {%- if previous_product -%}
+      {%- if previous_product != blank -%}
         <div class="hover-event lh-1">
           <a
             href="{{ previous_product.url }}"
@@ -141,7 +146,7 @@
           </a>
           <div class="product-item flex gap-10 shadow p-10 rounded-5 absolute z-3 bg-white invisible transition-short{% if enable_rtl %} left-0{% else %} right-0{% endif %}">
             <div class="product-img w-custom rounded-5 overflow-hidden" style="--custom-width: 5rem">
-              <a href="{{ previous_product.url | within: collection }}">
+              <a href="{{ previous_product.url }}">
                 {%- if previous_product.featured_image != blank -%}
                   {%- assign image_alt = previous_product.featured_image.alt | default: 'product' | escape -%}
                   {% render 'responsive-image',
@@ -157,7 +162,7 @@
             </div>
             <div class="product-details flex-1">
               <a
-                href="{{ previous_product.url | within: collection }}"
+                href="{{ previous_product.url }}"
                 class="no-underline heading-color fs-small-1 subheading_weight lh-normal"
                 aria-label="{{ previous_product.title }}"
               >
@@ -175,7 +180,7 @@
           </div>
         </div>
       {%- endif -%}
-      <a href="{{ collection_list.url }}" class="nav-back lh-1 text-color tooltip relative">
+      <a href="{{ all_products_url }}" class="nav-back lh-1 text-color tooltip relative">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path d="M19 12H5"/>
           <path d="m12 19-7-7 7-7"/>
@@ -184,7 +189,7 @@
           {{- 'products.product.back_to_product' | t -}}
         </span>
       </a>
-      {%- if next_product -%}
+      {%- if next_product != blank -%}
         <div class="hover-event lh-1">
           <a
             href="{{ next_product.url }}"
@@ -197,7 +202,7 @@
           </a>
           <div class="product-item flex gap-10 shadow p-10 rounded-5 absolute z-3 bg-white invisible transition-short{% if enable_rtl %} left-0{% else %} right-0{% endif %}">
             <div class="product-img w-custom rounded-5 overflow-hidden" style="--custom-width: 5rem">
-              <a href="{{ next_product.url | within: collection }}" arial-label="{{ next_product.title }}">
+              <a href="{{ next_product.url }}" aria-label="{{ next_product.title }}">
                 {%- if next_product.featured_image != blank -%}
                   {%- assign image_alt = next_product.featured_image.alt | default: 'product' | escape -%}
                   {% render 'responsive-image',
@@ -213,9 +218,9 @@
             </div>
             <div class="product-details flex-1">
               <a
-                href="{{ next_product.url | within: collection }}"
+                href="{{ next_product.url }}"
                 class="no-underline heading-color fs-small-1 subheading_weight lh-normal"
-                arial-label="{{ next_product.title }}"
+                aria-label="{{ next_product.title }}"
               >
                 {{ next_product.title }}
               </a>

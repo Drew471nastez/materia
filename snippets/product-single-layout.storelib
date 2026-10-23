@@ -3,6 +3,8 @@
   Materia Themes. Developed By Materia Themes.
 {%- endcomment -%}
 {{ 'countdown.css' | asset_url | stylesheet_tag }}
+{{ 'product-page-ui.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'product-page-ui.js' | asset_url }}" defer="defer"></script>
 <style>
   .pdp-view-link,
   .pdp-view-link:link,
@@ -138,6 +140,12 @@
             assign default_position = product.selected_or_first_available_variant.featured_image.position | minus: 1
           endunless
         -%}
+        {%- liquid
+          assign psl_lightbox = true
+          if section.settings.enable_lightbox == false
+            assign psl_lightbox = false
+          endif
+        -%}
         {% render 'media-gallery',
           images: media,
           section_st: section.settings,
@@ -146,7 +154,8 @@
           section: section,
           position_index: default_position,
           desktop_layout: desktop_layout,
-          type: type
+          type: type,
+          lightbox: psl_lightbox
         %}
       </div>
 
@@ -660,81 +669,29 @@
                 </div>
               </div>
             {%- when 'variant_picker' -%}
-              {% comment %} Variant picker {% endcomment %}
               {% if products_group == blank %}
-                {%- if block_st.enable_picker_custom -%}
-                  <style>
-                    /* Custom picker styling — scoped to PILL-style variant buttons
-                       only (the rounded text chips like "Red light", "Near-infrared").
-                       :not(.product__color-swatch) excludes the color circles so
-                       this never overrides color swatches. */
-                    #variant-picker-{{ block.id }} .product__item-option:not(.product__color-swatch),
-                    #variant-picker-{{ block.id }} input + label:not(.product__color-swatch) {
-                      border-radius: {{ block_st.picker_border_radius | default: 8 }}px !important;
-                      transition: background-color .2s ease, color .2s ease, border-color .2s ease !important;
-                      {% if block_st.picker_bg_unselected != blank %}background: {{ block_st.picker_bg_unselected }} !important;{% endif %}
-                      {% if block_st.picker_border_color != blank %}border-color: {{ block_st.picker_border_color }} !important;{% endif %}
-                      {% if block_st.picker_text_unselected != blank %}color: {{ block_st.picker_text_unselected }} !important;{% endif %}
-                    }
-                    #variant-picker-{{ block.id }} .product__item-option:not(.product__color-swatch):hover,
-                    #variant-picker-{{ block.id }} input + label:not(.product__color-swatch):hover {
-                      {% if block_st.picker_text_hover != blank %}color: {{ block_st.picker_text_hover }} !important;{% endif %}
-                    }
-                    #variant-picker-{{ block.id }} input:checked + label:not(.product__color-swatch),
-                    #variant-picker-{{ block.id }} .product__item-option:not(.product__color-swatch).active,
-                    #variant-picker-{{ block.id }} .product__item-option:not(.product__color-swatch)[aria-checked="true"] {
-                      {% if block_st.picker_bg_selected != blank %}background: {{ block_st.picker_bg_selected }} !important;{% endif %}
-                      {% if block_st.picker_text_selected != blank %}color: {{ block_st.picker_text_selected }} !important;{% endif %}
-                      {% if block_st.picker_border_color != blank %}border-color: {{ block_st.picker_border_color }} !important;{% endif %}
-                    }
-{% comment %}{% endcomment %}                  </style>
-                {%- endif -%}
-                <div
-                  id="variant-picker-{{ block.id }}"
-                  class="product-detail__variant-picker mb-25"
-                  {{ block.shopify_attributes }}
-                  data-type="{{ block.settings.variant_type }}"
-                >
-                  {% if user_variants_image_group %}
-                    {%- render 'color-swatches', product: product, type: 'group', block: block, section: section -%}
-                  {% else %}
-                    {%- render 'color-swatches', product: product, type: 'detail', block: block, section: section -%}
-                  {% endif %}
-                </div>
+                {%- render 'variant-picker-block', block: block, product: product, section: section, group: user_variants_image_group -%}
               {% endif %}
             {%- comment -%} delivery_return + trust_badge blocks — DELETED {%- endcomment -%}
             {%- when 'collapsible_row' -%}
-              {% comment %} collapsible {% endcomment %}
-              <collapsible-block
-                tabindex="0"
-                {{ block.shopify_attributes }}
-                class="bls-toggle {% if block_st.open == true %} active {% endif %} relative border-bottom block{% if enable_skeleton_loading %} skeleton-loading{% endif %}"
-              >
-                <h3 class="h6 my-0 pointer py-17 relative collapsible-heading heading-letter-spacing">
-                  {{- block_st.heading }}
-                  <span class="open-children-toggle absolute inset-0 flex flex-end pointer">
-                    <span class="icon_plus-animation"> </span>
-                  </span>
-                </h3>
-                <div
-                  class="overflow-hidden {% if block_st.open == true %} open_collab {% endif %} collapsible-content"
-                  {% if block_st.open != true %}
-                    style="display: none;"
-                  {% endif %}
-                >
-                  <div class="collapsible-content_inner mb-12 rich__text-mt-0{% if block_st.use_product_description == true %} product_description{% endif %}">
-                    {% if block_st.use_product_description == true %}
-                      {%- if product != blank -%}
-                        {{ product.description }}
-                      {%- else -%}
-                        {{ 'onboarding.default_description' | t }}
-                      {% endif %}
-                    {% else %}
-                      {{ block_st.content }}
-                    {% endif %}
-                  </div>
+              {%- comment -%} Expandable info row: a native <details>, animated by product-page-ui. {%- endcomment -%}
+              {%- liquid
+                assign cr_body = block_st.content
+                assign cr_desc = false
+                if block_st.use_product_description == true and product.description != blank
+                  assign cr_body = product.description
+                  assign cr_desc = true
+                endif
+              -%}
+              <details class="mt-acc product-detail__collapsible" {{ block.shopify_attributes }}{% if block_st.open == true %} open{% endif %}>
+                <summary>
+                  <h3 class="mt-acc__title">{{- block_st.heading -}}</h3>
+                  <svg class="mt-acc__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                </summary>
+                <div class="mt-acc__body">
+                  <div class="mt-acc__inner rte{% if cr_desc %} product_description{% endif %}">{{ cr_body }}</div>
                 </div>
-              </collapsible-block>
+              </details>
             {%- when 'countdown_timer' -%}
               {% comment %} Countdown timer {% endcomment %}
               {{ 'countdown.css' | asset_url | stylesheet_tag }}
@@ -862,14 +819,31 @@
                 {% endif %}
               {% endif %}
             {%- when 'short_description' -%}
-              {%- if product.metafields.custom.short_description -%}
+              {%- comment -%}
+                Short description: the block's own text when filled in, else the
+                product's short_description metafield, else the start of the
+                product description.
+              {%- endcomment -%}
+              {%- liquid
+                assign sd_len = block_st.excerpt_length | default: 150 | plus: 0
+                assign sd_html = ''
+                assign sd_custom = block_st.custom_text | strip_html | strip
+                if sd_custom != blank
+                  assign sd_html = block_st.custom_text
+                elsif product.metafields.custom.short_description != blank
+                  assign sd_html = product.metafields.custom.short_description | strip_html | truncate: sd_len
+                elsif product.description != blank
+                  assign sd_html = product.description | strip_html | strip | truncate: sd_len
+                endif
+              -%}
+              {%- if sd_html != blank -%}
                 <div
                   {{ block.shopify_attributes }}
-                  class="product_detail-des mb-22{% if enable_skeleton_loading %} skeleton-loading{% endif %}"
+                  class="product_detail-des rte mb-22{% if enable_skeleton_loading %} skeleton-loading{% endif %}"
                 >
-                  {{ product.metafields.custom.short_description | truncate: block_st.excerpt_length }}
+                  {{ sd_html }}
                 </div>
-              {% endif %}
+              {%- endif -%}
             {%- when 'model_size' -%}
               {%- if product.metafields.custom.model_size -%}
                 <div
@@ -1088,7 +1062,7 @@
             {%- when 'description' -%}
               {% comment %} Description {% endcomment %}
               {%- if product != blank -%}
-                {%- if product.metafields.custom.short_description -%}
+                {%- if product.metafields.custom.short_description != blank and product.description == blank -%}
                   <div
                     class="product-detail__short-description{% if enable_skeleton_loading %} skeleton-loading{% endif %}"
                     {{ block.shopify_attributes }}
@@ -2855,440 +2829,7 @@ media (min-width: 1024px){
 {% comment %}{% endcomment %}</script>
 
 {%- when 'size_chart_popup' -%}
-{%- assign sc = block.settings -%}
-
-<div id="SC-{{ block.id }}"
-     class="scp"
-     {{ block.shopify_attributes }}
-     data-sc
-     style="
-       /* trigger */
-       --sc-trig-fs: {{ sc.trig_font_size | default: 16 }}px;
-       --sc-trig-fw: {{ sc.trig_font_weight | default: '600' }};
-       --sc-trig-color: {{ sc.trig_color | default: '#111111' }};
-       --sc-trig-gap: {{ sc.trig_gap | default: 8 }}px;
-       --sc-trig-pad-t: {{ sc.trig_pad_t_d | default: 8 }}px;
-       --sc-trig-pad-b: {{ sc.trig_pad_b_d | default: 8 }}px;
-       --sc-trig-pad-l: {{ sc.trig_pad_l_d | default: 0 }}px;
-       --sc-trig-pad-r: {{ sc.trig_pad_r_d | default: 0 }}px;
-
-       /* modal */
-       --sc-modal-bg: {{ sc.modal_bg | default: '#FFFFFF' }};
-       --sc-modal-radius: {{ sc.modal_radius | default: 12 }}px;
-       --sc-modal-pad: {{ sc.modal_padding | default: 20 }}px;
-       --scw-d: {{ sc.modal_width_d | default: 880 }}px;
-       --scw-t: {{ sc.modal_width_t | default: 720 }}px;
-       --scw-m: {{ sc.modal_width_m | default: 360 }}px;
-
-       /* title */
-       --sc-title-color: {{ sc.title_color | default: 'var(--color-heading)' }};
-       --sc-title-fs: {{ sc.title_size | default: 18 }}px;
-       --sc-title-fw: {{ sc.title_weight | default: '700' }};
-
-       /* icon */
-       --sc-icon-size: {{ sc.icon_size | default: 18 }}px;
-       --sc-icon-color: {{ sc.icon_color | default: '#111111' }};
-     ">
-  
-  <button type="button"
-          class="scp__trigger{% if sc.underline_text %} scp__trigger--underline{% endif %}"
-          aria-haspopup="dialog"
-          aria-expanded="false"
-          aria-controls="SCDialog-{{ block.id }}">
-    {%- if sc.show_icon -%}
-    <span class="scp__icn" aria-hidden="true">
-     
-      <svg viewBox="0 0 50 50" class="icn" xmlns="http://www.w3.org/2000/svg" transform="rotate(45)">
-        <path fill="currentColor" stroke="currentColor" stroke-width="0.0005"
-              d="M29.063,40.313c0.552,0,1-0.447,1-1V10.75c0-0.553-0.448-1-1-1h-8.851c-0.552,0-1,0.447-1,1v28.563
-                 c0,0.553,0.448,1,1,1H29.063z M28.063,11.75v26.563h-6.851v-1.938h1.664c0.552,0,1-0.447,1-1s-0.448-1-1-1h-1.664v-2h1.664
-                 c0.552,0,1-0.447,1-1s-0.448-1-1-1h-1.664v-2h1.664c0.552,0,1-0.447,1-1s-0.448-1-1-1h-1.664v-2h1.664c0.552,0,1-0.447,1-1
-                 s-0.448-1-1-1h-1.664v-2h1.664c0.552,0,1-0.447,1-1s-0.448-1-1-1h-1.664v-2h1.664c0.552,0,1-0.447,1-1s-0.448-1-1-1h-1.664V11.75H28.063z"/>
-      </svg>
-    </span>
-    {%- endif -%}
-    <span class="scp__label">{{ sc.trig_text | default: 'Size Guide' }}</span>
-  </button>
-
- 
-  <div class="scp__overlay" data-overlay hidden></div>
-
-  <div id="SCDialog-{{ block.id }}"
-       class="scp__dialog"
-       role="dialog"
-       aria-modal="true"
-       aria-labelledby="SCTitle-{{ block.id }}"
-       data-dialog
-       hidden>
-
-    <div class="scp__modal" data-modal>
-
-      <div class="scp__head">
-        <h3 id="SCTitle-{{ block.id }}" class="scp__title">{{ sc.modal_title | default: 'Size Guide' }}</h3>
-        <button type="button" class="scp__close" aria-label="Close (Esc)" data-close>
-          <svg viewBox="0 0 24 24" class="icn" xmlns="http://www.w3.org/2000/svg">
-            <path fill="currentColor" d="M18.3 5.71L12 12l6.3 6.29-1.41 1.41L10.59 13.41 4.29 19.7 2.88 18.29 9.17 12 2.88 5.71 4.29 4.29 10.59 10.59 16.89 4.29z"/>
-          </svg>
-        </button>
-      </div>
-
-      {%- if sc.enable_size_popup -%}
-        <!-- Tabs -->
-        <div class="scp__tabs">
-          <button type="button" class="scp__tab is-active" data-tab="sizes-{{ block.id }}">{{ sc.tab_sizes_label | default: 'Sizes' }}</button>
-          <button type="button" class="scp__tab" data-tab="measure-{{ block.id }}">{{ sc.tab_measure_label | default: 'How to measure' }}</button>
-        </div>
-
-
-        <div id="sizes-{{ block.id }}" class="scp__panel is-active">
-          <div class="scp__page-wrap">
-            {%- if sc.sizes_page != blank -%}
-              {{ sc.sizes_page.content }}
-            {%- else -%}
-              <p style="margin:0;">Assign a “Page containing size chart” in the block settings.</p>
-            {%- endif -%}
-          </div>
-        </div>
-
-    
-        <div id="measure-{{ block.id }}" class="scp__panel">
-          <div class="scp__measure-grid">
-            <div class="scp__measure-img">
-              {%- if sc.measure_image != blank -%}
-                {{ sc.measure_image | image_url: width: 1440 | image_tag: loading: 'lazy', alt: 'How to measure', class: 'img' }}
-              {%- else -%}
-                <div class="scp__placeholder" aria-hidden="true">
-                  <svg viewBox="0 0 64 48" xmlns="http://www.w3.org/2000/svg" class="ph">
-                    <rect x="1" y="1" width="62" height="46" rx="4" fill="#d9d9d9"/>
-                    <path d="M8 34l10-12 10 11 8-8 12 13H8z" fill="#c6c6c6"/>
-                    <circle cx="23" cy="17" r="4" fill="#c6c6c6"/>
-                  </svg>
-                </div>
-              {%- endif -%}
-            </div>
-            <div class="scp__measure-text">
-              <div class="row">
-                <p class="mtitle">A. {{ sc.h_a_title | default: 'CHEST' }}:</p>
-                <p class="mbody">{{ sc.h_a_text | default: 'Measure around the fullest part of your chest, keeping the measuring tape horizontal.' }}</p>
-              </div>
-              <div class="row">
-                <p class="mtitle">B. {{ sc.h_b_title | default: 'WAIST' }}:</p>
-                <p class="mbody">{{ sc.h_b_text | default: 'Measure around the narrowest part of your waist, keeping the tape horizontal.' }}</p>
-              </div>
-              <div class="row">
-                <p class="mtitle">C. {{ sc.h_c_title | default: 'HIPS' }}:</p>
-                <p class="mbody">{{ sc.h_c_text | default: 'Measure around the fullest part of your hips, keeping the tape horizontal.' }}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      {%- else -%}
-  
-        <div class="scp__imgwrap
-                    {%- case sc.image_ratio -%}
-                      {%- when '1_1' -%} ar-1-1
-                      {%- when '4_5' -%} ar-4-5
-                      {%- when '3_4' -%} ar-3-4
-                      {%- when '2_3' -%} ar-2-3
-                      {%- when '4_3' -%} ar-4-3
-                      {%- when '3_2' -%} ar-3-2
-                      {%- when '16_9' -%} ar-16-9
-                      {%- when '9_16' -%} ar-9-16
-                    {%- endcase -%}">
-          {%- if sc.chart_image != blank -%}
-            <img
-              src="{{ sc.chart_image | image_url: width: 1440 }}"
-              srcset="
-                {{ sc.chart_image | image_url: width: 480 }} 480w,
-                {{ sc.chart_image | image_url: width: 800 }} 800w,
-                {{ sc.chart_image | image_url: width: 1200 }} 1200w,
-                {{ sc.chart_image | image_url: width: 1440 }} 1440w
-              "
-              sizes="(max-width: 768px) 90vw, (max-width: 1024px) 70vw, 50vw"
-              alt="{{ sc.modal_title | escape }}"
-              class="scp__img"
-              loading="lazy"
-              decoding="async">
-          {%- else -%}
-            <div class="scp__placeholder" aria-hidden="true">
-              <svg viewBox="0 0 64 48" xmlns="http://www.w3.org/2000/svg" class="ph">
-                <rect x="1" y="1" width="62" height="46" rx="4" fill="#d9d9d9"/>
-                <path d="M8 34l10-12 10 11 8-8 12 13H8z" fill="#c6c6c6"/>
-                <circle cx="23" cy="17" r="4" fill="#c6c6c6"/>
-              </svg>
-            </div>
-          {%- endif -%}
-        </div>
-      {%- endif -%}
-    </div>
-  </div>
-</div>
-
-<style>
-
-  #SC-{{ block.id }} .icn { width: 1em; height: 1em; display: inline-block; }
-
- 
-  #SC-{{ block.id }} .scp__trigger{
-    display: inline-flex;
-    align-items: center;
-    gap: var(--sc-trig-gap);
-    padding: var(--sc-trig-pad-t) var(--sc-trig-pad-r) var(--sc-trig-pad-b) var(--sc-trig-pad-l);
-    background: transparent;
-    border: 0;
-    cursor: pointer;
-    font-size: var(--sc-trig-fs);
-    font-weight: var(--sc-trig-fw);
-    color: var(--sc-trig-color);
-    line-height: 1.2;
-    text-decoration: none;
-  }
-  #SC-{{ block.id }} .scp__trigger--underline{ text-decoration: underline; text-underline-offset: 2px; }
-  #SC-{{ block.id }} .scp__trigger .scp__icn .icn{
-    width: var(--sc-icon-size);
-    height: var(--sc-icon-size);
-    color: var(--sc-icon-color);
-  }
-  #SC-{{ block.id }} .scp__trigger:focus-visible{ outline: 2px solid #000; outline-offset: 2px; }
-
-
-  @media (max-width:1024px){
-    #SC-{{ block.id }}{
-      --sc-trig-pad-t: {{ sc.trig_pad_t_t | default: 8 }}px;
-      --sc-trig-pad-b: {{ sc.trig_pad_b_t | default: 8 }}px;
-      --sc-trig-pad-l: {{ sc.trig_pad_l_t | default: 0 }}px;
-      --sc-trig-pad-r: {{ sc.trig_pad_r_t | default: 0 }}px;
-    }
-  }
- 
-  @media (max-width:768px){
-    #SC-{{ block.id }}{
-      --sc-trig-pad-t: {{ sc.trig_pad_t_m | default: 8 }}px;
-      --sc-trig-pad-b: {{ sc.trig_pad_b_m | default: 8 }}px;
-      --sc-trig-pad-l: {{ sc.trig_pad_l_m | default: 0 }}px;
-      --sc-trig-pad-r: {{ sc.trig_pad_r_m | default: 0 }}px;
-    }
-  }
-
-
-  #SC-{{ block.id }} .scp__overlay{
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,.45);
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
-    opacity: 0; pointer-events: none;
-    transition: opacity .18s ease;
-    z-index: 100000;
-  }
-  #SC-{{ block.id }} .scp__overlay.is-open{ opacity: 1; pointer-events: auto; }
-
-
-  #SC-{{ block.id }} .scp__dialog{
-    position: fixed; inset: 0; display: grid; place-items: center;
-    z-index: 100001;
-  }
-
-  
-  #SC-{{ block.id }} .scp__modal{
-    width: var(--scw-d);
-    max-width: calc(100vw - 32px);
-    background: var(--sc-modal-bg);
-    border-radius: var(--sc-modal-radius);
-    box-shadow: 0 10px 30px rgba(0,0,0,.18);
-    padding: var(--sc-modal-pad);
-    transform: translateY(6px) scale(.98);
-    opacity: 0;
-    transition: transform .18s ease, opacity .18s ease;
-  }
-  #SC-{{ block.id }} .scp__dialog.is-open .scp__modal{
-    transform: translateY(0) scale(1);
-    opacity: 1;
-  }
-
-  
-  @media (max-width:1024px){
-    #SC-{{ block.id }} .scp__modal{ width: var(--scw-t); }
-  }
-  
-  @media (max-width:768px){
-    #SC-{{ block.id }} .scp__modal{ width: var(--scw-m); }
-  }
-
-
-  #SC-{{ block.id }} .scp__head{
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    margin-bottom: 16px;
-  }
-  #SC-{{ block.id }} .scp__title{
-    margin: 0;
-    color: var(--sc-title-color);
-    font-size: var(--sc-title-fs);
-    font-weight: var(--sc-title-fw);
-    line-height: 1.25;
-  }
-  #SC-{{ block.id }} .scp__close{
-    border: 0; background: transparent; cursor: pointer;
-    width: 36px; height: 36px; display: grid; place-items: center;
-    border-radius: 999px;
-  }
-  #SC-{{ block.id }} .scp__close:focus-visible{ outline: 2px solid #000; outline-offset: 2px; }
-  #SC-{{ block.id }} .scp__close .icn{ width: 20px; height: 20px; }
-
-
-  #SC-{{ block.id }} .scp__tabs{ display: flex; gap: 12px; border-bottom: 1px solid #eaeaea; margin-bottom: 18px; }
-  #SC-{{ block.id }} .scp__tab{
-    background: transparent; border: 0; padding: 8px 14px; cursor: pointer; border-radius: 8px 8px 0 0;
-    color: #111; font-weight: 600;
-  }
-  #SC-{{ block.id }} .scp__tab.is-active{ background: #f6f6f6; }
-
-  #SC-{{ block.id }} .scp__panel{ display: none; }
-  #SC-{{ block.id }} .scp__panel.is-active{ display: block; }
-
-
-  #SC-{{ block.id }} .scp__page-wrap{ width: 100%; overflow-x: auto; }
-
-
-  #SC-{{ block.id }} .scp__measure-grid{
-    display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start;
-  }
-  #SC-{{ block.id }} .scp__measure-img .img{ width: 100%; height: auto; border-radius: 8px; display: block; }
-  #SC-{{ block.id }} .scp__measure-text .row{ margin-bottom: 18px; }
-  #SC-{{ block.id }} .scp__measure-text .mtitle{ margin: 0 0 6px 0; font-weight: 700; }
-  #SC-{{ block.id }} .scp__measure-text .mbody{ margin: 0; line-height: 1.6; color: #333; }
-
-  @media (max-width: 900px){
-    #SC-{{ block.id }} .scp__measure-grid{ grid-template-columns: 1fr; }
-  }
-
-
-  #SC-{{ block.id }} .scp__imgwrap{ width: 100%; border-radius: {{ sc.image_radius | default: 8 }}px; overflow: hidden; }
-  #SC-{{ block.id }} .scp__imgwrap.ar-1-1   { aspect-ratio: 1 / 1; }
-  #SC-{{ block.id }} .scp__imgwrap.ar-4-5   { aspect-ratio: 4 / 5; }
-  #SC-{{ block.id }} .scp__imgwrap.ar-3-4   { aspect-ratio: 3 / 4; }
-  #SC-{{ block.id }} .scp__imgwrap.ar-2-3   { aspect-ratio: 2 / 3; }
-  #SC-{{ block.id }} .scp__imgwrap.ar-4-3   { aspect-ratio: 4 / 3; }
-  #SC-{{ block.id }} .scp__imgwrap.ar-3-2   { aspect-ratio: 3 / 2; }
-  #SC-{{ block.id }} .scp__imgwrap.ar-16-9  { aspect-ratio: 16 / 9; }
-  #SC-{{ block.id }} .scp__imgwrap.ar-9-16  { aspect-ratio: 9 / 16; }
-
-  #SC-{{ block.id }} .scp__img,
-  #SC-{{ block.id }} .scp__placeholder{ width: 100%; height: 100%; display: block; }
-  #SC-{{ block.id }} .scp__img{
-    object-fit: {{ sc.image_fit | default: 'contain' }};
-    background: #f5f5f5;
-    border-radius: inherit;
-  }
-  #SC-{{ block.id }} .scp__placeholder{ display: grid; place-items: center; background: #d0d0d0; }
-  #SC-{{ block.id }} .scp__placeholder .ph{ width: 70%; height: auto; }
-
-  /* Open state helpers */
-  #SC-{{ block.id }} [data-dialog].is-open{ display: grid; }
-  #SC-{{ block.id }} [data-dialog][hidden]{ display: none !important; }
-  #SC-{{ block.id }} [data-overlay][hidden]{ display: none !important; }
-
-  /* Prevent body scroll when open */
-  html.scp-lock { overflow: hidden; }
-{% comment %}{% endcomment %}</style>
-
-<script>
-(function(){
-  var root = document.getElementById('SC-{{ block.id }}');
-  if(!root) return;
-
-
-  {% if sc.pin_above_buy %}
-    try {
-      var mount = document.querySelector('.product-form, .ProductForm__BuyButtons, form[action$="/cart/add"], .product .product-form, .product-single__add-to-cart, .shopify-payment-button, .add-to-cart');
-      if(mount && root.parentNode){
-        var wrap = document.createElement('div');
-        wrap.style.display = 'flex';
-        wrap.style.justifyContent = 'flex-end';
-        wrap.style.marginBottom = '6px';
-        mount.parentNode.insertBefore(wrap, mount);
-        wrap.appendChild(root);
-      }
-    } catch(e) {}
-  {% endif %}
-
-  var trigger = root.querySelector('.scp__trigger');
-  var overlay = root.querySelector('[data-overlay]');
-  var dialog  = root.querySelector('[data-dialog]');
-  var modal   = root.querySelector('[data-modal]');
-  var closeBtn= root.querySelector('[data-close]');
-  var lastFocus = null;
-
-  function open(){
-    lastFocus = document.activeElement;
-    overlay.hidden = false;
-    dialog.hidden = false;
-    requestAnimationFrame(function(){
-      overlay.classList.add('is-open');
-      dialog.classList.add('is-open');
-      trigger.setAttribute('aria-expanded','true');
-      document.documentElement.classList.add('scp-lock');
-      var f = getFocusable(modal);
-      if(f.length){ f[0].focus(); } else if (closeBtn) { closeBtn.focus(); }
-    });
-    document.addEventListener('keydown', onKeydown);
-    dialog.addEventListener('click', onOutside);
-  }
-  function close(){
-    overlay.classList.remove('is-open');
-    dialog.classList.remove('is-open');
-    trigger.setAttribute('aria-expanded','false');
-    document.documentElement.classList.remove('scp-lock');
-    setTimeout(function(){
-      overlay.hidden = true;
-      dialog.hidden = true;
-      if(lastFocus && typeof lastFocus.focus === 'function'){ lastFocus.focus({preventScroll:true}); }
-    }, 180);
-    document.removeEventListener('keydown', onKeydown);
-    dialog.removeEventListener('click', onOutside);
-  }
-  function onOutside(e){ if(!modal.contains(e.target)) close(); }
-  function onKeydown(e){
-    if(e.key === 'Escape'){ e.preventDefault(); close(); return; }
-    if(e.key === 'Tab'){ trapTab(e); }
-  }
-  function getFocusable(el){
-    return Array.prototype.slice.call(el.querySelectorAll(
-      'a[href], area[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), iframe, object, embed, [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'
-    )).filter(function(n){ return n.offsetParent !== null; });
-  }
-  function trapTab(e){
-    var focusable = getFocusable(modal);
-    if(!focusable.length) return;
-    var first = focusable[0];
-    var last  = focusable[focusable.length - 1];
-    var active = document.activeElement;
-    if(e.shiftKey){
-      if(active === first){ e.preventDefault(); last.focus(); }
-    }else{
-      if(active === last){ e.preventDefault(); first.focus(); }
-    }
-  }
-
-  trigger.addEventListener('click', open);
-  closeBtn.addEventListener('click', close);
-
-
-  {% if sc.enable_size_popup %}
-  var tabBtns = root.querySelectorAll('.scp__tab');
-  var panels  = root.querySelectorAll('.scp__panel');
-  tabBtns.forEach(function(btn){
-    btn.addEventListener('click', function(){
-      var id = btn.getAttribute('data-tab');
-      tabBtns.forEach(function(b){ b.classList.remove('is-active'); });
-      panels.forEach(function(p){ p.classList.remove('is-active'); });
-      btn.classList.add('is-active');
-      var panel = root.querySelector('#' + id);
-      if(panel){ panel.classList.add('is-active'); }
-    });
-  });
-  {% endif %}
-})();
-{% comment %}{% endcomment %}</script>
+  {%- render 'size-chart-popup-import', block: block -%}
 
 {%- when 'infotables' -%}
 {%- assign bs = block.settings -%}
@@ -3761,10 +3302,15 @@ Pick the source:
 3) Otherwise: empty (and we render nothing)
 {%- endcomment -%}
 {%- assign pd_source = '' -%}
-{%- if bs.enable_custom_description and bs.custom_description != blank -%}
+{%- assign pd_custom = bs.custom_description | strip_html | strip -%}
+{%- if pd_custom contains 'Write your custom description here' -%}{%- assign pd_custom = '' -%}{%- endif -%}
+{%- if bs.enable_custom_description and pd_custom != blank -%}
   {%- assign pd_source = bs.custom_description -%}
 {%- elsif product != blank and product.description != blank -%}
   {%- assign pd_source = product.description -%}
+{%- elsif pd_custom != blank -%}
+  {%- comment -%} No product description: the custom text fills in. {%- endcomment -%}
+  {%- assign pd_source = bs.custom_description -%}
 {%- endif -%}
 
 {%- assign pd_plain = pd_source | strip_html | strip -%}
@@ -4850,89 +4396,35 @@ Pick the source:
 
 {%- assign icon_svg = bs.icon_svg_custom | default: preset_svg -%}
 
-<collapsible-block
+<details
   id="ModernCR-{{ block.id }}"
-  tabindex="0"
+  class="mt-acc bls-toggle-modern"
   {{ block.shopify_attributes }}
-  class="bls-toggle-modern relative border-bottom block{% if enable_skeleton_loading %} skeleton-loading{% endif %}"
-  style="
-    --mcr-icon-size:   {{ bs.icon_size  | default: 20 }}px;
-    --mcr-icon-gap:    {{ bs.icon_gap   | default: 10 }}px;
-    --mcr-icon-color:  {{ bs.icon_color | default: '#222222' }};
-    --mcr-icon-stroke: {{ bs.icon_stroke | default: 1.25 }};
-  "
-  onclick="(function(el){
-    var content = el.querySelector('.modern-collapsible-content');
-    var arrow = el.querySelector('.modern-toggle-arrow');
-    if(!el.classList.contains('open')) {
-      el.classList.add('open');
-      content.style.maxHeight = content.scrollHeight + 'px';
-      arrow.style.transform = 'rotate(90deg)';
-      setTimeout(function(){ content.style.maxHeight = 'none'; }, 400);
-    } else {
-      el.classList.remove('open');
-      if(content.style.maxHeight === 'none'){
-        content.style.maxHeight = content.scrollHeight + 'px';
-        content.offsetHeight;
-      }
-      content.style.maxHeight = '0px';
-      arrow.style.transform = 'rotate(0deg)';
-    }
-  })(this)"
+  style="--mt-acc-icon-size: {{ bs.icon_size | default: 20 }}px; --mt-acc-icon: {{ bs.icon_color | default: 'var(--color-heading)' }}; --mcr-icon-gap: {{ bs.icon_gap | default: 10 }}px; --mcr-icon-stroke: {{ bs.icon_stroke | default: 1.25 }};"
 >
-  <h3 class="h6 my-0 pointer py-17 relative collapsible-heading heading-letter-spacing"
-      style="position:relative; display:flex; align-items:center; gap:var(--mcr-icon-gap);">
-
+  <summary style="gap: var(--mcr-icon-gap);">
     {%- if bs.enable_left_icon -%}
-      <span class="mcr__icon" aria-hidden="true">
-        <span class="mcr__icon-inner">{{- icon_svg -}}</span>
-      </span>
+      <span class="mt-acc__icon mcr__icon" aria-hidden="true"><span class="mcr__icon-inner">{{- icon_svg -}}</span></span>
     {%- endif -%}
-
-    <span class="mcr__title">{{- bs.heading -}}</span>
-
-    <span class="open-children-toggle-modern"
-          style="position:absolute; top:50%; right:0; transform:translateY(-50%); pointer-events:none;">
-      <svg class="modern-toggle-arrow" xmlns="http://www.w3.org/2000/svg"
-           width="18" height="18" viewBox="0 0 16 16" fill="none"
-           style="transition:transform .4s ease; transform:rotate(0deg); color: var(--color-heading) !important;">
-        <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </span>
-  </h3>
-
-  <div class="overflow-hidden modern-collapsible-content"
-       style="max-height:0px; overflow:hidden; transition:max-height .4s ease;">
-    <div class="modern-collapsible-content_inner mb-12 rich__text-mt-0{% if bs.use_product_description == true %} product_description{% endif %}">
-      {% if bs.use_product_description == true %}
-        {%- if product != blank -%}
-          {{ product.description }}
-        {%- else -%}
-          {{ 'onboarding.default_description' | t }}
-        {% endif %}
-      {% else %}
-        {{ bs.content }}
-      {% endif %}
-    </div>
+    <h3 class="mt-acc__title mcr__title">{{- bs.heading -}}</h3>
+    <svg class="mt-acc__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+  </summary>
+  {%- liquid
+    assign mcr_body = bs.content
+    assign mcr_desc = false
+    if bs.use_product_description == true and product.description != blank
+      assign mcr_body = product.description
+      assign mcr_desc = true
+    endif
+  -%}
+  <div class="mt-acc__body">
+    <div class="mt-acc__inner rte{% if mcr_desc %} product_description{% endif %}">{{ mcr_body }}</div>
   </div>
-
   <style>
-    #ModernCR-{{ block.id }} .mcr__icon{
-      width: var(--mcr-icon-size);
-      height: var(--mcr-icon-size);
-      min-width: var(--mcr-icon-size);
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      color: var(--mcr-icon-color);
-    }
-    #ModernCR-{{ block.id }} .mcr__icon-inner svg{
-      width:100%;
-      height:100%;
-      display:block;
-    }
-    #ModernCR-{{ block.id }} .mcr__icon-inner svg *,
-    #ModernCR-{{ block.id }} .mcr__icon-inner svg {
+    #ModernCR-{{ block.id }} .mcr__icon-inner { display: inline-flex; width: var(--mt-acc-icon-size); height: var(--mt-acc-icon-size); }
+    #ModernCR-{{ block.id }} .mcr__icon-inner svg { width: 100%; height: 100%; display: block; }
+    #ModernCR-{{ block.id }} .mcr__icon-inner svg,
+    #ModernCR-{{ block.id }} .mcr__icon-inner svg * {
       stroke: currentColor;
       stroke-width: var(--mcr-icon-stroke);
       stroke-linecap: round;
@@ -4940,8 +4432,8 @@ Pick the source:
       vector-effect: non-scaling-stroke;
       fill: none;
     }
-{% comment %}{% endcomment %}  </style>
-</collapsible-block>
+  {% comment %}{% endcomment %}</style>
+</details>
 
 {%- when 'info_box' -%}
   {%- render 'info-box-block', block: block -%}

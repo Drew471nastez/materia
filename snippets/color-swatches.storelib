@@ -27,6 +27,13 @@
     endfor
   endfor
   assign variant_type = block.settings.variant_type
+  assign cs_has_size = false
+  for opt in product.options_with_values
+    assign opt_ns = opt.name | replace: ' ', ''
+    if option_size contains opt_ns
+      assign cs_has_size = true
+    endif
+  endfor
 %}
 {%- if type == 'item' -%}
   {% comment %} Case color swatches for product item {% endcomment %}
@@ -161,88 +168,49 @@
           assign op = 'option' | append: opt_pos
           assign op_value = product.selected_or_first_available_variant[op]
           assign option_name_nospace = option.name | replace: ' ' , ''
+          assign cs_guide_here = false
+          if block.settings.show_size_guide
+            if option_size contains option_name_nospace
+              assign cs_guide_here = true
+            elsif cs_has_size == false and forloop.first
+              assign cs_guide_here = true
+            endif
+          endif
         -%}
         <fieldset class="product-form__input product-form__input--dropdown flex flex-wrap gap-15 row-gap-0 mb-22 relative p-0 border-0 m-0">
           <div class="flex align-center gap-15 flex-wrap w-full justify-between row-gap-0">
-            <div
+            <label
               class="form__label lh-normal option_drop_value"
-              for="Option-{{ section.id }}-{{ forloop.index0 }}"
+              for="Option-{{ section.id }}-{{ block.id }}-{{ forloop.index0 }}"
             >
               {{ option.name }}:
               <span data-option-name="{{ option.name }}" class="option_value heading-style capitalize">
                 {{- op_value -}}
               </span>
-            </div>
+            </label>
 
-            {%- if option_size contains option_name_nospace -%}
-              {%- if block.settings.show_size_guide -%}
-                {%- liquid
-                  assign product_collections = product.collections
-                  assign collection_size_chart = ''
-                  for productCollection in product_collections
-                    if productCollection.metafields.custom.size_chart != blank
-                      assign collection_size_chart = productCollection.metafields.custom.size_chart
-                    endif
-                  endfor
-                -%}
-                {% if block.settings.size_guide_page != blank
-                  or product.metafields.custom.size_chart != blank
-                  or collection_size_chart != ''
-                %}
-                  <product-addons
-                    data-text-header="{{ 'general.product.size_guide' | t }}"
-                    data-custom-class="size_chart"
-                    class="product-addons__ask-question pointer underline hover-heading-color transition skeleton-loading"
-                  >
-                    {{ block.settings.size_guide_label }}
-                    <div class="product-addons__content ask-question__content hidden">
-                      {% if product.metafields.custom.size_chart != blank %}
-                        {% assign size_chart_html = product.metafields.custom.size_chart %}
-                        {{ pages[size_chart_html].content }}
-                      {%- else -%}
-                        {{ pages[block.settings.size_guide_page].content }}
-                      {% endif %}
-                    </div>
-                  </product-addons>
-                {% endif %}
-              {%- endif -%}
-            {%- endif -%}
+            {%- if cs_guide_here -%}{%- render 'size-guide-sheet', block: block, product: product, section: section -%}{%- endif -%}
           </div>
-          <swatch-dropdown
-            data-span-for="Option-{{ section.id }}-{{ forloop.index0 }}"
-            class="select-custom mt-12 pointer user-select-none w-full border transition rounded-3 h-45 px-20 flex align-center skeleton-loading"
-          >
-            <swatch-dropdown-select-value class="uppercase-first-letter select-selected user-select-none w-full py-10 inline-flex justify-between align-center gap-10 gap-lg-20 lh-normal pointer overlay">
-              <span
-                data-option-name="{{ option.name }}"
-                class="option_value heading-color subheading_weight uppercase-first-letter"
-              >
-                {{ op_value }}
-              </span>
-              <svg width="9" height="7" fill="none" class="icon-down transition-short active-rotated">
-                <path fill="#111" d="M.196 2.018A.573.573 0 0 1 0 1.582c0-.18.065-.336.196-.467.12-.12.27-.18.451-.18.18 0 .331.06.452.18L4.5 4.517l3.401-3.402c.12-.12.271-.18.452-.18.18 0 .33.06.451.18.13.13.196.286.196.467 0 .17-.065.316-.196.436L4.952 5.871a.589.589 0 0 1-.452.196.589.589 0 0 1-.452-.196L.196 2.018Z"/>
-              </svg>
-            </swatch-dropdown-select-value>
-            <div
-              class="w-full select-custom__content facet-filters__sort invisible transition-short select__select absolute shadow list-none z-2 p-5 border rounded-3 color-default{% if enable_rtl %} left-0{% else %} right-0{% endif %}"
-              id="Option-{{ section.id }}-{{ forloop.index0 }}"
-              aria-describedby="a11y-refresh-page-message"
-              style="--color-border: var(--color-dark);"
+          <div class="mt-select-wrap">
+            <select
+              id="Option-{{ section.id }}-{{ block.id }}-{{ forloop.index0 }}"
+              class="mt-select"
+              data-option-position="{{ opt_pos }}"
+              aria-label="{{ option.name | escape }}"
             >
-              <div class="h-full overflow-auto">
-                {% render 'product-variant-options',
-                  product: product,
-                  section: section,
-                  option_index: forloop.index,
-                  option: option,
-                  isColorOption: is_color_option,
-                  option_name: option_name,
-                  swatch_item_type: swatch_item_type,
-                  variant_type: 'dropdown'
-                %}
-              </div>
-            </div>
-          </swatch-dropdown>
+              {%- render 'product-variant-options',
+                product: product,
+                section: section,
+                option_index: forloop.index,
+                option: option,
+                isColorOption: is_color_option,
+                option_name: option_name,
+                swatch_item_type: swatch_item_type,
+                variant_type: 'dropdown'
+              -%}
+            </select>
+            <svg class="mt-select-wrap__chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2.5 4.5 3.5 3.5 3.5-3.5"/></svg>
+          </div>
         </fieldset>
       {%- endfor -%}
       <script type="application/json">
@@ -262,6 +230,14 @@
           assign op = 'option' | append: opt_pos
           assign op_value = product.selected_or_first_available_variant[op]
           assign option_name_nospace = option.name | replace: ' ' , ''
+          assign cs_guide_here = false
+          if block.settings.show_size_guide
+            if option_size contains option_name_nospace
+              assign cs_guide_here = true
+            elsif cs_has_size == false and forloop.first
+              assign cs_guide_here = true
+            endif
+          endif
         -%}
         <fieldset class="js product-form__input flex flex-wrap mb-25 mx-0 p-0 border-0{% if is_color_option == true %} product-form__input_color{% if settings.enable_color_swatches %} gap-20{% else %} gap-10{% endif %}{% else %} gap-10{% endif %}{% if option_size contains option_name_nospace %} product-form__input_size{% endif %}">
           <div class="form__label gap-10 w-full lh-normal flex gap-15 justify-between">
@@ -269,39 +245,7 @@
               {{- option.name }}: <span class="option_value heading-style capitalize">{{ op_value }}</span></span
             >
 
-            {%- if option_size contains option_name_nospace -%}
-              {%- if block.settings.show_size_guide -%}
-                {%- liquid
-                  assign product_collections = product.collections
-                  assign collection_size_chart = ''
-                  for productCollection in product_collections
-                    if productCollection.metafields.custom.size_chart != blank
-                      assign collection_size_chart = productCollection.metafields.custom.size_chart
-                    endif
-                  endfor
-                -%}
-                {% if block.settings.size_guide_page != blank
-                  or product.metafields.custom.size_chart != blank
-                  or collection_size_chart != ''
-                %}
-                  <product-addons
-                    data-text-header="{{ 'general.product.size_guide' | t }}"
-                    data-custom-class="size_chart"
-                    class="product-addons__ask-question pointer underline hover-heading-color transition skeleton-loading"
-                  >
-                    {{ block.settings.size_guide_label }}
-                    <div class="product-addons__content ask-question__content hidden">
-                      {% if product.metafields.custom.size_chart != blank %}
-                        {% assign size_chart_html = product.metafields.custom.size_chart %}
-                        {{ pages[size_chart_html].content }}
-                      {%- else -%}
-                        {{ pages[block.settings.size_guide_page].content }}
-                      {% endif %}
-                    </div>
-                  </product-addons>
-                {% endif %}
-              {%- endif -%}
-            {%- endif -%}
+            {%- if cs_guide_here -%}{%- render 'size-guide-sheet', block: block, product: product, section: section -%}{%- endif -%}
           </div>
           {% render 'product-variant-options',
             product: product,
@@ -352,45 +296,21 @@
           assign op = 'option' | append: opt_pos
           assign op_value = product.selected_or_first_available_variant[op]
           assign option_name_nospace = option.name | replace: ' ' , ''
+          assign cs_guide_here = false
+          if block.settings.show_size_guide
+            if option_size contains option_name_nospace
+              assign cs_guide_here = true
+            elsif cs_has_size == false and forloop.first
+              assign cs_guide_here = true
+            endif
+          endif
         -%}
         <fieldset class="js product-form__input flex flex-wrap mb-20 mx-0 p-0 border-0{% if is_color_option == true %} product-form__input_color gap-20{% else %} gap-10{% endif %}{% if option_size contains option_name_nospace %} product-form__input_size{% endif %}">
           <div class="form__label gap-10 w-full lh-normal flex gap-15 justify-between">
             <span>
               {{- option.name }}: <span class="option_value heading-style capitalize">{{ op_value }}</span></span
             >
-            {%- if option_size contains option_name_nospace -%}
-              {%- if block.settings.show_size_guide -%}
-                {%- liquid
-                  assign product_collections = product.collections
-                  assign collection_size_chart = ''
-                  for productCollection in product_collections
-                    if productCollection.metafields.custom.size_chart != blank
-                      assign collection_size_chart = productCollection.metafields.custom.size_chart
-                    endif
-                  endfor
-                -%}
-                {% if block.settings.size_guide_page != blank
-                  or product.metafields.custom.size_chart != blank
-                  or collection_size_chart != ''
-                %}
-                  <product-addons
-                    data-text-header="{{ 'general.product.size_guide' | t }}"
-                    data-custom-class="size_chart"
-                    class="product-addons__ask-question pointer underline hover-heading-color transition skeleton-loading"
-                  >
-                    {{ block.settings.size_guide_label }}
-                    <div class="product-addons__content ask-question__content hidden">
-                      {% if product.metafields.custom.size_chart != blank %}
-                        {% assign size_chart_html = product.metafields.custom.size_chart %}
-                        {{ pages[size_chart_html].content }}
-                      {%- else -%}
-                        {{ pages[block.settings.size_guide_page].content }}
-                      {% endif %}
-                    </div>
-                  </product-addons>
-                {% endif %}
-              {%- endif -%}
-            {%- endif -%}
+            {%- if cs_guide_here -%}{%- render 'size-guide-sheet', block: block, product: product, section: section -%}{%- endif -%}
           </div>
           {% render 'product-variant-options',
             product: product,
