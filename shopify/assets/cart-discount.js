@@ -241,8 +241,7 @@ class MinicartDiscount extends HTMLElement {
     event.preventDefault();
     event.stopPropagation();
     const removeButton = event.target.closest(".cart-discount-remove");
-    removeButton.setAttribute("aria-disabled", "true");
-    removeButton.classList.add("loading");
+    if (!removeButton || removeButton.getAttribute("aria-disabled") === "true") return;
     if (event instanceof KeyboardEvent && event.key !== "Enter") {
       return;
     }
@@ -260,6 +259,10 @@ class MinicartDiscount extends HTMLElement {
       return;
     }
 
+    removeButton.setAttribute("aria-disabled", "true");
+    removeButton.setAttribute("aria-busy", "true");
+    removeButton.classList.add("loading");
+
     const abortController = this.#createAbortController();
 
     try {
@@ -275,6 +278,7 @@ class MinicartDiscount extends HTMLElement {
       this.cart?.cartAction?.();
       this.#activeFetch = null;
       removeButton.setAttribute("aria-disabled", "false");
+      removeButton.removeAttribute("aria-busy");
       removeButton.classList.remove("loading");
     }
   };

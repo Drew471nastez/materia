@@ -859,6 +859,7 @@ class CartNotification extends HTMLElement {
   }
 
   async open() {
+    const opening = this._openRevision = (this._openRevision || 0) + 1;
     this._closingUntil = 0;
     // A close started just before must not run its delayed steps on top of
     // this open (it used to remove `open`/`open-drawer` from the reopened drawer).
@@ -878,6 +879,7 @@ class CartNotification extends HTMLElement {
       if (document.documentElement.classList.contains("open-search")) {
         await new Promise((resolve) => setTimeout(resolve, 420));
       }
+      if (!this.isConnected || opening !== this._openRevision) return;
       this.notification
         .querySelector(".minicart__wrapper")
         .classList.add("open");
@@ -906,6 +908,7 @@ class CartNotification extends HTMLElement {
   }
 
   close() {
+    this._openRevision = (this._openRevision || 0) + 1;
     // One close at a time: the bound buttons and the shared handler can both fire.
     if (this._closingUntil && Date.now() < this._closingUntil) return;
     const wrapper = this.notification.querySelector(".minicart__wrapper");
