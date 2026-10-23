@@ -125,7 +125,23 @@
   }
   tuneImages();
   if ('MutationObserver' in window) {
-    new MutationObserver(function () { tuneImages(); }).observe(document.documentElement, { childList: true, subtree: true });
+    // Batched: one pass when the page is idle, not one per DOM change.
+    var tunePending = false;
+    var idle = window.requestIdleCallback || function (fn) { return setTimeout(fn, 120); };
+    new MutationObserver(function (records) {
+      if (tunePending) return;
+      for (var i = 0; i < records.length; i++) {
+        var added = records[i].addedNodes;
+        for (var j = 0; j < added.length; j++) {
+          var n = added[j];
+          if (n.nodeType === 1 && (n.tagName === 'IMG' || (n.firstElementChild && n.querySelector('img')))) {
+            tunePending = true;
+            idle(function () { tunePending = false; tuneImages(); }, { timeout: 400 });
+            return;
+          }
+        }
+      }
+    }).observe(document.documentElement, { childList: true, subtree: true });
   }
 
   // ---------- Hover prefetch ----------
@@ -208,7 +224,12 @@
       });
     }
     observe();
-    new MutationObserver(observe).observe(document.documentElement, { childList: true, subtree: true });
+    var observePending = false;
+    new MutationObserver(function () {
+      if (observePending) return;
+      observePending = true;
+      (window.requestIdleCallback || function (fn) { return setTimeout(fn, 150); })(function () { observePending = false; observe(); }, { timeout: 500 });
+    }).observe(document.documentElement, { childList: true, subtree: true });
   }
 
   // ---------- Instant nav (View Transitions / bfcache friendly) ----------
