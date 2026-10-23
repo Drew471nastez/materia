@@ -1,6 +1,10 @@
 <template compat="shopify">
+{% render 'theme-type' %}
+{%- liquid
+  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+-%}
 {%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
-{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' and section.settings.reveal != false -%}
 <style>
   #shopify-section-{{ section.id }}.scroll-trigger {
     --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
@@ -164,7 +168,7 @@
 
 <!-- --UUID-c3ee5db1-- -->
 
-<section class="Loudz-{{ section.id | handle }} LoudzWavyBannerSection">
+<section class="Loudz-{{ section.id | handle }} LoudzWavyBannerSection color-{{ color_scheme }} gradient">
 	{%- liquid
 		assign buttons_block = section.blocks | where: "type", "buttons" | first
 
@@ -320,9 +324,9 @@
 								{%- endif -%}
 								{%- capture heading_css_variables -%}
 										--block-heading-size: {{- block.settings.heading_size -}}px;
-										--block-heading-color: {{- block.settings.heading_color -}} !important;
+										--block-heading-color: {% render 'scheme-color', color: block.settings.heading_color, fallback: 'var(--color-heading)' %} !important;
 										--block-heading-font: {{- block.settings.heading_font.family -}};
-                    --block-heading-weight: {{- block.settings.heading_weight -}};
+                    --block-heading-weight: {% if block.settings.heading_weight == 'theme' or block.settings.heading_weight == blank %}var(--heading-weight, 600){% else %}{{- block.settings.heading_weight -}}{% endif %};
 									  {%- endcapture -%}
 								<h2
 									style="{{- heading_css_variables | strip_newlines | escape -}}"
@@ -339,7 +343,7 @@
 								{%- endif -%}
 								{%- capture caption_css_variables -%}
 										--block-caption-size: {{- block.settings.caption_size -}}px;
-										--block-caption-color: {{- block.settings.caption_color -}} !important;
+										--block-caption-color: {% render 'scheme-color', color: block.settings.caption_color, fallback: 'var(--color-text)' %} !important;
 										--block-caption-font: {{- block.settings.caption_font.family -}};
 										--block-caption-weight: {{- block.settings.caption_weight -}};
 									  {%- endcapture -%}
@@ -366,7 +370,7 @@
 								{%- endif -%}
 								{%- capture description_css_variables -%}
 										--block-description-size: {{- block.settings.description_size -}}px;
-										--block-description-color: {{- block.settings.description_color -}} !important;
+										--block-description-color: {% render 'scheme-color', color: block.settings.description_color, fallback: 'var(--color-text)' %} !important;
 										--block-description-font: {{- block.settings.description_font.family -}};
 									  {%- endcapture -%}
 								<div
@@ -382,15 +386,15 @@
 				{%- if buttons_block -%}
 					<div class="LoudzButtonsGroup">
 						{%- capture buttons_css_variables -%}
-								--block-primary-button-text-color: {{- buttons_block.settings.primary_text_color -}} !important;
-								--block-primary-button-background-color: {{- buttons_block.settings.primary_background_color -}} !important;
+								--block-primary-button-text-color: {% if buttons_block.settings.primary_button_style == 'solid' %}{% render 'scheme-color', color: buttons_block.settings.primary_text_color, fallback: 'var(--btn-primary-color)' %}{% else %}{% render 'scheme-color', color: buttons_block.settings.primary_text_color, fallback: 'var(--color-heading)' %}{% endif %} !important;
+								--block-primary-button-background-color: {% render 'scheme-color', color: buttons_block.settings.primary_background_color, fallback: 'var(--btn-primary-bg-color)' %} !important;
 								--block-primary-button-corner-radius: {{- buttons_block.settings.primary_button_corner -}}px;
-								--block-primary-button-border-color: {{- buttons_block.settings.primary_border_color -}} !important;
+								--block-primary-button-border-color: {% render 'scheme-color', color: buttons_block.settings.primary_border_color, fallback: 'var(--btn-secondary-border-color, currentColor)' %} !important;
 				
-								--block-secondary-button-text-color: {{- buttons_block.settings.secondary_text_color -}} !important;
-								--block-secondary-button-background-color: {{- buttons_block.settings.secondary_background_color -}} !important;
+								--block-secondary-button-text-color: {% if buttons_block.settings.secondary_button_style == 'solid' %}{% render 'scheme-color', color: buttons_block.settings.secondary_text_color, fallback: 'var(--btn-primary-color)' %}{% else %}{% render 'scheme-color', color: buttons_block.settings.secondary_text_color, fallback: 'var(--color-heading)' %}{% endif %} !important;
+								--block-secondary-button-background-color: {% render 'scheme-color', color: buttons_block.settings.secondary_background_color, fallback: 'var(--btn-primary-bg-color)' %} !important;
 								--block-secondary-button-corner-radius: {{- buttons_block.settings.secondary_button_corner -}}px;
-								--block-secondary-button-border-color: {{- buttons_block.settings.secondary_border_color -}} !important;
+								--block-secondary-button-border-color: {% render 'scheme-color', color: buttons_block.settings.secondary_border_color, fallback: 'var(--btn-secondary-border-color, currentColor)' %} !important;
 
                 --block-button-font-weight: {{- buttons_block.settings.button_font_weight -}};
 							  {%- endcapture -%}
@@ -480,6 +484,23 @@
 		</div>
 	</div>
 </section>
+{%- if section.settings.enable_wave_animation -%}
+<script>
+  /* Waves hold still under reduced motion and while off screen */
+  (function(){
+    var root = document.querySelector('.Loudz-{{ section.id | handle }}.LoudzWavyBannerSection');
+    if (!root || root.dataset.waveInit) return;
+    root.dataset.waveInit = '1';
+    var svgs = root.querySelectorAll('svg');
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function setRun(on){ svgs.forEach(function(s){ if (s.pauseAnimations) { on ? s.unpauseAnimations() : s.pauseAnimations(); } }); }
+    if (reduce) { setRun(false); return; }
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function(es){ es.forEach(function(e){ setRun(e.isIntersecting); }); }).observe(root);
+    }
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
 
 
 
@@ -496,14 +517,14 @@
 	  }
 	}
 	#shopify-section-{{ section.id }} {
-	  background-color: {{ section.settings.section_bg | default: '#FFFFFF' }};
+	  background-color: {% render 'scheme-color', color: section.settings.section_bg, fallback: 'var(--color-background)' %};
 	}
 	.Loudz-{{ section.id | handle }} {
 	 --section-top-margin: {{ section.settings.section_margin_top_desktop | default: 0 }}px;
    --section-bottom-margin: {{ section.settings.section_margin_bottom_desktop | default: 0 }}px;
 	 --section-top-margin-mobile: {{ section.settings.section_margin_top_mobile | default: 0 }}px;
    --section-bottom-margin-mobile: {{ section.settings.section_margin_bottom_mobile | default: 0 }}px;
-	 --section-wave-color: {{- section.settings.wave_color -}} !important;
+	 --section-wave-color: {% render 'scheme-color', color: section.settings.wave_color, fallback: 'color-mix(in srgb, var(--color-text) 6%, var(--color-background))' %} !important;
 	 --section-top-padding: {{- section.settings.top_padding_desktop -}}px;
    --section-bottom-padding: {{- section.settings.bottom_padding_desktop -}}px;
 	 --section-top-padding-mobile: {{- section.settings.top_padding_mobile -}}px;
@@ -548,6 +569,10 @@
 					behavior: 'smooth',
 				});
 			}
+		}
+
+		if (!customElements.get('loudz-wave-scroll-to-top')) {
+			customElements.define('loudz-wave-scroll-to-top', LoudzWaveScrollToTop);
 		}
 
 		document.addEventListener('shopify:section:load', () => {
@@ -1281,9 +1306,43 @@
     },
     "settings": [
       {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "full_width",
+        "options": [
+          {
+            "value": "container",
+            "label": "Default"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
         "type": "checkbox",
         "id": "reset_spacing",
-        "label": "Remove default space between sections",
+        "label": "Remove section gap",
         "default": true
       },
       {
@@ -1293,7 +1352,7 @@
       {
         "type": "select",
         "id": "content_alignment",
-        "label": "Alignment of Content",
+        "label": "Content alignment",
         "options": [
           {
             "value": "left",
@@ -1317,20 +1376,17 @@
       {
         "type": "color",
         "id": "section_bg",
-        "label": "Section background color",
-        "default": "#FFFFFF",
-        "info": "Background of the whole section area around the wavy banner."
+        "label": "Section background color"
       },
       {
         "type": "color",
         "id": "wave_color",
-        "label": "Color of Waves",
-        "default": "#F2F2F2"
+        "label": "Wave color"
       },
       {
         "type": "select",
         "id": "wave_type",
-        "label": "Type of Waves",
+        "label": "Wave type",
         "options": [
           {
             "value": "type1",
@@ -1363,13 +1419,12 @@
         "type": "checkbox",
         "id": "reveal",
         "label": "Reveal on scroll",
-        "default": true,
-        "info": "Uses your global Animations & motion setting."
+        "default": true
       },
       {
         "type": "checkbox",
         "id": "enable_wave_animation",
-        "label": "Enable Wave Animation",
+        "label": "Animate waves",
         "default": true
       },
       {
@@ -1378,32 +1433,8 @@
       },
       {
         "type": "select",
-        "id": "section_width",
-        "label": "Section width",
-        "default": "full_width",
-        "options": [
-          {
-            "value": "container",
-            "label": "Default"
-          },
-          {
-            "value": "fluid_container",
-            "label": "Fluid container"
-          },
-          {
-            "value": "stretch_width",
-            "label": "Stretched"
-          },
-          {
-            "value": "full_width",
-            "label": "Full width"
-          }
-        ]
-      },
-      {
-        "type": "select",
         "id": "content_layout_desktop",
-        "label": "Desktop Layout for Content",
+        "label": "Desktop layout",
         "options": [
           {
             "value": "vertical",
@@ -1431,7 +1462,7 @@
         "max": 100,
         "step": 2,
         "unit": "px",
-        "label": "Desktop Top Padding",
+        "label": "Top padding",
         "default": 40
       },
       {
@@ -1441,7 +1472,7 @@
         "max": 100,
         "step": 2,
         "unit": "px",
-        "label": "Desktop Bottom Padding",
+        "label": "Bottom padding",
         "default": 40
       },
       {
@@ -1451,7 +1482,7 @@
         "max": 100,
         "step": 2,
         "unit": "px",
-        "label": "Desktop Vertical Gap between Button & Elements",
+        "label": "Content gap",
         "default": 20
       },
       {
@@ -1461,7 +1492,7 @@
         "max": 100,
         "step": 1,
         "unit": "%",
-        "label": "Inner content width",
+        "label": "Inner width (desktop)",
         "default": 80,
         "info": "Applies only to desktop"
       },
@@ -1494,7 +1525,7 @@
         "max": 100,
         "step": 2,
         "unit": "px",
-        "label": "Mobile Top Padding",
+        "label": "Top padding",
         "default": 40
       },
       {
@@ -1504,7 +1535,7 @@
         "max": 100,
         "step": 2,
         "unit": "px",
-        "label": "Mobile Bottom Padding",
+        "label": "Bottom padding",
         "default": 40
       },
       {
@@ -1514,7 +1545,7 @@
         "max": 100,
         "step": 2,
         "unit": "px",
-        "label": "Mobile Vertical Gap between Button & Elements",
+        "label": "Content gap",
         "default": 16
       },
       {
@@ -1550,7 +1581,7 @@
             "type": "text",
             "id": "heading",
             "default": "Catchy Headline",
-            "label": "Heading Text"
+            "label": "Heading"
           },
           {
             "type": "header",
@@ -1563,14 +1594,18 @@
             "max": 72,
             "step": 2,
             "unit": "px",
-            "label": "Heading Font Size",
+            "label": "Size",
             "default": 32
           },
           {
             "type": "select",
             "id": "heading_weight",
-            "label": "Heading Font Weight",
+            "label": "Weight",
             "options": [
+              {
+                "value": "theme",
+                "label": "Theme"
+              },
               {
                 "value": "100",
                 "label": "Thin"
@@ -1592,25 +1627,25 @@
                 "label": "Bold"
               }
             ],
-            "default": "600"
+            "default": "theme"
           },
           {
             "type": "color",
             "id": "heading_color",
-            "label": "Heading Color",
-            "default": "#000000"
+            "label": "Color"
           },
           {
             "type": "checkbox",
             "id": "heading_alternative_font",
-            "label": "Use Alternative Font",
+            "label": "Alternative font",
             "default": false
           },
           {
             "type": "font_picker",
             "id": "heading_font",
-            "label": "Alternative Font",
-            "default": "sans_serif_n4"
+            "label": "Font",
+            "default": "sans_serif_n4",
+            "visible_if": "{{ block.settings.heading_alternative_font }}"
           }
         ]
       },
@@ -1627,7 +1662,7 @@
             "type": "text",
             "id": "caption",
             "default": "Supporting Subheadline",
-            "label": "Caption Text"
+            "label": "Caption"
           },
           {
             "type": "header",
@@ -1640,13 +1675,13 @@
             "max": 30,
             "step": 1,
             "unit": "px",
-            "label": "Caption Font Size",
+            "label": "Size",
             "default": 16
           },
           {
             "type": "select",
             "id": "caption_weight",
-            "label": "Caption Font Weight",
+            "label": "Weight",
             "options": [
               {
                 "value": "400",
@@ -1662,20 +1697,20 @@
           {
             "type": "color",
             "id": "caption_color",
-            "label": "Caption Color",
-            "default": "#000000"
+            "label": "Color"
           },
           {
             "type": "checkbox",
             "id": "caption_alternative_font",
-            "label": "Use Alternative Font",
+            "label": "Alternative font",
             "default": false
           },
           {
             "type": "font_picker",
             "id": "caption_font",
-            "label": "Alternative Font",
-            "default": "sans_serif_n4"
+            "label": "Font",
+            "default": "sans_serif_n4",
+            "visible_if": "{{ block.settings.caption_alternative_font }}"
           }
         ]
       },
@@ -1692,7 +1727,7 @@
             "type": "richtext",
             "id": "description",
             "default": "<p>Engage your audience with compelling content about your offer.</p>",
-            "label": "Description Text"
+            "label": "Text"
           },
           {
             "type": "header",
@@ -1705,26 +1740,26 @@
             "max": 24,
             "step": 1,
             "unit": "px",
-            "label": "Description Font Size",
+            "label": "Size",
             "default": 16
           },
           {
             "type": "color",
             "id": "description_color",
-            "label": "Description Color",
-            "default": "#000000"
+            "label": "Color"
           },
           {
             "type": "checkbox",
             "id": "description_alternative_font",
-            "label": "Use Alternative Font",
+            "label": "Alternative font",
             "default": false
           },
           {
             "type": "font_picker",
             "id": "description_font",
-            "label": "Alternative Font",
-            "default": "sans_serif_n4"
+            "label": "Font",
+            "default": "sans_serif_n4",
+            "visible_if": "{{ block.settings.description_alternative_font }}"
           }
         ]
       },
@@ -1768,7 +1803,7 @@
           {
             "type": "checkbox",
             "id": "primary_new_tab",
-            "label": "Open Primary Link in New Tab",
+            "label": "Open in new tab",
             "default": false,
             "visible_if": "{{ block.settings.primary_button_behaviour == 'link' }}"
           },
@@ -1785,7 +1820,7 @@
           {
             "type": "checkbox",
             "id": "secondary_new_tab",
-            "label": "Open Secondary Link in New Tab",
+            "label": "Open in new tab",
             "default": false
           },
           {
@@ -1796,7 +1831,6 @@
             "type": "checkbox",
             "id": "use_theme_button",
             "label": "Use theme button style",
-            "info": "Solid and outline buttons follow Theme settings > Buttons. Turn off to set their colours and corners here.",
             "default": true
           },
           {
@@ -1823,21 +1857,18 @@
             "type": "color",
             "id": "primary_text_color",
             "label": "Primary Text Color",
-            "default": "#FFFFFF",
             "visible_if": "{{ block.settings.use_theme_button == false or block.settings.primary_button_style == 'link' }}"
           },
           {
             "type": "color",
             "id": "primary_background_color",
             "label": "Primary Background Color",
-            "default": "#222222",
             "visible_if": "{{ block.settings.use_theme_button == false and block.settings.primary_button_style == 'solid' }}"
           },
           {
             "type": "color",
             "id": "primary_border_color",
             "label": "Primary Border Color",
-            "default": "#222222",
             "visible_if": "{{ block.settings.use_theme_button == false and block.settings.primary_button_style == 'outline' }}"
           },
           {
@@ -1875,21 +1906,18 @@
             "type": "color",
             "id": "secondary_text_color",
             "label": "Secondary Text Color",
-            "default": "#FFFFFF",
             "visible_if": "{{ block.settings.use_theme_button == false or block.settings.secondary_button_style == 'link' }}"
           },
           {
             "type": "color",
             "id": "secondary_background_color",
             "label": "Secondary Background Color",
-            "default": "#222222",
             "visible_if": "{{ block.settings.use_theme_button == false and block.settings.secondary_button_style == 'solid' }}"
           },
           {
             "type": "color",
             "id": "secondary_border_color",
             "label": "Secondary Border Color",
-            "default": "#222222",
             "visible_if": "{{ block.settings.use_theme_button == false and block.settings.secondary_button_style == 'outline' }}"
           },
           {

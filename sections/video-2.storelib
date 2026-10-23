@@ -1,4 +1,37 @@
 <template compat="shopify">
+{% render 'theme-type' %}
+{%- liquid
+  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+-%}
+<style>
+  /* ── Section width ── */
+  {%- case section.settings.section_width -%}
+    {%- when 'container' -%}
+      #shopify-section-{{ section.id }} {
+        max-width: calc(var(--page-width, 1300px) + 3rem);
+        margin-inline: auto;
+        padding-inline: 1.5rem;
+        box-sizing: border-box;
+      }
+    {%- when 'fluid_container' -%}
+      #shopify-section-{{ section.id }} {
+        max-width: calc(var(--fluid-container-width, 1500px) + 3rem);
+        margin-inline: auto;
+        padding-inline: 1.5rem;
+        box-sizing: border-box;
+      }
+    {%- when 'stretch_width' -%}
+      #shopify-section-{{ section.id }} {
+        padding-inline: 1.5rem;
+        box-sizing: border-box;
+      }
+      @media (min-width: 1200px) {
+        #shopify-section-{{ section.id }} { padding-inline: 3rem; }
+      }
+    {%- when 'full_width' -%}
+      /* full bleed */
+  {%- endcase -%}
+{% comment %}{% endcomment %}</style>
 {%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
 {%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
 <style>
@@ -51,7 +84,7 @@
     #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
   {%- endif -%}
 
-  #shopify-section-{{ sid }} { background-color: {{ st.section_bg | default: '#FFFFFF' }}; }
+  #shopify-section-{{ sid }} { background-color: {% render 'scheme-color', color: st.section_bg, fallback: 'var(--color-background)' %}; }
   #shopify-section-{{ sid }} .vid2 {
     padding: {{ st.padding_top_mobile | default: 40 }}px {{ st.side_padding_mobile | default: 20 }}px {{ st.padding_bottom_mobile | default: 40 }}px;
   }
@@ -98,6 +131,7 @@
     width: 40px; height: 40px;
     border-radius: 999px; border: 0;
     background: rgba(0,0,0,0.55);
+    transition: background-color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), transform var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease);
     color: #fff;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
@@ -105,10 +139,13 @@
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
   }
+  #shopify-section-{{ sid }} .vid2__mute:hover { background: rgba(0,0,0,0.75); }
+  #shopify-section-{{ sid }} .vid2__mute:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { #shopify-section-{{ sid }} .vid2__mute { transition: none; } }
   #shopify-section-{{ sid }} .vid2__mute svg { width: 18px; height: 18px; fill: currentColor; }
 {% comment %}{% endcomment %}</style>
 
-<div id="vid2-{{ sid }}" class="vid2 section sec__video-2" data-section-id="{{ sid }}">
+<div id="vid2-{{ sid }}" class="vid2 section sec__video-2 color-{{ color_scheme }} gradient {{ section.settings.section_width }}" data-section-id="{{ sid }}">
   <div class="vid2__inner">
     <div class="vid2__media" data-vid2-media>
       {%- if st.video != blank -%}
@@ -123,7 +160,7 @@
           {% if st.poster != blank %}poster="{{ st.poster | image_url: width: 1800 }}"{% endif %}
           playsinline></video>
       {%- elsif st.poster != blank -%}
-        <img src="{{ st.poster | image_url: width: 1800 }}" alt="{{ st.poster.alt | escape }}" loading="lazy">
+        <img src="{{ st.poster | image_url: width: 1800 }}" alt="{{ st.poster.alt | escape }}" width="{{ st.poster.width }}" height="{{ st.poster.height }}" decoding="async">
       {%- else -%}
         <img src="https://2dbags.co/wp-content/uploads/revslider/lookbook1-demo_slider/placeholder.jpg" alt="{{ 'accessibility.placeholder' | t }}" loading="lazy">
       {%- endif -%}
@@ -141,8 +178,18 @@
 <script>
   (function() {
     var sec = document.getElementById('vid2-{{ sid }}');
-    if (!sec) return;
+    if (!sec || sec.dataset.vid2Init) return;
+    sec.dataset.vid2Init = '1';
     var v = sec.querySelector('video');
+    /* Autoplay video plays only while on screen */
+    if (v && v.autoplay && 'IntersectionObserver' in window) {
+      new IntersectionObserver(function(entries) {
+        entries.forEach(function(e) {
+          if (e.isIntersecting) { var pr = v.play(); if (pr && pr.catch) pr.catch(function(){}); }
+          else { v.pause(); }
+        });
+      }, { threshold: 0.15 }).observe(v);
+    }
     var btn = sec.querySelector('[data-vid2-mute]');
     if (!btn) return;
     if (!v) { btn.style.display = 'none'; return; }
@@ -352,9 +399,43 @@
     "class": "section sec__video-2",
     "settings": [
       {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "full_width",
+        "options": [
+          {
+            "value": "container",
+            "label": "Default"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
         "type": "checkbox",
         "id": "reset_spacing",
-        "label": "Remove default space between sections",
+        "label": "Remove section gap",
         "default": true
       },
       {
@@ -364,17 +445,17 @@
       {
         "type": "video",
         "id": "video",
-        "label": "Video (uploaded to Shopify)"
+        "label": "Video"
       },
       {
         "type": "url",
         "id": "video_url",
-        "label": "External video URL (.mp4)"
+        "label": "Video URL (.mp4)"
       },
       {
         "type": "image_picker",
         "id": "poster",
-        "label": "Poster / fallback image"
+        "label": "Poster image"
       },
       {
         "type": "header",
@@ -391,7 +472,7 @@
         "id": "muted",
         "label": "Muted",
         "default": true,
-        "info": "Required for autoplay in most browsers."
+        "info": "Needed for autoplay."
       },
       {
         "type": "checkbox",
@@ -402,29 +483,29 @@
       {
         "type": "checkbox",
         "id": "show_controls",
-        "label": "Show native player controls",
+        "label": "Player controls",
         "default": false
       },
       {
         "type": "checkbox",
         "id": "show_mute_btn",
-        "label": "Show floating mute button (when controls hidden)",
+        "label": "Mute button",
         "default": true
       },
       {
         "type": "header",
-        "content": "Layout"
+        "content": "Video shape"
       },
       {
         "type": "checkbox",
         "id": "full_bleed",
-        "label": "Full bleed (edge-to-edge)",
+        "label": "Edge to edge",
         "default": false
       },
       {
         "type": "range",
         "id": "aspect_w",
-        "label": "Aspect ratio — width",
+        "label": "Ratio width",
         "min": 1,
         "max": 32,
         "step": 1,
@@ -433,7 +514,7 @@
       {
         "type": "range",
         "id": "aspect_h",
-        "label": "Aspect ratio — height",
+        "label": "Ratio height",
         "min": 1,
         "max": 32,
         "step": 1,
@@ -451,13 +532,12 @@
       },
       {
         "type": "header",
-        "content": "Section colors + spacing"
+        "content": "Colors and spacing"
       },
       {
         "type": "color",
         "id": "section_bg",
-        "label": "Section background",
-        "default": "#FFFFFF"
+        "label": "Section background"
       },
       {
         "type": "range",
