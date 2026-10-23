@@ -104,33 +104,61 @@
       style="--gap: 7;"
     >
       {%- liquid
-        assign previous_product = collection.previous_product
-        assign next_product = collection.next_product
-        assign collection_list = collection
-        if previous_product == blank and next_product == blank
-          comment
-            Opened outside a collection: walk the product's first collection
-            to find the products on either side.
-          endcomment
-          assign collection_list = product.collections.first
-          if collection_list
-            assign found = false
-            for p in collection_list.products
-              if found
-                assign next_product = p
-                break
-              endif
-              if p.handle == product.handle
-                assign found = true
-              else
-                assign previous_product = p
-              endif
-            endfor
-            unless found
-              assign previous_product = blank
-            endunless
-          endif
+        comment
+          The products on either side of this one: the collection it was
+          opened from, else the product's first collection, else all
+          products (on Storelib the collection may be empty on a product
+          page). An arrow with no product is left out.
+        endcomment
+        assign previous_product = nil
+        assign next_product = nil
+        assign collection_list = nil
+        assign nb_found = false
+        if collection.previous_product or collection.next_product
+          assign previous_product = collection.previous_product
+          assign next_product = collection.next_product
+          assign collection_list = collection
+          assign nb_found = true
         endif
+        for nb_source in (1..3)
+          if nb_found
+            break
+          endif
+          assign nb_list = nil
+          if nb_source == 1
+            assign nb_list = collection
+          elsif nb_source == 2
+            assign nb_list = product.collections.first
+          else
+            assign nb_list = collections.all
+          endif
+          assign nb_prev = nil
+          assign nb_next = nil
+          assign nb_hit = false
+          assign nb_products = nil
+          if nb_list != blank
+            assign nb_products = nb_list.products
+          endif
+          for p in nb_products
+            if nb_hit
+              assign nb_next = p
+              break
+            endif
+            if p.handle == product.handle
+              assign nb_hit = true
+            else
+              assign nb_prev = p
+            endif
+          endfor
+          if nb_hit
+            assign previous_product = nb_prev
+            assign next_product = nb_next
+            assign nb_found = true
+            if nb_source < 3
+              assign collection_list = nb_list
+            endif
+          endif
+        endfor
         assign all_products_url = collection_list.url | default: routes.all_products_collection_url | default: '/collections/all'
       -%}
       {%- if previous_product != blank -%}

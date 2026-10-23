@@ -5516,8 +5516,14 @@ class SwatchFunctions extends SwatchInit {
     // Only option inputs drive a variant change (quantity, gift card and
     // other inputs inside the picker must not).
     if (!target || !target.matches || !target.matches('input[type="radio"], select')) return;
+    // The sticky bar's picker lives in <body>: its product is the section
+    // with the same id.
     this.productTarget =
       this.closest(".product__item-js") ||
+      (this.dataset.section &&
+        document.querySelector(
+          `.product__item-js[data-section="${CSS.escape(String(this.dataset.section))}"]`
+        )) ||
       this.closest(".shopify-section, [id^='shopify-section-'], section") ||
       document.body;
     // Storelib can render the quantity list with blank values, which is
@@ -5665,7 +5671,7 @@ class SwatchFunctions extends SwatchInit {
         ".shopable-video__product-information .card-product-price"
       );
     }
-    const sticky = productTarget.querySelector("sticky-add-cart");
+    const sticky = this.stickyBar(productTarget);
     if (sticky) {
       sticky.querySelectorAll(".price-regular .price").forEach((el) => {
         el.innerHTML = price_format;
@@ -5857,11 +5863,13 @@ class SwatchFunctions extends SwatchInit {
   findVariantMediaSlide(scope, variant, target) {
     if (!scope) return null;
     const slides = [...scope.querySelectorAll("[data-media-id]")].filter(
-      (el) => !el.closest(".media-thumb-swiper, .thumbnail-slide")
+      (el) => !el.closest(".media-thumb-swiper, .thumbnail-slide, .swiper-slide-duplicate")
     );
     if (!slides.length) return null;
     const section = this.dataset.section;
     const ids = [];
+    const info = typeof this.variantMediaInfo === "function" ? this.variantMediaInfo(variant) : null;
+    if (info && info.id !== "" && info.id != null) ids.push(String(info.id));
     if (variant) {
       if (variant.featured_media && variant.featured_media.id != null)
         ids.push(String(variant.featured_media.id));
@@ -5887,23 +5895,43 @@ class SwatchFunctions extends SwatchInit {
       if (typeof variant.image === "string") urls.push(variant.image);
       if (variant.image && variant.image.src) urls.push(variant.image.src);
     }
-    if (target && target.id) {
-      const label = this.querySelector(`label[for="${CSS.escape(target.id)}"]`);
-      if (label && label.dataset.image) urls.push(label.dataset.image);
+    if (info && info.src) urls.push(info.src);
+    // The picture on the chosen swatch: the one just picked, then every
+    // checked one.
+    const picked = [];
+    if (target && target.id) picked.push(target);
+    if (typeof this.querySelectorAll === "function") {
+      this.querySelectorAll('input[type="radio"]:checked').forEach((input) => {
+        if (input !== target && input.id) picked.push(input);
+      });
     }
+    picked.forEach((input) => {
+      const label = this.querySelector(`label[for="${CSS.escape(input.id)}"]`);
+      if (label && label.dataset.image) urls.push(label.dataset.image);
+    });
     const keys = urls.map((u) => this.mediaKey(u)).filter(Boolean);
     if (!keys.length) return null;
-    return (
-      slides.find((el) => {
-        const img = el.querySelector("img");
-        if (!img) return false;
-        const srcs = [img.currentSrc, img.src, img.getAttribute("data-src")];
-        (img.getAttribute("srcset") || "").split(",").forEach((part) => {
-          srcs.push(part.trim().split(" ")[0]);
-        });
-        return srcs.some((s) => keys.includes(this.mediaKey(s)));
-      }) || null
-    );
+    // Each slide's picture names, from every address its image may carry.
+    const slideKeys = slides.map((el) => {
+      const img = el.querySelector("img");
+      if (!img) return [];
+      const srcs = [
+        img.currentSrc,
+        img.getAttribute("src"),
+        img.getAttribute("data-src"),
+        el.getAttribute("data-mt-src"),
+      ];
+      [img.getAttribute("srcset"), img.getAttribute("data-srcset")].forEach((set) => {
+        (set || "").split(",").forEach((part) => srcs.push(part.trim().split(" ")[0]));
+      });
+      return srcs.map((u) => this.mediaKey(u)).filter(Boolean);
+    });
+    // The surest name first: the variant's own picture before a swatch's.
+    for (const key of keys) {
+      const i = slideKeys.findIndex((list) => list.includes(key));
+      if (i > -1) return slides[i];
+    }
+    return null;
   }
   updateMedia(variantGroup = false, target = null) {
     if (!this.productTarget) return;
@@ -5913,48 +5941,104 @@ class SwatchFunctions extends SwatchInit {
     if (!gallery) return;
     const slide = this.findVariantMediaSlide(gallery, variant, target);
     if (!slide) return;
+    SwatchFunctions.goToMedia(gallery, slide);
+  }
+  // The variant's picture as the page lists it (script[data-variant-media]),
+  // for when the variant data has no media id.
+  variantMediaInfo(variant) {
+    if (!variant || !this.productTarget) return null;
+    if (this._variantMediaFrom !== this.productTarget) {
+      this._variantMediaFrom = this.productTarget;
+      this._variantMedia = null;
+      const el = this.productTarget.querySelector("script[data-variant-media]");
+      if (el) {
+        try {
+          this._variantMedia = JSON.parse(el.textContent);
+        } catch (err) {
+          this._variantMedia = null;
+        }
+      }
+    }
+    return (this._variantMedia && this._variantMedia[String(variant.id)]) || null;
+  }
+  // Brings a gallery picture to the front every time: the slider slides to
+  // it, a sideways row scrolls to it, a column of pictures scrolls the page
+  // to it. Nothing moves when it is already there.
+  static goToMedia(gallery, slide) {
     const reduce =
       window.matchMedia &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const behavior = reduce ? "auto" : "smooth";
-    const thumbs = gallery.querySelector("slide-with-thumbs");
-    const main = thumbs && thumbs.globalSlide;
-    if (thumbs && main && main.slides) {
+    const speed = reduce ? 0 : 500;
+    const holder = gallery.querySelector("slide-with-thumbs");
+    const slideEl = slide.closest(".swiper-slide") || slide;
+    const live = (sw) => (sw && !sw.destroyed && sw.slides ? sw : null);
+    const mainEl = holder && holder.querySelector(".swiper-wrapper-preview");
+    const main = live(mainEl && mainEl.swiper) || live(holder && holder.globalSlide);
+    if (main && main.el && main.el.contains(slideEl)) {
       const list = Array.from(main.slides);
-      let index = list.indexOf(slide.closest(".swiper-slide") || slide);
+      const index = list.indexOf(slideEl);
       if (index < 0) return;
-      if (main.params && main.params.loop && typeof main.slideToLoop === "function") {
-        const real = slide.closest(".swiper-slide")?.getAttribute("data-swiper-slide-index");
-        main.slideToLoop(real != null ? Number(real) : index, reduce ? 0 : 500);
-      } else {
-        main.slideTo(index, reduce ? 0 : 500);
+      const loop = !!(main.params && main.params.loop);
+      const realAttr = slideEl.getAttribute("data-swiper-slide-index");
+      const real = realAttr != null && realAttr !== "" ? Number(realAttr) : index;
+      const current = loop ? main.realIndex : main.activeIndex;
+      if ((loop ? real : index) !== current) {
+        if (loop && typeof main.slideToLoop === "function") main.slideToLoop(real, speed);
+        else main.slideTo(index, speed);
       }
-      if (thumbs.thumbnailSlide && typeof thumbs.thumbnailSlide.slideTo === "function") {
-        thumbs.thumbnailSlide.slideTo(index, reduce ? 0 : 500);
+      const thumbs = live(holder.thumbnailSlide);
+      if (thumbs && typeof thumbs.slideTo === "function") {
+        const ti = loop ? real : index;
+        const thumb = thumbs.slides[ti];
+        if (!thumb || !thumb.classList.contains("swiper-slide-visible")) thumbs.slideTo(ti, speed);
       }
       return;
     }
-    // Grid and stack: a row that scrolls sideways (phones) slides to the
-    // picture; a column of pictures brings it into view without a jump.
-    const scroller = slide.closest(".grid_scroll");
+    // A row that scrolls sideways (phones, grid and stack layouts).
+    const scroller = slideEl.closest(".grid_scroll, .swiper-wrapper, [data-scroll-row]");
     if (scroller && scroller.scrollWidth > scroller.clientWidth + 1) {
       const sRect = scroller.getBoundingClientRect();
-      const rect = slide.getBoundingClientRect();
+      const rect = slideEl.getBoundingClientRect();
       const pad = parseFloat(getComputedStyle(scroller).paddingLeft) || 0;
-      scroller.scrollTo({
-        left: scroller.scrollLeft + (rect.left - sRect.left) - pad,
-        behavior,
-      });
+      const rtl = getComputedStyle(scroller).direction === "rtl";
+      const delta = rtl
+        ? rect.right - sRect.right + (parseFloat(getComputedStyle(scroller).paddingRight) || 0)
+        : rect.left - sRect.left - pad;
+      if (Math.abs(delta) > 2) {
+        scroller.scrollTo({ left: scroller.scrollLeft + delta, behavior });
+      }
       return;
     }
-    const rect = slide.getBoundingClientRect();
-    const fullyVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
-    if (!fullyVisible) slide.scrollIntoView({ behavior, block: "nearest" });
+    // A column of pictures: scroll the page so the picture sits under the
+    // sticky header, unless it is already fully in view.
+    const rect = slideEl.getBoundingClientRect();
+    const topOffset =
+      parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sticky-top")) || 0;
+    const viewTop = topOffset;
+    const viewBottom = window.innerHeight;
+    const fits = rect.height <= viewBottom - viewTop;
+    const inView = fits
+      ? rect.top >= viewTop - 1 && rect.bottom <= viewBottom + 1
+      : rect.top <= viewTop + 1 && rect.bottom >= viewBottom - 1;
+    if (inView) return;
+    const y = window.scrollY + rect.top - viewTop - 20;
+    window.scrollTo({ top: Math.max(0, y), behavior });
+  }
+  // The section's sticky add to cart bar. It moves itself to <body> (so it
+  // stays fixed to the viewport), out of the section, so it is found by
+  // the section id as well.
+  stickyBar(scope) {
+    const inScope = scope && scope.querySelector ? scope.querySelector("sticky-add-cart") : null;
+    if (inScope) return inScope;
+    const id = this.dataset && this.dataset.section;
+    if (!id) return null;
+    return document.querySelector(`sticky-add-cart[data-section-id="${CSS.escape(String(id))}"]`);
   }
   updateMediaSticky() {
     if (!this.productTarget) return;
     if (!this.currentVariant) return;
-    const stickyAddCart = this.productTarget.querySelector("sticky-add-cart");
+    const stickyAddCart = this.stickyBar(this.productTarget);
     if (!stickyAddCart) return;
     const fm = this.currentVariant.featured_media;
     const src =
@@ -6894,7 +6978,7 @@ class VariantRadiosDetail extends SwatchFunctions {
     this.updateVariantInput();
     this.updatePrice(this.productTarget);
     this.renderProductInfor(this.productTarget, variantQtyData, target);
-    this.updateMedia();
+    this.updateMedia(false, target);
     this.updateShareUrl();
     this.mapStickyDropdown();
     this.setAvailable();
@@ -6902,7 +6986,7 @@ class VariantRadiosDetail extends SwatchFunctions {
   mapStickyDropdown() {
     if (!this.currentVariant || !this.productTarget) return;
 
-    const stickyAddCart = this.productTarget.querySelector("sticky-add-cart");
+    const stickyAddCart = this.stickyBar(this.productTarget);
     if (!stickyAddCart) return;
 
     const select = stickyAddCart.querySelector("select");
@@ -6941,11 +7025,11 @@ class VariantRadiosSingle extends SwatchFunctions {
   constructor() {
     super();
   }
-  groupFunctionsAvailable(variantQtyData) {
+  groupFunctionsAvailable(variantQtyData, target) {
     this.updateVariantInput();
     this.updatePrice(this.productTarget);
     this.renderProductInfor(this.productTarget, variantQtyData);
-    this.updateMedia();
+    this.updateMedia(false, target);
   }
 }
 customElements.define("variant-radios-single", VariantRadiosSingle);
@@ -6956,10 +7040,21 @@ class VariantGroupDetail extends VariantRadiosDetail {
   }
 
   onVariantChange(e) {
-    this.productTarget = this.closest(".product__item-js");
-    const variantQtyData = JSON.parse(
-      this.productTarget.querySelector(".productVariantsQty").textContent
-    );
+    this.productTarget =
+      this.closest(".product__item-js") ||
+      (this.dataset.section &&
+        document.querySelector(
+          `.product__item-js[data-section="${CSS.escape(String(this.dataset.section))}"]`
+        ));
+    if (!this.productTarget) return;
+    let variantQtyData = [];
+    try {
+      variantQtyData = JSON.parse(
+        this.productTarget.querySelector(".productVariantsQty").textContent
+      );
+    } catch (err) {
+      variantQtyData = [];
+    }
     this.groupFunctionsInit();
 
     if (!this.currentVariant) {

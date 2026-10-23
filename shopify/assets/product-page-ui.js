@@ -21,33 +21,71 @@
   // Browsers that animate <details> in CSS (::details-content + interpolate-size).
   var cssAccordion = supports("interpolate-size: allow-keywords") && supports("selector(::details-content)");
 
+  // The builder canvas (an iframe, or Shopify-style design mode).
+  var editor = (function () {
+    try {
+      return window.self !== window.top || !!(window.Shopify && window.Shopify.designMode) ||
+        document.documentElement.classList.contains("shopify-design-mode");
+    } catch (e) {
+      return true;
+    }
+  })();
+  // When a click was last handled here, so the builder fallback below does
+  // not run the same action twice.
+  var lastHandled = 0;
+  function now() {
+    return window.performance && performance.now ? performance.now() : Date.now();
+  }
+
   /* ---------------------------------------------------------------------
      1. Accordions: <details class="mt-acc"><summary>..</summary>
         <div class="mt-acc__body">..</div></details>
-     Native details open and close with no script. Here the height is
-     animated where CSS cannot do it.
+     The summary click is handled here and the row is opened by setting
+     details.open, so it never depends on the click's default action: the
+     builder cancels that default on clicks inside a block (to select the
+     block), which left the rows shut in the builder only. The height is
+     animated in CSS (::details-content) where the browser can, here
+     otherwise. Open rows are remembered and given back when the builder
+     draws the section again.
      ------------------------------------------------------------------- */
-  document.addEventListener("click", function (e) {
-    var summary = e.target && e.target.closest ? e.target.closest("details.mt-acc > summary") : null;
-    if (!summary) return;
-    if (e.target.closest("a[href]") && e.target.closest("a[href]") !== summary) return;
-    var details = summary.parentElement;
-    if (cssAccordion || reduced() || typeof details.animate !== "function") return;
-    var body = null;
+  var accState = {};
+  function accKey(details) {
+    return details.getAttribute("data-mt-acc-key") || details.id || "";
+  }
+  function accBody(details) {
     for (var i = 0; i < details.children.length; i++) {
-      if (details.children[i].classList.contains("mt-acc__body")) body = details.children[i];
+      if (details.children[i].classList.contains("mt-acc__body")) return details.children[i];
     }
-    if (!body) return;
-    e.preventDefault();
-    var opening = !details.open || details.classList.contains("is-closing");
+    return null;
+  }
+  function accIsOpen(details) {
+    return details.open && !details.classList.contains("is-closing");
+  }
+  function remember(details, open) {
+    var key = accKey(details);
+    if (!key) return;
+    accState[key] = { open: open, def: details._mtDefault };
+  }
+  function setAcc(details, open, instant) {
+    if (!details || open === accIsOpen(details)) return;
+    remember(details, open);
+    if (details._mtAnim) {
+      details._mtAnim.cancel();
+      details._mtAnim = null;
+    }
+    var body = accBody(details);
+    if (instant || cssAccordion || reduced() || !body || typeof body.animate !== "function") {
+      details.classList.remove("is-closing");
+      details.open = open;
+      return;
+    }
     var from = details.open ? body.getBoundingClientRect().height : 0;
-    if (details._mtAnim) details._mtAnim.cancel();
     details.open = true;
-    details.classList.toggle("is-closing", !opening);
-    var to = opening ? body.scrollHeight : 0;
+    details.classList.toggle("is-closing", !open);
+    var to = open ? body.scrollHeight : 0;
     body.style.overflow = "hidden";
     var anim = body.animate(
-      { height: [from + "px", to + "px"], opacity: opening ? [0.4, 1] : [1, 0.4] },
+      { height: [from + "px", to + "px"], opacity: open ? [0.4, 1] : [1, 0.4] },
       { duration: 320, easing: "cubic-bezier(.4,0,.2,1)" }
     );
     details._mtAnim = anim;
@@ -55,12 +93,75 @@
       details._mtAnim = null;
       body.style.overflow = "";
       details.classList.remove("is-closing");
-      if (!opening) details.open = false;
+      if (!open) details.open = false;
     };
     anim.oncancel = function () {
       body.style.overflow = "";
     };
-  });
+  }
+  function summaryFor(target) {
+    var summary = target && target.closest ? target.closest("details.mt-acc > summary") : null;
+    if (!summary) return null;
+    // A link or a control inside the summary keeps its own click.
+    var inner = target.closest("a[href], button, input, select, textarea, label");
+    if (inner && inner !== summary && summary.contains(inner)) return null;
+    return summary;
+  }
+  function onSummaryClick(e) {
+    var summary = summaryFor(e.target);
+    if (!summary) return;
+    e.preventDefault();
+    if (e._mtAcc) return;
+    e._mtAcc = true;
+    lastHandled = now();
+    var details = summary.parentElement;
+    setAcc(details, !accIsOpen(details));
+  }
+  // Capture on window: this runs before handlers on the page, and before
+  // the builder's own handlers on document or the block.
+  window.addEventListener("click", onSummaryClick, true);
+  document.addEventListener("toggle", function (e) {
+    var d = e.target;
+    if (d && d.matches && d.matches("details.mt-acc") && !d.classList.contains("is-closing")) remember(d, d.open);
+  }, true);
+  function markDefaults(root) {
+    (root || document).querySelectorAll("details.mt-acc").forEach(function (d) {
+      if (d._mtDefault === undefined) d._mtDefault = d.open;
+    });
+  }
+  function restoreAccordions(root) {
+    if (!root || !root.querySelectorAll) return;
+    var list = root.querySelectorAll("details.mt-acc");
+    list.forEach(function (d) {
+      if (d._mtDefault === undefined) d._mtDefault = d.open;
+      var saved = accState[accKey(d)];
+      if (!saved) return;
+      // The row's "open" setting changed: the new default wins.
+      if (saved.def !== undefined && saved.def !== d._mtDefault) {
+        delete accState[accKey(d)];
+        return;
+      }
+      if (saved.open === d.open) return;
+      d.classList.add("mt-acc--instant");
+      d.open = saved.open;
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          d.classList.remove("mt-acc--instant");
+        });
+      });
+    });
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () { markDefaults(document); });
+  } else {
+    markDefaults(document);
+  }
+  function onSectionRedraw(e) {
+    var root = e && e.target && e.target.querySelectorAll ? e.target : document;
+    restoreAccordions(root);
+  }
+  document.addEventListener("storelib:section-load", onSectionRedraw);
+  document.addEventListener("shopify:section:load", onSectionRedraw);
 
   /* ---------------------------------------------------------------------
      2. Sheets: a button with data-mt-sheet-open and aria-controls naming a
@@ -132,6 +233,7 @@
       var dialog = document.getElementById(opener.getAttribute("aria-controls"));
       if (dialog && dialog.tagName === "DIALOG") {
         e.preventDefault();
+        lastHandled = now();
         openSheet(dialog, opener);
       }
       return;
@@ -159,6 +261,7 @@
     var d = document.createElement("dialog");
     d.className = "mt-lb";
     d.setAttribute("aria-label", "Image viewer");
+    d.setAttribute("data-no-image-carry", "");
     d.innerHTML =
       '<div class="mt-lb__track" tabindex="-1"></div>' +
       '<p class="mt-lb__count" aria-live="polite"></p>' +
@@ -229,6 +332,7 @@
   }
   function openLightbox(gallery, startEl) {
     if (!lb) lb = buildLightbox();
+    if (lb.dialog.open && !lb.dialog.classList.contains("is-closing")) return;
     var items = galleryItems(gallery);
     if (!items.length) return;
     var start = 0;
@@ -243,6 +347,8 @@
     items.forEach(function (it, i) {
       var fig = document.createElement("figure");
       fig.className = "mt-lb__slide";
+      // The editor keeps re-drawn pictures by address; these are our own.
+      fig.setAttribute("data-no-image-carry", "");
       var img = document.createElement("img");
       img.src = it.src;
       img.alt = it.alt;
@@ -312,6 +418,7 @@
     if (item.closest(".media-thumb-swiper, .thumbnail-slide")) return;
     if (t.closest("button, video, iframe, product-model, .cloudimage-360")) return;
     e.preventDefault();
+    lastHandled = now();
     openLightbox(gallery, item);
   });
   // Keyboard: a picture in a lightbox gallery opens with Enter or Space.
@@ -322,6 +429,75 @@
     e.preventDefault();
     openLightbox(item.closest("[data-mt-lightbox]"), item);
   });
+
+  /* ---------------------------------------------------------------------
+     Builder fallback. The builder may stop a click inside a block before
+     it reaches the page (to select the block). A press that ends where it
+     started with no click handled here then opens the row or the picture
+     itself. Only in the builder; the live site uses the click alone.
+     ------------------------------------------------------------------- */
+  if (editor) {
+    var press = null;
+    var keyAt = 0;
+    var actionFor = function (target) {
+      var summary = summaryFor(target);
+      if (summary) {
+        var details = summary.parentElement;
+        var wasOpen = accIsOpen(details);
+        return function () {
+          if (accIsOpen(details) !== wasOpen) return; // it toggled after all
+          setAcc(details, !wasOpen);
+        };
+      }
+      var opener = target && target.closest ? target.closest("[data-mt-sheet-open]") : null;
+      if (opener) {
+        return function () {
+          var dialog = document.getElementById(opener.getAttribute("aria-controls"));
+          if (dialog && dialog.tagName === "DIALOG" && !dialog.open) openSheet(dialog, opener);
+        };
+      }
+      var item = target && target.closest ? target.closest("[data-mt-lightbox] [data-mt-src]") : null;
+      if (item && !item.closest(".media-thumb-swiper, .thumbnail-slide") &&
+          !target.closest("button, video, iframe, product-model, .cloudimage-360")) {
+        return function () {
+          if (lb && lb.dialog.open) return;
+          openLightbox(item.closest("[data-mt-lightbox]"), item);
+        };
+      }
+      return null;
+    };
+    window.addEventListener("pointerdown", function (e) {
+      press = null;
+      if (e.button !== 0 || e.isPrimary === false) return;
+      var run = actionFor(e.target);
+      if (run) press = { x: e.clientX, y: e.clientY, run: run };
+    }, true);
+    window.addEventListener("pointercancel", function () { press = null; }, true);
+    window.addEventListener("pointerup", function (e) {
+      var p = press;
+      press = null;
+      if (!p || Math.abs(e.clientX - p.x) > 6 || Math.abs(e.clientY - p.y) > 6) return;
+      var at = now();
+      setTimeout(function () {
+        if (lastHandled >= at) return;
+        p.run();
+      }, 350);
+    }, true);
+    window.addEventListener("keydown", function (e) {
+      if ((e.key === "Enter" || e.key === " ") && summaryFor(e.target) === e.target) keyAt = now();
+    }, true);
+    window.addEventListener("keyup", function (e) {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      if (summaryFor(e.target) !== e.target || !keyAt) return;
+      var at = keyAt;
+      keyAt = 0;
+      var run = actionFor(e.target);
+      setTimeout(function () {
+        if (lastHandled >= at || !run) return;
+        run();
+      }, 200);
+    }, true);
+  }
 
   /* ---------------------------------------------------------------------
      4. Gallery video: a video plays (muted) while it is on screen when the

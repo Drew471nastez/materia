@@ -2,105 +2,213 @@
 "use-strict";
 
 class StickyAddCart extends HTMLElement {
-  constructor() {
-    super();
-    this.init();
-  }
-  init() {
-    // Cache the inline ATC reference BEFORE we move the bar — once moved
-    // to <body>, `this.closest('.sec__featured-product')` would return null.
-    this._mainSection = this.closest(".sec__featured-product");
-
-    /* Dedupe — when Shopify's theme editor re-renders the section after
-       a setting change, a NEW <sticky-add-cart> is created in the
-       section while the OLD one we previously portaled sits in <body>.
-       Result: two stacked sticky bars covering each other. Before
-       portaling THIS instance, remove any prior bar with the same
-       section id from the body (or any orphaned siblings of this bar). */
-    const myId = this.getAttribute('data-section-id');
-    if (myId) {
-      document.querySelectorAll(
-        'body > sticky-add-cart[data-section-id="' + myId + '"]'
-      ).forEach(prior => {
-        if (prior !== this) prior.remove();
-      });
+  /* The bar shows once the section's own Add to cart button has scrolled
+     above the screen and hides when it comes back or a .product-sticky-hide
+     section climbs in. It moves itself to <body> so position: fixed is
+     always the viewport, sits on top of the phone navigation bar, and is set
+     up again when the builder draws its section again (a new bar replaces
+     the old one; a bar whose section is gone removes itself). */
+  connectedCallback() {
+    if (!this._mtReady) {
+      this._mtReady = true;
+      this.setup();
+    } else if (!this._mtObserving) {
+      this.observe();
     }
-
-    // Portal to <body>. The sticky bar uses `position: fixed; bottom: 0`,
-    // but any ancestor with `transform`, `filter`, `perspective`,
-    // `backdrop-filter`, `contain: paint|layout|strict`, or `will-change`
-    // on one of those properties creates a new containing block, which
-    // makes the fixed element anchor to that ancestor instead of the
-    // viewport. Moving the bar to be a direct child of <body> guarantees
-    // viewport-bottom anchoring regardless of what theme blocks/sections
-    // do upstream.
+  }
+  disconnectedCallback() {
+    // Moving to <body> disconnects and connects again: keep running then.
+    if (this.isConnected) return;
+    this.teardown();
+  }
+  setup() {
+    this.sectionId = this.getAttribute("data-section-id") || "";
+    this._mainSection = this.closest(".sec__featured-product");
+    if (this.sectionId) {
+      document
+        .querySelectorAll('sticky-add-cart[data-section-id="' + CSS.escape(this.sectionId) + '"]')
+        .forEach((prior) => {
+          if (prior !== this) prior.remove();
+        });
+    }
     if (this.parentElement && this.parentElement !== document.body) {
       document.body.appendChild(this);
     }
-    this.getHeightAddToCart();
-    const btn_minimal = this.querySelector("minimal-button");
-    if (btn_minimal) {
-      btn_minimal.addEventListener("click", this.toggle.bind(this), false);
+    this.mobileQuery = window.matchMedia("(max-width: 767.98px)");
+    // Hidden until the section's button scrolls away: out of the tab order.
+    this.setAttribute("aria-hidden", "true");
+    if ("inert" in this) this.inert = true;
+    this.prepareSelect();
+    this.observe();
+    const btnMinimal = this.querySelector("minimal-button");
+    if (btnMinimal) btnMinimal.addEventListener("click", this.toggle.bind(this), false);
+  }
+  findMain() {
+    if (this._mainSection && this._mainSection.isConnected) return this._mainSection;
+    if (this._mainSection) {
+      // The builder drew the section again: a bar it drew has replaced this
+      // one already, so with none the bar is switched off.
+      this.remove();
+      return null;
+    }
+    const id = this.sectionId;
+    this._mainSection =
+      (id && document.getElementById("MainProduct-" + id)) ||
+      (id && document.querySelector('.sec__featured-product[data-section="' + CSS.escape(id) + '"]')) ||
+      null;
+    return this._mainSection;
+  }
+  observe() {
+    if (this._mtObserving) return;
+    this._mtObserving = true;
+    this._ticking = false;
+    this._onScroll = () => {
+      if (this._ticking) return;
+      this._ticking = true;
+      requestAnimationFrame(() => this.evaluate());
+    };
+    this._onResize = () => {
+      this.placeAboveNav();
+      this.layoutForWidth();
+      this._onScroll();
+    };
+    window.addEventListener("scroll", this._onScroll, { passive: true });
+    window.addEventListener("resize", this._onResize, { passive: true });
+    this._onVariant = (e) => {
+      const d = (e && e.detail) || {};
+      if (d.sectionId != null && String(d.sectionId) !== String(this.sectionId)) return;
+      requestAnimationFrame(() => this.syncPrice());
+    };
+    document.addEventListener("variant:change", this._onVariant);
+    this._onRedraw = () => requestAnimationFrame(() => this.isConnected && this.evaluate());
+    document.addEventListener("storelib:section-load", this._onRedraw);
+    document.addEventListener("shopify:section:load", this._onRedraw);
+    this._select = this.querySelector("select");
+    if (this._select) {
+      this._onSelect = () => this.syncPrice();
+      this._select.addEventListener("change", this._onSelect);
+    }
+    if ("ResizeObserver" in window) {
+      this._ro = new ResizeObserver(() => this.placeAboveNav());
+      const nav = document.querySelector("mobile-navigation-bar");
+      if (nav) this._ro.observe(nav);
+    }
+    this.placeAboveNav();
+    this.layoutForWidth();
+    this.evaluate();
+  }
+  teardown() {
+    this._mtObserving = false;
+    window.removeEventListener("scroll", this._onScroll);
+    window.removeEventListener("resize", this._onResize);
+    document.removeEventListener("variant:change", this._onVariant);
+    document.removeEventListener("storelib:section-load", this._onRedraw);
+    document.removeEventListener("shopify:section:load", this._onRedraw);
+    if (this._select && this._onSelect) this._select.removeEventListener("change", this._onSelect);
+    if (this._ro) this._ro.disconnect();
+    this._ro = null;
+    document.documentElement.classList.remove("mt-sticky-cart-shown");
+  }
+  evaluate() {
+    this._ticking = false;
+    const main = this.findMain();
+    if (!main) return this.setShown(false);
+    const primaryBtn = main.querySelector(".button-trigger__sticky");
+    if (!primaryBtn) return this.setShown(false);
+    const vh = window.innerHeight;
+    const rect = primaryBtn.getBoundingClientRect();
+    let nearHide = false;
+    const anchors = document.querySelectorAll(".product-sticky-hide");
+    for (let i = 0; i < anchors.length; i++) {
+      const r = anchors[i].getBoundingClientRect();
+      if (r.top < vh - 220 && r.bottom > 0) {
+        nearHide = true;
+        break;
+      }
+    }
+    this.setShown(rect.bottom <= 0 && !nearHide);
+  }
+  setShown(on) {
+    if (this.classList.contains("show-sticky-cart") === on) return;
+    this.classList.toggle("show-sticky-cart", on);
+    this.setAttribute("aria-hidden", on ? "false" : "true");
+    if ("inert" in this) this.inert = !on;
+    document.documentElement.classList.toggle("mt-sticky-cart-shown", on);
+    if (on) this.placeAboveNav();
+  }
+  // Sits on top of the phone navigation bar instead of under it; with no
+  // bar below, its own padding clears the home indicator (safe area).
+  placeAboveNav() {
+    const nav = document.querySelector("mobile-navigation-bar");
+    let offset = 0;
+    if (nav) {
+      const cs = getComputedStyle(nav);
+      if (cs.display !== "none" && cs.visibility !== "hidden") {
+        const r = nav.getBoundingClientRect();
+        if (r.height > 0 && r.top < window.innerHeight) offset = Math.max(0, Math.round(window.innerHeight - r.top));
+      }
+    }
+    if (offset !== this._navOffset) {
+      this._navOffset = offset;
+      this.style.setProperty("--mt-sticky-offset", offset + "px");
+      this.classList.toggle("has-nav-below", offset > 0);
     }
   }
-  getHeightAddToCart() {
-    const _this = this;
-    this.main = this._mainSection || this.closest(".sec__featured-product");
-    if (!this.main) return;
-    const primaryBtn = this.main.querySelector(".button-trigger__sticky");
-
-    if (!primaryBtn) return;
-
-    /* Show the sticky bar once the inline Add-to-Cart button has scrolled
-       off-screen (buttonRect.bottom <= 0). Hide the moment the inline
-       button comes back into view OR when any "sticky hide" anchor
-       (footer, related-products, etc.) climbs near. JS only toggles a
-       class, all motion is in CSS. The 220px threshold gives the bar
-       time to slide away gracefully before the next section arrives. */
-    let isVisible = true;
-    let ticking = false;
-    const HIDE_THRESHOLD = 220; // px from viewport bottom when next section enters
-
-    const evaluate = () => {
-      ticking = false;
-      const buttonRect = primaryBtn.getBoundingClientRect();
-      const viewportHeight = window.innerHeight;
-      // Re-query each tick so dynamically-injected sections (related-products
-      // hydrates async) are picked up the moment they appear.
-      const hideAnchors = document.querySelectorAll(".product-sticky-hide");
-      let nearHideAnchor = false;
-      for (let i = 0; i < hideAnchors.length; i++) {
-        const r = hideAnchors[i].getBoundingClientRect();
-        if (r.top < viewportHeight - HIDE_THRESHOLD && r.bottom > 0) {
-          nearHideAnchor = true;
-          break;
-        }
-      }
-      const inlineBtnVisible =
-        buttonRect.top < viewportHeight && buttonRect.bottom > 0;
-
-      // Hide whenever the inline ATC is on-screen OR any hide-anchor is climbing in.
-      if (inlineBtnVisible || nearHideAnchor) {
-        if (_this.classList.contains("show-sticky-cart")) {
-          _this.classList.remove("show-sticky-cart");
-        }
-        isVisible = true;
-        return;
-      }
-      // Otherwise, show once we're past the inline ATC.
-      if (isVisible && buttonRect.bottom <= 0) {
-        isVisible = false;
-        _this.classList.add("show-sticky-cart");
-      }
-    };
-
-    const onScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(evaluate);
-        ticking = true;
-      }
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
+  // Phones show only the variant's name in the list and its price in the
+  // button; larger screens keep "name - price".
+  prepareSelect() {
+    const select = this.querySelector("select");
+    if (!select) {
+      this.classList.add("no-picker");
+      return;
+    }
+    Array.from(select.options).forEach((opt) => {
+      if (opt.dataset.mtFull != null) return;
+      const full = opt.textContent.replace(/\s+/g, " ").trim();
+      opt.dataset.mtFull = full;
+      const title = (opt.dataset.value || "").trim();
+      let price = full;
+      if (title && full.indexOf(title) === 0) price = full.slice(title.length).replace(/^\s*-\s*/, "");
+      else if (full.lastIndexOf(" - ") > -1) price = full.slice(full.lastIndexOf(" - ") + 3);
+      opt.dataset.mtPrice = price;
+      opt.dataset.mtTitle = title && !/default title/i.test(title) ? title : "";
+    });
+    const real = Array.from(select.options).filter((o) => o.dataset.mtTitle);
+    if (real.length < 2) this.classList.add("no-picker");
+  }
+  layoutForWidth() {
+    const select = this.querySelector("select");
+    if (!select) return this.syncPrice();
+    const phone = !!(this.mobileQuery && this.mobileQuery.matches);
+    if (phone !== this._phone) {
+      this._phone = phone;
+      Array.from(select.options).forEach((opt) => {
+        if (opt.dataset.mtFull == null) return;
+        const text = phone && opt.dataset.mtTitle ? opt.dataset.mtTitle : opt.dataset.mtFull;
+        if (opt.textContent !== text) opt.textContent = text;
+      });
+    }
+    this.syncPrice();
+  }
+  syncPrice() {
+    const button = this.querySelector('button[name="add"], .product-form__submit');
+    if (!button) return;
+    const select = this.querySelector("select");
+    const opt = select && select.options[select.selectedIndex];
+    let price = opt ? opt.dataset.mtPrice || "" : "";
+    if (!price) {
+      const shown = this.querySelector(".price-regular .price, .price");
+      price = shown ? shown.textContent.replace(/\s+/g, " ").trim() : "";
+    }
+    let tag = button.querySelector(".mt-sticky-price");
+    if (!tag) {
+      tag = document.createElement("span");
+      tag.className = "mt-sticky-price hidden-on-load";
+      const label = button.querySelector(".btn-label");
+      if (label && label.nextSibling) button.insertBefore(tag, label.nextSibling);
+      else button.appendChild(tag);
+    }
+    if (tag.textContent !== price) tag.textContent = price;
   }
   toggle(e) {
     const target = e.currentTarget;
