@@ -1991,68 +1991,138 @@ class LocalizationForm extends HTMLElement {
 
   setupMobileSheet() {
     const list = this.elements.list;
-    if (!list) return;
-    // Inject grab-area if not present
-    if (!list.querySelector(".sheet-grab-area")) {
-      const grab = document.createElement("div");
-      grab.className = "sheet-grab-area";
-      list.prepend(grab);
+    if (!list || list.dataset.sheetReady) return;
+    list.dataset.sheetReady = "1";
+    const isMobile = () => window.matchMedia("(max-width: 1024.98px)").matches;
+
+    // Sheet head: grab handle and a search field. Drag starts here, or from
+    // the list when it is scrolled to the top, like a native iOS sheet.
+    const head = document.createElement("div");
+    head.className = "loc-sheet-head";
+    const grab = document.createElement("div");
+    grab.className = "sheet-grab-area";
+    grab.setAttribute("aria-hidden", "true");
+    head.appendChild(grab);
+    const items = [...list.querySelectorAll(".disclosure__item")];
+    if (items.length > 6) {
+      const label = list.dataset.searchLabel || "Search";
+      const field = document.createElement("label");
+      field.className = "loc-sheet-search";
+      field.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+      const input = document.createElement("input");
+      input.type = "search";
+      input.placeholder = label;
+      input.setAttribute("aria-label", label);
+      input.autocomplete = "off";
+      input.enterKeyHint = "search";
+      field.appendChild(input);
+      head.appendChild(field);
+      const norm = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      items.forEach((li) => { li.dataset.search = norm(li.textContent.replace(/\s+/g, " ")); });
+      input.addEventListener("input", () => {
+        const q = norm(input.value.trim());
+        items.forEach((li) => { li.hidden = q !== "" && !li.dataset.search.includes(q); });
+        if (this.elements.panel) this.elements.panel.scrollTop = 0;
+      });
+      input.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        items.find((li) => !li.hidden)?.querySelector("a")?.click();
+      });
+      this._sheetSearch = input;
     }
-    // Ensure a single shared backdrop exists
-    if (!document.querySelector(".loc-sheet-backdrop")) {
-      const bd = document.createElement("div");
+    list.prepend(head);
+    list.addEventListener("keyup", (e) => {
+      if (e.key !== "Escape" || !this._sheetPortaled) return;
+      this.hidePanel();
+      this.elements.button?.focus({ preventScroll: true });
+    });
+
+    // Shared backdrop, shown in the top layer just before the sheet so it
+    // sits above the open phone menu too.
+    let bd = document.querySelector(".loc-sheet-backdrop");
+    if (!bd) {
+      bd = document.createElement("div");
       bd.className = "loc-sheet-backdrop";
       document.body.appendChild(bd);
       bd.addEventListener("click", () => {
         document.querySelectorAll("localization-form").forEach((lf) => {
-          const btn = lf.querySelector(".button-localization.open");
-          if (btn) lf.hidePanel();
+          if (lf.querySelector(".button-localization.open")) lf.hidePanel();
         });
-        bd.classList.remove("open");
       });
     }
-    this._backdrop = document.querySelector(".loc-sheet-backdrop");
-    // Drag-to-dismiss
-    const grabArea = list.querySelector(".sheet-grab-area");
-    let startY = 0;
-    let currentY = 0;
-    let dragging = false;
-    const isMobile = () => window.matchMedia("(max-width: 1024.98px)").matches;
-    const onStart = (e) => {
-      if (!isMobile()) return;
-      if (!this.elements.button.classList.contains("open")) return;
-      dragging = true;
-      startY = e.touches ? e.touches[0].clientY : e.clientY;
-      currentY = 0;
-      this.classList.add("sheet-dragging");
-      list.classList.add('sheet-dragging');
-      if (e.pointerId && grabArea.setPointerCapture) {
-        try { grabArea.setPointerCapture(e.pointerId); } catch (err) {}
+    this._backdrop = bd;
+
+    const scroller = () => this.elements.panel;
+    let startY = 0, lastY = 0, lastT = 0, velocity = 0, dy = 0;
+    let tracking = false, dragging = false;
+    const setDrag = (y) => {
+      dy = y;
+      list.style.setProperty("--sheet-drag-y", y + "px");
+      const h = list.offsetHeight || 1;
+      bd.style.opacity = String(Math.max(0, 1 - y / h));
+    };
+    const begin = (y, fromHead) => {
+      if (!isMobile() || !this.elements.button.classList.contains("open")) return;
+      tracking = true;
+      dragging = fromHead;
+      startY = lastY = y;
+      lastT = performance.now();
+      velocity = 0;
+      dy = 0;
+      if (dragging) list.classList.add("sheet-dragging");
+    };
+    const move = (y, e) => {
+      if (!tracking) return;
+      const sc = scroller();
+      if (!dragging) {
+        // From the list: only take over when it is at the top and pulled down.
+        if (y - startY > 4 && (!sc || sc.scrollTop <= 0)) {
+          dragging = true;
+          startY = y;
+          list.classList.add("sheet-dragging");
+        } else if (Math.abs(y - startY) > 4) {
+          tracking = false;
+          return;
+        } else return;
       }
+      const now = performance.now();
+      velocity = (y - lastY) / Math.max(1, now - lastT);
+      lastY = y;
+      lastT = now;
+      const d = y - startY;
+      setDrag(d > 0 ? d : d / 4);
+      if (e && e.cancelable) e.preventDefault();
     };
-    const onMove = (e) => {
-      if (!dragging) return;
-      const y = e.touches ? e.touches[0].clientY : e.clientY;
-      currentY = Math.max(0, y - startY);
-      list.style.setProperty("--sheet-drag-y", currentY + "px");
-      if (e.cancelable) e.preventDefault();
-    };
-    const onEnd = () => {
+    const finish = () => {
+      if (!tracking) return;
+      tracking = false;
       if (!dragging) return;
       dragging = false;
-      this.classList.remove("sheet-dragging");
-      list.classList.remove('sheet-dragging');
-      if (currentY > 90) {
+      list.classList.remove("sheet-dragging");
+      if (dy > list.offsetHeight * 0.3 || velocity > 0.5) {
         this.hidePanel();
+      } else {
+        setDrag(0);
+        bd.style.removeProperty("opacity");
       }
-      list.style.setProperty("--sheet-drag-y", "0px");
     };
-    grabArea.addEventListener("pointerdown", onStart);
-    grabArea.addEventListener("pointermove", onMove);
-    grabArea.addEventListener("pointerup", onEnd);
-    grabArea.addEventListener("pointercancel", onEnd);
-    // Pointer events cover iOS Safari and Android Chrome without duplicate
-    // touch+pointer handlers competing for the same gesture.
+    list.addEventListener("touchstart", (e) => {
+      if (e.touches.length !== 1 || e.target.closest("input")) return;
+      begin(e.touches[0].clientY, !!e.target.closest(".loc-sheet-head"));
+    }, { passive: true });
+    list.addEventListener("touchmove", (e) => move(e.touches[0].clientY, e), { passive: false });
+    list.addEventListener("touchend", finish);
+    list.addEventListener("touchcancel", finish);
+    // Mouse and pen drag from the handle.
+    head.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "touch" || e.target.closest("input")) return;
+      begin(e.clientY, true);
+      try { head.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    head.addEventListener("pointermove", (e) => { if (e.pointerType !== "touch") move(e.clientY, e); });
+    head.addEventListener("pointerup", (e) => { if (e.pointerType !== "touch") finish(); });
+    head.addEventListener("pointercancel", (e) => { if (e.pointerType !== "touch") finish(); });
   }
 
   handleBodyClick(evt) {
@@ -2062,56 +2132,85 @@ class LocalizationForm extends HTMLElement {
     }
   }
 
+  _topLayer(el, show) {
+    if (!el || !HTMLElement.prototype.showPopover) return;
+    try {
+      if (show) {
+        if (!el.hasAttribute("popover")) el.setAttribute("popover", "manual");
+        if (el.matches(":popover-open")) el.hidePopover();
+        el.showPopover();
+      } else if (el.hasAttribute("popover")) {
+        if (el.matches(":popover-open")) el.hidePopover();
+        el.removeAttribute("popover");
+      }
+    } catch (e) {}
+  }
+
   portalMobileSheet() {
     clearTimeout(this._portalRestoreTimer);
-    if (this._sheetPortaled) {
-      this.elements.list?.classList.add('is-open');
-      return;
-    }
-    if (!this.elements.list) return;
     const list = this.elements.list;
-    // A fixed sheet nested inside a sticky/transforming header is clipped or
-    // trapped on iOS. Portaling only the OPEN panel to body fixes this while
-    // keeping the original localization form and its click handlers.
-    const sourceStyle = getComputedStyle(this);
-    ['--color-background','--color-heading','--color-text','--color-border'].forEach(name => {
-      const value = sourceStyle.getPropertyValue(name).trim();
-      if (value) list.style.setProperty(name, value);
+    if (!list) return;
+    if (!this._sheetPortaled) {
+      // A fixed sheet nested inside a sticky or transformed header is clipped
+      // on iOS, so only the open panel moves to <body>.
+      const sourceStyle = getComputedStyle(this);
+      ['--color-background','--color-heading','--color-text','--color-border'].forEach(name => {
+        const value = sourceStyle.getPropertyValue(name).trim();
+        if (value) list.style.setProperty(name, value);
+      });
+      list.classList.add('materia-localization-sheet');
+      document.body.appendChild(list);
+      this._sheetPortaled = true;
+    }
+    list.classList.remove('is-open');
+    list.style.removeProperty('height');
+    list.style.setProperty('--sheet-drag-y', '0px');
+    this._backdrop?.style.removeProperty('opacity');
+    this._topLayer(this._backdrop, true);
+    this._topLayer(list, true);
+    list.getBoundingClientRect();
+    requestAnimationFrame(() => {
+      if (!this._sheetPortaled || !this.elements.button?.classList.contains('open')) return;
+      this._backdrop?.classList.add('open');
+      list.classList.add('is-open');
+      // Keep the height while searching so the sheet does not jump.
+      list.style.height = list.offsetHeight + 'px';
+      const current = list.querySelector('[aria-current="true"]');
+      if (current && this.elements.panel) {
+        this.elements.panel.scrollTop = Math.max(0, current.offsetTop - this.elements.panel.clientHeight / 2);
+      }
     });
-    list.classList.add('materia-localization-sheet');
-    document.body.appendChild(list);
-    this._sheetPortaled = true;
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (this._sheetPortaled && this.elements.button?.classList.contains('open')) list.classList.add('is-open');
-    }));
   }
 
   hidePanel() {
     document.body.removeEventListener("click", this.onBodyClick);
     this.elements.button?.classList.remove("open");
     this.elements.button?.setAttribute("aria-expanded", "false");
+    const list = this.elements.list;
+    const anyOpen = document.querySelector("localization-form .button-localization.open");
+    if (!anyOpen && this._backdrop) {
+      this._backdrop.classList.remove("open");
+      this._backdrop.style.removeProperty("opacity");
+    }
     if (this._sheetPortaled) {
-      const list = this.elements.list;
       list.classList.remove('is-open', 'sheet-dragging');
       list.style.removeProperty('--sheet-drag-y');
-      // Restore the original sibling only AFTER the closing transition.
-      // Do not tear down the fixed panel while it is sliding offscreen.
       clearTimeout(this._portalRestoreTimer);
       this._portalRestoreTimer = setTimeout(() => {
         if (this.elements.button?.classList.contains('open')) return;
+        this._topLayer(list, false);
+        if (!document.querySelector("localization-form .button-localization.open")) this._topLayer(this._backdrop, false);
         if (this.elements.button?.isConnected) this.elements.button.after(list);
         else list.remove();
         list.classList.remove('materia-localization-sheet');
+        list.style.removeProperty('height');
         ['--color-background','--color-heading','--color-text','--color-border'].forEach(name => list.style.removeProperty(name));
+        if (this._sheetSearch && this._sheetSearch.value) {
+          this._sheetSearch.value = '';
+          this._sheetSearch.dispatchEvent(new Event('input'));
+        }
         this._sheetPortaled = false;
-      }, 340);
-    }
-    // Close backdrop if no other localization-form is still open
-    const anyOpen = document.querySelector(
-      "localization-form .button-localization.open"
-    );
-    if (!anyOpen && this._backdrop) {
-      this._backdrop.classList.remove("open");
+      }, 420);
     }
   }
 

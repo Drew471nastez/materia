@@ -1,4 +1,8 @@
 <template compat="shopify">
+{% render 'theme-type' %}
+{%- liquid
+  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+-%}
 {%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
 {%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
 <style>
@@ -293,14 +297,14 @@
   {%- endcase -%}
 
   #loudz-{{ section.id }} {
-    --loudz-background-color: {{ section.settings.background_gradient | default: section.settings.background_color }} !important;
+    --loudz-background-color: {% if section.settings.background_gradient != blank %}{{ section.settings.background_gradient }}{% else %}{% render 'scheme-color', color: section.settings.background_color, fallback: 'var(--color-background)' %}{% endif %} !important;
     --loudz-section-width: {{ section.settings.inner_width_px | default: 1440 }}px;
     --loudz-padding-block: {{ section.settings.mobile_top_padding }}px {{ section.settings.mobile_bottom_padding }}px;
 
-    --loudz-collection-title-color: {{ section.settings.title_color }} !important;
-    --loudz-collection-title-color-hover: {{ section.settings.hover_color }};
+    --loudz-collection-title-color: {% render 'scheme-color', color: section.settings.title_color, fallback: 'var(--color-heading)' %} !important;
+    --loudz-collection-title-color-hover: {% render 'scheme-color', color: section.settings.hover_color, fallback: 'var(--color-primary)' %};
     --loudz-collection-title-font-size: {{ section.settings.mobile_text_size }}px;
-    --loudz-collection-title-weight: {{ section.settings.font_weight }};
+    --loudz-collection-title-weight: {% if section.settings.font_weight == blank or section.settings.font_weight == 'theme' %}var(--heading-weight, 700){% else %}{{ section.settings.font_weight }}{% endif %};
 
     --loudz-container-gap: {{ section.settings.mobile_container_gap }}px;
     --loudz-item-spacing: {{ section.settings.collection_titles_gap }}px;
@@ -310,7 +314,7 @@
     --loudz-image-width: 100%;
     --loudz-object-fit: {% if section.settings.object_fit == 'cover' %}cover{% else %}contain{% endif %};
 
-    --loudz-underline-color: {{ section.settings.underline_color | default: section.settings.title_color }} !important;
+    --loudz-underline-color: {% render 'scheme-color', color: section.settings.underline_color, fallback: 'currentColor' %} !important;
     --loudz-underline-thickness: {{ section.settings.underline_thickness }}px;
 
     --loudz-aspect-mobile: {{ ratio_mobile }};
@@ -331,7 +335,7 @@
   }
 {% comment %}{% endcomment %}</style>
 
-<div id="loudz-{{ section.id }}" class="loudz-{{ section.id }} loudz-collection-list-1{% if section.settings.enable_underline %} loudz--underline-enabled{% endif %}">
+<div id="loudz-{{ section.id }}" class="loudz-{{ section.id }} loudz-collection-list-1 color-{{ color_scheme }} gradient {{ section.settings.section_width }}{% if section.settings.enable_underline %} loudz--underline-enabled{% endif %}">
   <div {{ html_id }} class="{{ 'loudz__container ' | append: section.settings.html_class | strip }}">
     <div class="loudz__menu{% if section.settings.desktop_image_position == 'row-reverse' %} loudz__menu--left{% endif %}">
       {% for block in section.blocks %}
@@ -403,6 +407,8 @@
         if (!previewImage || !collectionItems.length) return;
 
         collectionItems.forEach(item => {
+          if (item.dataset.loudzInit === '1') return;
+          item.dataset.loudzInit = '1';
           item.addEventListener('mouseenter', function () {
             const newImage = item.getAttribute('data-image');
             if (newImage && previewImage.getAttribute('src') !== newImage) {
@@ -417,8 +423,13 @@
       });
     }
 
-    document.addEventListener('DOMContentLoaded', loudzCollectionList1);
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', loudzCollectionList1);
+    } else {
+      loudzCollectionList1();
+    }
     document.addEventListener('shopify:section:load', loudzCollectionList1);
+    document.addEventListener('storelib:section-load', loudzCollectionList1);
   })();
 {% comment %}{% endcomment %}</script>
 
@@ -965,14 +976,8 @@
     },
     "settings": [
       {
-        "type": "checkbox",
-        "id": "reset_spacing",
-        "label": "Remove default space between sections",
-        "default": true
-      },
-      {
         "type": "header",
-        "content": "General"
+        "content": "Layout"
       },
       {
         "type": "select",
@@ -997,6 +1002,22 @@
             "label": "Full width"
           }
         ]
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "General"
       },
       {
         "type": "number",
@@ -1114,7 +1135,6 @@
         "type": "select",
         "id": "object_fit",
         "label": "Image fit behavior",
-        "info": "Coverfit uses full bleed (recommended). Auto ratio disables enforced aspect ratios.",
         "options": [
           {
             "value": "cover",
@@ -1157,6 +1177,10 @@
         "label": "Font weight",
         "options": [
           {
+            "value": "theme",
+            "label": "Theme"
+          },
+          {
             "value": "100",
             "label": "Thin"
           },
@@ -1193,19 +1217,17 @@
             "label": "Black"
           }
         ],
-        "default": "700"
+        "default": "theme"
       },
       {
         "type": "color",
         "id": "title_color",
-        "label": "Title color",
-        "default": "#000000"
+        "label": "Title color"
       },
       {
         "type": "color",
         "id": "hover_color",
-        "label": "Title hover color",
-        "default": "#FF0000"
+        "label": "Title hover color"
       },
       {
         "type": "header",
@@ -1214,14 +1236,12 @@
       {
         "type": "color",
         "id": "background_color",
-        "label": "Section background color",
-        "default": "#FFFFFF"
+        "label": "Section background color"
       },
       {
         "type": "color_background",
         "id": "background_gradient",
-        "label": "Background gradient",
-        "info": "If set, overrides the background color."
+        "label": "Background gradient"
       },
       {
         "type": "checkbox",
@@ -1232,8 +1252,7 @@
       {
         "type": "color",
         "id": "underline_color",
-        "label": "Underline color",
-        "info": "Defaults to the title color if left empty."
+        "label": "Underline color"
       },
       {
         "type": "range",
@@ -1253,8 +1272,7 @@
         "type": "checkbox",
         "id": "reveal",
         "label": "Reveal on scroll",
-        "default": true,
-        "info": "Uses your global Animations & motion setting."
+        "default": true
       },
       {
         "type": "header",
@@ -1290,7 +1308,7 @@
         "type": "range",
         "id": "desktop_menu_offset",
         "label": "Collection List Texts — Horizontal position (Desktop)",
-        "info": "Shift the whole text column left/right. Negative = left, Positive = right.",
+        "info": "Negative left, positive right",
         "min": -50,
         "max": 50,
         "step": 1,
@@ -1423,13 +1441,13 @@
             "id": "title",
             "label": "Custom title (optional)",
             "default": "Featured Collection",
-            "info": "Leave blank to use the collection title."
+            "info": "Defaults to collection title"
           },
           {
             "type": "image_picker",
             "id": "image",
             "label": "Custom image (optional)",
-            "info": "Leave blank to use the collection image."
+            "info": "Defaults to collection image"
           }
         ]
       }

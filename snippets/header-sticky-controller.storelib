@@ -59,6 +59,25 @@
       box-sizing: border-box;
     }
   }
+  /* While open on a phone the drawer is promoted to the browser's top layer
+     (popover), so no wrapper, sticky bar or bottom bar can sit above it. */
+  @media (max-width: 1024.98px) {
+    .navigation.mobile[popover] {
+      position: fixed !important;
+      inset: 0 !important;
+      margin: 0 !important;
+      border: 0 !important;
+      width: 100vw !important;
+      max-width: 100vw !important;
+      height: 100dvh !important;
+      max-height: none !important;
+      overflow: hidden;
+      color: inherit;
+      background: var(--color-background);
+      z-index: auto;
+    }
+    .navigation.mobile[popover]::backdrop { background: transparent; }
+  }
   @media (prefers-reduced-motion: reduce) {
     #shopify-section-{{ section.id }}[data-storelib-sticky],
     #shopify-section-{{ section.id }} > header.header,
@@ -203,6 +222,46 @@
     window.StorelibHeaderSticky = {register: schedule, refresh: schedule};
   }
   window.StorelibHeaderSticky.refresh();
+
+  /* Phone menu in the top layer. The theme opens it by adding .nav-open to
+     <html>; the drawer is shown as a popover for as long as it is open or
+     sliding shut, then hidden again. */
+  if (!window.StorelibMenuLayer && HTMLElement.prototype.showPopover) {
+    const root = document.documentElement;
+    const phone = matchMedia('(max-width: 1024.98px)');
+    let closeTimer;
+    const drawers = () => [...document.querySelectorAll('.navigation.mobile')];
+    const show = nav => {
+      if (!nav.hasAttribute('popover')) nav.setAttribute('popover', 'manual');
+      if (nav.matches(':popover-open')) return;
+      nav.style.transition = 'none';
+      nav.style.transform = getComputedStyle(root).direction === 'rtl' ? 'translateX(105%)' : 'translateX(-105%)';
+      try { nav.showPopover(); } catch (e) { nav.style.transition = nav.style.transform = ''; return; }
+      nav.getBoundingClientRect();
+      nav.style.transition = nav.style.transform = '';
+    };
+    const hide = nav => {
+      try { if (nav.matches(':popover-open')) nav.hidePopover(); } catch (e) {}
+      nav.removeAttribute('popover');
+    };
+    const sync = () => {
+      clearTimeout(closeTimer);
+      if (root.classList.contains('nav-open') && phone.matches) {
+        drawers().forEach(show);
+      } else {
+        const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        closeTimer = setTimeout(() => {
+          if (!root.classList.contains('nav-open') || !phone.matches) drawers().forEach(hide);
+        }, reduce ? 0 : 580);
+      }
+    };
+    new MutationObserver(sync).observe(root, {attributes: true, attributeFilter: ['class']});
+    phone.addEventListener?.('change', sync);
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && root.classList.contains('nav-open') && !document.querySelector('.materia-localization-sheet.is-open')) document.querySelector('.navigation.mobile close-menu')?.click();
+    });
+    window.StorelibMenuLayer = {sync};
+  }
 })();
 {% comment %}{% endcomment %}</script>
 </template>
