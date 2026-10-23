@@ -521,6 +521,24 @@
     opacity: 1 !important;
     transform: none !important;
   }
+  /* Swiping: whole slides move. While a finger drags, every slide shows its
+     words, and a slide reached by swiping keeps them as they are (no hide and
+     replay). The slide leaving keeps its words until it is out of view. Arrow,
+     dot and autoplay changes still play the entrance. */
+  #{{ section.id }} slide-section.is-dragging .swiper-slide .sec__content-inner,
+  #{{ section.id }} slide-section .swiper-slide[data-swiped] .sec__content-inner,
+  #{{ section.id }} slide-section.is-entering .swiper-slide-prev .sec__content-inner,
+  #{{ section.id }} slide-section.is-entering .swiper-slide-next .sec__content-inner {
+    opacity: 1;
+    visibility: visible;
+  }
+  #{{ section.id }} slide-section.is-dragging .swiper-slide .sec__content-inner :is(motion-element, .sec__content-inner > *),
+  #{{ section.id }} slide-section .swiper-slide[data-swiped] .sec__content-inner :is(motion-element, .sec__content-inner > *),
+  #{{ section.id }} slide-section.is-entering :is(.swiper-slide-prev, .swiper-slide-next):not(.swiper-slide-active) .sec__content-inner :is(motion-element, .sec__content-inner > *) {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
   #{{ section.id }} .banner__media :is(img, video) {
     backface-visibility: hidden;
   }
@@ -1320,6 +1338,28 @@
             mo.disconnect();
           });
           mo.observe(first, { attributes: true, attributeFilter: ['class'] });
+        })();
+        (function () {
+          var slider = document.getElementById('swiper-{{ section.id }}');
+          if (!slider) return;
+          function wire(sw) {
+            if (!sw || sw.__materiaSwipe) return;
+            sw.__materiaSwipe = true;
+            var dragged = false;
+            sw.on('sliderFirstMove', function () { dragged = true; slider.classList.add('is-dragging'); });
+            sw.on('slideChangeTransitionStart', function () {
+              sw.slides.forEach(function (s) { if (!s.classList.contains('swiper-slide-active')) s.removeAttribute('data-swiped'); });
+              if (dragged && sw.slides[sw.activeIndex]) sw.slides[sw.activeIndex].setAttribute('data-swiped', '');
+            });
+            sw.on('transitionEnd', function () { dragged = false; slider.classList.remove('is-dragging'); });
+            sw.on('touchEnd', function () {
+              /* A drag that snaps back without changing slide ends here too. */
+              setTimeout(function () { if (!sw.animating) { dragged = false; slider.classList.remove('is-dragging'); } }, (sw.params.speed || 400) + 80);
+            });
+          }
+          if (slider.swiper) return wire(slider.swiper);
+          var mo = new MutationObserver(function () { if (slider.swiper) { mo.disconnect(); wire(slider.swiper); } });
+          mo.observe(slider, { attributes: true, attributeFilter: ['class'] });
         })();
 {% comment %}{% endcomment %}      </script>
     {% endif %}
