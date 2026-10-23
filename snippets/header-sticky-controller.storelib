@@ -1,6 +1,8 @@
 <template compat="shopify">
 <style>
-  /* Runtime mode wins over stale sticky classes and the optional fixed pill. */
+  /* One sticky engine. The bar sticks under the announcement, and "show on
+     scroll up" slides the whole section. Transform stays off the header itself
+     so the fixed mobile menu is never trapped inside the bar. */
   #shopify-section-{{ section.id }}[data-storelib-sticky] {
     animation: none !important;
     opacity: 1 !important;
@@ -15,10 +17,18 @@
     top: var(--storelib-header-top, 0px) !important;
     z-index: 11;
     transform: none !important;
-    transition: transform 250ms ease;
+    animation: none !important;
+    transition: transform 420ms cubic-bezier(.22, .61, .36, 1);
   }
   #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].shopify-section-header-hidden {
-    transform: translateY(calc(-100% - 20px)) !important;
+    transform: translate3d(0, calc(-100% - var(--storelib-header-top, 0px)), 0) !important;
+    pointer-events: none;
+  }
+  #shopify-section-{{ section.id }} > header.header {
+    transition: box-shadow .42s ease, background-color .42s ease, color .42s ease;
+  }
+  #shopify-section-{{ section.id }} > header.header::before {
+    transition: opacity .42s ease, background-color .42s ease;
   }
   @media (min-width: 1025px) {
     #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]):has(header.is-pill) { position: fixed !important; }
@@ -26,9 +36,29 @@
   {% if pgs.header_pill_mobile %}
     #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]):has(header.is-pill) { position: fixed !important; }
   {% endif %}
-  html.nav-open #shopify-section-{{ section.id }}[data-storelib-sticky] { transform: none !important; }
+  /* Open menu sits above the announcement. Dropping the bar's transform lets
+     the fixed drawer cover the viewport instead of being clipped under the bar. */
+  html.nav-open #shopify-section-{{ section.id }}[data-storelib-sticky],
+  html.nav-open #shopify-section-{{ section.id }} {
+    transform: none !important;
+    z-index: 80 !important;
+    pointer-events: auto;
+    overflow: visible !important;
+  }
+  html.nav-open .shopify-section-group-header-group:not(.section-header) {
+    z-index: 1 !important;
+  }
+  html.nav-open .navigation.mobile {
+    z-index: 90 !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    height: 100% !important;
+    max-height: none !important;
+  }
   @media (prefers-reduced-motion: reduce) {
-    #shopify-section-{{ section.id }}[data-storelib-sticky] { transition: none !important; }
+    #shopify-section-{{ section.id }}[data-storelib-sticky],
+    #shopify-section-{{ section.id }} > header.header,
+    #shopify-section-{{ section.id }} > header.header::before { transition: none !important; }
   }
 {% comment %}{% endcomment %}</style>
 <script>
@@ -49,12 +79,18 @@
         const root = bar.closest('.shopify-section, [id^="shopify-section-"]');
         if (!root) continue;
         root.style.setProperty('--storelib-announcement-top', offset + 'px');
-        if (bar.dataset.stickyAnnouncement === 'true' && bar.getClientRects().length &&
-            getComputedStyle(bar).display !== 'none' && (!header || bar.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING)) {
-          offset += root.getBoundingClientRect().height;
+        const style = getComputedStyle(bar);
+        const rootStyle = getComputedStyle(root);
+        const visible = bar.getClientRects().length && style.display !== 'none' && rootStyle.display !== 'none' && style.visibility !== 'hidden';
+        const beforeHeader = !header || (bar.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING);
+        if (bar.dataset.stickyAnnouncement === 'true' && visible && beforeHeader) {
+          offset += Math.round(root.getBoundingClientRect().height);
         }
       }
-      document.documentElement.style.setProperty('--storelib-header-top', offset + 'px');
+      const px = Math.max(0, offset) + 'px';
+      document.documentElement.style.setProperty('--storelib-header-top', px);
+      document.documentElement.style.setProperty('--sl-header-offset', px);
+      document.documentElement.style.setProperty('--height-bar', px);
     }
     function schedule() { if (frame == null) frame = requestAnimationFrame(update); }
     new MutationObserver(records => {
@@ -109,8 +145,6 @@
         state.lastY = y;
         state.mode = mode;
       }
-      // Measure an in-flow marker so the scroll threshold never depends on the
-      // header's current sticky/hidden rectangle. ResizeObserver keeps it current.
       if (!state.marker?.isConnected) {
         state.marker = document.createElement('span');
         state.marker.dataset.headerAnchor = '';
@@ -121,21 +155,27 @@
       const pinned = document.documentElement.matches('.nav-open, .open-search, .open-minicart') ||
         header.contains(document.activeElement) ||
         (header.classList.contains('open-submenu') && header.matches(':hover'));
-      if (mode !== 'on-scroll-up' || y <= threshold || pinned || changed) state.hidden = false;
-      else if (Math.abs(y - state.lastY) > 2) state.hidden = y > state.lastY;
-      state.lastY = y;
+      const delta = y - state.lastY;
+      if (mode !== 'on-scroll-up' || y <= threshold || pinned || changed) {
+        state.hidden = false;
+        state.lastY = y;
+      } else if (delta > 8) {
+        state.hidden = true;
+        state.lastY = y;
+      } else if (delta < -8) {
+        state.hidden = false;
+        state.lastY = y;
+      }
       section.dataset.storelibSticky = mode;
       section.toggleAttribute('data-sticky-always', mode === 'always');
       section.classList.toggle('scroll-up', mode === 'on-scroll-up');
       section.classList.toggle('scr-pass-header', mode === 'on-scroll-up' && y > threshold);
       section.classList.toggle('header-sticky', mode === 'on-scroll-up' && y > threshold);
-      section.classList.toggle('shopify-section-header-sticky', mode !== 'none' && y > (mode === 'always' ? 0 : threshold));
+      section.classList.toggle('shopify-section-header-sticky', mode !== 'none' && y > (mode === 'always' ? 4 : threshold));
       section.classList.toggle('shopify-section-header-hidden', state.hidden);
-      section.classList.remove('animate');
+      section.classList.remove('animate', 'sl-hdr-hidden', 'sl-header-snap');
     };
     function schedule() { if (frame == null) frame = requestAnimationFrame(update); }
-    // Do not subscribe to every class change in the document. Animations and
-    // editor sliders can change hundreds of unrelated elements per second.
     const mutations = new MutationObserver(records => {
       if (records.some(r => [...r.addedNodes, ...r.removedNodes].some(n =>
         n.nodeType === 1 && (n.matches?.('header.header[data-sticky]') || n.querySelector?.('header.header[data-sticky]'))))) schedule();
