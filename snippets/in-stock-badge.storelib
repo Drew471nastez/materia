@@ -1,0 +1,218 @@
+<template compat="shopify">
+{%- comment -%}
+  Materia Themes — In Stock Badge block.
+  Pulsing green dot + "In Stock, Order Today To Receive It By {date}".
+
+  Date is rendered server-side with `'now'`, then refreshed in the browser
+  on every load so it stays accurate even when Shopify caches the page at
+  the CDN edge. Merchant controls the offset, business-day skip mode, and
+  the date format string.
+
+  Pass `block`.
+{%- endcomment -%}
+{%- liquid
+  assign s = block.settings
+  assign block_id = 'in-stock-' | append: block.id
+
+  assign label_text   = s.label_text   | default: 'In Stock,'
+  assign middle_text  = s.middle_text  | default: 'Order Today To Receive It By'
+  assign offset_days  = s.offset_days  | default: 5
+  assign offset_days_int = offset_days | plus: 0
+  assign skip_mode    = s.skip_mode    | default: 'weekends'
+  assign date_format_label = s.date_format | default: 'long'
+
+  comment
+    Compute the delivery date in Liquid for the initial server render.
+    JS recomputes on load so the date stays correct after CDN caching.
+  endcomment
+  assign now_unix      = 'now' | date: '%s' | plus: 0
+  assign one_day       = 86400
+  assign final_unix    = now_unix | plus: 0
+  assign added         = 0
+  for _i in (1..30)
+    if added >= offset_days_int
+      break
+    endif
+    assign final_unix = final_unix | plus: one_day
+    assign dow = final_unix | date: '%w' | plus: 0
+    assign skip_this = false
+    if skip_mode == 'weekends'
+      if dow == 0 or dow == 6
+        assign skip_this = true
+      endif
+    elsif skip_mode == 'sundays'
+      if dow == 0
+        assign skip_this = true
+      endif
+    endif
+    unless skip_this
+      assign added = added | plus: 1
+    endunless
+  endfor
+
+  case date_format_label
+    when 'short'
+      assign date_fmt = '%b %-d'
+    when 'long'
+      assign date_fmt = '%B %-d'
+    when 'long_year'
+      assign date_fmt = '%B %-d, %Y'
+    when 'full'
+      assign date_fmt = '%A, %B %-d'
+    when 'numeric'
+      assign date_fmt = '%-m/%-d/%Y'
+    else
+      assign date_fmt = '%B %-d'
+  endcase
+  assign delivery_date_text = final_unix | date: date_fmt
+
+  assign accent_color = s.accent_color | default: '#10b981'
+  assign dot_color    = s.dot_color    | default: accent_color
+  assign text_color   = s.text_color
+  assign date_color   = s.date_color
+
+  assign border_style = s.container_border_style | default: 'dashed'
+  assign border_w     = s.container_border_width | default: 1
+
+  assign show_container = false
+  if s.enable_container
+    assign show_container = true
+  endif
+-%}
+
+<style>
+  #{{ block_id }} {
+    padding-top: {{ s.padding_top | default: 8 }}px;
+    padding-bottom: {{ s.padding_bottom | default: 8 }}px;
+    text-align: {{ s.alignment | default: 'left' }};
+    /* Inherits the theme color scheme via the surrounding section's color-scheme */
+    color: var(--color-text, #111);
+  }
+  #{{ block_id }} .is-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: {{ s.gap | default: 8 }}px;
+    font-size: {{ s.font_size_mobile | default: 13 }}px;
+    font-weight: {{ s.font_weight | default: '500' }};
+    line-height: 1.35;
+    {% if text_color != blank %}color: {{ text_color }};{% endif %}
+    max-width: 100%;
+    box-sizing: border-box;
+    {%- if show_container -%}
+      padding: {{ s.container_padding_y | default: 8 }}px {{ s.container_padding_x | default: 18 }}px;
+      border-radius: {{ s.container_radius | default: 24 }}px;
+      {%- if s.container_bg != blank -%}
+        background: {{ s.container_bg }};
+      {%- else -%}
+        background: var(--color-background, transparent);
+      {%- endif -%}
+      {%- if border_style != 'none' and border_w > 0 -%}
+        border: {{ border_w }}px {{ border_style }} {%- if s.container_border_color != blank %} {{ s.container_border_color }}{%- else %} currentColor{%- endif -%};
+      {%- endif -%}
+      {%- if s.container_shadow -%}
+        box-shadow: 0 2px 10px -2px rgba(0,0,0,0.08);
+      {%- endif -%}
+    {%- endif -%}
+  }
+  @media (min-width: 750px) {
+    #{{ block_id }} .is-badge { font-size: {{ s.font_size_desktop | default: 14 }}px; }
+  }
+  #{{ block_id }} .is-dot {
+    display: inline-block;
+    width: {{ s.dot_size | default: 9 }}px;
+    height: {{ s.dot_size | default: 9 }}px;
+    border-radius: 50%;
+    background: {{ dot_color }};
+    flex: 0 0 auto;
+    position: relative;
+  }
+  {%- if s.enable_pulse -%}
+    #{{ block_id }} .is-dot::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: {{ dot_color }};
+      opacity: 0.55;
+      animation: is-pulse-{{ block.id }} 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    @keyframes is-pulse-{{ block.id }} {
+      0%   { transform: scale(1);   opacity: 0.55; }
+      70%  { transform: scale(2.4); opacity: 0;    }
+      100% { transform: scale(2.4); opacity: 0;    }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #{{ block_id }} .is-dot::after { animation: none; opacity: 0; }
+    }
+  {%- endif -%}
+  #{{ block_id }} .is-label {
+    font-weight: {{ s.label_weight | default: 700 }};
+    color: {{ accent_color }};
+    margin-right: 4px;
+  }
+  #{{ block_id }} .is-middle { display: inline; }
+  #{{ block_id }} .is-date {
+    font-weight: {{ s.date_weight | default: 700 }};
+    {% if date_color != blank %}color: {{ date_color }};{% endif %}
+    margin-left: 4px;
+  }
+{% comment %}{% endcomment %}</style>
+
+<div id="{{ block_id }}" class="in-stock-badge-block" {{ block.shopify_attributes }}>
+  <span class="is-badge">
+    {%- if s.show_dot -%}<span class="is-dot" aria-hidden="true"></span>{%- endif -%}
+    <span class="is-body">
+      {%- if label_text != blank -%}<span class="is-label">{{ label_text }}</span>{%- endif -%}
+      {%- if middle_text != blank -%}<span class="is-middle">{{ middle_text }}</span>{%- endif -%}
+      <span class="is-date"
+            data-in-stock-date
+            data-offset-days="{{ offset_days_int }}"
+            data-skip-mode="{{ skip_mode }}"
+            data-date-format="{{ date_format_label }}">{{ delivery_date_text }}</span>
+    </span>
+  </span>
+</div>
+
+<script>
+  (function(){
+    var root = document.getElementById({{ block_id | json }});
+    if (!root) return;
+    var el = root.querySelector('[data-in-stock-date]');
+    if (!el) return;
+
+    var offset = parseInt(el.getAttribute('data-offset-days') || '5', 10);
+    if (!isFinite(offset) || offset < 1) offset = 5;
+    var skip = el.getAttribute('data-skip-mode') || 'weekends';
+    var fmt  = el.getAttribute('data-date-format') || 'long';
+
+    var d = new Date();
+    var added = 0;
+    var safety = 0;
+    while (added < offset && safety < 60) {
+      d.setDate(d.getDate() + 1);
+      safety++;
+      var dow = d.getDay(); // 0=Sun..6=Sat
+      var skipThis = false;
+      if (skip === 'weekends' && (dow === 0 || dow === 6)) skipThis = true;
+      else if (skip === 'sundays' && dow === 0) skipThis = true;
+      if (!skipThis) added++;
+    }
+
+    var months      = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    var monthsShort = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var weekdays    = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+    var out;
+    switch (fmt) {
+      case 'short':     out = monthsShort[d.getMonth()] + ' ' + d.getDate(); break;
+      case 'long_year': out = months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear(); break;
+      case 'full':      out = weekdays[d.getDay()] + ', ' + months[d.getMonth()] + ' ' + d.getDate(); break;
+      case 'numeric':   out = (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear(); break;
+      case 'long':
+      default:          out = months[d.getMonth()] + ' ' + d.getDate(); break;
+    }
+    el.textContent = out;
+  })();
+{% comment %}{% endcomment %}</script>
+
+</template>

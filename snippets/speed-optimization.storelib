@@ -1,0 +1,244 @@
+<template compat="shopify">
+{%- comment -%}
+  Materia Themes — Speed Optimization runtime.
+  Reads the Speed Optimization tab in Theme settings and emits:
+   • <link rel="preconnect"> / dns-prefetch tags
+   • <link rel="preload" as="image"> for the LCP image
+   • CSS for font-display: swap and reduced-motion behavior
+   • A small JS bundle for hover prefetch, idle 3rd-party loading,
+     IntersectionObserver-based pause-when-offscreen, etc.
+
+  Include with: {%- render 'speed-optimization' -%}  (in <head>)
+{%- endcomment -%}
+{%- liquid
+  # Speed Optimization — FOUR high-level toggles drive every granular behavior below.
+  assign perf_images = settings.perf_images
+  assign perf_motion = settings.perf_motion
+  assign perf_nav = settings.perf_nav
+  assign perf_thirdparty = settings.perf_thirdparty
+
+  # Images & fonts
+  assign sp_preconnect = perf_images
+  assign sp_preload_lcp = perf_images
+  assign sp_font_swap = perf_images
+  assign sp_async_decode = perf_images
+  assign sp_lazy = perf_images
+  assign sp_quality = 'balanced'
+
+  # Third-party scripts
+  assign sp_dns = perf_thirdparty
+  assign sp_defer = perf_thirdparty
+
+  # Navigation (instant nav stays off — experimental / can clash with Shop Pay)
+  assign sp_prefetch_hover = perf_nav
+  assign sp_instant = false
+
+  # Motion & battery
+  assign sp_reduced_motion = perf_motion
+  assign sp_pause = perf_motion
+
+  assign log = false
+-%}
+
+{%- if sp_preconnect -%}
+  <link rel="preconnect" href="https://cdn.shopify.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.shopifycdn.com" crossorigin>
+{%- endif -%}
+
+{%- if sp_dns -%}
+  <link rel="dns-prefetch" href="https://www.google-analytics.com">
+  <link rel="dns-prefetch" href="https://www.googletagmanager.com">
+  <link rel="dns-prefetch" href="https://connect.facebook.net">
+  <link rel="dns-prefetch" href="https://static.klaviyo.com">
+  <link rel="dns-prefetch" href="https://cdn.judge.me">
+  <link rel="dns-prefetch" href="https://widget.trustpilot.com">
+  <link rel="dns-prefetch" href="https://www.youtube.com">
+  <link rel="dns-prefetch" href="https://player.vimeo.com">
+{%- endif -%}
+
+{%- if sp_preload_lcp -%}
+  {%- comment -%}Try to find the first slideshow / banner image on the home page.{%- endcomment -%}
+  {%- assign lcp_image = blank -%}
+  {%- for section in template.section_groups -%}{%- endfor -%}
+  {%- if template.name == 'index' -%}
+    {%- for section_id in content_for_index -%}{%- endfor -%}
+  {%- endif -%}
+  {%- if settings.preload_image != blank -%}
+    {%- assign lcp_image = settings.preload_image -%}
+  {%- endif -%}
+  {%- if lcp_image != blank -%}
+    <link rel="preload" as="image" href="{{ lcp_image | image_url: width: 1600 }}" imagesrcset="{{ lcp_image | image_url: width: 800 }} 800w, {{ lcp_image | image_url: width: 1200 }} 1200w, {{ lcp_image | image_url: width: 1600 }} 1600w" imagesizes="100vw" fetchpriority="high">
+  {%- endif -%}
+{%- endif -%}
+
+{%- if sp_font_swap or sp_reduced_motion -%}
+<style id="speed-optimization-css">
+  {%- if sp_font_swap -%}
+    /* Force font-display: swap for any @font-face the theme loads */
+    @font-face { font-display: swap !important; }
+  {%- endif -%}
+  {%- if sp_reduced_motion -%}
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+      [data-image-effect='parallax'],
+      [data-image-effect='ken_burns'],
+      [data-image-effect='mouse_track'] { animation: none !important; transform: none !important; }
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- endif -%}
+
+<script id="speed-optimization-js" data-log="{{ log }}">
+(function () {
+  var s = {
+    log: {{ log | json }},
+    asyncDecode: {{ sp_async_decode | json }},
+    lazyBelowFold: {{ sp_lazy | json }},
+    deferThirdParty: {{ sp_defer | json }},
+    prefetchHover: {{ sp_prefetch_hover | json }},
+    instantNav: {{ sp_instant | json }},
+    pauseOffscreen: {{ sp_pause | json }},
+    reducedMotion: {{ sp_reduced_motion | json }},
+    imageQuality: {{ sp_quality | json }}
+  };
+  function L() { if (s.log && console && console.info) console.info.apply(console, ['[speed]'].concat([].slice.call(arguments))); }
+
+  // ---------- Async image decode + below-fold lazy ----------
+  function tuneImages() {
+    var imgs = document.querySelectorAll('img:not([data-speed-tuned])');
+    var firstViewport = window.innerHeight + 200;
+    imgs.forEach(function (img) {
+      img.setAttribute('data-speed-tuned', '1');
+      if (s.asyncDecode && !img.hasAttribute('decoding')) img.setAttribute('decoding', 'async');
+      if (s.lazyBelowFold && !img.hasAttribute('loading')) {
+        var rect = img.getBoundingClientRect();
+        if (rect.top > firstViewport) img.setAttribute('loading', 'lazy');
+        else img.setAttribute('loading', 'eager');
+      }
+    });
+    if (imgs.length) L('tuned ' + imgs.length + ' images');
+  }
+  tuneImages();
+  if ('MutationObserver' in window) {
+    new MutationObserver(function () { tuneImages(); }).observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  // ---------- Hover prefetch ----------
+  if (s.prefetchHover && 'IntersectionObserver' in window) {
+    var prefetched = new Set();
+    function prefetch(url) {
+      if (prefetched.has(url)) return;
+      prefetched.add(url);
+      var l = document.createElement('link');
+      l.rel = 'prefetch';
+      l.href = url;
+      l.as = 'document';
+      document.head.appendChild(l);
+      L('prefetched', url);
+    }
+    var hoverTimer;
+    document.addEventListener('mouseover', function (e) {
+      var a = e.target.closest && e.target.closest('a[href]');
+      if (!a) return;
+      var href = a.getAttribute('href');
+      if (!href || href.charAt(0) === '#' || a.target === '_blank') return;
+      if (a.hostname && a.hostname !== location.hostname) return;
+      clearTimeout(hoverTimer);
+      hoverTimer = setTimeout(function () { prefetch(a.href); }, 100);
+    }, true);
+    document.addEventListener('mouseout', function () { clearTimeout(hoverTimer); }, true);
+  }
+
+  // ---------- Defer third-party until idle ----------
+  if (s.deferThirdParty) {
+    function loadDeferred() {
+      document.querySelectorAll('script[type="text/lazyload"]').forEach(function (sc) {
+        var n = document.createElement('script');
+        for (var i = 0; i < sc.attributes.length; i++) {
+          var a = sc.attributes[i];
+          if (a.name === 'type') continue;
+          n.setAttribute(a.name, a.value);
+        }
+        if (sc.textContent) n.textContent = sc.textContent;
+        sc.parentNode.replaceChild(n, sc);
+      });
+      L('deferred 3rd-party scripts loaded');
+    }
+    if ('requestIdleCallback' in window) requestIdleCallback(loadDeferred, { timeout: 4000 });
+    else setTimeout(loadDeferred, 2500);
+  }
+
+  // ---------- Pause carousels/videos when off-screen ----------
+  if (s.pauseOffscreen && 'IntersectionObserver' in window) {
+    var pausableSel = 'video, .swiper, slide-section, [data-autoplay]';
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        var el = entry.target;
+        if (entry.isIntersecting) {
+          if (el.tagName === 'VIDEO' && el.dataset.spdPaused === '1') {
+            el.dataset.spdPaused = '0';
+            el.play && el.play().catch(function () {});
+          }
+          if (el.swiper && el.dataset.spdPaused === '1') {
+            el.dataset.spdPaused = '0';
+            try { el.swiper.autoplay && el.swiper.autoplay.start(); } catch (_) {}
+          }
+        } else {
+          if (el.tagName === 'VIDEO' && !el.paused) {
+            el.dataset.spdPaused = '1';
+            el.pause && el.pause();
+          }
+          if (el.swiper && el.swiper.autoplay && el.swiper.autoplay.running) {
+            el.dataset.spdPaused = '1';
+            try { el.swiper.autoplay.stop(); } catch (_) {}
+          }
+        }
+      });
+    }, { threshold: 0.1 });
+    function observe() {
+      document.querySelectorAll(pausableSel).forEach(function (el) {
+        if (el.dataset.spdObserved === '1') return;
+        el.dataset.spdObserved = '1';
+        io.observe(el);
+      });
+    }
+    observe();
+    new MutationObserver(observe).observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  // ---------- Instant nav (View Transitions / bfcache friendly) ----------
+  if (s.instantNav && 'startViewTransition' in document) {
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest && e.target.closest('a[href]');
+      if (!a) return;
+      var href = a.getAttribute('href');
+      if (!href || href.charAt(0) === '#' || a.target === '_blank') return;
+      if (a.hostname && a.hostname !== location.hostname) return;
+      e.preventDefault();
+      document.startViewTransition(function () { location.href = a.href; });
+    });
+    L('instant nav enabled');
+  }
+
+  // ---------- Diagnostics ----------
+  if (s.log && 'PerformanceObserver' in window) {
+    try {
+      var po = new PerformanceObserver(function (list) {
+        list.getEntries().forEach(function (entry) {
+          if (entry.entryType === 'largest-contentful-paint') L('LCP', Math.round(entry.startTime), 'ms', entry.element);
+          if (entry.entryType === 'layout-shift' && !entry.hadRecentInput) L('CLS shift', entry.value.toFixed(4));
+        });
+      });
+      po.observe({ type: 'largest-contentful-paint', buffered: true });
+      po.observe({ type: 'layout-shift', buffered: true });
+    } catch (_) {}
+  }
+})();
+{% comment %}{% endcomment %}</script>
+
+</template>

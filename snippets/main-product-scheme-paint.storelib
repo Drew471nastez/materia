@@ -1,0 +1,228 @@
+<template compat="shopify">
+{%- comment -%}
+  Hard-paint snippet for the product info section. Resolves the section's
+  active scheme to actual hex values and pins the lightbox + sticky add-to-cart
+  bar to those colours. Lives in a snippet (not inline in main-product.liquid)
+  so the section file stays under Shopify's 256 KB template-content cap.
+
+  Inputs:
+    pinfo_bg, pinfo_text, pinfo_heading, pinfo_btn_primary_color,
+    pinfo_btn_primary_bg, pinfo_btn_outline_color, pinfo_btn_outline_border,
+    section_id (passed via section.id from caller).
+{%- endcomment -%}
+{%- if pinfo_bg != blank -%}
+<style>
+  /* HARD PAINT — PhotoSwipe lightbox + sticky add-to-cart bar.
+     Both elements live OUTSIDE the section's DOM scope (lightbox
+     portals to <body>, sticky bar is `position: fixed`), so they
+     can't inherit `.color-{scheme}` via cascade. We resolve the
+     section's scheme hex values server-side and pin them here. */
+  .pswp {
+    --pswp-bg: {{ pinfo_bg }} !important;
+    --pswp-placeholder-bg: {{ pinfo_bg }} !important;
+    --pswp-icon-color: {{ pinfo_text }} !important;
+    --pswp-icon-color-secondary: color-mix(in srgb, {{ pinfo_bg }} 70%, {{ pinfo_text }} 30%) !important;
+    --pswp-icon-stroke-color: {{ pinfo_text }} !important;
+    --pswp-error-text-color: {{ pinfo_text }} !important;
+  }
+  .pswp__bg { background-color: {{ pinfo_bg }} !important; }
+  .pswp__button,
+  .pswp__button .pswp__icn,
+  .pswp__button--arrow--prev,
+  .pswp__button--arrow--next,
+  .pswp__button--close,
+  .pswp__button--zoom {
+    color: {{ pinfo_text }} !important;
+  }
+  .pswp__button .pswp__icn use,
+  .pswp__button .pswp__icn path,
+  .pswp__button svg,
+  .pswp__button svg use,
+  .pswp__button svg path {
+    fill: currentColor !important;
+    stroke: currentColor !important;
+  }
+  .pswp__button {
+    background: transparent !important;
+    transition: opacity 0.18s ease, transform 0.18s ease !important;
+  }
+  .pswp__button:hover {
+    background: transparent !important;
+    opacity: 0.7 !important;
+  }
+  .pswp__bottom-bar {
+    background-color: color-mix(in srgb, {{ pinfo_bg }} 92%, {{ pinfo_text }} 8%) !important;
+    border-color: color-mix(in srgb, {{ pinfo_text }} 18%, transparent) !important;
+  }
+  .pswp__bottom-bar .pswp__button,
+  .pswp__bottom-bar .pswp__button .pswp__icn,
+  .pswp__bottom-bar .pswp__button svg,
+  .pswp__bottom-bar .pswp__button svg path,
+  .pswp__bottom-bar .pswp__button svg use {
+    color: {{ pinfo_text }} !important;
+    fill: currentColor !important;
+    stroke: currentColor !important;
+  }
+  /* Sticky add-to-cart bar — paint with section scheme bg + text. */
+  sticky-add-cart {
+    background-color: {{ pinfo_bg }} !important;
+    color: {{ pinfo_text }} !important;
+  }
+  /* Product title in the sticky bar uses the scheme's HEADING colour
+     (matches the "Heading" color in the color-scheme General settings).
+     `.product-item__name` is the actual title class rendered by the
+     product-item snippet in sticky type, `.product-item__title` is a
+     fallback for other layouts. */
+  sticky-add-cart :is(.heading-color, .product-item__name, .product-item__name *, a.product-item__name, .product-item__title, h1, h2, h3, h4, h5, h6) {
+    color: {{ pinfo_heading }} !important;
+  }
+  sticky-add-cart :is(.price, .price *, span:not(.product-item__name *), p, label) {
+    color: {{ pinfo_text }} !important;
+  }
+  /* Sticky bar buttons — primary uses scheme primary, outline uses scheme outline. */
+  sticky-add-cart :is(.btn-outline, .btn-outline *) {
+    color: {{ pinfo_btn_outline_color }} !important;
+    border-color: {{ pinfo_btn_outline_border }} !important;
+  }
+  /* Sticky bar quantity selector — exactly mirrors the in-section
+     quantity pill: scheme background + 8 % text tint, scheme-text glyphs
+     and number. After `<sticky-add-cart>` portals to <body>, we scope
+     via `[data-section-id]` (the ancestor `#MainProduct-…` no longer
+     applies). The selector union covers every form Shopify renders the
+     pill in (.quantity, quantity-input.quantity, .grey-bg variants…). */
+  sticky-add-cart[data-section-id="{{ section_id }}"] :is(.quantity, quantity-input.quantity, .quantity.grey-bg, .product-form__quantity .quantity, .product-form__quantity quantity-input.quantity, .product-detail__buy-buttons .quantity, .product-detail__buy-buttons quantity-input.quantity) {
+    background-color: color-mix(in srgb, {{ pinfo_bg }} 92%, {{ pinfo_text }} 8%) !important;
+    background: color-mix(in srgb, {{ pinfo_bg }} 92%, {{ pinfo_text }} 8%) !important;
+    border: 1px solid color-mix(in srgb, {{ pinfo_text }} 22%, transparent) !important;
+    box-shadow:
+      0 1px 0 0 color-mix(in srgb, {{ pinfo_text }} 10%, transparent),
+      0 2px 6px -3px color-mix(in srgb, {{ pinfo_text }} 14%, transparent) !important;
+  }
+  /* Number input — heading colour so it reads as a typographic value
+     (same pattern as titles + prices), with transparent bg so the
+     surrounding pill tint shows through. */
+  sticky-add-cart[data-section-id="{{ section_id }}"] :is(.quantity-input, .product-form__quantity .quantity-input, .product-detail__buy-buttons .quantity-input) {
+    color: {{ pinfo_heading }} !important;
+    background: transparent !important;
+  }
+  /* +/- buttons — text colour glyphs on transparent pill (no second pill). */
+  sticky-add-cart[data-section-id="{{ section_id }}"] :is(.quantity__button, .quantity__button svg, .quantity__button svg path, .product-form__quantity .quantity__button, .product-detail__buy-buttons .quantity__button) {
+    color: {{ pinfo_text }} !important;
+    fill: currentColor !important;
+    background: transparent !important;
+  }
+  /* Quantity +/- buttons — keep them visually still. The previous
+     `transform` transition caused a square outline / focus-ring shift
+     during hover on some browsers (Chromium paints the focus-visible
+     outline as a slightly offset square that animates with the
+     transform). Killing transform + outline + box-shadow keeps the
+     pill rock-steady; opacity-only on hover for the soft pressable
+     feedback. */
+  sticky-add-cart[data-section-id="{{ section_id }}"] .quantity__button {
+    transition: opacity 0.18s ease !important;
+    transform: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+  sticky-add-cart[data-section-id="{{ section_id }}"] .quantity__button:is(:hover, :focus, :focus-visible, :active) {
+    background: transparent !important;
+    background-color: transparent !important;
+    transform: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    opacity: 0.7 !important;
+  }
+  /* Pill itself — kill any inherited box-shadow / transform that paints
+     a "square fade" element across the rounded pill. */
+  sticky-add-cart[data-section-id="{{ section_id }}"] :is(.quantity, quantity-input.quantity) {
+    box-shadow: none !important;
+    transform: none !important;
+    outline: none !important;
+  }
+  /* Sticky bar variant picker. We deliberately do NOT target
+     `.product-form__input` directly — that class is shared by the
+     QUANTITY wrapper (`<div class="product-form__input product-form__quantity">`),
+     and painting bg+border on it would create a rectangle behind the
+     rounded `.quantity` pill. We target only variant-specific elements
+     and force the quantity wrapper to stay transparent below. */
+  sticky-add-cart :is(variant-radios-detail, variant-select-detail, variant-radios, variant-select, select, .product-form select, .product-options select) {
+    background-color: color-mix(in srgb, {{ pinfo_bg }} 92%, {{ pinfo_text }} 8%) !important;
+    color: {{ pinfo_text }} !important;
+    border-color: color-mix(in srgb, {{ pinfo_text }} 22%, transparent) !important;
+  }
+  /* Variant-only `.product-form__input` (NOT the quantity wrapper). */
+  sticky-add-cart .product-form__input:not(.product-form__quantity) {
+    background-color: color-mix(in srgb, {{ pinfo_bg }} 92%, {{ pinfo_text }} 8%) !important;
+    color: {{ pinfo_text }} !important;
+    border-color: color-mix(in srgb, {{ pinfo_text }} 22%, transparent) !important;
+  }
+  /* Quantity wrapper — transparent so only the inner rounded pill
+     paints. Kills the "rectangle around the pill" artifact. */
+  sticky-add-cart .product-form__quantity,
+  sticky-add-cart .product-form__quantity.product-form__input,
+  sticky-add-cart div.product-form__quantity {
+    background: transparent !important;
+    background-color: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+  sticky-add-cart :is(.product-form__input:not(.product-form__quantity) *, select option) {
+    color: {{ pinfo_text }} !important;
+  }
+  sticky-add-cart :is(input[type="radio"] + label, .variant-input label, .product-options label, .product-form__input label) {
+    background-color: color-mix(in srgb, {{ pinfo_bg }} 92%, {{ pinfo_text }} 8%) !important;
+    color: {{ pinfo_text }} !important;
+    border-color: color-mix(in srgb, {{ pinfo_text }} 22%, transparent) !important;
+  }
+  sticky-add-cart input[type="radio"]:checked + label {
+    background-color: {{ pinfo_btn_primary_bg }} !important;
+    color: {{ pinfo_btn_primary_color }} !important;
+    border-color: {{ pinfo_btn_primary_bg }} !important;
+  }
+  /* Sticky bar primary button (Add to Cart). Paints with the section's
+     Button-Primary scheme colours — the SAME tokens that drive the inline
+     Add-to-Cart button. The buy_colors snippet emits HIGHER-specificity
+     rules (with `#MainProduct-{id} .product-detail__buy-buttons` as
+     ancestor) when "Enable custom colours" is ON, so custom buy-button
+     colours apply to both the inline and sticky buttons consistently. */
+  sticky-add-cart :is(.btn-primary, [class*="btn-primary"], button[type="submit"], .product-form__submit, .product-detail__buy-buttons .btn-primary, .product-detail__buy-buttons .product-form__submit, .product-detail__buy-buttons button[name="add"], button[name="add"]) {
+    background-color: {{ pinfo_btn_primary_bg }} !important;
+    color: {{ pinfo_btn_primary_color }} !important;
+    border-color: {{ pinfo_btn_primary_bg }} !important;
+    /* Soft, seamless interaction motion — cubic easing across the same
+       three properties so the button never "snaps" between states. */
+    transition:
+      background-color .35s cubic-bezier(.4, 0, .2, 1),
+      border-color     .35s cubic-bezier(.4, 0, .2, 1),
+      color            .35s cubic-bezier(.4, 0, .2, 1),
+      box-shadow       .35s cubic-bezier(.4, 0, .2, 1),
+      transform        .25s cubic-bezier(.4, 0, .2, 1) !important;
+    will-change: background-color, transform, box-shadow;
+  }
+  sticky-add-cart :is(.btn-primary *, .btn-primary span, button[type="submit"] *, .product-form__submit *, .product-detail__buy-buttons .btn-primary *, .product-detail__buy-buttons .product-form__submit *, button[name="add"] *, button[name="add"] span) {
+    color: {{ pinfo_btn_primary_color }} !important;
+  }
+  /* Hover — subtle 7 % darken + a feather-soft shadow lift. No scale jump,
+     no harsh colour shift — it should feel like a glass surface that
+     barely warms under the cursor. */
+  sticky-add-cart :is(.btn-primary, button[type="submit"], .product-form__submit, button[name="add"]):hover {
+    background-color: color-mix(in srgb, {{ pinfo_btn_primary_bg }} 93%, #000 7%) !important;
+    border-color:     color-mix(in srgb, {{ pinfo_btn_primary_bg }} 93%, #000 7%) !important;
+    color: {{ pinfo_btn_primary_color }} !important;
+    box-shadow: 0 4px 14px -6px color-mix(in srgb, {{ pinfo_btn_primary_bg }} 60%, transparent) !important;
+  }
+  sticky-add-cart :is(.btn-primary, button[type="submit"], .product-form__submit, button[name="add"]):active {
+    background-color: color-mix(in srgb, {{ pinfo_btn_primary_bg }} 88%, #000 12%) !important;
+    transition-duration: .1s !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    sticky-add-cart :is(.btn-primary, button[type="submit"], .product-form__submit, button[name="add"]) {
+      transition: none !important;
+    }
+  }
+{% comment %}{% endcomment %}</style>
+{%- endif -%}
+
+</template>

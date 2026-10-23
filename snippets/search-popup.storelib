@@ -1,0 +1,220 @@
+<template compat="shopify">
+{%- comment -%}
+  Materia Themes. Developed By Materia Themes.
+{%- endcomment -%}
+{% # theme-check-disable ContentForHeaderModification %}
+{%- capture content_for_query_string -%}
+  {{ content_for_header }}
+{%- endcapture -%}
+{% # theme-check-enable ContentForHeaderModification %}
+{%- assign pageurl = content_for_query_string
+  | split: '"pageurl":"'
+  | last
+  | split: '"'
+  | first
+  | split: request.host
+  | last
+  | replace: '\/', '/'
+  | replace: '%20', ' '
+  | replace: '\u0026', '&'
+-%}
+{%- assign page_query_string = pageurl | split: '?' | last -%}
+{%- liquid
+  assign theme_st = settings
+  assign show_search_price = theme_st.show_search_price
+  assign search_type = theme_st.search_type
+  assign popular_key_word = theme_st.popular_key_word
+  assign enable_search_suggestion = theme_st.enable_search_suggestion
+  assign search_terms = search.terms
+  assign key_terms = search_terms
+  assign collection_suggestion = theme_st.collection_suggestion
+  assign search_result = theme_st.search_result
+  if search_terms contains 'product_type:'
+    assign arr_terms = search_terms | remove: 'product_type:' | split: ' AND '
+    assign product_type = arr_terms[0] | strip
+    assign search_terms = arr_terms[1] | strip
+    if search_terms == blank
+      assign key_terms = key_terms | remove: ' AND '
+      assign search_terms = product_type
+    endif
+  endif
+  if page_query_string contains 'ajax=1' and page_query_string contains 'type=popup'
+    assign search_type = 'popup'
+  endif
+  assign popup_anim = theme_st.search_popup_animation | default: 'fade'
+  assign show_trending = theme_st.search_show_trending
+  if show_trending == nil
+    assign show_trending = true
+  endif
+  assign search_title_text = 'general.search.search' | t
+  comment
+    Basic mode = popup shell without ajax / suggestions / collection blocks.
+    `basic_mode` is passed in from top-search.liquid; we also flip the
+    container class so the basic-only CSS (hide-suggestions) takes effect.
+  endcomment
+  assign is_basic = false
+  if basic_mode or search_type == 'basic'
+    assign is_basic = true
+  endif
+  assign popup_class = 'search__type-popup'
+  if is_basic
+    assign popup_class = 'search__type-basic'
+  endif
+-%}
+{% liquid
+  assign enable_rtl = settings.rtl
+  assign iso_code = request.locale.iso_code
+  assign lis_language_rtl = settings.language_rtl
+  if lis_language_rtl != blank
+    if lis_language_rtl contains iso_code
+      assign enable_rtl = true
+    else
+      assign enable_rtl = false
+    endif
+  endif
+%}
+
+{%- comment -%} Search color scheme — applies settings.search_color_scheme to the popup (mirrors the cart drawer pattern). Falls back to the first scheme if blank. {%- endcomment -%}
+{%- assign search_scheme = settings.search_color_scheme -%}
+{%- if search_scheme == blank -%}
+  {%- for sc in settings.color_schemes -%}{%- assign search_scheme = sc -%}{%- break -%}{%- endfor -%}
+{%- endif -%}
+{%- assign search_scheme_id = 'default' -%}
+{%- if search_scheme != blank -%}{%- assign search_scheme_id = search_scheme.id | default: search_scheme -%}{%- endif -%}
+{%- capture search_scheme_inline -%}
+  {%- if search_scheme.settings -%}
+    --color-background: {{ search_scheme.settings.background }};
+    --color-text: {{ search_scheme.settings.text_color }};
+    --color-heading: {{ search_scheme.settings.heading_color }};
+    --color-primary: {{ search_scheme.settings.primary_color }};
+    --color-border: {{ search_scheme.settings.border_color }};
+    --gradient-background: {% if search_scheme.settings.background_gradient != blank %}{{ search_scheme.settings.background_gradient }}{% else %}{{ search_scheme.settings.background }}{% endif %};
+    background-color: {{ search_scheme.settings.background }};
+    color: {{ search_scheme.settings.text_color }};
+  {%- endif -%}
+{%- endcapture -%}
+
+<div
+  class="{{ popup_class }} search__popup-anim--{{ popup_anim }}{% if is_basic %} is-basic-mode{% endif %} color-{{ search_scheme_id }} h-full overflow-auto px-15 custom-scrollbar"
+  data-search-popup-anim="{{ popup_anim }}"
+  style="{{ search_scheme_inline | strip | strip_newlines }}"
+  {% if is_basic %}data-search-basic="true"{% endif %}
+>
+  <div class="{% if section_width == 'container' %}container{% else %}fluid_container{% endif %}">
+    <h3 class="search-title search-title--animated text-center h4 m-0 hidden block-sm" aria-label="{{ search_title_text }}">
+      {%- assign title_chars = search_title_text | split: '' -%}
+      {%- for ch in title_chars -%}
+        <span class="search-title__char" style="--char-i: {{ forloop.index0 }};" aria-hidden="true">{% if ch == ' ' %}&nbsp;{% else %}{{ ch }}{% endif %}</span>
+      {%- endfor -%}
+    </h3>
+    <div class="search__type-popup-bar{% if enable_rtl %} search__type-popup-bar--rtl{% endif %}">
+      <form
+        action="{{ routes.search_url }}"
+        id="search_mini_form"
+        method="get"
+        role="search"
+        class="search search-modal__form search__type-popup-form"
+      >
+        <div class="search__type-popup-field">
+          <input
+            class="search__input search__type-popup-input field__input"
+            type="search"
+            name="q"
+            id="search-template"
+            value="{{ search.terms | escape }}"
+            placeholder="{{ 'general.search.search' | t }}"
+            maxlength="128"
+            role="combobox"
+            aria-expanded="false"
+            aria-owns="predictive-search-results"
+            aria-controls="predictive-search-results"
+            aria-haspopup="listbox"
+            aria-autocomplete="list"
+            autocorrect="off"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+          >
+          <label class="field__label visually-hidden" for="search-template">
+            {{- 'general.search.search' | t -}}
+          </label>
+          <input type="hidden" name="options[unavailable_products]" value="last">
+          <input type="hidden" name="options[prefix]" value="last">
+          <input type="hidden" name="options[fields]" value="title,vendor,product_type,variants.title">
+          <input type="hidden" name="type" value="{{ search_result }}">
+          <span class="search__type-popup-loading" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" class="spin">
+              <use href="#icon-load"></use>
+            </svg>
+          </span>
+          <button
+            type="submit"
+            class="search__type-popup-submit"
+            aria-label="{{ 'general.search.search' | t }}"
+          >
+            <svg width="17" height="17" viewBox="0 0 17 17" fill="currentColor">
+              <use href="#icon-search" />
+            </svg>
+          </button>
+        </div>
+      </form>
+      <button
+        type="button"
+        class="search__type-popup-close btn-search-close"
+        aria-label="{{ 'general.search.close' | t | default: 'Close' }}"
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <use href="#icon-close" />
+        </svg>
+      </button>
+    </div>
+    {%- unless is_basic -%}
+    <div id="predictive-search" class="predictive-search--header mt-25">
+      <div class="predictive-search" data-predictive-search>
+        {%- if enable_search_suggestion and collection_suggestion -%}
+          {%- assign collection = collections[collection_suggestion] -%}
+          {%- if collection.products.size > 0 -%}
+            <div class="search-suggest search-list-item">
+              <span class="h5 m-0">
+                {{ 'general.search.popular_products' | t }}
+              </span>
+              <div id="search-results">
+                <div class="search__grid mt-15 {{ product_style }}">
+                  <div
+                    id="search-results-list"
+                    class="search-results-list{% if search_type == 'default' or search_type == 'popup' %} grid grid-cols gap-15 gap-lg-20{% endif %}"
+                    style="{% if search_type == 'default' or search_type == 'popup' %}--col-number: 1;--col-tablet: 1;--col-desktop-small:3;--col-desktop: 5;{% endif %}"
+                  >
+                    {%- assign sizes = '(min-width: 1200px) calc((1200px -  30px * 3) * 0.2), (min-width: 768px) calc( (100vw - 30px - 30px * 2 ) * 0.33), 80px' -%}
+                    {%- for product in collection.products limit: 5 -%}
+                      {% render 'product-item', search_thumb: true,
+                        card_product: product,
+                        section_id: section.id,
+                        template_enable_action: false,
+                        template_enable_product_vendor: false,
+                        template_enable_rate: true,
+                        template_enable_price: show_search_price,
+                        template_enable_product_short_description: false,
+                        template_enable_color_swatches: false,
+                        type: 'normal',
+                        sizes: sizes
+                      %}
+                    {%- endfor -%}
+                  </div>
+                </div>
+              </div>
+            </div>
+          {%- endif -%}
+        {%- endif -%}
+  
+      </div>
+      <span class="predictive-search-status visually-hidden" role="status" aria-hidden="true"></span>
+    </div>
+    <div class="search__loading-state mt-15 ">
+      {%- render 'skeleton', type: 'popup' -%}
+    </div>
+    {%- endunless -%}
+  </div>
+</div>
+
+</template>

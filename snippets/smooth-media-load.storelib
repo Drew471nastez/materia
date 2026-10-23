@@ -1,0 +1,79 @@
+<template compat="shopify">
+{%- comment -%}
+  Smooth media load (bulletproof)
+  -------------------------------
+  Fades images & videos in once they finish loading, without the abrupt
+  gray-box -> hard pop. Rewritten to be impossible to leave media invisible:
+
+    * It NEVER sets opacity:0 as a resting state. Media is visible by default.
+      On load it plays a ONE-SHOT fade-in animation (no fill-mode), so after the
+      animation the element returns to its natural CSS opacity. If JS never runs,
+      or a node is cloned (e.g. Swiper carousel loop slides), the media is simply
+      visible — never stuck hidden.
+    * Hover / secondary product-card images (.secondary-image, .opacity-0) are
+      skipped entirely so card hover swaps are never disturbed.
+    * Clone-safe: processed elements are tracked in a WeakSet (not a copyable
+      attribute), so carousel clones are handled correctly.
+    * Skipped in the theme editor (design mode) and for reduced-motion users.
+{%- endcomment -%}
+<style>
+  @keyframes materiaMediaFade { from { opacity: 0; } to { opacity: 1; } }
+  html.js-media-fade .media-fade-run { animation: materiaMediaFade .4s ease; }
+{% comment %}{% endcomment %}</style>
+<script>
+(function () {
+  if ({{ settings.scroll_animation | default: 'none' | json }} === 'none' || {{ request.design_mode | json }}) return;
+  if (window.Shopify && window.Shopify.designMode) { return; }
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
+
+  var root = document.documentElement;
+  root.classList.add('js-media-fade');
+
+  var seen = ('WeakSet' in window) ? new WeakSet() : null;
+  var SKIP = /(?:^|\s)(secondary-image|opacity-0|product-image|first-image|bls-loading-image|bls-loaded-image)(?:\s|$)/;
+
+  function eligible(el) {
+    if (el.tagName !== 'IMG' && el.tagName !== 'VIDEO') { return false; }
+    var cn = (typeof el.className === 'string') ? el.className : '';
+    if (cn && SKIP.test(cn)) { return false; }     // never touch hover/secondary media
+    return true;
+  }
+
+  function prep(el) {
+    if (!eligible(el)) { return; }
+    if (seen) { if (seen.has(el)) { return; } seen.add(el); }
+    var ready = el.tagName === 'IMG' ? (el.complete && el.naturalWidth > 0) : (el.readyState >= 2);
+    if (ready) { return; }                          // already painted — leave it, no flash
+    var ev = el.tagName === 'IMG' ? 'load' : 'loadeddata';
+    el.addEventListener(ev, function () { el.classList.add('media-fade-run'); }, { once: true });
+  }
+
+  function scan(ctx) {
+    var nodes = (ctx || document).querySelectorAll('img, video');
+    for (var i = 0; i < nodes.length; i++) { prep(nodes[i]); }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { scan(); });
+  } else {
+    scan();
+  }
+
+  if ('MutationObserver' in window) {
+    var mo = new MutationObserver(function (muts) {
+      for (var i = 0; i < muts.length; i++) {
+        var added = muts[i].addedNodes;
+        for (var j = 0; j < added.length; j++) {
+          var node = added[j];
+          if (node.nodeType !== 1) { continue; }
+          if (node.tagName === 'IMG' || node.tagName === 'VIDEO') { prep(node); }
+          else if (node.querySelectorAll) { scan(node); }
+        }
+      }
+    });
+    mo.observe(document.documentElement, { childList: true, subtree: true });
+  }
+})();
+{% comment %}{% endcomment %}</script>
+
+</template>

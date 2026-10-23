@@ -1,0 +1,171 @@
+<template compat="shopify">
+{%- comment -%}
+  Materia Themes — site logo.
+
+  Renders both logo images side-by-side wrapped in `.header__logo`:
+    • `.header__normal-logo` — visible by default + when the header is
+      in its sticky / solid state.
+    • `.header__transparent-logo` — visible only when the header is in
+      its transparent state on the homepage.
+
+  Fallback chains:
+    Normal      :  settings.logo → settings.mobile_logo → placeholder
+    Transparent :  settings.logo_on_transparent → settings.logo
+                   → settings.mobile_logo → placeholder
+
+  Why both `<img>`s render in DOM (instead of switching at Liquid):
+  the header transitions between transparent and sticky/solid states
+  on a single page load (the user scrolls past the hero). CSS toggles
+  which image is visible based on the header's runtime class — no JS,
+  no layout-shift, no Liquid re-render. The visibility CSS lives in
+  `sections/header.liquid` so this snippet stays state-free.
+{%- endcomment -%}
+{%- liquid
+  assign shop_name = shop.name
+  assign theme_st = settings
+
+  assign logo_image          = theme_st.logo
+  assign mobile_logo_image   = theme_st.mobile_logo
+  assign logo_on_transparent = theme_st.logo_on_transparent
+
+  assign logo_width        = theme_st.desktop_logo_width
+  assign mobile_logo_width = theme_st.mobile_logo_width
+  comment
+    The mobile logo width is ALWAYS driven by the mobile slider, whether or not
+    a separate mobile logo image is set. Previously it was overwritten with the
+    desktop width whenever there was no dedicated mobile image, which made the
+    mobile slider do nothing in that (very common) case.
+  endcomment
+
+  comment
+    Resolve each <img> slot via the fallback chain. Pre-resolving here
+    means the rendered tags always have a real `src` — no broken images
+    and no dual-render of the placeholder next to a real logo.
+  endcomment
+  assign normal_src      = logo_image | default: mobile_logo_image
+  assign transparent_src = logo_on_transparent | default: logo_image | default: mobile_logo_image
+
+  assign on_transparent_page = false
+  if isTransparent and request.page_type == 'index' and transparent_src != blank
+    assign on_transparent_page = true
+  endif
+
+  assign placeholder_url = 'https://cdn.shopify.com/s/files/1/0918/6322/0561/files/400_x_200.svg?v=1757841030'
+
+  comment
+    Demo logo fallback — only when no merchant logo is set. Gated by the
+    global "Demo Images" toggle inside snippets/demo-image.liquid, so when
+    that toggle is OFF this returns blank and the plain placeholder shows.
+  endcomment
+  assign demo_logo = ''
+  if normal_src == blank
+    capture demo_logo
+      render 'demo-image', key: 'theme_logo'
+    endcapture
+    assign demo_logo = demo_logo | strip
+  endif
+-%}
+
+{% if request.page_type == 'index' %}
+  <h1 class="my-0 inline-flex align-center">
+{%- endif -%}
+<a
+  class="logo-img no-underline inline-flex align-center{% if request.page_type != 'index' %} h1 my-0{% endif %}"
+  href="{{ routes.root_url }}"
+  aria-label="{{ shop_name }}"
+  {{ block.shopify_attributes }}
+>
+  <span
+    class="header__logo inline-flex align-center"
+    style="--header-logo-width: {{ logo_width }}px; --header-logo-width-mobile: {{ mobile_logo_width }}px;"
+  >
+    {%- comment -%} Normal / sticky-state logo {%- endcomment -%}
+    {%- if normal_src != blank -%}
+      {%- assign normal_height = logo_width | divided_by: normal_src.aspect_ratio | round -%}
+      <img
+        srcset="
+          {%- if normal_src.width >= 165 -%}{{ normal_src | image_url: width: 165 }} 165w,{%- endif -%}
+          {%- if normal_src.width >= 330 -%}{{ normal_src | image_url: width: 330 }} 330w,{%- endif -%}
+          {%- if normal_src.width >= 535 -%}{{ normal_src | image_url: width: 535 }} 535w,{%- endif -%}
+          {%- if normal_src.width >= 750 -%}{{ normal_src | image_url: width: 750 }} 750w,{%- endif -%}
+          {{ normal_src | image_url }} {{ normal_src.width }}w
+        "
+        src="{{ normal_src | image_url: width: 330 }}"
+        sizes="(max-width: 1024px) 300px, 400px"
+        loading="eager"
+        decoding="sync"
+        fetchpriority="high"
+        class="header__normal-logo{% if mobile_logo_image != blank %} header__normal-logo--desktop-only{% endif %}"
+        width="{{ logo_width }}"
+        height="{{ normal_height }}"
+        alt="{{ normal_src.alt | default: shop_name | escape }}"
+      >
+      {%- if mobile_logo_image != blank -%}
+        {%- assign mobile_logo_height = mobile_logo_width | divided_by: mobile_logo_image.aspect_ratio | round -%}
+        <img
+          src="{{ mobile_logo_image | image_url: width: 330 }}"
+          sizes="300px"
+          loading="eager"
+        decoding="sync"
+          class="header__mobile-logo"
+          width="{{ mobile_logo_width }}"
+          height="{{ mobile_logo_height }}"
+          alt="{{ shop_name | escape }}"
+        >
+      {%- endif -%}
+    {%- elsif demo_logo != blank -%}
+      <img
+        src="{{ demo_logo }}"
+        loading="eager"
+        decoding="sync"
+        fetchpriority="high"
+        class="header__normal-logo"
+        width="{{ logo_width }}"
+        alt="{{ shop_name | escape }}"
+      >
+    {%- else -%}
+      <img
+        src="{{ placeholder_url }}"
+        loading="eager"
+        decoding="sync"
+        class="header__normal-logo header__logo-placeholder"
+        style="border-radius:6px;"
+        width="{{ logo_width }}"
+        height="{{ logo_width | divided_by: 2 }}"
+        alt="{{ shop_name | escape }}"
+      >
+    {%- endif -%}
+
+    {%- comment -%}
+      Transparent-state logo — only rendered when the page is eligible
+      to be in transparent-header state AND we have a resolvable
+      transparent source. When absent, the normal logo stays visible
+      on the transparent header.
+    {%- endcomment -%}
+    {%- if on_transparent_page -%}
+      {%- assign transparent_height = logo_width | divided_by: transparent_src.aspect_ratio | round -%}
+      <img
+        srcset="
+          {%- if transparent_src.width >= 165 -%}{{ transparent_src | image_url: width: 165 }} 165w,{%- endif -%}
+          {%- if transparent_src.width >= 330 -%}{{ transparent_src | image_url: width: 330 }} 330w,{%- endif -%}
+          {%- if transparent_src.width >= 535 -%}{{ transparent_src | image_url: width: 535 }} 535w,{%- endif -%}
+          {%- if transparent_src.width >= 750 -%}{{ transparent_src | image_url: width: 750 }} 750w,{%- endif -%}
+          {{ transparent_src | image_url }} {{ transparent_src.width }}w
+        "
+        src="{{ transparent_src | image_url: width: 330 }}"
+        sizes="(max-width: 1024px) 300px, 400px"
+        loading="eager"
+        decoding="sync"
+        class="header__transparent-logo"
+        width="{{ logo_width }}"
+        height="{{ transparent_height }}"
+        alt="{{ transparent_src.alt | default: shop_name | escape }}"
+      >
+    {%- endif -%}
+  </span>
+</a>
+{% if request.page_type == 'index' %}
+  </h1>
+{%- endif -%}
+
+</template>

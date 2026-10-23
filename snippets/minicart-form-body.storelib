@@ -1,0 +1,344 @@
+<template compat="shopify">
+{%- comment -%}
+  The drawer's scrolling body and footer, #minicart-form. Rendered by the
+  minicart snippet on page load and by the minicart-form section after every
+  cart change, so both always match the Cart Drawer settings.
+{%- endcomment -%}
+{%- liquid
+  assign theme_st = settings
+  assign show_currency_code = theme_st.show_currency_code
+  assign action_after_add_cart = theme_st.action_after_add_cart
+  assign minicart_type = 'disable'
+  if theme_st.cart_drawer_recommendations
+    assign minicart_type = 'show_inside'
+    if theme_st.minicart_type == 'show_beside'
+      assign minicart_type = 'show_beside'
+    endif
+  endif
+  assign recommendations_heading = theme_st.product_recommendations_heading
+  assign product_recommendations_type = theme_st.product_recommendations_type
+  assign select_product_recommendations = theme_st.select_product_recommendations
+  assign hidden_price = theme_st.hidden_price
+  assign drawer_terms_enabled = false
+  if theme_st.enable_cart_terms
+    assign drawer_terms_enabled = true
+  endif
+  comment
+    In the editor the preview cart is usually empty. Draw the tools, footer
+    and recommendations anyway so every Cart Drawer setting shows live.
+  endcomment
+  assign drawer_parts = false
+  if cart.items.size > 0 or request.design_mode or carrier
+    assign drawer_parts = true
+  endif
+  assign enable_rtl = settings.rtl
+  assign iso_code = request.locale.iso_code
+  assign lis_language_rtl = settings.language_rtl
+  if lis_language_rtl != blank
+    if lis_language_rtl contains iso_code
+      assign enable_rtl = true
+    else
+      assign enable_rtl = false
+    endif
+  endif
+-%}
+<div
+  id="minicart-form"
+  class="minicart-form flex-1 flex flex-column grow relative overflow-hidden color-default"
+>
+  <div class="minicart-scroll flex-1 overflow-y-scroll custom-scrollbar">
+    <form
+      id="minicart"
+      action="{{ routes.cart_url }}"
+      method="post"
+      class="minicart-form flex-1 flex flex-column grow relative overflow-hidden color-default"
+      novalidate
+    >
+      {%- comment -%} The editor's settings copy keeps this structure with an empty list; the drawer moves its own rows in. {%- endcomment -%}
+      {%- if cart.items.size > 0 or carrier -%}
+        <div class="minicart-body flex-1 grow pt-30 px-30 overflow-x-hidden{% if action_after_add_cart == 'open_drawer' %} pb-30{% endif %}">
+          {%- render 'cart-drawer-addons', slot: 'top_of_drawer' -%}
+          <div class="items">
+            {% for item in cart.items %}
+              {%- render 'cart-item', item: item -%}
+            {% endfor %}
+          </div>
+          {%- render 'cart-drawer-addons', slot: 'below_items' -%}
+        </div>
+      {%- else -%}
+        <div class="cart-body">
+          {%- if request.design_mode -%}
+            <div class="minicart-body px-30 pt-20">{%- render 'cart-drawer-addons', slot: 'top_of_drawer' -%}</div>
+          {%- endif -%}
+          <div class="cart-empty text-center p-30">
+            {% if action_after_add_cart == 'open_drawer' %}
+              <svg class="cart-empty__icon" width="80" height="80" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M5.25 8.25h13.5l-1 11.4a2.5 2.5 0 0 1-2.49 2.28H8.74a2.5 2.5 0 0 1-2.49-2.28l-1-11.4Z" stroke="#C9CCD1" stroke-width="1.5" stroke-linejoin="round"/>
+                <path d="M8.75 11V8a3.25 3.25 0 0 1 6.5 0v3" stroke="#C9CCD1" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            {%- endif -%}
+            <div class="fs-18 h6 mt-15 mb-20">{{ 'general.cart.subtitle' | t }}</div>
+            <p class="empty description mt-0 mb-20 max-w-custom mx-auto" style="--max-width: 85%;">
+              {{ 'general.cart.description' | t }}
+            </p>
+            <button type="button" class="minicart-action close-cart btn-primary mb-10">
+              {{ 'general.cart.return_shop' | t }}
+            </button>
+          </div>
+          {%- if request.design_mode -%}
+            <div class="minicart-body px-30 pb-20">{%- render 'cart-drawer-addons', slot: 'below_items' -%}</div>
+          {%- endif -%}
+        </div>
+      {%- endif -%}
+    </form>
+    {% if drawer_parts and action_after_add_cart == 'open_drawer' %}
+      {%- render 'cart-addons', part: 'sheets' -%}
+    {% endif %}
+    {% if drawer_parts %}
+      {% if action_after_add_cart == 'open_drawer' and minicart_type == 'show_inside' or action_after_add_cart == 'open_drawer' and minicart_type == 'show_both' %}
+        {%- if product_recommendations_type == 'auto' -%}
+          <minicart-recommendations
+            data-url="{{ routes.product_recommendations_url }}?product_id={{ cart.items.first.product_id }}&limit=6&section_id=cart-upsell"
+            class="bls-image-js block cart-recommend pt-30 pb-30 px-30 border-top block{% if product_recommendations_type == 'auto' %} no-js-hidden{% endif %}"
+          >
+        {%- else -%}
+          <div
+            class="cart-recommend cart-recommend-custom pt-30 pb-30 px-30 border-top inside block{% if select_product_recommendations == blank %} hidden-recommend{% endif %}"
+          >
+        {%- endif -%}
+        {%- if recommendations_heading -%}
+          <h4 class="minicart-heading mt-0 mb-15 fs-18 heading-letter-spacing">
+            {{ recommendations_heading }}
+          </h4>
+        {%- endif -%}
+        <slide-section
+          class="swiper swiper-cart-upsell"
+          id="swiper-cart-upsell"
+          data-section-id="cart-upsell"
+          data-autoplay="false"
+          data-loop="false"
+          data-mobile="1"
+          data-tablet="1"
+          data-desktop="1"
+          data-item-mobile="1"
+          data-spacing="{{ settings.cart_drawer_recommend_gap | default: 12 }}"
+        >
+          <div class="swiper-wrapper">
+            {%- if product_recommendations_type != 'auto' -%}
+              {%- for item in select_product_recommendations -%}
+                {% liquid
+                  assign hidden = false
+                  for itemcart in cart.items
+                    if itemcart.product_id == item.id
+                      assign hidden = true
+                    endif
+                  endfor
+                %}
+                {% if hidden == false %}
+                  <div class="swiper-slide">
+                    {% render 'product-item',
+                      card_product: item,
+                      template_enable_price: true,
+                      template_enable_add_cart: true,
+                      template_enable_product_vendor: false,
+                      template_enable_rate: false,
+                      template_enable_product_short_description: false,
+                      template_enable_color_swatches: false,
+                      type: 'list'
+                    %}
+                  </div>
+                {% endif %}
+              {%- endfor -%}
+            {%- endif -%}
+          </div>
+          <div class="swiper-pagination"></div>
+        </slide-section>
+        {%- if product_recommendations_type == 'auto' -%}
+          </minicart-recommendations>
+        {%- else -%}
+          </div>
+        {%- endif -%}
+      {% endif %}
+      {% if action_after_add_cart == 'open_drawer' and minicart_type == 'show_beside' %}
+        {%- if product_recommendations_type == 'auto' -%}
+          <minicart-recommendations-beside
+            data-url="{{ routes.product_recommendations_url }}?product_id={{ cart.items.first.product_id }}&limit=6&section_id=cart-upsell"
+            class="bls-image-js cart-recommend pb-30 px-30 block fixed-1025 gradient inset-y-0 z-2 beside invisible-1025 pointer-none-1025 cart-recommend-beside-mobile color-default{% if product_recommendations_type == 'auto' %} no-js-hidden{% endif %}"
+          >
+        {%- else -%}
+          <div
+            class="cart-recommend cart-recommend-custom pb-30 px-30 fixed-1025 mt-1025-0 inset-y-0 z-2 beside invisible-1025 pointer-none-1025 cart-recommend-beside-mobile color-default{% if select_product_recommendations == blank %} hidden{% endif %}"
+          >
+        {%- endif -%}
+        {%- if recommendations_heading -%}
+          <minicart-recommendations-heading class="flex gap-10 justify-between recommend-heading">
+            <h4 class="minicart-heading mt-0 mb-15 fs-18 heading-letter-spacing">
+              {{ recommendations_heading }}
+            </h4>
+            <button-close-beside class="btn-reset button-close button-close-beside pointer hover-svg-zoom hidden block-1025">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" class="transition">
+                <use href="#icon-close" />
+              </svg>
+            </button-close-beside>
+          </minicart-recommendations-heading>
+        {%- endif -%}
+        <grid-custom
+          class="cart-upsell-wrapper flex gap flex-wrap custom-scrollbar"
+          data-mobile="1"
+          data-spacing="{{ settings.cart_drawer_recommend_gap | default: 12 }}"
+          data-section-id="cart-upsell-beside"
+        >
+          {%- if product_recommendations_type != 'auto' -%}
+            {%- for item in select_product_recommendations -%}
+              {% liquid
+                assign hidden = false
+                for itemcart in cart.items
+                  if itemcart.product_id == item.id
+                    assign hidden = true
+                  endif
+                endfor
+              %}
+              {% if hidden == false %}
+                <div class="cart-upsell-item w-full">
+                  {% render 'product-item',
+                    card_product: item,
+                    template_enable_price: true,
+                    template_enable_add_cart: true,
+                    template_enable_product_vendor: false,
+                    template_enable_rate: false,
+                    template_enable_product_short_description: false,
+                    template_enable_color_swatches: false,
+                    type: 'list'
+                  %}
+                </div>
+              {% endif %}
+            {%- endfor -%}
+          {%- endif -%}
+        </grid-custom>
+        {%- if product_recommendations_type == 'auto' -%}
+          </minicart-recommendations-beside>
+        {%- else -%}
+          </div>
+        {%- endif -%}
+      {% endif %}
+    {% endif %}
+    {%- comment -%}
+      Last in the scroll area and pushed to its bottom: directly above the
+      subtotal when the cart is short, scrolling with the items when it is long.
+    {%- endcomment -%}
+    {%- if drawer_parts and action_after_add_cart == 'open_drawer' -%}
+      {%- render 'cart-addons', part: 'row' -%}
+    {%- endif -%}
+  </div>
+  {% if drawer_parts %}
+    <div class="cart-footer{% if action_after_add_cart == 'show_popup' %} mt-30{% endif %}">
+    {%- if cart.items.size == 0 -%}
+      <p class="cart-editor-preview">Editor preview: shoppers see this once the cart has items.</p>
+    {%- endif -%}
+      {%- comment -%} Cart drawer addons rendered ABOVE the gray totals container {%- endcomment -%}
+      <div class="cart-drawer-addons-row px-30">
+        {%- render 'cart-drawer-addons', slot: 'above_subtotal' -%}
+      </div>
+      <div class="drawer-bottom cart__ctas px-30 pt-20 pb-30 grey-bg border-top">
+        {% if hidden_price == false %}
+          <div class="cart-summary {% if enable_rtl %}text-left{% else %}text-right{% endif %}" data-cart-summary>
+            <div data-discounts>
+              <ul class="cart-discounts list-unstyled fs-small primary-color" data-discounts-list>
+                {% unless cart.cart_level_discount_applications.size == 0 %}
+                  {% for discount in cart.cart_level_discount_applications %}
+                    <li>
+                      <span>
+                        {% if show_currency_code %}
+                          {{- discount.title | upcase }}&nbsp;(-
+                          {{- discount.total_allocated_amount | money_with_currency -}}
+                          )
+                        {% else %}
+                          {{- discount.title | upcase }}&nbsp;(-{{ discount.total_allocated_amount | money }})
+                        {% endif %}
+                      </span>
+                    </li>
+                  {% endfor %}
+                {% endunless %}
+              </ul>
+            </div>
+          </div>
+        {% endif %}
+        <div class="subtotal flex gap-10 justify-between align-center" data-cart-subtotal>
+          <h5 class="heading-color my-0">{{ 'general.cart.subtotal' | t }}</h5>
+          <span class="subtotal-price h5 my-5" data-cart-subtotal-price>
+            {% if show_currency_code %}
+              {{ cart.total_price | money_with_currency }}
+            {% else %}
+              {{ cart.total_price | money }}
+            {% endif %}
+          </span>
+        </div>
+        {%- if settings.enable_catalog_mode == false -%}
+          {%- if drawer_terms_enabled -%}
+            {%- liquid
+              assign drawer_terms_link_url = settings.cart_terms_link_url
+              if drawer_terms_link_url == blank and shop.terms_of_service.url != blank
+                assign drawer_terms_link_url = shop.terms_of_service.url
+              endif
+              assign drawer_terms_link_label = settings.cart_terms_link_label | default: 'terms & conditions'
+              assign drawer_terms_label = settings.cart_terms_label
+              if drawer_terms_label == blank
+                assign drawer_terms_label = 'I agree with the LINK'
+              endif
+              assign drawer_terms_label_html = drawer_terms_label | escape
+              if drawer_terms_link_url != blank
+                assign drawer_terms_link_html = '<a href="' | append: drawer_terms_link_url | append: '" class="underline" target="_blank" rel="noopener">' | append: drawer_terms_link_label | append: '</a>'
+              else
+                assign drawer_terms_link_html = drawer_terms_link_label
+              endif
+              assign drawer_terms_label_html = drawer_terms_label_html | replace: 'LINK', drawer_terms_link_html
+            -%}
+            <cart-terms class="cart-terms cart-terms--drawer block mt-15 mb-10">
+              <label class="cart-terms__field flex align-start gap-10 pointer">
+                <span class="cart-terms__box relative inline-block">
+                  <input
+                    type="checkbox"
+                    class="cart-terms__input"
+                    id="cart-terms-agree-drawer"
+                    name="cart-terms-agree-drawer"
+                    required
+                  >
+                  <span class="cart-terms__check" aria-hidden="true"></span>
+                </span>
+                <span class="cart-terms__text fs-small">{{ drawer_terms_label_html }}</span>
+              </label>
+            </cart-terms>
+          {%- endif -%}
+          {%- render 'cart-drawer-addons', slot: 'above_checkout' -%}
+          {%- assign drawer_buttons = settings.cart_drawer_buttons | default: 'both' -%}
+          {%- if drawer_buttons == 'continue_shopping' or drawer_buttons == 'checkout_continue' -%}
+          <button type="button" class="action mb-10 btn-outline w-full text-center close-cart materia-continue-shopping">
+            <span>{{ 'general.continue_shopping' | t }}</span>
+          </button>
+          {%- endif -%}
+          {%- if drawer_buttons == 'both' or drawer_buttons == 'view_cart' -%}
+          <a
+            class="action block mb-10{% unless drawer_terms_enabled %} mt-17{% endunless %} btn-outline w-full text-center no-underline viewcart"
+            href="{{ routes.cart_url }}"
+          >
+            <span>{{ 'general.cart.viewcart' | t }}</span>
+          </a>
+          {%- endif -%}
+          {%- if drawer_buttons == 'both' or drawer_buttons == 'checkout' or drawer_buttons == 'checkout_continue' -%}
+          <button
+            type="submit"
+            class="btn-primary w-full btn-checkout"
+            name="checkout"
+            form="minicart"
+            {% if drawer_terms_enabled %}data-requires-terms="drawer" aria-disabled="true" disabled{% endif %}
+          >
+            <span>{{ 'general.cart.checkout' | t }}</span>
+          </button>
+          {%- endif -%}
+          {%- render 'cart-drawer-addons', slot: 'below_checkout' -%}
+        {%- endif -%}
+      </div>
+    </div>
+  {% endif %}
+</div>
+</template>

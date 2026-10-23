@@ -1,0 +1,331 @@
+<template compat="shopify">
+{%- comment -%}
+  ═══════════════════════════════════════════════════════════════════════
+  WEBSITE INTRO — full-screen branded splash screen
+  ═══════════════════════════════════════════════════════════════════════
+  A configurable intro animation that overlays the storefront while the
+  page loads. Settings live in General Theme Settings → "Website Intro".
+
+  Behaviour modes (settings.intro_behavior):
+    • first_access   — show once per browser (localStorage flag)
+    • every_page     — show on every page load
+    • always_testing — show every time (testing mode, default)
+    • once_per_day   — localStorage timestamp, suppress for 24h
+  `intro_first_load_only` is a legacy alias for "first_access" — if set,
+  it overrides whatever behavior is configured.
+
+  Visuals:
+    • Background: solid colour OR uploaded image (with brightness/blur)
+    • Logo: optional uploaded image with 5 animation styles
+    • Loading text above the bar (optional)
+    • Loading bar in 3 styles, custom colours, optional white glow
+
+  The intro auto-dismisses after `intro_duration` seconds. After fade-out
+  the overlay element is removed from the DOM so no layout cost remains.
+{%- endcomment -%}
+{%- if settings.enable_intro and request.design_mode != true -%}
+  {%- comment -%}
+    Logo source priority:
+      1. settings.intro_logo (custom intro logo) — if uploaded.
+      2. settings.logo (theme main logo) — if `intro_use_theme_logo`
+         is on (default ON, so the store's logo shows automatically).
+      3. None — the intro renders text + bar only.
+    We compute `logo_url` as a plain string up here so the markup
+    below can render with a flat <img src="..."> — no chained filters,
+    no Liquid parse ambiguity. `logo_alt` is pre-escaped likewise.
+  {%- endcomment -%}
+  {%- liquid
+    assign intro_duration = settings.intro_duration | default: 4
+    assign behavior = settings.intro_behavior | default: 'always_testing'
+    if settings.intro_first_load_only
+      assign behavior = 'first_access'
+    endif
+    assign use_bg_color = settings.intro_use_bg_color
+    assign bg_color = settings.intro_bg_color | default: '#000000'
+    assign bg_image = settings.intro_bg_image
+    assign bg_brightness = settings.intro_bg_brightness | default: 100
+    assign bg_blur = settings.intro_bg_blur | default: 0
+    assign logo = settings.intro_logo
+    if logo == blank and settings.intro_use_theme_logo
+      assign logo = settings.logo
+    endif
+    assign logo_url = ''
+    if logo != blank
+      assign logo_url = logo | image_url: width: 600
+    endif
+    assign logo_alt = shop.name | escape
+    assign logo_size = settings.intro_logo_size | default: 170
+    assign logo_anim = settings.intro_logo_animation | default: 'outline_glow'
+    assign show_text = settings.intro_show_text
+    assign intro_text = settings.intro_text | default: 'Welcome'
+    assign text_color = settings.intro_text_color | default: '#FFFFFF'
+    assign text_size = settings.intro_text_size | default: 20
+    assign bar_style = settings.intro_bar_style | default: 'style2'
+    assign bar_unfilled = settings.intro_bar_unfilled | default: '#383838'
+    assign bar_filled = settings.intro_bar_filled | default: '#FCFCFC'
+    assign bar_glow = settings.intro_bar_glow
+  -%}
+  <website-intro
+    class="website-intro website-intro--logo-{{ logo_anim }} website-intro--bar-{{ bar_style }}{% if bar_glow %} website-intro--bar-glow{% endif %}"
+    data-duration="{{ intro_duration }}"
+    data-behavior="{{ behavior }}"
+    style="
+      --wi-bg-color: {{ bg_color }};
+      --wi-bg-brightness: {{ bg_brightness }}%;
+      --wi-bg-blur: {{ bg_blur }}px;
+      --wi-logo-size: {{ logo_size }}px;
+      --wi-text-color: {{ text_color }};
+      --wi-text-size: {{ text_size }}px;
+      --wi-bar-unfilled: {{ bar_unfilled }};
+      --wi-bar-filled: {{ bar_filled }};
+      --wi-duration: {{ intro_duration }}s;
+    "
+    aria-hidden="true">
+    {%- if bg_image and use_bg_color != true -%}
+      <div class="website-intro__bg website-intro__bg--image"
+           style="background-image: url('{{ bg_image | image_url: width: 2000 }}');"></div>
+    {%- else -%}
+      <div class="website-intro__bg website-intro__bg--color"></div>
+    {%- endif -%}
+    <div class="website-intro__content">
+      {%- if logo_url != blank -%}
+        <div class="website-intro__logo-wrap">
+          {%- comment -%}
+            Plain <img> with the URL precomputed into a string — every
+            attribute is a flat value, no chained filters, no Liquid
+            parse ambiguity. This is the bare-metal form that can't
+            produce the "wrong number of arguments" error under any
+            Shopify version.
+          {%- endcomment -%}
+          <img src="{{ logo_url }}"
+               class="website-intro__logo"
+               alt="{{ logo_alt }}"
+               loading="eager">
+        </div>
+      {%- endif -%}
+      {%- if show_text -%}
+        <p class="website-intro__text">{{ intro_text | escape }}</p>
+      {%- endif -%}
+      <div class="website-intro__bar" role="progressbar" aria-label="{{ 'accessibility.loading' | t | default: 'Loading' }}">
+        <span class="website-intro__bar-fill"></span>
+      </div>
+    </div>
+  </website-intro>
+  <style>
+    /* Block scroll while the intro is up so nothing peeks behind the
+       overlay during a slow page paint. The class is removed in JS
+       when the intro dismisses. */
+    html.website-intro-active, html.website-intro-active body {
+      overflow: hidden !important;
+    }
+    website-intro {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 1;
+      transition: opacity .6s cubic-bezier(.4, 0, .2, 1);
+      pointer-events: auto;
+      font-family: var(--body-font, inherit);
+    }
+    website-intro.is-hiding { opacity: 0; pointer-events: none; }
+    website-intro .website-intro__bg {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+    }
+    website-intro .website-intro__bg--color { background: var(--wi-bg-color); }
+    website-intro .website-intro__bg--image {
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      filter: brightness(var(--wi-bg-brightness)) blur(var(--wi-bg-blur));
+    }
+    website-intro .website-intro__content {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 28px;
+      padding: 32px;
+      max-width: 90vw;
+    }
+
+    /* Logo + animations */
+    website-intro .website-intro__logo-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: var(--wi-logo-size);
+      height: var(--wi-logo-size);
+    }
+    website-intro .website-intro__logo {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    website-intro.website-intro--logo-outline_glow .website-intro__logo-wrap {
+      animation: wi-outline-glow 2.4s ease-in-out infinite;
+      filter: drop-shadow(0 0 0 transparent);
+    }
+    @keyframes wi-outline-glow {
+      0%, 100% { filter: drop-shadow(0 0 4px rgba(255, 255, 255, .15)) drop-shadow(0 0 0 rgba(255, 255, 255, 0)); }
+      50%      { filter: drop-shadow(0 0 16px rgba(255, 255, 255, .8))  drop-shadow(0 0 32px rgba(255, 255, 255, .35)); }
+    }
+    website-intro.website-intro--logo-fade_in .website-intro__logo {
+      animation: wi-fade-in 1.6s ease-out 1 both;
+    }
+    @keyframes wi-fade-in {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    website-intro.website-intro--logo-scale_in .website-intro__logo {
+      animation: wi-scale-in 1.6s cubic-bezier(.34, 1.56, .64, 1) 1 both;
+    }
+    @keyframes wi-scale-in {
+      from { opacity: 0; transform: scale(.7); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    website-intro.website-intro--logo-float .website-intro__logo-wrap {
+      animation: wi-float 2.8s ease-in-out infinite;
+    }
+    @keyframes wi-float {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-12px); }
+    }
+
+    /* Loading text */
+    website-intro .website-intro__text {
+      margin: 0;
+      color: var(--wi-text-color);
+      font-size: var(--wi-text-size);
+      letter-spacing: .04em;
+      text-align: center;
+      line-height: 1.3;
+      animation: wi-fade-in .8s ease-out 1 both;
+    }
+
+    /* Loading bar */
+    website-intro .website-intro__bar {
+      position: relative;
+      width: min(380px, 60vw);
+      height: 6px;
+      background: var(--wi-bar-unfilled);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    website-intro .website-intro__bar-fill {
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 0%;
+      background: var(--wi-bar-filled);
+      border-radius: 999px;
+      animation: wi-bar-fill var(--wi-duration, 4s) cubic-bezier(.4, 0, .2, 1) 1 forwards;
+    }
+    @keyframes wi-bar-fill {
+      from { width: 0%; }
+      to   { width: 100%; }
+    }
+    website-intro.website-intro--bar-style2 .website-intro__bar-fill {
+      animation:
+        wi-bar-fill var(--wi-duration, 4s) cubic-bezier(.4, 0, .2, 1) 1 forwards,
+        wi-bar-pulse 1.3s ease-in-out infinite;
+    }
+    @keyframes wi-bar-pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: .65; }
+    }
+    website-intro.website-intro--bar-style3 .website-intro__bar {
+      background: var(--wi-bar-unfilled);
+    }
+    website-intro.website-intro--bar-style3 .website-intro__bar-fill {
+      background:
+        repeating-linear-gradient(
+          45deg,
+          var(--wi-bar-filled) 0 10px,
+          color-mix(in srgb, var(--wi-bar-filled) 65%, transparent) 10px 20px
+        );
+      animation:
+        wi-bar-fill var(--wi-duration, 4s) cubic-bezier(.4, 0, .2, 1) 1 forwards,
+        wi-bar-shimmer 1s linear infinite;
+    }
+    @keyframes wi-bar-shimmer {
+      from { background-position: 0 0; }
+      to   { background-position: 40px 0; }
+    }
+    website-intro.website-intro--bar-glow .website-intro__bar-fill {
+      box-shadow: 0 0 12px 1px color-mix(in srgb, var(--wi-bar-filled) 80%, transparent);
+    }
+
+    @media (prefers-reduced-motion: reduce){
+      website-intro,
+      website-intro * { animation: none !important; transition: opacity .3s ease !important; }
+      website-intro .website-intro__bar-fill { width: 100%; }
+    }
+{% comment %}{% endcomment %}  </style>
+  <script>
+  (function(){
+    if (window.__websiteIntroInit) return;
+    window.__websiteIntroInit = true;
+
+    var intro = document.querySelector('website-intro');
+    if (!intro) return;
+
+    var duration  = parseFloat(intro.dataset.duration || '4') * 1000;
+    var behavior  = intro.dataset.behavior || 'always_testing';
+    var STORAGE_FIRST = 'materia_intro_first_access';
+    var STORAGE_DAY   = 'materia_intro_last_shown';
+
+    /* Behaviour gate — decide whether to show the intro at all. */
+    var shouldShow = true;
+    try {
+      if (behavior === 'first_access') {
+        if (localStorage.getItem(STORAGE_FIRST)) shouldShow = false;
+        else localStorage.setItem(STORAGE_FIRST, String(Date.now()));
+      } else if (behavior === 'once_per_day') {
+        var last = parseInt(localStorage.getItem(STORAGE_DAY) || '0', 10);
+        var DAY = 24 * 60 * 60 * 1000;
+        if (last && Date.now() - last < DAY) shouldShow = false;
+        else localStorage.setItem(STORAGE_DAY, String(Date.now()));
+      }
+      /* 'every_page' and 'always_testing' both fall through → show. */
+    } catch (_) { /* localStorage blocked — fail open, always show. */ }
+
+    if (!shouldShow) {
+      intro.remove();
+      return;
+    }
+
+    /* Lock scroll while the intro is visible. */
+    document.documentElement.classList.add('website-intro-active');
+
+    function dismiss(){
+      intro.classList.add('is-hiding');
+      document.documentElement.classList.remove('website-intro-active');
+      setTimeout(function(){
+        try { intro.remove(); } catch (_) {}
+      }, 600);
+    }
+
+    /* Primary dismissal — after the configured duration. */
+    var timer = setTimeout(dismiss, duration);
+
+    /* Safety dismissal — if the user starts interacting (click /
+       keypress), drop the intro early so they're never stuck. */
+    function onUserGesture(){
+      clearTimeout(timer);
+      dismiss();
+      document.removeEventListener('keydown', onUserGesture);
+      document.removeEventListener('click', onUserGesture, true);
+    }
+    document.addEventListener('keydown', onUserGesture);
+    document.addEventListener('click', onUserGesture, true);
+  })();
+{% comment %}{% endcomment %}  </script>
+{%- endif -%}
+
+</template>

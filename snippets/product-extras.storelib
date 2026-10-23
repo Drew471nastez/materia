@@ -1,0 +1,344 @@
+<template compat="shopify">
+{%- comment -%}
+  Materia Themes — extracted helper styles + scripts for main-product blocks.
+  Pass `mode` to render the desired feature.
+{%- endcomment -%}
+
+{%- if mode == 'nav_dots' -%}
+<style>
+@media (max-width: 749px) {
+  /* Hide native pagination + numeric fraction on mobile */
+  #MainProduct-{{ section_id }} .product-detail__media .swiper-pagination-fraction,
+  #MainProduct-{{ section_id }} .product-detail__media .swiper-pagination { display: none !important; }
+  /* Custom dot row — sits BELOW the image, no pill background, clean dots */
+  #MainProduct-{{ section_id }} .nav-dots-row {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 14px 0 4px;
+    width: 100%;
+  }
+  #MainProduct-{{ section_id }} .nav-dots-row .nav-dot {
+    width: 7px; height: 7px; margin: 0; padding: 0;
+    background: var(--color-text, #111); opacity: 0.18;
+    border-radius: 999px; border: 0;
+    transition: width .28s cubic-bezier(0.22,0.61,0.36,1), opacity .28s ease;
+    cursor: pointer;
+    flex: 0 0 auto;
+  }
+  #MainProduct-{{ section_id }} .nav-dots-row .nav-dot.is-active {
+    width: 22px; opacity: 1;
+  }
+}
+@media (min-width: 750px) {
+  #MainProduct-{{ section_id }} .nav-dots-row { display: none !important; }
+}
+{% comment %}{% endcomment %}</style>
+<script>
+(function() {
+  function init() {
+    var sec = document.getElementById('MainProduct-{{ section_id }}');
+    if (!sec) return;
+    /* Find the media column regardless of desktop layout. */
+    var mediaCol =
+      sec.querySelector('.product-detail__media') ||
+      sec.querySelector('.product__media') ||
+      sec.querySelector('.product__media-wrapper') ||
+      sec.querySelector('.product-detail__media-wrapper') ||
+      sec.querySelector('[class*="media"]') ||
+      sec;
+    /* Try to find a swiper instance first (Thumbnail layouts use it). */
+    var allSwipers = mediaCol.querySelectorAll('slide-section, .swiper');
+    var swiperEl = null;
+    for (var k = 0; k < allSwipers.length; k++) {
+      var sw = allSwipers[k];
+      if (sw.closest('.thumbnail-slide')) continue;
+      if (sw.classList.contains('thumbnail-slide')) continue;
+      swiperEl = sw; break;
+    }
+    /* Stack/Grid layouts may not have a swiper at all — fall back to
+       scroll-snap tracking of the actual image elements in the column. */
+    if (!swiperEl) {
+      initScrollMode(sec, mediaCol);
+      return;
+    }
+    var allSlides = swiperEl.querySelectorAll('.swiper-slide');
+    /* Filter out duplicate slides from loop mode + thumbnail slides. */
+    var realSlides = [];
+    allSlides.forEach(function(s) {
+      if (s.classList.contains('swiper-slide-duplicate')) return;
+      if (s.closest('.thumbnail-slide')) return;
+      realSlides.push(s);
+    });
+    var n = realSlides.length;
+    if (n < 2) return;
+    if (sec.querySelector('.nav-dots-row')) return;
+    var row = document.createElement('div');
+    row.className = 'nav-dots-row';
+    for (var i = 0; i < n; i++) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'nav-dot' + (i === 0 ? ' is-active' : '');
+      b.setAttribute('aria-label', 'Go to image ' + (i + 1));
+      b.dataset.index = String(i);
+      row.appendChild(b);
+    }
+    /* Insert AFTER the swiper, below the product image. */
+    if (swiperEl.parentNode) swiperEl.parentNode.insertBefore(row, swiperEl.nextSibling);
+    else mediaCol.appendChild(row);
+    var getSwiper = function() {
+      return swiperEl.swiper || swiperEl.globalSlide || null;
+    };
+    var setActive = function(idx) {
+      row.querySelectorAll('.nav-dot').forEach(function(d, i) { d.classList.toggle('is-active', i === idx); });
+    };
+    row.addEventListener('click', function(e) {
+      var t = e.target.closest('.nav-dot'); if (!t) return;
+      var idx = parseInt(t.dataset.index, 10) || 0;
+      setActive(idx);
+      var sw = getSwiper();
+      if (sw && typeof sw.slideTo === 'function') sw.slideTo(idx);
+    });
+    /* Try to attach a slideChange listener (preferred path). */
+    var attach = function(sw) {
+      if (sw && sw.on) {
+        sw.on('slideChange', function() {
+          var idx = (sw.realIndex !== undefined ? sw.realIndex : sw.activeIndex) || 0;
+          setActive(idx);
+        });
+      }
+    };
+    var attached = false;
+    var attachPoll = setInterval(function() {
+      var sw = getSwiper();
+      if (sw && !attached) { attached = true; clearInterval(attachPoll); attach(sw); }
+    }, 200);
+    setTimeout(function() { clearInterval(attachPoll); }, 10000);
+
+    /* Index polling fallback — guarantees the dots stay in sync even when
+       slideChange doesn't fire (e.g. swipes on some swiper versions, or when
+       slide transitions are interrupted). Cheap operation, runs every 250ms. */
+    var lastIdx = 0;
+    setInterval(function() {
+      var sw = getSwiper(); if (!sw) return;
+      var idx = (sw.realIndex !== undefined ? sw.realIndex : sw.activeIndex) || 0;
+      if (idx !== lastIdx) { lastIdx = idx; setActive(idx); }
+    }, 250);
+  }
+  /* Scroll-mode fallback for Stack / Grid layouts that don't use a swiper.
+     Tracks which product image is currently in view and updates the active
+     dot. Clicking a dot scrolls the image into view smoothly. */
+  function initScrollMode(sec, mediaCol) {
+    if (sec.querySelector('.nav-dots-row')) return;
+    /* Find all "real" product images — broad selector that excludes
+       thumbnails / nested swatches / loading placeholders. */
+    var rawImages = mediaCol.querySelectorAll('img');
+    var seen = []; var seenSrc = {};
+    for (var i = 0; i < rawImages.length; i++) {
+      var img = rawImages[i];
+      if (img.closest('.thumbnail-slide')) continue;
+      if (img.closest('.product__color-swatch')) continue;
+      if (img.closest('button-wishlist')) continue;
+      if (img.closest('[data-thumbnail]')) continue;
+      if (img.closest('.cart-item')) continue;
+      if (img.closest('.product-form__quantity')) continue;
+      /* Skip tiny icon-sized images (less than 100px wide intrinsic) */
+      if (img.naturalWidth && img.naturalWidth < 100) continue;
+      var key = img.currentSrc || img.src || ('idx' + i);
+      if (seenSrc[key]) continue;
+      seenSrc[key] = true; seen.push(img);
+    }
+    if (seen.length < 2) return;
+    var row = document.createElement('div');
+    row.className = 'nav-dots-row';
+    for (var j = 0; j < seen.length; j++) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'nav-dot' + (j === 0 ? ' is-active' : '');
+      b.setAttribute('aria-label', 'Go to image ' + (j + 1));
+      b.dataset.index = String(j);
+      row.appendChild(b);
+    }
+    /* Place the dots BELOW the media column. */
+    if (mediaCol.parentNode) {
+      mediaCol.appendChild(row);
+    }
+    var setActive = function(idx) {
+      row.querySelectorAll('.nav-dot').forEach(function(d, i) { d.classList.toggle('is-active', i === idx); });
+    };
+    row.addEventListener('click', function(e) {
+      var t = e.target.closest('.nav-dot'); if (!t) return;
+      var idx = parseInt(t.dataset.index, 10) || 0;
+      setActive(idx);
+      var target = seen[idx];
+      if (target && typeof target.scrollIntoView === 'function') {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+    if ('IntersectionObserver' in window) {
+      var io = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (!entry.isIntersecting) return;
+          var idx = seen.indexOf(entry.target);
+          if (idx >= 0) setActive(idx);
+        });
+      }, { threshold: 0.55 });
+      seen.forEach(function(img) { io.observe(img); });
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+  setTimeout(init, 400);
+  setTimeout(init, 1000);
+})();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+
+{%- if mode == 'mobile_slides' -%}
+<script>
+(function() {
+  function apply() {
+    if (window.innerWidth >= 750) return;
+    var sec = document.getElementById('MainProduct-{{ section_id }}');
+    if (!sec) return;
+    var swiperEl = sec.querySelector('.product-detail__media .swiper, .product-detail__media slide-section');
+    if (!swiperEl) return;
+    var sw = swiperEl.swiper;
+    if (!sw) return setTimeout(apply, 200);
+    try {
+      sw.params.slidesPerView = {{ slides_per_view }};
+      sw.params.spaceBetween = 8;
+      sw.update();
+    } catch (e) {}
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
+  else apply();
+  setTimeout(apply, 800);
+  window.addEventListener('resize', apply);
+})();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+
+{%- if mode == 'buy_colors' -%}
+{%- comment -%}
+  When the merchant turns on "Enable custom colors" in the buy buttons
+  block, the colours apply to BOTH the in-section Add to Cart / Buy Now
+  AND the matching buttons in the sticky bar — they share the
+  `.product-detail__buy-buttons` wrapper class so a single rule covers
+  both. The hard-paint rules in `snippets/main-product-scheme-paint.liquid`
+  are conditional on the buy-buttons block NOT being active, so the
+  custom colours win cleanly.
+{%- endcomment -%}
+{%- comment -%}
+  Scope: main-product wraps content in id="MainProduct-{id}" but
+  featured-product (via product-single-layout) does NOT — only Shopify's
+  auto wrapper #shopify-section-{id} exists there. :is() keeps specificity
+  identical (ID = 1,0,0) while matching both sections.
+{%- endcomment -%}
+{%- capture scope -%}:is(#MainProduct-{{ section_id }}, #shopify-section-{{ section_id }}){%- endcapture -%}
+<style>
+{{ scope }} .product-detail__buy-buttons .btn-primary,
+{{ scope }} .product-detail__buy-buttons .product-form__submit {
+  transition: background-color .25s ease, color .25s ease, border-color .25s ease, transform .2s ease !important;
+}
+{%- if atc_bg != blank -%}
+{{ scope }} .product-detail__buy-buttons .btn-primary,
+{{ scope }} .product-detail__buy-buttons .product-form__submit {
+  background: {{ atc_bg }} !important; border-color: {{ atc_bg }} !important;
+}
+{%- endif -%}
+{%- if atc_text != blank -%}
+{%- comment -%}
+  Also target descendants (`* `, `span`) — the global rule in
+  theme.liquid pins `.btn-primary * { color: var(--btn-primary-color) }`
+  so the inner span text overrides whatever we set on the button
+  unless we explicitly target `.btn-primary *` here too.
+{%- endcomment -%}
+{{ scope }} .product-detail__buy-buttons .btn-primary,
+{{ scope }} .product-detail__buy-buttons .btn-primary *,
+{{ scope }} .product-detail__buy-buttons .product-form__submit,
+{{ scope }} .product-detail__buy-buttons .product-form__submit * { color: {{ atc_text }} !important; }
+{%- endif -%}
+{%- if atc_hover_bg != blank -%}
+{{ scope }} .product-detail__buy-buttons .btn-primary:hover,
+{{ scope }} .product-detail__buy-buttons .product-form__submit:hover {
+  background: {{ atc_hover_bg }} !important; border-color: {{ atc_hover_bg }} !important;
+}
+{%- endif -%}
+{%- if atc_hover_text != blank -%}
+{{ scope }} .product-detail__buy-buttons .btn-primary:hover,
+{{ scope }} .product-detail__buy-buttons .btn-primary:hover *,
+{{ scope }} .product-detail__buy-buttons .product-form__submit:hover,
+{{ scope }} .product-detail__buy-buttons .product-form__submit:hover * { color: {{ atc_hover_text }} !important; }
+{%- endif -%}
+{%- if buy_bg != blank -%}
+{{ scope }} .product-detail__buy-buttons .shopify-payment-button__button,
+{{ scope }} .product-detail__buy-buttons .shopify-payment-button__button--unbranded {
+  background: {{ buy_bg }} !important; border-color: {{ buy_bg }} !important;
+  transition: background-color .25s ease, color .25s ease, border-color .25s ease, transform .2s ease !important;
+}
+{%- endif -%}
+{%- if buy_text != blank -%}
+{{ scope }} .product-detail__buy-buttons .shopify-payment-button__button,
+{{ scope }} .product-detail__buy-buttons .shopify-payment-button__button *,
+{{ scope }} .product-detail__buy-buttons .shopify-payment-button__button--unbranded,
+{{ scope }} .product-detail__buy-buttons .shopify-payment-button__button--unbranded * { color: {{ buy_text }} !important; }
+{%- endif -%}
+{%- if buy_hover_bg != blank -%}
+{{ scope }} .product-detail__buy-buttons .shopify-payment-button__button:hover,
+{{ scope }} .product-detail__buy-buttons .shopify-payment-button__button--unbranded:hover {
+  background: {{ buy_hover_bg }} !important; border-color: {{ buy_hover_bg }} !important;
+}
+{%- endif -%}
+{%- if buy_hover_text != blank -%}
+{{ scope }} .product-detail__buy-buttons .shopify-payment-button__button:hover,
+{{ scope }} .product-detail__buy-buttons .shopify-payment-button__button:hover *,
+{{ scope }} .product-detail__buy-buttons .shopify-payment-button__button--unbranded:hover,
+{{ scope }} .product-detail__buy-buttons .shopify-payment-button__button--unbranded:hover * { color: {{ buy_hover_text }} !important; }
+{%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- endif -%}
+
+{%- if mode == 'badge_inline' -%}
+<style>
+/* Minimal, non-destructive: turn the price wrapper into an inline-flex row
+   so the badge sits next to the price text. No padding/margin resets on
+   the badge itself — those would deform the badge pill. Just align-items
+   center on the wrapper does the heavy lifting; baseline alignment of
+   text + badge is handled by the natural flex centering. */
+#MainProduct-{{ section_id }} .product-detail__information #price-{{ section_id }}.has-inline-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: auto;
+  max-width: 100%;
+}
+#MainProduct-{{ section_id }} .product-detail__information #price-{{ section_id }}.has-inline-badge .sale_badge--next-to-price {
+  flex: 0 0 auto;
+  margin: 0 !important;
+  align-self: center;
+}
+{% comment %}{% endcomment %}</style>
+<script>
+(function() {
+  var move = function() {
+    var badge = document.querySelector('#MainProduct-{{ section_id }} .product-detail__information .sale_badge[data-block-id="{{ block_id }}"]');
+    var priceWrap = document.querySelector('#MainProduct-{{ section_id }} .product-detail__information #price-{{ section_id }}');
+    if (!badge || !priceWrap) return;
+    if (priceWrap.contains(badge)) return;
+    priceWrap.classList.add('has-inline-badge');
+    priceWrap.appendChild(badge);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', move);
+  else move();
+  document.addEventListener('variant:change', move);
+  var n = 0; var i = setInterval(function(){ move(); if (++n >= 20) clearInterval(i); }, 150);
+})();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+
+</template>
