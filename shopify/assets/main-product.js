@@ -263,7 +263,14 @@ customElements.define("sold-product", SoldProduct);
     apply();
   }
   if ("MutationObserver" in window) {
-    const mo = new MutationObserver(() => apply());
+    // At most once a frame: this ran two document-wide queries on every DOM
+    // change anywhere on the page (timers, sliders, the cart drawer).
+    let queued = false;
+    const mo = new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; apply(); });
+    });
     mo.observe(document.documentElement, { subtree: true, childList: true });
   }
   document.addEventListener("variant:change", apply);

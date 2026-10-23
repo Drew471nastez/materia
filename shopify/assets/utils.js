@@ -50,6 +50,11 @@ const PUB_SUB_EVENTS = {
 let subscribers = {};
 var root = document.body;
 
+// The helpers below hang off a global `Shopify` object. Make sure it exists so
+// a page without it does not stop this file before getScrollBarWidth,
+// subscribe/publish and formatMoney are defined (theme.js relies on them).
+window.Shopify = window.Shopify || {};
+
 Shopify.bind = function (fn, scope) {
   return function () {
     return fn.apply(scope, arguments);
@@ -290,9 +295,16 @@ function initLazyloadItem() {
 initLazyloadItem();
 
 function initLazyload() {
+  // Passive and at most once a frame: this used to query the whole document on
+  // every scroll event.
+  let lazyFrame = 0;
   window.addEventListener("scroll", () => {
-    scrollLazyload();
-  });
+    if (lazyFrame) return;
+    lazyFrame = requestAnimationFrame(() => {
+      lazyFrame = 0;
+      scrollLazyload();
+    });
+  }, { passive: true });
   let pos = window.pageYOffset;
   if (pos > 40) {
     scrollLazyload();

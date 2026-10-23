@@ -2,6 +2,32 @@
 "use-strict";
 import "./cart-components.js";
 
+// Motion.animate when motion.min.js has loaded; otherwise jump straight to the
+// final values so menus and search still open (and their .then still runs)
+// instead of throwing halfway with the page already scroll-locked.
+function motionAnimate(el, keyframes, options) {
+  try {
+    if (window.Motion && typeof window.Motion.animate === "function") {
+      return window.Motion.animate(el, keyframes, options);
+    }
+  } catch (e) { console.error("[theme] animate", e); }
+  const list = !el ? [] : (el.length !== undefined && !el.style) ? Array.from(el) : [el];
+  list.forEach((node) => {
+    if (!node || !node.style) return;
+    Object.keys(keyframes || {}).forEach((key) => {
+      let value = keyframes[key];
+      if (Array.isArray(value)) value = value[value.length - 1];
+      if (key === "y" || key === "x") {
+        const unit = typeof value === "number" ? `${value}px` : value;
+        node.style.transform = key === "y" ? `translateY(${unit})` : `translateX(${unit})`;
+      } else {
+        node.style[key] = value;
+      }
+    });
+  });
+  return Promise.resolve();
+}
+
 function initComparisons() {
   var x, i;
   x = document.getElementsByClassName("img-comp-overlay");
@@ -65,7 +91,7 @@ function initComparisons() {
   }
 }
 
-initComparisons();
+try { initComparisons(); } catch (e) { console.error("[theme] comparisons init", e); }
 let resizeTimeout;
 window.addEventListener("resize", () => {
   clearTimeout(resizeTimeout);
@@ -159,7 +185,7 @@ function initializeLazyLoad() {
   };
   lazyLoadVideos();
 }
-initializeLazyLoad();
+try { initializeLazyLoad(); } catch (e) { console.error("[theme] lazy video init", e); }
 
 const slideAnime = (() => {
   let isAnimating = false;
@@ -403,7 +429,7 @@ var wishlistHeader = (function () {
     },
   };
 })();
-wishlistHeader.init();
+try { wishlistHeader.init(); } catch (e) { console.error("[theme] wishlist init", e); }
 
 function HoverIntent(exitTime, elements, userConfig) {
   const defaultOptions = {
@@ -592,7 +618,7 @@ let BlsMainMenuShopify = (function () {
       const innerRect = targetItem.getBoundingClientRect();
       const heightScrollDown = outerRect.bottom - innerRect.bottom;
 
-      Motion.animate(
+      motionAnimate(
         submenu,
         {
           y: ["-105%", heightScrollDown],
@@ -625,7 +651,7 @@ let BlsMainMenuShopify = (function () {
       let topCaculate = sf.getBoundingClientRect().bottom + 10;
 
       Promise.all([
-        Motion.animate(
+        motionAnimate(
           ps,
           {
             y: [topCaculate, "-105%"],
@@ -636,7 +662,7 @@ let BlsMainMenuShopify = (function () {
             duration: 0.2,
           }
         ),
-        Motion.animate(
+        motionAnimate(
           overlay_search,
           {
             opacity: [1, 0],
@@ -661,7 +687,7 @@ let BlsMainMenuShopify = (function () {
           }
 
           // Show submenu with animation
-          Motion.animate(
+          motionAnimate(
             submenu,
             {
               y: ["-105%", sectionPbValue],
@@ -693,7 +719,7 @@ let BlsMainMenuShopify = (function () {
         header.classList.remove("open-submenu");
       }
 
-      Motion.animate(
+      motionAnimate(
         submenu,
         {
           y: [heightScrollDown, "-105%"],
@@ -1035,9 +1061,22 @@ let BlsMainMenuShopify = (function () {
     },
   };
 })();
-BlsMainMenuShopify.init();
+// One failing init must not stop the rest of this module (search, cart,
+// quantity inputs and every custom element defined further down).
+try { BlsMainMenuShopify.init(); } catch (e) { console.error("[theme] menu init", e); }
 
 // Re-initialize header behaviors after Theme Editor reloads the section
+document.addEventListener("storelib:section-load", (event) => {
+  const section = event.target;
+  if (!section || section.nodeType !== 1 || !section.querySelector("header.header[data-sticky]")) return;
+  // The redrawn header has no open menu or search; the cart drawer is not part
+  // of it and keeps its own state.
+  const html = document.documentElement;
+  html.classList.remove("nav-open", "open-search", "nav-verticalmenu");
+  if (!document.querySelector("#minicart_wrapper .minicart__wrapper.open")) html.classList.remove("open-drawer", "open-minicart");
+  try { BlsMainMenuShopify.init(); } catch (e) {}
+  try { BlsSearchShopify && BlsSearchShopify.init && BlsSearchShopify.init(); } catch (e) {}
+});
 document.addEventListener("shopify:section:load", (event) => {
   const section = event.target;
   if (!section || !section.classList || !section.classList.contains("section-header")) return;
@@ -1071,10 +1110,12 @@ var BlsSearchShopify = (function () {
       if (predictive) {
         this.setupEventListeners();
       }
-      const form = document.querySelector("#search-form");
       document.querySelectorAll(".top-search-toggle").forEach((navToggle) => {
         navToggle.onclick = (e) => {
           const target = e.currentTarget;
+          // Looked up on click: the form may be redrawn after init.
+          const form = document.querySelector("#search-form");
+          if (!form) return;
           if (!form.classList.contains("open")) {
             form.classList.add("open");
             target.classList.add("open");
@@ -1082,18 +1123,16 @@ var BlsSearchShopify = (function () {
               "open-drawer",
               "open-search"
             );
-            root.style.setProperty(
-              "padding-right",
-              getScrollBarWidth.init() + "px"
-            );
             setTimeout(function () {
-              form.querySelector('input[type="search"]').focus();
+              form.querySelector('input[type="search"]')?.focus();
             }, 100);
           } else {
             form.classList.remove("open");
             target.classList.remove("open");
             setTimeout(() => {
-              document.documentElement.classList.remove("open-drawer");
+              const html = document.documentElement;
+              if (html.classList.contains("open-search") || html.classList.contains("open-minicart")) return;
+              html.classList.remove("open-drawer");
               root.style.removeProperty("padding-right");
             }, 300);
 
@@ -1103,6 +1142,7 @@ var BlsSearchShopify = (function () {
       });
       document.querySelectorAll(".btn-search-close").forEach((navToggle) => {
         navToggle.onclick = () => {
+          const form = document.querySelector("#search-form");
           if (form) {
             form.classList.remove("open");
           }
@@ -1111,7 +1151,10 @@ var BlsSearchShopify = (function () {
             ?.classList.remove("open");
           document.documentElement.classList.remove("open-search");
           setTimeout(() => {
-            document.documentElement.classList.remove("open-drawer");
+            const html = document.documentElement;
+            // Keep the lock if the search or the cart was opened meanwhile.
+            if (html.classList.contains("open-search") || html.classList.contains("open-minicart")) return;
+            html.classList.remove("open-drawer");
             root.style.removeProperty("padding-right");
           }, 300);
         };
@@ -1192,6 +1235,11 @@ var BlsSearchShopify = (function () {
       }
     },
     openDefaultSearch: function () {
+      // Check everything this needs before touching the header or locking the
+      // page, and ignore a second click while the panel is still sliding in.
+      if (!document.querySelector(".overlay_search") || !document.querySelector(".popup-search")) return;
+      if (this._searchOpening && Date.now() - this._searchOpening < 1000) return;
+      this._searchOpening = Date.now();
       const headerNavigation = document.querySelector(
         ".header-bottom__navigation"
       );
@@ -1221,12 +1269,14 @@ var BlsSearchShopify = (function () {
           ? ".header-mega-store"
           : ".search-full"
       );
-      let topCaculate = sf.getBoundingClientRect().bottom;
+      let topCaculate = sf ? sf.getBoundingClientRect().bottom : (headerWrapper ? headerWrapper.getBoundingClientRect().bottom : 0);
       const ps = document.querySelector(".popup-search");
       document.documentElement.classList.add("open-drawer");
-      root.style.setProperty("padding-right", getScrollBarWidth.init() + "px");
+      // No scrollbar compensation: the layout keeps the gutter (scrollbar-gutter:
+      // stable) and pins body padding-right to 0, so measuring it only forced a
+      // full layout on every open.
       Promise.all([
-        Motion.animate(
+        motionAnimate(
           ps,
           {
             y: ["-105%", topCaculate],
@@ -1238,7 +1288,7 @@ var BlsSearchShopify = (function () {
           }
         ),
 
-        Motion.animate(
+        motionAnimate(
           overlay_search,
           {
             opacity: [0, 1],
@@ -1249,7 +1299,8 @@ var BlsSearchShopify = (function () {
             duration: 0.4,
           }
         ),
-      ]).then(() => {
+      ]).catch(() => {}).then(() => {
+        this._searchOpening = 0;
         setTimeout(() => {
           document.documentElement.classList.add("open-search");
         }, 20);
@@ -1264,9 +1315,14 @@ var BlsSearchShopify = (function () {
       const ps = document.querySelector(".popup-search");
       const sf = document.querySelector(".search-full");
       const overlay_search = document.querySelector(".overlay_search");
+      if (!overlay_search || !ps) {
+        document.documentElement.classList.remove("open-search");
+        if (!document.documentElement.classList.contains("open-minicart")) document.documentElement.classList.remove("open-drawer");
+        return;
+      }
       overlay_search.classList.remove("open");
       ps.classList.remove("popup-search-show");
-      let topCaculate = sf.getBoundingClientRect().bottom + 10;
+      let topCaculate = (sf ? sf.getBoundingClientRect().bottom : 0) + 10;
       if (headerNavigation && headerWrapper) {
         headerNavigation.style.opacity = "";
         headerNavigation.style.transition = "";
@@ -1274,7 +1330,7 @@ var BlsSearchShopify = (function () {
         headerWrapper.style.marginBottom = "";
       }
       Promise.all([
-        Motion.animate(
+        motionAnimate(
           ps,
           {
             y: [topCaculate, "-105%"],
@@ -1286,7 +1342,7 @@ var BlsSearchShopify = (function () {
           }
         ),
 
-        Motion.animate(
+        motionAnimate(
           overlay_search,
           {
             opacity: [1, 0],
@@ -1297,7 +1353,7 @@ var BlsSearchShopify = (function () {
             duration: 0.4,
           }
         ),
-      ]).then(() => {
+      ]).catch(() => {}).then(() => {
         setTimeout(() => {
           if (document.documentElement.classList.contains("open-minicart")) {
             document.documentElement.classList.remove("open-search");
@@ -1573,7 +1629,7 @@ var BlsSearchShopify = (function () {
     },
   };
 })();
-BlsSearchShopify.init();
+try { BlsSearchShopify.init(); } catch (e) { console.error("[theme] search init", e); }
 class HeaderSearch extends HTMLElement {
   constructor() {
     super();
@@ -1902,7 +1958,7 @@ var BlsLoginPopup = (function () {
     },
   };
 })();
-BlsLoginPopup.init();
+try { BlsLoginPopup.init(); } catch (e) { console.error("[theme] login popup init", e); }
 
 class BackToTop extends HTMLElement {
   constructor() {
@@ -2845,7 +2901,7 @@ var returnMessageWhenSubmit = (function () {
     },
   };
 })();
-returnMessageWhenSubmit.init();
+try { returnMessageWhenSubmit.init(); } catch (e) { console.error("[theme] form message init", e); }
 class NavBar extends HTMLElement {
   constructor() {
     super();
@@ -7378,6 +7434,10 @@ class CountdownTimer extends HTMLElement {
         deadline = new Date(Date.now() + parseInt(minutesLeft) * 60000);
       }
       const updateCountdown = () => {
+        // A timer whose element was replaced (cart drawer redraw) stops,
+        // instead of ticking forever on a detached copy.
+        if (this.isConnected) this._wasConnected = true;
+        else if (this._wasConnected) { clearInterval(this.interval); return; }
         const now = new Date();
         const difference = deadline - now;
         if (difference > 0) {
@@ -7394,10 +7454,11 @@ class CountdownTimer extends HTMLElement {
           !this.timeoutMessage
         ) {
           Object.entries(timeLeft).forEach(([key, value]) => {
-            if (this.querySelector("." + key)) {
-              this.querySelector("." + key).innerHTML = value
-                .toString()
-                .padStart(2, "0");
+            const slot = this.querySelector("." + key);
+            if (slot) {
+              const text = value.toString().padStart(2, "0");
+              // Only digits that changed are written.
+              if (slot.textContent !== text) slot.textContent = text;
             }
           });
         } else if (this.timeoutMessage) {
@@ -7406,9 +7467,11 @@ class CountdownTimer extends HTMLElement {
         } else {
           clearInterval(this.interval);
         }
-        this.classList.remove("hidden");
+        // Touch the class lists only when they change: each write is a
+        // mutation every page-wide class observer hears, once a second.
+        if (this.classList.contains("hidden")) this.classList.remove("hidden");
         const badgesCountdown = this.closest(".product__badges-sale-countdown");
-        if (badgesCountdown) {
+        if (badgesCountdown && (badgesCountdown.classList.contains("hidden") || !badgesCountdown.classList.contains("inline-flex"))) {
           badgesCountdown.classList.remove("hidden");
           badgesCountdown.classList.add("inline-flex");
         }
@@ -8896,7 +8959,7 @@ var BlsCustomer = (function () {
     },
   };
 })();
-BlsCustomer.init();
+try { BlsCustomer.init(); } catch (e) { console.error("[theme] customer init", e); }
 class IdeaProducts extends PopupBase {
   constructor() {
     super();

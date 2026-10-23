@@ -860,18 +860,24 @@ class CartNotification extends HTMLElement {
 
   async open() {
     this._closingUntil = 0;
+    // A close started just before must not run its delayed steps on top of
+    // this open (it used to remove `open`/`open-drawer` from the reopened drawer).
+    (this._closeTimers || []).forEach(clearTimeout);
+    this._closeTimers = [];
     if (!this.notification.classList.contains("go_to_cart_page")) {
-      if (this.classList.contains("show_popup")) {
+      if (this.classList.contains("show_popup") && this.minicart__wrapper) {
         this.cart_icon = document.querySelector("header");
-        this.minicart__wrapper.style.top = `calc(${
-          this.cart_icon.getBoundingClientRect().bottom
-        }px)`;
+        if (this.cart_icon) {
+          this.minicart__wrapper.style.top = `calc(${
+            this.cart_icon.getBoundingClientRect().bottom
+          }px)`;
+        }
       }
-      let delay;
+      // Let an open search panel finish sliding away (0.4s) before the drawer
+      // comes in; it used to wait 0.65s.
       if (document.documentElement.classList.contains("open-search")) {
-        delay = new Promise((resolve) => setTimeout(resolve, 650));
+        await new Promise((resolve) => setTimeout(resolve, 420));
       }
-      delay && (await delay);
       this.notification
         .querySelector(".minicart__wrapper")
         .classList.add("open");
@@ -882,14 +888,17 @@ class CartNotification extends HTMLElement {
         document.documentElement.classList.add("open-drawer", "open-minicart");
       }
 
-      window.BlsLazyloadImg?.init?.();
+      // The image scan walks every product image on the page; run it after the
+      // frame that starts the slide so the drawer moves at once.
+      requestAnimationFrame(() => window.BlsLazyloadImg?.init?.());
     } else {
       this.notification.querySelector("a").click();
     }
     this.notification.addEventListener(
       "transitionend",
       () => {
-        this.notification.focus();
+        // Never scroll the page to the drawer's place in the document.
+        this.notification.focus({ preventScroll: true });
       },
       { once: true }
     );
@@ -909,23 +918,29 @@ class CartNotification extends HTMLElement {
       cartRecommend.classList.remove("open");
     }
     this._closingUntil = Date.now() + time + 120;
+    (this._closeTimers || []).forEach(clearTimeout);
+    this._closeTimers = [];
 
-    setTimeout(() => {
+    this._closeTimers.push(setTimeout(() => {
       this.notification.classList.remove("open");
       this.notification
         .querySelector(".minicart__wrapper")
-        .classList.remove("open");
+        ?.classList.remove("open");
       document.documentElement.classList.remove("open-minicart");
-    }, time);
-    setTimeout(() => {
+    }, time));
+    this._closeTimers.push(setTimeout(() => {
       root.style.removeProperty("padding-right");
-      document.documentElement.classList.remove("open-drawer");
+      // Another drawer (menu, search) may have opened meanwhile: keep its lock.
+      const html = document.documentElement;
+      if (!html.classList.contains("open-search") && !html.classList.contains("nav-open") && !html.classList.contains("open-minicart")) {
+        html.classList.remove("open-drawer");
+      }
       if (document.querySelector("minicart-recommendations-beside")) {
         document
           .querySelector("minicart-recommendations-beside")
           .classList.remove("open");
       }
-    }, time + 550);
+    }, time + 550));
     document.body?.removeEventListener("click", this.onBodyClick);
     for (var item of document.querySelectorAll(".addon")) {
       item.classList.remove("is-open");
