@@ -1,4 +1,4 @@
-/* Warm only the two real product-neighbour pages, after this page has loaded.
+/* Warm only the two real product-neighbour pages, once the DOM is ready.
    Native navigation retains form behaviour, history and the browser's cache. */
 (() => {
   if (window.__materiaNavigation) return;
@@ -20,8 +20,8 @@
     const idle = window.requestIdleCallback || (fn => setTimeout(fn, 150));
     idle(() => [...document.querySelectorAll('a[data-product-neighbor]')].slice(0, 2).forEach(warm), {timeout: 1200});
   };
-  if (document.readyState === 'complete') ready();
-  else window.addEventListener('load', ready, {once: true});
+  if (document.readyState !== 'loading') ready();
+  else document.addEventListener('DOMContentLoaded', ready, {once: true});
   document.addEventListener('pointerover', event => warm(event.target.closest?.('a[data-product-neighbor]')), {passive: true});
   document.addEventListener('focusin', event => warm(event.target.closest?.('a[data-product-neighbor]')));
 })();

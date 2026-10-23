@@ -4,13 +4,16 @@
   window.__materiaExperienceReady = true;
   function syncButtons(scope = document) {
     const purchase = '.product-detail__buy-buttons :is(button[name="add"], .shopify-payment-button__button:not(.shopify-payment-button__button--branded)), .product-detail__information :is(.btn-primary, .btn-secondary, .btn-outline, [data-sl-button]):not(.btn-reset):not(.icon-btn):not(.quantity__button), .product-item__button-submit, .footer__newsletter button[type="submit"], #minicart_wrapper .cart__addon-content :is(.btn-save, .coupon-apply, .add-giftwrap, .btn-cancel), #minicart_wrapper .drawer-bottom :is(.btn-primary, .btn-outline, .btn-secondary)';
-    scope.querySelectorAll(purchase).forEach(button => {
-      const role = button.matches('.shopify-payment-button__button, .btn-secondary, .btn-outline, .btn-cancel') ? 'secondary' : 'primary';
+    const shared = '.shopify-section :is(a, button, input[type="submit"]):is(.btn-primary, .btn-secondary, .btn-outline):not(.btn-reset):not(.icon-btn):not(.btn-icon--circle)';
+    scope.querySelectorAll(purchase + ', ' + shared).forEach(button => {
+      const role = button.dataset.themeButton || (button.matches('.shopify-payment-button__button, .btn-secondary, .btn-outline, .btn-cancel') ? 'secondary' : 'primary');
       button.setAttribute('data-theme-button', role);
       button.setAttribute('data-sl-button', '');
     });
     document.querySelectorAll('[data-theme-button]').forEach(button => {
       const role = button.getAttribute('data-theme-button');
+      const extraHover = document.body?.dataset.slBtnHover;
+      button.dataset.buttonHover = extraHover && extraHover !== 'theme' ? extraHover : (document.body?.dataset.btnHover || 'fade');
       let wrapper = button.closest('[data-atc-appearance]');
       const sticky = button.closest('sticky-add-cart');
       if (sticky) {
@@ -29,7 +32,12 @@
   document.addEventListener('DOMContentLoaded', () => syncButtons());
   document.addEventListener('storelib:section-load', () => syncButtons());
   document.addEventListener('shopify:section:load', () => syncButtons());
-  document.addEventListener('storelib:settings-change', () => requestAnimationFrame(() => syncButtons()));
+  document.addEventListener('storelib:settings-change', () => {
+    if (!window.__materiaThemeLive) requestAnimationFrame(() => syncButtons());
+  });
+  // theme-live applies settings in its own animation frame, after the original
+  // Storelib event. Read appearance/effect attributes only once they are current.
+  document.addEventListener('materia:theme-applied', () => syncButtons());
   new MutationObserver(records => {
     for (const record of records) for (const node of record.addedNodes) {
       if (node.nodeType === 1 && (node.matches('.shopify-payment-button__button') || node.querySelector('.shopify-payment-button__button'))) syncButtons(node.parentElement || document);

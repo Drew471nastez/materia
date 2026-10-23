@@ -141,13 +141,56 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
     await page.evaluate(()=>window.scrollTo(0,250));
     const beforeTop=await page.$eval('media-gallery',el=>el.getBoundingClientRect().top);
     await page.evaluate(()=>document.documentElement.style.setProperty('--sticky-top','0px'));
-    assert.equal(await page.$eval('media-gallery',el=>el.getBoundingClientRect().top),beforeTop,'header hide must not change the gallery anchor');passed++;
+    assert.equal(await page.$eval('media-gallery',el=>el.getBoundingClientRect().top),beforeTop,'unrelated sticky offsets must not move the gallery');
+    await page.evaluate(()=>document.documentElement.style.setProperty('--product-sticky-top','0px'));
+    await page.waitForTimeout(120);
+    const duringTop=await page.$eval('media-gallery',el=>el.getBoundingClientRect().top);
+    assert(duringTop<beforeTop && duringTop>20,'gallery follows header smoothly instead of reserving an empty gap');
+    await page.waitForTimeout(400);
+    assert.equal(await page.$eval('media-gallery',el=>Math.round(el.getBoundingClientRect().top)),20);passed++;
     await page.route('https://fixture.test/**',route=>route.fulfill({contentType:'text/html',body:'<a data-product-neighbor href="/products/b">Next</a><a data-product-neighbor href="/products/c">Previous</a><a data-product-neighbor href="/cart">Cart</a>'}));
     await page.goto('https://fixture.test/products/a');
     await page.addScriptTag({content:read('shopify/assets/theme-navigation.js')});await page.waitForTimeout(250);
     assert.equal(await page.locator('link[rel=prefetch]').count(),2);
     await page.locator('a').first().hover();await page.waitForTimeout(30);
     assert.equal(await page.locator('link[rel=prefetch]').count(),2,'neighbour prefetch must be deduplicated');passed++;
+    // A sticky announcement must keep its stacking context under the dimmer,
+    // not be demoted behind the opaque product section when either drawer opens.
+    await page.setContent('<style>body{margin:0}#bar{position:sticky;top:0;height:60px;background:white}main{position:relative;z-index:1;height:1000px;margin-top:-20px;background:white}</style><div id="bar" class="shopify-section-group-header-group section-announcement-bar">Shipping</div><main>Product</main>');
+    await page.addStyleTag({content:read('shopify/assets/theme.css')});
+    for(const mode of ['open-minicart','open-search','overlay-closing']) {
+      await page.evaluate(mode=>document.documentElement.className=mode,mode);
+      assert(Number(await page.$eval('#bar',el=>getComputedStyle(el).zIndex))>1,mode+' must not bury announcement');
+      assert.equal(await page.$eval('#bar',el=>el.getBoundingClientRect().height),60);
+    }passed++;
+    // Run both real settings listeners, in their normal registration order.
+    // The very first edit must update a slideshow CTA, without a second drag.
+    await page.setContent('<style>:root{--btn-border-width:2px;--btn-anim-duration:300ms}.color-default{--btn-primary-bg-color:#222;--btn-primary-color:white;--btn-primary-border-color:transparent;--btn-secondary-color:#333}</style><body data-btn-style="solid" data-btn-secondary-style="outline" data-btn-hover="fade" data-sl-btn-hover="theme"><section class="color-default"><a id="live-slide" data-theme-button="primary">Shop now</a><a id="live-secondary" data-theme-button="secondary">More</a></section></body>');
+    await page.evaluate(()=>{document.documentElement.className='';window.__materiaExperienceReady=false;window.__materiaThemeLive=false;});
+    await page.addStyleTag({content:read('shopify/assets/theme-button-contract.css')});
+    await page.addScriptTag({content:read('shopify/assets/materia-experience.js')});
+    const liveScript=read('snippets/theme-live.storelib').match(/<script>([\s\S]*?)<\/script>/)[1]
+      .replace(/"\{\{[\s\S]*?\}\}"/g,'""').replace(/\{\{[\s\S]*?\}\}/g,'null').replace(/\{%[\s\S]*?%\}/g,'');
+    await page.addScriptTag({content:liveScript});
+    await page.mouse.move(1100,750);
+    await page.evaluate(()=>document.dispatchEvent(new CustomEvent('storelib:settings-change',{detail:{live:true,settings:{btn_style:'outline',btn_hover_effect:'slide',color_schemes:{default:{settings:{background:'#ffffff',text_color:'#111111',heading_color:'#222222',primary_color:'#114488',btn_primary_background:'#114488',btn_primary_color:'#ffffff',btn_primary_border_color:'#008800',btn_primary_hover_border_color:'#ff9900',btn_primary_hover_background:'#cc0000',btn_primary_hover_color:'#ffffff'}}}}}})));
+    await page.waitForTimeout(80);
+    assert.equal(await page.locator('#live-slide').getAttribute('data-button-appearance'),'outline');
+    assert.equal(await page.locator('#live-slide').getAttribute('data-button-hover'),'slide');
+    assert.equal(await page.$eval('#live-slide',el=>getComputedStyle(el).color),'rgb(17, 68, 136)');
+    assert.equal(await page.$eval('#live-slide',el=>getComputedStyle(el).borderTopColor),'rgb(17, 68, 136)');
+    assert.equal(await page.$eval('#live-slide',el=>getComputedStyle(el).getPropertyValue('--btn-primary-border-color').trim()),'#008800');passed++;
+    await page.waitForTimeout(450); // leave live-drag mode before testing hover motion
+    await page.hover('#live-slide');await page.waitForTimeout(100);
+    const liveFill=await page.$eval('#live-slide',el=>getComputedStyle(el,'::before').transform);
+    const liveScale=Number(liveFill.match(/matrix\(([^,]+)/)[1]);assert(liveScale>0&&liveScale<1);
+    await page.waitForTimeout(350);
+    assert.equal(await page.$eval('#live-slide',el=>getComputedStyle(el).borderTopColor),'rgb(255, 153, 0)');passed++;
+    await page.evaluate(()=>document.dispatchEvent(new CustomEvent('storelib:settings-change',{detail:{settings:{btn_style:'solid',storelib_button_hover_effect:'lift'}}})));
+    await page.waitForTimeout(80);
+    assert.equal(await page.locator('#live-slide').getAttribute('data-button-appearance'),'solid');
+    assert.equal(await page.locator('#live-secondary').getAttribute('data-button-appearance'),'outline');
+    assert.equal(await page.locator('#live-slide').getAttribute('data-button-hover'),'lift');passed++;
     assert.deepEqual(errors,[]);
     console.log(`${passed} browser interaction checks passed`);
   } finally {await browser.close();}
