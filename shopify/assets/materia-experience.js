@@ -135,6 +135,28 @@
     const section = event.target?.matches?.('[id^="shopify-section-"]') ? event.target : event.target?.closest?.('[id^="shopify-section-"]');
     topbarControllers.get(section)?.();
   });
+  // Drawers start below visible announcement chrome. One ResizeObserver writes
+  // a single root variable; opening a drawer never measures or rearranges it.
+  let announcementResize;
+  function syncAnnouncementHeight() {
+    announcementResize?.disconnect();
+    const bars = [...document.querySelectorAll('.section-announcement-bar, [id*="announcement-bar"]')]
+      .filter((node, _index, all) => !all.some(other => other !== node && other.contains(node)));
+    const measure = () => {
+      const height = bars.reduce((total, node) => {
+        if (!node.isConnected || getComputedStyle(node).display === 'none') return total;
+        return total + Math.ceil(node.getBoundingClientRect().height);
+      }, 0);
+      document.documentElement.style.setProperty('--materia-announcement-height', height + 'px');
+    };
+    announcementResize = 'ResizeObserver' in window ? new ResizeObserver(measure) : null;
+    bars.forEach(node => announcementResize?.observe(node));
+    measure();
+  }
+  document.addEventListener('DOMContentLoaded', syncAnnouncementHeight);
+  document.addEventListener('shopify:section:load', syncAnnouncementHeight);
+  document.addEventListener('storelib:section-load', syncAnnouncementHeight);
   syncTerms();
   initStickyTopbars();
+  syncAnnouncementHeight();
 })();

@@ -41,7 +41,7 @@
   var frame = 0;
   var pending = {};
   var tweakTimer = 0;
-  var schemeNodes = new Map();
+  var liveSchemes = {};
   var rtlHref = "{{ 'rtl.css' | asset_url }}";
   var state = {
     btn_shape: "{{ settings.btn_shape | default: 'rounded' }}",
@@ -86,18 +86,32 @@
     if (value == null || value === '') root.style.removeProperty(name);
     else root.style.setProperty(name, value);
   }
-  function nodesFor(id) {
-    var list = schemeNodes.get(id);
-    if (list && list.length && list[0].isConnected) return list;
-    list = Array.prototype.slice.call(document.querySelectorAll('.color-' + id));
-    schemeNodes.set(id, list);
-    return list;
+  function cssName(value) {
+    if (window.CSS && CSS.escape) return CSS.escape(String(value));
+    return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
   }
-  function paint(el, vars) {
-    var keys = Object.keys(vars);
-    for (var i = 0; i < keys.length; i++) {
-      if (vars[keys[i]] != null && vars[keys[i]] !== '') el.style.setProperty(keys[i], vars[keys[i]]);
+  function schemeSheet() {
+    var sheet = document.getElementById('sl-live-schemes');
+    if (!sheet) {
+      sheet = document.createElement('style');
+      sheet.id = 'sl-live-schemes';
+      document.head.appendChild(sheet);
     }
+    var css = '';
+    Object.keys(liveSchemes).forEach(function (id) {
+      var vars = liveSchemes[id];
+      var declarations = Object.keys(vars).filter(function (key) { return vars[key] != null && vars[key] !== ''; })
+        .map(function (key) { return key + ':' + vars[key] + '!important'; }).join(';');
+      if (declarations) css += '.color-' + cssName(id) + '{' + declarations + '}';
+    });
+    if (sheet.textContent !== css) sheet.textContent = css;
+  }
+  function fontFamily(value) {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    var family = value.family || value.name || '';
+    var fallbacks = value.fallback_families || value.fallbacks || '';
+    return family ? '"' + String(family).replace(/"/g, '\\"') + '"' + (fallbacks ? ', ' + fallbacks : '') : '';
   }
   function schemeVars(s) {
     if (!s) return null;
@@ -185,6 +199,8 @@
     for (k in s) if (Object.prototype.hasOwnProperty.call(s, k) && Object.prototype.hasOwnProperty.call(state, k)) state[k] = s[k];
 
     /* Type */
+    if (has(s, 'font_body_system')) set('--body-font', fontFamily(s.font_body_system));
+    if (has(s, 'font_heading_system')) set('--heading-font', fontFamily(s.font_heading_system));
     if (has(s, 'body_font_size')) set('--body-font-size', px(s.body_font_size));
     if (has(s, 'body_line_height')) set('--body-line-height', String(s.body_line_height));
     if (has(s, 'body_font_weight')) set('--body-weight', String(s.body_font_weight));
@@ -271,10 +287,12 @@
       for (var n = 0; n < ids.length; n++) {
         var varsForScheme = schemeVars(schemes[ids[n]]);
         if (!varsForScheme) continue;
-        var list = nodesFor(ids[n]);
-        for (var m = 0; m < list.length; m++) paint(list[m], varsForScheme);
-        if (n === 0 || ids[n] === 'default') paint(root, varsForScheme);
+        liveSchemes[ids[n]] = varsForScheme;
+        if (n === 0 || ids[n] === 'default') {
+          Object.keys(varsForScheme).forEach(function (key) { set(key, varsForScheme[key]); });
+        }
       }
+      schemeSheet();
     }
   }
 
@@ -294,9 +312,6 @@
       applySettings(next);
     });
   });
-  function forget() { schemeNodes.clear(); }
-  document.addEventListener('shopify:section:load', forget);
-  document.addEventListener('storelib:section-load', forget);
 })();
 {% comment %}{% endcomment %}</script>
 </template>
