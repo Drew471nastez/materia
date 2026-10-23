@@ -3,9 +3,9 @@
   if (window.__materiaExperienceReady) return;
   window.__materiaExperienceReady = true;
   function syncButtons(scope = document) {
-    const purchase = '.product-detail__buy-buttons :is(button[name="add"], .shopify-payment-button__button:not(.shopify-payment-button__button--branded)), .product-detail__information :is(.btn-primary, .btn-secondary, .btn-outline, [data-sl-button]):not(.btn-reset):not(.icon-btn):not(.quantity__button), .product-item__button-submit, .footer__newsletter button[type="submit"]';
+    const purchase = '.product-detail__buy-buttons :is(button[name="add"], .shopify-payment-button__button:not(.shopify-payment-button__button--branded)), .product-detail__information :is(.btn-primary, .btn-secondary, .btn-outline, [data-sl-button]):not(.btn-reset):not(.icon-btn):not(.quantity__button), .product-item__button-submit, .footer__newsletter button[type="submit"], #minicart_wrapper .cart__addon-content :is(.btn-save, .coupon-apply, .add-giftwrap, .btn-cancel), #minicart_wrapper .drawer-bottom :is(.btn-primary, .btn-outline, .btn-secondary)';
     scope.querySelectorAll(purchase).forEach(button => {
-      const role = button.matches('.shopify-payment-button__button, .btn-secondary, .btn-outline') ? 'secondary' : 'primary';
+      const role = button.matches('.shopify-payment-button__button, .btn-secondary, .btn-outline, .btn-cancel') ? 'secondary' : 'primary';
       button.setAttribute('data-theme-button', role);
       button.setAttribute('data-sl-button', '');
     });
@@ -188,31 +188,6 @@
     const section = event.target?.matches?.('[id^="shopify-section-"]') ? event.target : event.target?.closest?.('[id^="shopify-section-"]');
     topbarControllers.get(section)?.();
   });
-  // Drawers start below visible announcement chrome. One ResizeObserver writes
-  // a single root variable; opening a drawer never measures or rearranges it.
-  let announcementResize;
-  function syncAnnouncementHeight() {
-    announcementResize?.disconnect();
-    const candidates = [...document.querySelectorAll('.section-announcement-bar, [id*="announcement-bar"], [data-sticky-announcement], [data-sticky-topbar], announcement-bar, .unique-announcement-bar, .abp4')];
-    const bars = candidates.map(node => node.closest('.shopify-section') || node)
-      .filter((node, index, all) => all.indexOf(node) === index)
-      .filter((node, _index, all) => !all.some(other => other !== node && other.contains(node)));
-    bars.forEach(node => node.setAttribute('data-materia-announcement', ''));
-    const measure = () => {
-      const height = bars.reduce((total, node) => {
-        if (!node.isConnected || getComputedStyle(node).display === 'none') return total;
-        return total + Math.ceil(node.getBoundingClientRect().height);
-      }, 0);
-      document.documentElement.style.setProperty('--materia-announcement-height', height + 'px');
-    };
-    announcementResize = 'ResizeObserver' in window ? new ResizeObserver(measure) : null;
-    bars.forEach(node => announcementResize?.observe(node));
-    measure();
-  }
-  document.addEventListener('DOMContentLoaded', syncAnnouncementHeight);
-  document.addEventListener('shopify:section:load', syncAnnouncementHeight);
-  document.addEventListener('storelib:section-load', syncAnnouncementHeight);
   syncTerms();
   initStickyTopbars();
-  syncAnnouncementHeight();
 })();

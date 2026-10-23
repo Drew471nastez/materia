@@ -244,6 +244,7 @@ class CartNotification extends HTMLElement {
   cartAction() {
     this.actionEvents?.abort();
     this.actionEvents = new AbortController();
+    document.dispatchEvent(new CustomEvent('materia:cart-drawer-updated'));
     const signal = this.actionEvents.signal;
     this.querySelectorAll(".close-cart").forEach((navToggle) => {
       navToggle.addEventListener(

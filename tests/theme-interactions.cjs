@@ -60,15 +60,18 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
     await page.evaluate(()=>document.querySelector('cart-notification').classList.remove('open'));
     await page.waitForTimeout(650);assert.equal(await page.evaluate(()=>window.opens),1,'closed drawer must stay closed'); passed++;
 
-    await page.setContent('<div class="shopify-section"><div data-sticky-announcement="true" style="height:64px">Shipping</div></div><div class="overlay_search"></div><div id="minicart_wrapper"><div class="minicart__wrapper"></div></div><form class="newsletter-form"><input name="contact[email]" type="email" required value="a@example.test"><button type="submit">Subscribe</button></form>');
+    await page.setContent('<div class="shopify-section" style="position:sticky;top:0;z-index:12"><div data-sticky-announcement="true" style="height:64px">Shipping</div></div><cart-notification id="minicart_wrapper" class="open_drawer open"><div class="minicart__wrapper" style="position:fixed;right:0;width:400px"></div></cart-notification><div class="overlayminicart"></div><form class="newsletter-form"><input name="contact[email]" type="email" required value="a@example.test"><button type="submit">Subscribe</button></form>');
+    await page.addStyleTag({content:read('shopify/assets/theme.css')});
     await page.addStyleTag({content:read('shopify/assets/materia-experience.css')});
     await page.addScriptTag({content:read('shopify/assets/materia-experience.js')});
     await page.evaluate(()=>document.documentElement.classList.add('open-minicart'));
     await page.waitForTimeout(600);
-    assert.equal(await page.$eval('[data-materia-announcement]',el=>getComputedStyle(el,'::after').opacity),'1');
-    assert.equal(await page.$eval('.minicart__wrapper',el=>getComputedStyle(el).top),'64px');
-    await page.evaluate(()=>document.documentElement.classList.remove('open-minicart'));await page.waitForTimeout(600);
-    assert.equal(await page.$eval('[data-materia-announcement]',el=>getComputedStyle(el,'::after').opacity),'0');passed++;
+    assert(Number(await page.$eval('.overlayminicart',el=>getComputedStyle(el,'::after').opacity)) > .99);
+    assert.equal(await page.$eval('.overlayminicart',el=>getComputedStyle(el,'::after').top),'0px');
+    assert.equal(await page.$eval('.minicart__wrapper',el=>getComputedStyle(el).top),'0px');
+    assert.equal(await page.$eval('.minicart__wrapper',el=>el.getBoundingClientRect().height),800);
+    await page.evaluate(()=>document.documentElement.classList.remove('open-minicart'));await page.waitForTimeout(750);
+    assert.equal(await page.$eval('.overlayminicart',el=>getComputedStyle(el,'::after').opacity),'0');passed++;
     await page.evaluate(()=>document.querySelector('form').addEventListener('submit',e=>e.preventDefault()));
     await page.locator('button').click();assert.equal(await page.locator('form').getAttribute('aria-busy'),'true');
     await page.evaluate(()=>{const result=document.createElement('p');result.className='form__message';result.textContent='Confirmed by server';document.querySelector('form').append(result)});
@@ -113,6 +116,38 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
     await page.addStyleTag({content:sheets});
     const coupon=await page.$eval('.cart-discount-remove',el=>({width:el.getBoundingClientRect().width,height:el.getBoundingClientRect().height,background:getComputedStyle(el).backgroundColor}));
     assert.equal(coupon.width,44);assert.equal(coupon.height,44);assert.equal(coupon.background,'rgba(0, 0, 0, 0)');passed++;
+    // Real nested search-popup markup must remain compact; only its outer
+    // panel is fixed. The drawer variant must still cover the full viewport.
+    await page.setViewportSize({width:1200,height:800});
+    for(const mode of ['popup','basic','drawer']) {
+      await page.setContent(`<style>:root{--color-background:white;--color-heading:#222;--color-border:#ccc}body{margin:0}.bls__drawer{visibility:hidden}.open-search .bls__drawer.open{visibility:visible}</style><div id="search-form" class="search__type-${mode} bls__drawer open"><div class="search__type-${mode==='drawer'?'drawer':'popup'}"><div class="container"><div class="search__type-popup-bar"><form action="/search" class="search-modal__form"><input class="search__input" placeholder="Search"><button class="btn-search-close">Close</button></form></div></div></div></div>`);
+      await page.addStyleTag({content:read('shopify/assets/search-type-default.css')});
+      await page.addStyleTag({content:read('shopify/assets/materia-experience.css')});
+      await page.evaluate(()=>document.documentElement.classList.add('open-search'));
+      const rect=await page.$eval('#search-form',el=>({height:el.getBoundingClientRect().height,top:getComputedStyle(el).top}));
+      assert.equal(rect.top,'0px');
+      if(mode==='drawer')assert.equal(rect.height,800);
+      else {assert(rect.height<180,mode+' popup must not expand to viewport height');assert.equal(await page.$eval('#search-form > div',el=>getComputedStyle(el).position),'relative');}
+      passed++;
+    }
+    assert(read('sections/slideshow.storelib').includes('data-theme-button="primary"'),'slideshow must opt into tested contract');
+    await page.setContent('<style>:root{--btn-border-width:2px;--btn-primary-bg-color:#222;--btn-primary-color:white;--btn-primary-border-color:#000;--btn-secondary-bg-color:#222;--btn-secondary-color:white;--btn-secondary-border-color:#222}#slide .btn-primary{border:0!important}#coupon .btn-cancel{background:#222!important;color:black!important}</style><div id="slide"><a class="btn-primary" data-theme-button="primary">Shop</a></div><div id="coupon"><button class="btn-cancel" data-theme-button="secondary" data-button-appearance="solid"><span>Cancel</span></button></div>');
+    await page.addStyleTag({content:read('shopify/assets/theme-button-contract.css')});await page.waitForTimeout(350);
+    assert.equal(await page.$eval('#slide a',el=>getComputedStyle(el).borderTopWidth),'2px');
+    assert.equal(await page.$eval('#coupon button',el=>getComputedStyle(el).color),'rgb(255, 255, 255)');
+    assert.equal(await page.$eval('#coupon span',el=>getComputedStyle(el).color),'rgb(255, 255, 255)');passed++;
+    await page.setContent('<style>:root{--product-sticky-top:80px;--sticky-top:80px}.sticky{position:sticky}.product-detail__media{height:1600px}media-gallery{display:block;height:200px}</style><div class="product-detail__media"><media-gallery class="sticky top-30">Gallery</media-gallery></div>');
+    await page.addStyleTag({content:read('shopify/assets/product-page-ui.css')});
+    await page.evaluate(()=>window.scrollTo(0,250));
+    const beforeTop=await page.$eval('media-gallery',el=>el.getBoundingClientRect().top);
+    await page.evaluate(()=>document.documentElement.style.setProperty('--sticky-top','0px'));
+    assert.equal(await page.$eval('media-gallery',el=>el.getBoundingClientRect().top),beforeTop,'header hide must not change the gallery anchor');passed++;
+    await page.route('https://fixture.test/**',route=>route.fulfill({contentType:'text/html',body:'<a data-product-neighbor href="/products/b">Next</a><a data-product-neighbor href="/products/c">Previous</a><a data-product-neighbor href="/cart">Cart</a>'}));
+    await page.goto('https://fixture.test/products/a');
+    await page.addScriptTag({content:read('shopify/assets/theme-navigation.js')});await page.waitForTimeout(250);
+    assert.equal(await page.locator('link[rel=prefetch]').count(),2);
+    await page.locator('a').first().hover();await page.waitForTimeout(30);
+    assert.equal(await page.locator('link[rel=prefetch]').count(),2,'neighbour prefetch must be deduplicated');passed++;
     assert.deepEqual(errors,[]);
     console.log(`${passed} browser interaction checks passed`);
   } finally {await browser.close();}

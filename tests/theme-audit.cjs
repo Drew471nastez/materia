@@ -3,8 +3,11 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 const sections = fs.readdirSync(path.join(root, 'sections')).filter(f=>f.endsWith('.storelib')).sort();
-const batch = sections.filter(f=>f>'custom-html.storelib').slice(0,30);
+const ledger = require('./theme-review-ledger.json');
+const batch = ledger.current;
 assert.equal(batch.length,30);
+assert.equal(new Set([...ledger.previous,...batch,...ledger.remaining]).size,sections.length);
+assert(batch.every(file=>!ledger.previous.includes(file)),'batch must contain 30 previously unaudited sections');
 let schemas=0, blocks=0;
 for (const folder of ['sections','blocks','snippets','layout']) {
   if (!fs.existsSync(path.join(root,folder))) continue;
@@ -35,4 +38,4 @@ for(const file of ['main-product.storelib','featured-product.storelib']) {
 }
 console.log(`${schemas} schemas parsed; ${blocks} block definitions parsed; 30 batch schemas checked for unique IDs and shared typography`);
 console.log('Batch: '+batch.join(', '));
-console.log('Running audit count: 160/212; 52 remaining. Runtime tests cover shared interactions, not every setting in a live Storelib renderer.');
+console.log(`Running audit count: ${ledger.previous.length+batch.length}/${sections.length}; ${ledger.remaining.length} remaining. Runtime tests cover shared interactions, not every setting in a live Storelib renderer.`);
