@@ -1,4 +1,8 @@
 <template compat="shopify">
+{% render 'theme-type' %}
+{%- liquid
+  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+-%}
 <style data-rs-bulletproof>
   {%- if section.settings.reset_spacing -%}
     /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
@@ -21,7 +25,7 @@
   Section background colour wiring. Painted on the section wrapper so
   the colour fills edge-to-edge regardless of inner section width.
 {%- endcomment -%}
-{%- if section.settings.section_bg != blank -%}
+{%- if section.settings.section_bg != blank and section.settings.section_bg.alpha != 0 -%}
   <style>
     #shopify-section-{{ section.id }} {
       background-color: {{ section.settings.section_bg }};
@@ -142,7 +146,6 @@
 {%- liquid
   assign s = section.settings
   assign section_width = s.section_width | default: 'container'
-  assign color_scheme = s.color_scheme | default: 'scheme-1'
   if s.reset_spacing
     assign reset_spacing = ' remove_spacing'
   endif
@@ -160,7 +163,10 @@
   assign show_arrow = s.show_arrow
   assign carousel_pagination = s.carousel_pagination | default: 'show_dots'
   assign reveal = s.reveal
-  assign scroll_animation = settings.scroll_animation
+  assign scroll_animation = settings.scroll_animation | default: 'none'
+  unless reveal
+    assign scroll_animation = 'none'
+  endunless
 -%}
 {%- capture style -%}
   --section-pt: {{ s.padding_top }};
@@ -170,8 +176,8 @@
   --rw-cols-mb-int: {{ columns_mobile | floor | at_least: 1 }};
   --rw-gap: {{ column_gap }}px;
   --rw-overlay: {{ overlay_strength | divided_by: 100.0 }};
-  --rw-accent: {{ s.accent_color | default: '#ff2d55' }};
-  --rw-tile-bg: {{ s.tile_bg | default: '#000000' }};
+  --rw-accent: {% render 'scheme-color', color: s.accent_color, fallback: 'var(--color-primary)' %};
+  --rw-tile-bg: {% render 'scheme-color', color: s.tile_bg, fallback: '#000000' %};
   --rw-heading-size: {{ s.custom_heading_size | default: 15 }}px;
   --rw-caption-size: {{ s.custom_caption_size | default: 12 }}px;
   {%- if s.custom_tile_text != blank -%}--rw-tile-text: {{ s.custom_tile_text }};{%- endif -%}
@@ -204,8 +210,12 @@
     color: #fff;
     text-decoration: none;
     isolation: isolate;
-    transition: transform .35s cubic-bezier(.2,.7,.2,1);
+    transition: transform var(--btn-anim-duration, .35s) var(--btn-anim-ease, cubic-bezier(.2,.7,.2,1)), box-shadow var(--btn-anim-duration, .35s) var(--btn-anim-ease, ease);
   }
+  #shopify-section-{{ section.id }} .rw-tile:focus-visible,
+  #shopify-section-{{ section.id }} .rw-action:focus-visible,
+  #shopify-section-{{ section.id }} .rw-sound:focus-visible,
+  #shopify-section-{{ section.id }} .rw-product:focus-visible { outline: 2px solid var(--rw-accent); outline-offset: 2px; }
   #shopify-section-{{ section.id }} .rw-tile:hover { transform: translateY(-4px); }
   #shopify-section-{{ section.id }} .rw-tile video,
   #shopify-section-{{ section.id }} .rw-tile img,
@@ -260,6 +270,7 @@
     cursor: pointer;
     font-size: 11px;
     text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    transition: transform var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease);
   }
   #shopify-section-{{ section.id }} .rw-action svg {
     width: 32px; height: 32px;
@@ -275,7 +286,7 @@
   }
   #shopify-section-{{ section.id }} .rw-content__heading {
     font-size: var(--rw-heading-size);
-    font-weight: 600;
+    font-weight: var(--heading-weight, 600);
     line-height: 1.3;
     margin: 0;
     color: var(--rw-tile-text, #fff);
@@ -296,12 +307,13 @@
     margin-top: 4px;
     display: inline-flex; align-items: center; gap: 6px;
     padding: 7px 14px;
-    background: var(--rw-cta-bg, #fff);
-    color: var(--rw-cta-text, #111);
+    background-color: var(--rw-cta-bg, var(--btn-primary-bg-color, #fff));
+    color: var(--rw-cta-text, var(--btn-primary-color, #111));
     border-radius: 999px;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: var(--btn-font-weight, 600);
     text-decoration: none;
+    transition: background-color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease);
   }
   #shopify-section-{{ section.id }} .rw-product {
     position: absolute; left: 12px; bottom: 12px;
@@ -314,7 +326,9 @@
     text-decoration: none;
     box-shadow: 0 4px 14px rgba(0,0,0,0.18);
     max-width: calc(100% - 80px);
+    transition: box-shadow var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), transform var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease);
   }
+  #shopify-section-{{ section.id }} .rw-product:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.26); }
   #shopify-section-{{ section.id }} .rw-product img {
     position: static;
     width: 28px; height: 28px;
@@ -343,13 +357,22 @@
     color: #fff;
     cursor: pointer;
     display: inline-flex; align-items: center; justify-content: center;
-    transition: background .2s ease, transform .2s ease;
+    transition: background-color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), transform var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease);
   }
-  #shopify-section-{{ section.id }} .rw-sound:hover { background: rgba(0,0,0,0.7); }
+  #shopify-section-{{ section.id }} .rw-sound:hover { background-color: rgba(0,0,0,0.7); }
   #shopify-section-{{ section.id }} .rw-sound svg { width: 16px; height: 16px; }
   #shopify-section-{{ section.id }} .rw-sound .icon-on { display: none; }
   #shopify-section-{{ section.id }} .rw-sound.is-on .icon-off { display: none; }
   #shopify-section-{{ section.id }} .rw-sound.is-on .icon-on  { display: block; }
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ section.id }} .rw-tile,
+    #shopify-section-{{ section.id }} .rw-action,
+    #shopify-section-{{ section.id }} .rw-cta,
+    #shopify-section-{{ section.id }} .rw-product,
+    #shopify-section-{{ section.id }} .rw-sound { transition: none; }
+    #shopify-section-{{ section.id }} .rw-tile:hover,
+    #shopify-section-{{ section.id }} .rw-action:hover { transform: none; }
+  }
   /* Custom customization overrides */
   {%- if s.custom_section_bg != blank -%}
     #shopify-section-{{ section.id }} > .section { background: {{ s.custom_section_bg }} !important; }
@@ -459,13 +482,20 @@
 
 <script>
 (function () {
-  var section = document.getElementById('shopify-section-{{ section.id }}');
+  var SID = '{{ section.id }}';
+  var KEY = '__rwReels_' + SID;
+  function init() {
+  var section = document.getElementById('shopify-section-' + SID);
   if (!section) return;
+  var root = section.querySelector('.section');
+  if (!root || root.__rwInit) return;
+  root.__rwInit = true;
+  if (window[KEY] && window[KEY].disconnect) window[KEY].disconnect();
   var tiles = section.querySelectorAll('.rw-tile');
 
   // Auto-play in view + pause out of view
   if ('IntersectionObserver' in window) {
-    var io = new IntersectionObserver(function (entries) {
+    var io = window[KEY] = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
         var v = entry.target.querySelector('video');
         if (!v) return;
@@ -499,6 +529,11 @@
       e.stopPropagation();
       btn.classList.toggle('is-active');
     });
+  });
+  }
+  init();
+  document.addEventListener('storelib:section-load', function (e) {
+    if (e.detail && String(e.detail.sectionId) === SID) init();
   });
 })();
 {% comment %}{% endcomment %}</script>
@@ -1414,14 +1449,8 @@
     },
     "settings": [
       {
-        "type": "checkbox",
-        "id": "reset_spacing",
-        "label": "Remove default space between sections",
-        "default": true
-      },
-      {
         "type": "header",
-        "content": "General"
+        "content": "Layout"
       },
       {
         "type": "select",
@@ -1451,7 +1480,17 @@
         "type": "color_scheme",
         "id": "color_scheme",
         "label": "Color scheme",
-        "default": "scheme-1"
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove default space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "General"
       },
       {
         "type": "select",
@@ -1480,16 +1519,14 @@
       {
         "type": "checkbox",
         "id": "show_handle",
-        "label": "Show creator handle pill",
-        "default": true,
-        "info": "Top-left chip with avatar + @username."
+        "label": "Show creator handle",
+        "default": true
       },
       {
         "type": "checkbox",
         "id": "show_actions",
         "label": "Show side action icons",
-        "default": true,
-        "info": "Like / share / save column on the right edge."
+        "default": true
       },
       {
         "type": "header",
@@ -1515,8 +1552,7 @@
         "type": "checkbox",
         "id": "autoplay_videos",
         "label": "Auto-play videos in view",
-        "default": true,
-        "info": "Plays muted by default. Pauses when scrolled out of view."
+        "default": true
       },
       {
         "type": "checkbox",
@@ -1557,17 +1593,17 @@
       {
         "type": "color",
         "id": "custom_heading_color",
-        "label": "Section heading color override"
+        "label": "Heading color"
       },
       {
         "type": "color",
         "id": "custom_eyebrow_color",
-        "label": "Eyebrow color override"
+        "label": "Eyebrow color"
       },
       {
         "type": "color",
         "id": "custom_tile_text",
-        "label": "Tile text color override"
+        "label": "Tile text color"
       },
       {
         "type": "header",
@@ -1581,15 +1617,12 @@
       {
         "type": "color",
         "id": "tile_bg",
-        "label": "Tile background (behind video)",
-        "default": "#000000"
+        "label": "Tile background"
       },
       {
         "type": "color",
         "id": "accent_color",
-        "label": "Accent color",
-        "info": "Used by the like icon and avatar fallback.",
-        "default": "#ff2d55"
+        "label": "Accent color"
       },
       {
         "type": "select",
@@ -1619,8 +1652,7 @@
         "max": 80,
         "step": 5,
         "unit": "%",
-        "default": 25,
-        "info": "Helps the headline / username stay readable."
+        "default": 25
       },
       {
         "type": "header",
@@ -1819,7 +1851,6 @@
         "type": "range",
         "id": "columns_mobile",
         "label": "Items per row (mobile)",
-        "info": "Use a decimal like 1.2–1.5 to peek the next reel (carousel mode).",
         "min": 1,
         "max": 5,
         "step": 0.1,
@@ -1828,9 +1859,7 @@
       {
         "type": "color",
         "id": "section_bg",
-        "label": "Section background color",
-        "info": "Background colour of the whole section. Set transparent to inherit the page.",
-        "default": "#FFFFFF"
+        "label": "Section background color"
       }
     ],
     "blocks": [
@@ -2132,8 +2161,7 @@
           {
             "type": "text",
             "id": "video_url_direct",
-            "label": "Or paste direct video URL (.mp4)",
-            "info": "Plays a hosted .mp4 file (e.g. a Shopify CDN video link). Takes priority over the YouTube / Vimeo URL above."
+            "label": "Direct video URL (.mp4)"
           },
           {
             "type": "image_picker",
@@ -2168,8 +2196,7 @@
           {
             "type": "text",
             "id": "caption",
-            "label": "Caption",
-            "info": "Two-line clamp. Use to describe the clip."
+            "label": "Caption"
           },
           {
             "type": "header",
@@ -2188,14 +2215,13 @@
           },
           {
             "type": "header",
-            "content": "Side action counts (decorative)"
+            "content": "Side action counts"
           },
           {
             "type": "checkbox",
             "id": "show_block_actions",
-            "label": "Show side action counts on this tile",
-            "default": true,
-            "info": "Per-tile override; the section-level toggle must also be on."
+            "label": "Show action counts",
+            "default": true
           },
           {
             "type": "text",
@@ -2222,8 +2248,7 @@
           {
             "type": "product",
             "id": "product",
-            "label": "Product",
-            "info": "Shows a tappable chip in the bottom-left."
+            "label": "Product"
           }
         ]
       }
