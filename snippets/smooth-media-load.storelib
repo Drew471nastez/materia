@@ -15,6 +15,9 @@
     * Clone-safe: processed elements are tracked in a WeakSet (not a copyable
       attribute), so carousel clones are handled correctly.
     * Skipped in the theme editor (design mode) and for reduced-motion users.
+    * Never on what the visitor sees first: pictures in the first screen when
+      the page is read, and the priority (fetchpriority=high) picture, show the
+      moment they arrive. A fade there read as the hero flashing or popping.
 {%- endcomment -%}
 <style>
   @keyframes materiaMediaFade { from { opacity: 0; } to { opacity: 1; } }
@@ -34,6 +37,7 @@
 
   function eligible(el) {
     if (el.tagName !== 'IMG' && el.tagName !== 'VIDEO') { return false; }
+    if (el.getAttribute('fetchpriority') === 'high') { return false; }
     var cn = (typeof el.className === 'string') ? el.className : '';
     if (cn && SKIP.test(cn)) { return false; }     // never touch hover/secondary media
     return true;
@@ -53,10 +57,26 @@
     for (var i = 0; i < nodes.length; i++) { prep(nodes[i]); }
   }
 
+  // First read: everything already in the first screen (or above it) is left
+  // alone, measured in one pass before any listener is added.
+  function firstScan() {
+    var nodes = document.querySelectorAll('img, video');
+    var fold = window.innerHeight;
+    var inView = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var r = nodes[i].getBoundingClientRect();
+      inView.push(r.top < fold && r.bottom > 0 && r.left < window.innerWidth && r.right > 0);
+    }
+    for (var j = 0; j < nodes.length; j++) {
+      if (inView[j]) { if (seen) { seen.add(nodes[j]); } continue; }
+      prep(nodes[j]);
+    }
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () { scan(); });
+    document.addEventListener('DOMContentLoaded', firstScan);
   } else {
-    scan();
+    firstScan();
   }
 
   if ('MutationObserver' in window) {

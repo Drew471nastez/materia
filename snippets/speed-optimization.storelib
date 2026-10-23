@@ -1,266 +1,335 @@
 <template compat="shopify">
 {%- comment -%}
-  Materia Themes — Speed Optimization runtime.
-  Reads the Speed Optimization tab in Theme settings and emits:
-   • <link rel="preconnect"> / dns-prefetch tags
-   • <link rel="preload" as="image"> for the LCP image
-   • CSS for font-display: swap and reduced-motion behavior
-   • A small JS bundle for hover prefetch, idle 3rd-party loading,
-     IntersectionObserver-based pause-when-offscreen, etc.
+  Materia Themes. Speed runtime, driven by Theme settings > Performance.
+  Rendered in <head> before every stylesheet and before content_for_header.
 
-  Include with: {%- render 'speed-optimization' -%}  (in <head>)
+  Faster images & fonts (perf_images)
+    preconnect to the image and font hosts, the optional priority image is
+    preloaded on the home page, images below the first screen decode off the main thread.
+  Battery & motion friendly (perf_motion)
+    reduced motion honoured site wide; videos, autoplaying sliders and the
+    looping CSS animations of a content section (marquees, floats, shimmers)
+    pause while they are off screen; sliders do not autoplay under reduced motion.
+  Snappier page navigation (perf_nav)
+    speculation rules (prerender on hover or press, prefetch as fallback),
+    a short cross-fade between pages with the header held still, and hover
+    prefetch for browsers without speculation rules. A cart change drops pages
+    rendered in advance, so they never show an old cart.
+  Defer third-party apps & scripts (perf_thirdparty)
+    review, chat, popup, pixel and heatmap scripts that apps inject are held
+    until the visitor first interacts, or until the page has been idle a few
+    seconds after load. Analytics and checkout are never held.
+
+  A setting with no saved value takes its schema default (on, on, on, off).
 {%- endcomment -%}
 {%- liquid
-  # Speed Optimization — FOUR high-level toggles drive every granular behavior below.
-  assign perf_images = settings.perf_images
-  assign perf_motion = settings.perf_motion
-  assign perf_nav = settings.perf_nav
-  assign perf_thirdparty = settings.perf_thirdparty
-
-  # Images & fonts
-  assign sp_preconnect = perf_images
-  assign sp_preload_lcp = perf_images
-  assign sp_font_swap = perf_images
-  assign sp_async_decode = perf_images
-  assign sp_lazy = perf_images
-  assign sp_quality = 'balanced'
-
-  # Third-party scripts
-  assign sp_dns = perf_thirdparty
-  assign sp_defer = perf_thirdparty
-
-  # Navigation (instant nav stays off — experimental / can clash with Shop Pay)
-  assign sp_prefetch_hover = perf_nav
-  assign sp_instant = false
-
-  # Motion & battery
-  assign sp_reduced_motion = perf_motion
-  assign sp_pause = perf_motion
-
-  assign log = false
+  assign perf_images = true
+  if settings.perf_images == false
+    assign perf_images = false
+  endif
+  assign perf_motion = true
+  if settings.perf_motion == false
+    assign perf_motion = false
+  endif
+  assign perf_nav = true
+  if settings.perf_nav == false
+    assign perf_nav = false
+  endif
+  assign perf_thirdparty = false
+  if settings.perf_thirdparty == true
+    assign perf_thirdparty = true
+  endif
+  assign in_editor = false
+  if request.design_mode
+    assign in_editor = true
+  endif
+  assign shopify_fonts = false
+  if settings.font_type_body == 'shopify' or settings.font_type_heading == 'shopify'
+    assign shopify_fonts = true
+  endif
 -%}
 
-{%- if sp_preconnect -%}
-  <link rel="preconnect" href="https://cdn.shopify.com" crossorigin>
-  <link rel="preconnect" href="https://fonts.shopifycdn.com" crossorigin>
+{%- if perf_images -%}
+  {%- comment -%} Pictures are plain (no-cors) requests, so their connection is opened without crossorigin; fonts need it. {%- endcomment -%}
+  <link rel="preconnect" href="https://cdn.shopify.com">
+  {%- if shopify_fonts -%}
+    <link rel="preconnect" href="https://fonts.shopifycdn.com" crossorigin>
+  {%- endif -%}
+  {%- assign on_home = false -%}
+  {%- if request.page_type == 'index' or template.name == 'index' or template.name == 'home' -%}{%- assign on_home = true -%}{%- endif -%}
+  {%- if settings.preload_image != blank and on_home -%}
+    <link rel="preload" as="image" href="{{ settings.preload_image | image_url: width: 1600 }}" imagesrcset="{{ settings.preload_image | image_url: width: 800 }} 800w, {{ settings.preload_image | image_url: width: 1200 }} 1200w, {{ settings.preload_image | image_url: width: 1600 }} 1600w" imagesizes="100vw" fetchpriority="high">
+  {%- endif -%}
 {%- endif -%}
 
-{%- if sp_dns -%}
-  <link rel="dns-prefetch" href="https://www.google-analytics.com">
-  <link rel="dns-prefetch" href="https://www.googletagmanager.com">
-  <link rel="dns-prefetch" href="https://connect.facebook.net">
+{%- if perf_thirdparty -%}
   <link rel="dns-prefetch" href="https://static.klaviyo.com">
   <link rel="dns-prefetch" href="https://cdn.judge.me">
-  <link rel="dns-prefetch" href="https://widget.trustpilot.com">
+  <link rel="dns-prefetch" href="https://connect.facebook.net">
   <link rel="dns-prefetch" href="https://www.youtube.com">
-  <link rel="dns-prefetch" href="https://player.vimeo.com">
 {%- endif -%}
 
-{%- if sp_preload_lcp -%}
-  {%- comment -%}Try to find the first slideshow / banner image on the home page.{%- endcomment -%}
-  {%- assign lcp_image = blank -%}
-  {%- for section in template.section_groups -%}{%- endfor -%}
-  {%- if template.name == 'index' -%}
-    {%- for section_id in content_for_index -%}{%- endfor -%}
-  {%- endif -%}
-  {%- if settings.preload_image != blank -%}
-    {%- assign lcp_image = settings.preload_image -%}
-  {%- endif -%}
-  {%- if lcp_image != blank -%}
-    <link rel="preload" as="image" href="{{ lcp_image | image_url: width: 1600 }}" imagesrcset="{{ lcp_image | image_url: width: 800 }} 800w, {{ lcp_image | image_url: width: 1200 }} 1200w, {{ lcp_image | image_url: width: 1600 }} 1600w" imagesizes="100vw" fetchpriority="high">
-  {%- endif -%}
-{%- endif -%}
-
-{%- if sp_font_swap or sp_reduced_motion -%}
+{%- if perf_motion -%}
 <style id="speed-optimization-css">
-  {%- if sp_font_swap -%}
-    /* Force font-display: swap for any @font-face the theme loads */
-    @font-face { font-display: swap !important; }
-  {%- endif -%}
-  {%- if sp_reduced_motion -%}
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-        scroll-behavior: auto !important;
-      }
-      [data-image-effect='parallax'],
-      [data-image-effect='ken_burns'],
-      [data-image-effect='mouse_track'] { animation: none !important; transform: none !important; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
     }
-  {%- endif -%}
+    [data-image-effect='parallax'],
+    [data-image-effect='ken_burns'],
+    [data-image-effect='mouse_track'] { animation: none !important; transform: none !important; }
+  }
+  /* A content section scrolled well out of view holds its looping animations
+     where they are and picks them up again as it comes back. */
+  .shopify-section[data-perf-offscreen] *,
+  .shopify-section[data-perf-offscreen] *::before,
+  .shopify-section[data-perf-offscreen] *::after { animation-play-state: paused !important; }
 {% comment %}{% endcomment %}</style>
 {%- endif -%}
 
-<script id="speed-optimization-js" data-log="{{ log }}">
+{%- if perf_nav and in_editor == false -%}
+  {%- comment -%}
+    Page to page: the old page fades into the new one in 0.18s. The header is
+    its own layer, shown at once in its new state, so it does not blink. The
+    name only applies while the browser takes the snapshot, so the sticky
+    header and its fixed mobile menu behave as usual the rest of the time.
+  {%- endcomment -%}
+  <style id="speed-view-transitions">
+    @view-transition { navigation: auto; }
+    ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.18s; animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1); }
+    [id^="shopify-section-"].section-header { view-transition-name: site-header; }
+    ::view-transition-group(site-header) { animation: none; }
+    ::view-transition-old(site-header) { display: none; }
+    ::view-transition-new(site-header) { animation: none; }
+    @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+{% comment %}{% endcomment %}  </style>
+  <script type="speculationrules" id="speed-speculation-rules">
+{"prerender":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/cart","/cart/*","/cart?*","/checkout*","/account*","/*logout*","/*/add*","/*add-to-cart*","/search*","/apps/*","/*challenge*"]}},{"not":{"selector_matches":"[rel~=nofollow], [target=_blank], [download], [data-no-prefetch], [data-no-prerender]"}}]},"eagerness":"moderate"}],"prefetch":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/cart","/cart/*","/cart?*","/checkout*","/account*","/*logout*","/*/add*","/*add-to-cart*","/search*","/apps/*","/*challenge*"]}},{"not":{"selector_matches":"[rel~=nofollow], [target=_blank], [download], [data-no-prefetch]"}}]},"eagerness":"moderate"}]}
+{% comment %}{% endcomment %}  </script>
+{%- endif -%}
+
+<script id="speed-optimization-js">
 (function () {
   var s = {
-    log: {{ log | json }},
-    asyncDecode: {{ sp_async_decode | json }},
-    lazyBelowFold: {{ sp_lazy | json }},
-    deferThirdParty: {{ sp_defer | json }},
-    prefetchHover: {{ sp_prefetch_hover | json }},
-    instantNav: {{ sp_instant | json }},
-    pauseOffscreen: {{ sp_pause | json }},
-    reducedMotion: {{ sp_reduced_motion | json }},
-    imageQuality: {{ sp_quality | json }}
+    images: {{ perf_images | json }},
+    motion: {{ perf_motion | json }},
+    nav: {{ perf_nav | json }} && !{{ in_editor | json }},
+    thirdParty: {{ perf_thirdparty | json }} && !{{ in_editor | json }}
   };
-  function L() { if (s.log && console && console.info) console.info.apply(console, ['[speed]'].concat([].slice.call(arguments))); }
-
-  // ---------- Async image decode + below-fold lazy ----------
-  function tuneImages() {
-    var imgs = document.querySelectorAll('img:not([data-speed-tuned])');
-    var firstViewport = window.innerHeight + 200;
-    imgs.forEach(function (img) {
-      img.setAttribute('data-speed-tuned', '1');
-      if (s.asyncDecode && !img.hasAttribute('decoding')) img.setAttribute('decoding', 'async');
-      if (s.lazyBelowFold && !img.hasAttribute('loading')) {
-        var rect = img.getBoundingClientRect();
-        if (rect.top > firstViewport) img.setAttribute('loading', 'lazy');
-        else img.setAttribute('loading', 'eager');
-      }
-    });
-    if (imgs.length) L('tuned ' + imgs.length + ' images');
+  var idle = window.requestIdleCallback || function (fn) { return setTimeout(fn, 120); };
+  function onReady(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
+    else fn();
   }
-  tuneImages();
-  if ('MutationObserver' in window) {
-    // Batched: one pass when the page is idle, not one per DOM change.
-    var tunePending = false;
-    var idle = window.requestIdleCallback || function (fn) { return setTimeout(fn, 120); };
-    new MutationObserver(function (records) {
-      if (tunePending) return;
-      for (var i = 0; i < records.length; i++) {
-        var added = records[i].addedNodes;
-        for (var j = 0; j < added.length; j++) {
-          var n = added[j];
-          if (n.nodeType === 1 && (n.tagName === 'IMG' || (n.firstElementChild && n.querySelector('img')))) {
-            tunePending = true;
-            idle(function () { tunePending = false; tuneImages(); }, { timeout: 400 });
-            return;
+
+  /* ---------- Faster images: decode off the main thread below the first screen ----------
+     Pictures in the first screen keep the browser's own decoding, so the hero
+     paints in the same frame it arrives. One read pass, then one write pass. */
+  if (s.images) {
+    var tuneImages = function () {
+      var imgs = document.querySelectorAll('img:not([decoding]):not([data-speed-tuned])');
+      var fold = window.innerHeight;
+      var below = [];
+      for (var i = 0; i < imgs.length; i++) {
+        var r = imgs[i].getBoundingClientRect();
+        below.push(r.top >= fold || (r.width === 0 && r.height === 0));
+      }
+      for (var j = 0; j < imgs.length; j++) {
+        imgs[j].setAttribute('data-speed-tuned', '');
+        if (below[j]) imgs[j].decoding = 'async';
+      }
+    };
+    onReady(function () { idle(tuneImages, { timeout: 800 }); });
+    if ('MutationObserver' in window) {
+      var tunePending = false;
+      var tuneObserver = new MutationObserver(function (records) {
+        if (tunePending) return;
+        for (var i = 0; i < records.length; i++) {
+          var added = records[i].addedNodes;
+          for (var j = 0; j < added.length; j++) {
+            var n = added[j];
+            if (n.nodeType === 1 && (n.tagName === 'IMG' || (n.firstElementChild && n.querySelector('img')))) {
+              tunePending = true;
+              idle(function () { tunePending = false; tuneImages(); }, { timeout: 600 });
+              return;
+            }
           }
         }
-      }
-    }).observe(document.documentElement, { childList: true, subtree: true });
-  }
-
-  // ---------- Hover prefetch ----------
-  // Browsers that read the layout's speculation rules already prefetch on
-  // hover; a second <link rel=prefetch> fetched every page twice.
-  var hasSpeculation = !!(window.HTMLScriptElement && HTMLScriptElement.supports && HTMLScriptElement.supports('speculationrules'));
-  if (s.prefetchHover && !hasSpeculation && 'IntersectionObserver' in window) {
-    var prefetched = new Set();
-    function prefetch(url) {
-      if (prefetched.has(url)) return;
-      prefetched.add(url);
-      var l = document.createElement('link');
-      l.rel = 'prefetch';
-      l.href = url;
-      l.as = 'document';
-      document.head.appendChild(l);
-      L('prefetched', url);
+      });
+      onReady(function () { tuneObserver.observe(document.body || document.documentElement, { childList: true, subtree: true }); });
+      // Pictures that matter arrive with the page; stop watching once it has settled.
+      addEventListener('load', function () { setTimeout(function () { tuneObserver.disconnect(); }, 10000); }, { once: true });
     }
-    var hoverTimer;
-    document.addEventListener('mouseover', function (e) {
-      var a = e.target.closest && e.target.closest('a[href]');
-      if (!a) return;
-      var href = a.getAttribute('href');
-      if (!href || href.charAt(0) === '#' || a.target === '_blank') return;
-      if (a.hostname && a.hostname !== location.hostname) return;
-      clearTimeout(hoverTimer);
-      hoverTimer = setTimeout(function () { prefetch(a.href); }, 100);
-    }, true);
-    document.addEventListener('mouseout', function () { clearTimeout(hoverTimer); }, true);
   }
 
-  // ---------- Defer third-party until idle ----------
-  if (s.deferThirdParty) {
-    function loadDeferred() {
+  /* ---------- Snappier navigation ---------- */
+  if (s.nav) {
+    var hasSpeculation = !!(window.HTMLScriptElement && HTMLScriptElement.supports && HTMLScriptElement.supports('speculationrules'));
+    // Browsers without speculation rules (Safari, Firefox): fetch the next page
+    // when the pointer rests on a link, so it comes from cache on click.
+    if (!hasSpeculation) {
+      var prefetched = {};
+      var hoverTimer;
+      var skip = /\/(cart|checkout|account|search|apps)(\/|\?|$)|logout|add-to-cart|\/add(\/|\?|$)/;
+      document.addEventListener('mouseover', function (e) {
+        var a = e.target.closest && e.target.closest('a[href]');
+        if (!a || a.target === '_blank' || a.hasAttribute('download') || a.hasAttribute('data-no-prefetch')) return;
+        if (a.origin !== location.origin || a.hash && a.pathname === location.pathname) return;
+        if (skip.test(a.pathname + a.search)) return;
+        var url = a.href;
+        clearTimeout(hoverTimer);
+        hoverTimer = setTimeout(function () {
+          if (prefetched[url]) return;
+          prefetched[url] = 1;
+          var l = document.createElement('link');
+          l.rel = 'prefetch';
+          l.href = url;
+          document.head.appendChild(l);
+        }, 80);
+      }, { passive: true, capture: true });
+      document.addEventListener('mouseout', function () { clearTimeout(hoverTimer); }, { passive: true, capture: true });
+    }
+    // A page rendered in advance keeps the cart as it was then. When the cart
+    // changes here, the rules are put back fresh, which drops those pages.
+    if (hasSpeculation && 'PerformanceObserver' in window) {
+      var refreshRules = function () {
+        var old = document.getElementById('speed-speculation-rules');
+        if (!old) return;
+        var fresh = document.createElement('script');
+        fresh.type = 'speculationrules';
+        fresh.id = old.id;
+        fresh.textContent = old.textContent;
+        old.remove();
+        document.head.appendChild(fresh);
+      };
+      var cartWrite = /\/cart\/(add|change|update|clear)(\.js|\.json)?(\?|$)/;
+      try {
+        new PerformanceObserver(function (list) {
+          var entries = list.getEntries();
+          for (var i = 0; i < entries.length; i++) {
+            if (cartWrite.test(entries[i].name)) { refreshRules(); return; }
+          }
+        }).observe({ type: 'resource', buffered: false });
+      } catch (_) {}
+    }
+  }
+
+  /* ---------- Defer third-party apps & scripts ----------
+     Scripts an app injects from these hosts are held until the first
+     interaction or a few idle seconds after load, then added in order. */
+  if (s.thirdParty) {
+    var HOSTS = /(^|\.)(klaviyo\.com|judge\.me|judgeme\.io|trustpilot\.com|yotpo\.com|okendo\.io|stamped\.io|loox\.io|reviews\.io|privy\.com|omnisend\.com|tidio\.co|tawk\.to|gorgias\.chat|intercom\.io|crisp\.chat|zdassets\.com|facebook\.net|tiktok\.com|pinimg\.com|sc-static\.net|hotjar\.com|clarity\.ms|pushowl\.com|smile\.io)$/i;
+    var held = [];
+    var released = false;
+    var isHeld = function (node) {
+      if (released || !node || node.nodeName !== 'SCRIPT' || !node.src) return false;
+      try { return HOSTS.test(new URL(node.src, location.href).hostname); } catch (_) { return false; }
+    };
+    var origAppend = Node.prototype.appendChild;
+    var origInsert = Node.prototype.insertBefore;
+    Node.prototype.appendChild = function (node) {
+      if (isHeld(node)) { held.push(node); return node; }
+      return origAppend.call(this, node);
+    };
+    Node.prototype.insertBefore = function (node, ref) {
+      if (isHeld(node)) { held.push(node); return node; }
+      return origInsert.call(this, node, ref);
+    };
+    var release = function () {
+      if (released) return;
+      released = true;
+      Node.prototype.appendChild = origAppend;
+      Node.prototype.insertBefore = origInsert;
+      events.forEach(function (t) { removeEventListener(t, release, listenOpts); });
+      var queue = held.splice(0);
+      for (var i = 0; i < queue.length; i++) origAppend.call(document.head, queue[i]);
       document.querySelectorAll('script[type="text/lazyload"]').forEach(function (sc) {
         var n = document.createElement('script');
-        for (var i = 0; i < sc.attributes.length; i++) {
-          var a = sc.attributes[i];
-          if (a.name === 'type') continue;
-          n.setAttribute(a.name, a.value);
+        for (var k = 0; k < sc.attributes.length; k++) {
+          var a = sc.attributes[k];
+          if (a.name !== 'type') n.setAttribute(a.name, a.value);
         }
         if (sc.textContent) n.textContent = sc.textContent;
         sc.parentNode.replaceChild(n, sc);
       });
-      L('deferred 3rd-party scripts loaded');
-    }
-    if ('requestIdleCallback' in window) requestIdleCallback(loadDeferred, { timeout: 4000 });
-    else setTimeout(loadDeferred, 2500);
+    };
+    var events = ['pointerdown', 'keydown', 'touchstart', 'wheel', 'scroll'];
+    var listenOpts = { passive: true, once: true };
+    events.forEach(function (t) { addEventListener(t, release, listenOpts); });
+    var afterLoad = function () { setTimeout(function () { idle(release, { timeout: 2000 }); }, 3500); };
+    if (document.readyState === 'complete') afterLoad(); else addEventListener('load', afterLoad, { once: true });
   }
 
-  // ---------- Pause carousels/videos when off-screen ----------
-  if (s.pauseOffscreen && 'IntersectionObserver' in window) {
-    var pausableSel = 'video, .swiper, slide-section, [data-autoplay]';
-    var io = new IntersectionObserver(function (entries) {
+  /* ---------- Battery & motion friendly ---------- */
+  if (s.motion && 'IntersectionObserver' in window) {
+    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
+    var stopAutoplay = function (el) {
+      if (el.swiper && el.swiper.autoplay && el.swiper.autoplay.running) {
+        try { el.swiper.autoplay.stop(); } catch (_) {}
+        return true;
+      }
+      return false;
+    };
+    // Videos and sliders: paused out of view, resumed only if this paused them.
+    var mediaIO = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
         var el = entry.target;
+        if (reduced && reduced.matches) { stopAutoplay(el); return; }
         if (entry.isIntersecting) {
-          if (el.tagName === 'VIDEO' && el.dataset.spdPaused === '1') {
-            el.dataset.spdPaused = '0';
-            el.play && el.play().catch(function () {});
-          }
-          if (el.swiper && el.dataset.spdPaused === '1') {
-            el.dataset.spdPaused = '0';
-            try { el.swiper.autoplay && el.swiper.autoplay.start(); } catch (_) {}
-          }
-        } else {
-          if (el.tagName === 'VIDEO' && !el.paused) {
-            el.dataset.spdPaused = '1';
-            el.pause && el.pause();
-          }
-          if (el.swiper && el.swiper.autoplay && el.swiper.autoplay.running) {
-            el.dataset.spdPaused = '1';
-            try { el.swiper.autoplay.stop(); } catch (_) {}
-          }
+          if (el.dataset.spdPaused !== '1') return;
+          el.dataset.spdPaused = '0';
+          if (el.tagName === 'VIDEO') { var p = el.play && el.play(); if (p && p.catch) p.catch(function () {}); }
+          else if (el.swiper && el.swiper.autoplay) { try { el.swiper.autoplay.start(); } catch (_) {} }
+        } else if (el.tagName === 'VIDEO') {
+          if (!el.paused) { el.dataset.spdPaused = '1'; el.pause(); }
+        } else if (stopAutoplay(el)) {
+          el.dataset.spdPaused = '1';
         }
       });
-    }, { threshold: 0.1 });
-    function observe() {
-      document.querySelectorAll(pausableSel).forEach(function (el) {
-        if (el.dataset.spdObserved === '1') return;
-        el.dataset.spdObserved = '1';
-        io.observe(el);
+    }, { threshold: 0.05 });
+    // Content sections: looping CSS animations held while far out of view.
+    // Sections that hold a popup, drawer, dialog or sticky bar are left alone,
+    // because those can show on screen while the section itself is not.
+    var holdsOverlay = '[class*="popup"], [class*="Popup"], [class*="modal"], [class*="drawer"], [class*="sticky"], [role="dialog"], dialog';
+    var sectionIO = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        entry.target.toggleAttribute('data-perf-offscreen', !entry.isIntersecting);
+      });
+    }, { rootMargin: '300px 0px' });
+    var observeAll = function () {
+      var media = document.querySelectorAll('video, .swiper, slide-section, [data-autoplay]');
+      for (var i = 0; i < media.length; i++) {
+        if (media[i].dataset.spdObserved === '1') continue;
+        media[i].dataset.spdObserved = '1';
+        mediaIO.observe(media[i]);
+      }
+      var sections = document.querySelectorAll('#MainContent > .shopify-section:not([data-perf-watch])');
+      for (var j = 0; j < sections.length; j++) {
+        var sec = sections[j];
+        sec.setAttribute('data-perf-watch', '');
+        if (sec.querySelector(holdsOverlay)) continue;
+        sectionIO.observe(sec);
+      }
+    };
+    onReady(observeAll);
+    // Sliders start after their scripts run; under reduced motion stop them once started.
+    addEventListener('load', function () {
+      observeAll();
+      if (reduced && reduced.matches) document.querySelectorAll('.swiper, slide-section').forEach(stopAutoplay);
+    }, { once: true });
+    if ('MutationObserver' in window) {
+      var observePending = false;
+      onReady(function () {
+        new MutationObserver(function () {
+          if (observePending) return;
+          observePending = true;
+          idle(function () { observePending = false; observeAll(); }, { timeout: 600 });
+        }).observe(document.getElementById('MainContent') || document.body, { childList: true, subtree: true });
       });
     }
-    observe();
-    var observePending = false;
-    new MutationObserver(function () {
-      if (observePending) return;
-      observePending = true;
-      (window.requestIdleCallback || function (fn) { return setTimeout(fn, 150); })(function () { observePending = false; observe(); }, { timeout: 500 });
-    }).observe(document.documentElement, { childList: true, subtree: true });
-  }
-
-  // ---------- Instant nav (View Transitions / bfcache friendly) ----------
-  if (s.instantNav && 'startViewTransition' in document) {
-    document.addEventListener('click', function (e) {
-      var a = e.target.closest && e.target.closest('a[href]');
-      if (!a) return;
-      var href = a.getAttribute('href');
-      if (!href || href.charAt(0) === '#' || a.target === '_blank') return;
-      if (a.hostname && a.hostname !== location.hostname) return;
-      e.preventDefault();
-      document.startViewTransition(function () { location.href = a.href; });
-    });
-    L('instant nav enabled');
-  }
-
-  // ---------- Diagnostics ----------
-  if (s.log && 'PerformanceObserver' in window) {
-    try {
-      var po = new PerformanceObserver(function (list) {
-        list.getEntries().forEach(function (entry) {
-          if (entry.entryType === 'largest-contentful-paint') L('LCP', Math.round(entry.startTime), 'ms', entry.element);
-          if (entry.entryType === 'layout-shift' && !entry.hadRecentInput) L('CLS shift', entry.value.toFixed(4));
-        });
-      });
-      po.observe({ type: 'largest-contentful-paint', buffered: true });
-      po.observe({ type: 'layout-shift', buffered: true });
-    } catch (_) {}
   }
 })();
 {% comment %}{% endcomment %}</script>

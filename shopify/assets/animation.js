@@ -72,8 +72,9 @@ function initializeScrollAnimationTrigger(root = document, editorEvent = false) 
   const elements = [...root.querySelectorAll(SCROLL_ANIMATION_TRIGGER_CLASSNAME)];
   if (root.matches?.(SCROLL_ANIMATION_TRIGGER_CLASSNAME)) elements.unshift(root);
   const editor = editorEvent || document.documentElement.classList.contains('shopify-design-mode') || window.Shopify?.designMode;
+  const productInformation = '.product-detail__information, .product-single__information';
+  const fresh = [];
   elements.forEach(el => {
-    const productInformation = '.product-detail__information, .product-single__information';
     const essentialProductContent = el.closest(productInformation) || el.querySelector(productInformation);
     if (essentialProductContent || editor || reducedMotion() || !revealObserver || el.hasAttribute(SCROLL_ANIMATION_DONE_ATTR)) {
       revealObserver?.unobserve(el);
@@ -82,11 +83,15 @@ function initializeScrollAnimationTrigger(root = document, editorEvent = false) 
     }
     if (revealInitialized.has(el)) return;
     revealInitialized.add(el);
-    // Content already painted in the viewport must not disappear during initialization.
-    if (el.getBoundingClientRect().top < window.innerHeight) {
-      markDone(el);
-      return;
-    }
+    fresh.push(el);
+  });
+  // Measure every element first, then change classes: one layout for the whole
+  // page instead of one per section. Content in the first screen (or above it)
+  // shows at once; only what is below the fold waits to reveal on scroll.
+  const fold = window.innerHeight;
+  const below = fresh.map(el => el.getBoundingClientRect().top >= fold);
+  fresh.forEach((el, i) => {
+    if (!below[i]) { markDone(el); return; }
     el.classList.add('scroll-trigger--offscreen', 'scroll-trigger--armed');
     revealObserver.observe(el);
   });

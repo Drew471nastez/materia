@@ -35,18 +35,25 @@
       <meta name="description" content="{{ page_description | escape }}">
     {% endif %}
     {% render 'meta-tags' %}
+    {%- comment -%} Performance settings: preconnects, page-to-page fade, speculation rules (prerender and prefetch), motion and third-party handling. {%- endcomment -%}
     {%- render 'speed-optimization' -%}
-    {%- unless request.design_mode -%}
-      {%- comment -%} Page to page: a short cross-fade where the browser supports it, and links are fetched as soon as the pointer rests on them or presses, so the next page is ready. {%- endcomment -%}
-      <style>
-        @view-transition { navigation: auto; }
-        ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.2s; animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1); }
-        @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
-{% comment %}{% endcomment %}      </style>
-      <script type="speculationrules">
-        {"prefetch": [{"where": {"and": [{"href_matches": "/*"}, {"not": {"href_matches": ["/cart*", "/checkout*", "/account*", "/*logout*", "/*add*", "/search*"]}}, {"not": {"selector_matches": "[rel~=nofollow], [target=_blank], [data-no-prefetch]"}}]}, "eagerness": "moderate"}]}
-{% comment %}{% endcomment %}      </script>
-    {%- endunless -%}
+    {%- comment -%}
+      theme.js imports cart-components.js, which the browser would only find
+      after theme.js has downloaded and parsed. Start it now, resolved from
+      theme.js's own address exactly as the import is, at low priority so it
+      never competes with the stylesheets or the first image.
+    {%- endcomment -%}
+    <script>
+      (function () {
+        try {
+          var l = document.createElement('link');
+          l.rel = 'modulepreload';
+          l.href = new URL('./cart-components.js', new URL({{ 'theme.js' | asset_url | json }}, location.href)).href;
+          l.fetchPriority = 'low';
+          document.head.appendChild(l);
+        } catch (e) {}
+      })();
+{% comment %}{% endcomment %}    </script>
     {{ content_for_header }}
     {{ 'critical.css' | asset_url | stylesheet_tag }}
 
@@ -323,6 +330,15 @@
     {% endstyle %}
     {{ 'theme.css' | asset_url | stylesheet_tag }}
     {{ 'popup.css' | asset_url | stylesheet_tag }}
+    {%- comment -%}
+      The header menu and the cart drawer link their stylesheets from the body,
+      so the browser met them only halfway down the page, and the scripts and
+      the page's ready event waited on them. Requested here, with the others;
+      the drawer's at low priority so the first screen comes first.
+    {%- endcomment -%}
+    <link rel="preload" as="style" href="{{ 'navigation.css' | asset_url }}">
+    <link rel="preload" as="style" href="{{ 'minicart.css' | asset_url }}" fetchpriority="low">
+    <link rel="preload" as="style" href="{{ 'materia-experience.css' | asset_url }}" fetchpriority="low">
     {% render 'theme-controls' %}
     <script src="{{ 'swiper-bundle.min.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'motion.min.js' | asset_url }}" type="module" defer="defer"></script>
@@ -401,30 +417,15 @@
         body :where(.btn, .btn-primary, .btn-outline, .btn-white, .btn-secondary, [data-sl-button]):active { transform: none; }
       }
 {% comment %}{% endcomment %}    </style>
-  </head>
-  <body
-    class="gradient{% if settings.rounded_corner > 1 and settings.enable_rounded %} rounded-style{% endif %}{% if settings.action_after_add_cart == 'show_popup' %} minicart_type-popup{% endif %}{% if enable_rtl %} rtl{% endif %} {% if request.page_type == 'cart'%}template-cart{% endif %} {{ request.page_type }}"
-    data-btn-style="{{ settings.btn_style | default: 'solid' }}"
-    data-scroll-animation="{{ settings.scroll_animation | default: 'none' }}"
-    data-btn-shape="{{ settings.btn_shape | default: 'rounded' }}"
-    data-btn-hover="{{ settings.btn_hover_effect | default: 'fade' }}"
-    data-sl-btn-hover="{{ settings.storelib_button_hover_effect | default: 'theme' }}"
-    data-badge-shape="{{ settings.badges_shape | default: 'pill' }}"
-    data-badge-size="{{ settings.badges_size | default: 'medium' }}"
-    data-badge-position="{{ settings.badges_position | default: 'top_start' }}"
-    data-badge-anim="{{ settings.badges_animation | default: 'none' }}"
-    data-menu-hover="{{ settings.menu_hover_style | default: 'underline' }}"
-  >
-    {%- liquid
-      sections 'header-group'
-    -%}
-
     {%- comment -%}
       Sticky-footer layout — page content always fills at least one
       viewport height. This stops the body's white background from
       showing as a gap below the footer when content is short, AND
       keeps the footer flush against the top of the mobile-nav bar
       on mobile (no awkward white strip in between).
+
+      In <head>, so the first paint already has the final layout; drawn
+      after the header it made the header shift once on landing.
 
       Skipped in design_mode so Shopify's section-picker preview
       iframes (which render in tiny viewports and may misbehave with
@@ -450,6 +451,24 @@
         body > .shopify-section-group-footer-group { flex: 0 0 auto; }
 {% comment %}{% endcomment %}      </style>
     {%- endunless -%}
+  </head>
+  <body
+    class="gradient{% if settings.rounded_corner > 1 and settings.enable_rounded %} rounded-style{% endif %}{% if settings.action_after_add_cart == 'show_popup' %} minicart_type-popup{% endif %}{% if enable_rtl %} rtl{% endif %} {% if request.page_type == 'cart'%}template-cart{% endif %} {{ request.page_type }}"
+    data-btn-style="{{ settings.btn_style | default: 'solid' }}"
+    data-scroll-animation="{{ settings.scroll_animation | default: 'none' }}"
+    data-btn-shape="{{ settings.btn_shape | default: 'rounded' }}"
+    data-btn-hover="{{ settings.btn_hover_effect | default: 'fade' }}"
+    data-sl-btn-hover="{{ settings.storelib_button_hover_effect | default: 'theme' }}"
+    data-badge-shape="{{ settings.badges_shape | default: 'pill' }}"
+    data-badge-size="{{ settings.badges_size | default: 'medium' }}"
+    data-badge-position="{{ settings.badges_position | default: 'top_start' }}"
+    data-badge-anim="{{ settings.badges_animation | default: 'none' }}"
+    data-menu-hover="{{ settings.menu_hover_style | default: 'underline' }}"
+  >
+    {%- liquid
+      sections 'header-group'
+    -%}
+
 
     <main id="MainContent" class="content-for-layout focus-none" role="main" tabindex="-1">
       {{ content_for_layout }}
