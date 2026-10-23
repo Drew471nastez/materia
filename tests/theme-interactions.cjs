@@ -34,6 +34,18 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
     await page.emulateMedia({reducedMotion:'reduce'});
     assert.equal(await page.$eval('#primary',el=>getComputedStyle(el).transitionDuration),'0s'); passed++;
     await page.emulateMedia({reducedMotion:'no-preference'});
+    // Underline and ghost buttons read as text: no fill on hover under any effect,
+    // and a section's own hover fade gives way to the theme's effect.
+    for(const effect of ['slide','reverse','none']) {
+      await page.setContent(`<style>:root{--btn-primary-bg-color:#123456;--btn-primary-color:#fff;--btn-primary-hover-bg-color:#c00000;--btn-primary-hover-color:#fff;--btn-anim-duration:0ms}.own:hover{opacity:.85}</style><body data-btn-hover="${effect}"><a id="u" class="own" data-theme-button="primary" data-button-appearance="underline" data-button-hover="${effect}">Read more</a> <a id="s" class="own" data-theme-button="primary" data-button-appearance="solid" data-button-hover="${effect}">Shop</a></body>`);
+      await page.addStyleTag({content: read('shopify/assets/theme-button-contract.css')});
+      await page.hover('#u');
+      assert.equal((await style('#u')).bg,'rgba(0, 0, 0, 0)',effect+' must not fill an underline button');
+      assert.equal((await style('#u')).color,'rgb(192, 0, 0)');
+      assert.equal(await page.$eval('#u',el=>getComputedStyle(el,'::before').transform),'matrix(0, 0, 0, 1, 0, 0)');
+      await page.hover('#s');
+      assert.equal(await page.$eval('#s',el=>getComputedStyle(el).opacity),'1',effect+' must not add a section fade');
+    }passed++;
 
     // Actual ProductForm class, with a deliberately delayed Shopify response.
     const theme = read('shopify/assets/theme.js');
