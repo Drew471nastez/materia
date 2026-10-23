@@ -7,10 +7,11 @@
   if (connection?.saveData || /2g/.test(connection?.effectiveType || '')) return;
   const warmed = new Set();
   const warm = anchor => {
-    if (!anchor || anchor.target || anchor.hasAttribute('download') || anchor.hasAttribute('data-no-prefetch')) return;
-    const url = new URL(anchor.href, location.href);
-    if (url.origin !== location.origin || url.pathname === location.pathname || /\/(cart|checkout|account|search)(\/|$)/.test(url.pathname)) return;
-    if (warmed.has(url.href)) return;
+    if (!anchor || anchor.target || anchor.hasAttribute('download') || anchor.hasAttribute('data-no-prefetch') || anchor.relList.contains('nofollow')) return;
+    let url;
+    try { url = new URL(anchor.href, location.href); } catch { return; }
+    if (url.origin !== location.origin || url.pathname === location.pathname || /\/(cart|checkout|account|search|apps)(\/|$)|logout|add-to-cart|\/add(\/|$)/i.test(url.pathname)) return;
+    if (warmed.has(url.href) || warmed.size >= 12) return;
     warmed.add(url.href);
     const hint = document.createElement('link');
     hint.rel = 'prefetch'; hint.as = 'document'; hint.href = url.href;
@@ -22,6 +23,7 @@
   };
   if (document.readyState !== 'loading') ready();
   else document.addEventListener('DOMContentLoaded', ready, {once: true});
-  document.addEventListener('pointerover', event => warm(event.target.closest?.('a[data-product-neighbor]')), {passive: true});
-  document.addEventListener('focusin', event => warm(event.target.closest?.('a[data-product-neighbor]')));
+  document.addEventListener('pointerover', event => warm(event.target.closest?.('a[href]')), {passive: true});
+  document.addEventListener('focusin', event => warm(event.target.closest?.('a[href]')));
+  document.addEventListener('pointerdown', event => warm(event.target.closest?.('a[href]')), {passive: true});
 })();

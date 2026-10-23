@@ -4741,17 +4741,17 @@ if (!customElements.get("product-form-quick-edit")) {
                 );
 
                 if (cartUpsellItem.length > 0) {
-                  setTimeout(function () {
-                    cartRecommend.classList.add("open");
-                  }, 800);
+                  requestAnimationFrame(function () {
+                    if (cartRecommend.isConnected) cartRecommend.classList.add("open");
+                  });
                 } else if (cartUpsellSlide.length === 0) {
                   cartRecommend.classList.remove("block");
                   cartRecommend.classList.add("hidden");
                 }
               } else {
-                setTimeout(function () {
-                  cartRecommend.classList.add("open");
-                }, 800);
+                requestAnimationFrame(function () {
+                  if (cartRecommend.isConnected) cartRecommend.classList.add("open");
+                });
               }
             }
           });
@@ -7844,17 +7844,17 @@ if (!customElements.get("product-form")) {
                         ".swiper-cart-upsell .swiper-slide"
                       );
                       if (cartUpsellItem.length > 0) {
-                        setTimeout(function () {
-                          cartRecommend.classList.add("open");
-                        }, 800);
+                        requestAnimationFrame(function () {
+                          if (cartRecommend.isConnected) cartRecommend.classList.add("open");
+                        });
                       } else if (cartUpsellSlide.length === 0) {
                         cartRecommend.classList.remove("block");
                         cartRecommend.classList.add("hidden");
                       }
                     } else {
-                      setTimeout(function () {
-                        cartRecommend.classList.add("open");
-                      }, 800);
+                      requestAnimationFrame(function () {
+                        if (cartRecommend.isConnected) cartRecommend.classList.add("open");
+                      });
                     }
                   }
                 }, time);
@@ -7934,7 +7934,7 @@ if (!customElements.get("product-form")) {
           })
           .finally(() => {
             this.cart?.removeAttribute("aria-busy");
-            BlsLazyloadImg.init();
+            requestAnimationFrame(() => BlsLazyloadImg.init());
             if (document.documentElement.classList.contains("open-popup")) {
               document.documentElement.classList.remove("open-popup");
             }

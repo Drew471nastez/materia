@@ -875,10 +875,11 @@ class CartNotification extends HTMLElement {
           }px)`;
         }
       }
-      // Let an open search panel finish sliding away (0.4s) before the drawer
-      // comes in; it used to wait 0.65s.
+      // Close search and start the cart in the same frame. Never serialize two
+      // independent CSS transitions into a half-second pause.
       if (document.documentElement.classList.contains("open-search")) {
-        await new Promise((resolve) => setTimeout(resolve, 420));
+        document.documentElement.classList.remove('open-search');
+        document.getElementById('search-form')?.classList.remove('open');
       }
       if (!this.isConnected || opening !== this._openRevision) return;
       this.notification
@@ -974,39 +975,46 @@ customElements.define("cart-notification", CartNotification);
 // Base class for components that fetch and update content
 class BaseFetcher extends HTMLElement {
   static htmlCache = new Map();
-  constructor() {
-    super();
-    this.abortController = new AbortController();
-  }
+  static inFlight = new Map();
 
   async fetchAndUpdate(url, sourceSelector, targetSelector) {
     if (!url || this._loadingUrl === url) return;
-    const cacheKey = `${url}|${sourceSelector}`;
+    const revision = this._requestRevision = (this._requestRevision || 0) + 1;
+    const cacheKey = url;
+    if (!this.querySelector('.swiper-slide, .cart-upsell-item')) this.hidden = true;
     const cached = BaseFetcher.htmlCache.get(cacheKey);
     if (cached && Date.now() - cached.at < 15000) {
       this.updateContent(cached.html, sourceSelector, targetSelector);
       this.initializeLazyLoading();
       return;
     }
-    if (this.abortController.signal.aborted) this.abortController = new AbortController();
     this._loadingUrl = url;
     try {
-      const response = await fetch(url, {signal:this.abortController.signal,credentials:'same-origin'});
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const html = await response.text();
-      if (!this.isConnected) return;
+      if (!BaseFetcher.inFlight.has(url)) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const request = fetch(url, {signal:controller.signal,credentials:'same-origin'})
+          .then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.text(); })
+          .then(html => {
+            BaseFetcher.htmlCache.set(cacheKey, {html, at:Date.now()});
+            if (BaseFetcher.htmlCache.size > 12) BaseFetcher.htmlCache.delete(BaseFetcher.htmlCache.keys().next().value);
+            return html;
+          }).finally(() => { clearTimeout(timeout); BaseFetcher.inFlight.delete(url); });
+        BaseFetcher.inFlight.set(url, request);
+      }
+      const html = await BaseFetcher.inFlight.get(url);
+      if (!this.isConnected || revision !== this._requestRevision) return;
       this.updateContent(html, sourceSelector, targetSelector);
-      BaseFetcher.htmlCache.set(cacheKey, {html, at:Date.now()});
-      // Cap memory and stale results; recommendation URLs include the lead product.
-      if (BaseFetcher.htmlCache.size > 12) BaseFetcher.htmlCache.delete(BaseFetcher.htmlCache.keys().next().value);
     } catch (error) {
       if (error.name !== 'AbortError') {
         console.warn('[Materia recommendations] Request failed:', error);
-        if (!this.querySelector(targetSelector)?.children.length) this.classList.add('hidden');
+        if (!this.querySelector('.swiper-slide, .cart-upsell-item')) this.hidden = true;
       }
     } finally {
-      this._loadingUrl = null;
-      this.initializeLazyLoading();
+      if (revision === this._requestRevision) {
+        this._loadingUrl = null;
+        this.initializeLazyLoading();
+      }
     }
   }
 
@@ -1015,13 +1023,18 @@ class BaseFetcher extends HTMLElement {
     html.innerHTML = text;
     
     const content = html.querySelector(sourceSelector);
-    if (content?.innerHTML.trim().length) {
+    if (content?.querySelector('.swiper-slide, .cart-upsell-item')) {
       const target = this.querySelector(targetSelector);
       if (target) {
         target.innerHTML = content.innerHTML;
+        this.hidden = false;
+        this.classList.remove('hidden', 'no-js-hidden');
+        this.classList.add('open');
+        this.querySelector('slide-section')?.globalSlide?.update();
+        document.dispatchEvent(new CustomEvent('materia:cart-drawer-updated'));
       }
     } else {
-      this.classList.add("hidden");
+      this.hidden = true;
     }
   }
 
@@ -1032,8 +1045,10 @@ class BaseFetcher extends HTMLElement {
   }
 
   disconnectedCallback() {
-    // Cancel any ongoing fetch requests when element is removed
-    this.abortController.abort();
+    // A shared request may still serve the other layout. Ignore stale results
+    // here without aborting the request that layout is waiting for.
+    this._requestRevision = (this._requestRevision || 0) + 1;
+    this._loadingUrl = null;
   }
 }
 

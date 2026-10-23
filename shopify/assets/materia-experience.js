@@ -2,6 +2,24 @@
 (() => {
   if (window.__materiaExperienceReady) return;
   window.__materiaExperienceReady = true;
+  // Native links navigate without a JS delay, but acknowledge the tapped item
+  // immediately. Back/forward restores an idle navigation bar.
+  let navPendingTimer;
+  const clearNavPending = () => {
+    clearTimeout(navPendingTimer);
+    document.querySelectorAll('mobile-navigation-bar [data-nav-pending]').forEach(link => link.removeAttribute('data-nav-pending'));
+  };
+  document.addEventListener('click', event => {
+    const link = event.target.closest?.('mobile-navigation-bar a[href]');
+    if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.target || link.hasAttribute('download')) return;
+    let url;
+    try { url = new URL(link.href, location.href); } catch { return; }
+    if (url.origin !== location.origin || (url.pathname === location.pathname && url.search === location.search) || link.matches('[data-storelib-cart], [data-storelib-search], [data-storelib-menu], .cart-icon, .search-icon')) return;
+    clearNavPending();
+    link.setAttribute('data-nav-pending', '');
+    navPendingTimer = setTimeout(clearNavPending, 8000);
+  });
+  window.addEventListener('pageshow', clearNavPending);
   function syncButtons(scope = document) {
     const purchase = '.product-detail__buy-buttons :is(button[name="add"], .shopify-payment-button__button:not(.shopify-payment-button__button--branded)), .product-detail__information :is(.btn-primary, .btn-secondary, .btn-outline, [data-sl-button]):not(.btn-reset):not(.icon-btn):not(.quantity__button), .product-item__button-submit, .footer__newsletter button[type="submit"], #minicart_wrapper .cart__addon-content :is(.btn-save, .coupon-apply, .add-giftwrap, .btn-cancel), #minicart_wrapper .drawer-bottom :is(.btn-primary, .btn-outline, .btn-secondary)';
     const shared = '.shopify-section :is(a, button, input[type="submit"]):is(.btn-primary, .btn-secondary, .btn-outline):not(.btn-reset):not(.icon-btn):not(.btn-icon--circle)';

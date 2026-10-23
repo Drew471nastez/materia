@@ -224,6 +224,7 @@ class SlideSection extends HTMLElement {
   }
 
   init() {
+    if (this.classList.contains('slideshow')) { this.initSlide(); return; }
     if (document.body.classList.contains("index")) {
       let pos = window.pageYOffset;
       if (pos > 0 || document.body.classList.contains("swiper-lazy")) {
@@ -241,6 +242,7 @@ class SlideSection extends HTMLElement {
   }
 
   initSlide() {
+    if (this.globalSlide && !this.globalSlide.destroyed) return;
     const _this = this;
     var autoplaying = _this?.dataset.autoplay === "true";
     const loop = _this?.dataset.loop === "true";
@@ -373,6 +375,12 @@ class SlideSection extends HTMLElement {
       ...effectOpts,
       autoHeight: autoHeight,
       speed: speed,
+      // Let Swiper own the drag; vertical page scrolling keeps its native feel.
+      ...(_this.classList.contains('slideshow') ? {
+        threshold: 8, touchAngle: 35, resistanceRatio: .65,
+        longSwipesRatio: .25, longSwipesMs: 250,
+        followFinger: true, touchStartPreventDefault: false,
+      } : {}),
       watchSlidesProgress: true,
       watchSlidesVisibility: true,
       grabCursor: true,
@@ -493,8 +501,7 @@ class SlideSection extends HTMLElement {
           // the CSS uses an INTERRUPTIBLE transition (not a restartable keyframe).
           // Rapid arrow clicks therefore re-ease smoothly instead of snapping.
           if (!_this.classList.contains("slideshow")) return;
-          _this.classList.remove("is-entering");
-          void _this.offsetWidth; // reflow so the next add restarts the transition
+          if (_this.classList.contains('is-dragging')) return;
           _this.classList.add("is-entering");
           clearTimeout(_this._enterTimer);
           // Fallback removal in case TransitionEnd is skipped on a fast interrupt.
@@ -529,7 +536,7 @@ class SlideSection extends HTMLElement {
           }
 
           setTimeout(() => {
-            if (_this.classList.contains("slideshow")) {
+            if (_this.classList.contains("slideshow") && !_this.classList.contains('is-dragging')) {
               const motionElement = _this.querySelectorAll(
                 `.swiper-slide.swiper-slide-active  motion-element.effect_fadeinup, .swiper-slide.swiper-slide-active  motion-element.motion-image`
               );
