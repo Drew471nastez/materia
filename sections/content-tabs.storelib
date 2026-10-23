@@ -1,4 +1,5 @@
 <template compat="shopify">
+{% render 'theme-type' %}
 {%- comment -%} Connect to the theme's global Animations & motion settings (Theme settings > Animations). {%- endcomment -%}
 {%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
 <style>
@@ -145,7 +146,7 @@
 
   /* ---- Outer spacing ---- */
   #shopify-section-{{ sid }} .ctabs {
-    {% if st.background != blank %}background: {{ st.background }};{% endif %}
+    {% if st.background != blank and st.background.alpha != 0 %}background: {{ st.background }};{% endif %}
     padding-top: {{ st.padding_top_mobile | default: 48 }}px;
     padding-bottom: {{ st.padding_bottom_mobile | default: 48 }}px;
     margin-top: {{ st.section_margin_top_mobile | default: 0 }}px;
@@ -321,7 +322,7 @@
     margin: 0 0 10px;
     line-height: 1.15;
     font-size: {{ st.card_title_size | default: 24 }}px;
-    font-weight: 500;
+    font-weight: var(--heading-weight, 500);
   }
   #shopify-section-{{ sid }} .ctabs__desc {
     font-family: var(--body-font);
@@ -406,7 +407,7 @@
   }
 {% comment %}{% endcomment %}</style>
 
-<div class="ctabs color-{{ color_scheme }}">
+<div class="ctabs color-{{ color_scheme }} gradient">
   <div class="ctabs__inner">
 
     {%- if heading_found and hb.heading != blank -%}
@@ -465,8 +466,8 @@
                 echo '--ctabs-bri:' | append: tb.image_brightness | default: 100 | append: '%;'
                 echo '--ctabs-title:' | append: tb.title_color | default: '#FFFFFF' | append: ';'
                 echo '--ctabs-text:' | append: tb.text_color | default: '#FFFFFF' | append: ';'
-                echo '--ctabs-badge-bg:' | append: tb.badge_bg | default: '#E6E3FF' | append: ';'
-                echo '--ctabs-badge-c:' | append: tb.badge_text_color | default: '#2A2550' | append: ';'
+                echo '--ctabs-badge-bg:' | append: tb.badge_bg | default: 'var(--color-background)' | append: ';'
+                echo '--ctabs-badge-c:' | append: tb.badge_text_color | default: 'var(--color-heading)' | append: ';'
               endcapture
               assign card_tag = 'article'
               if tb.link != blank
@@ -551,13 +552,14 @@
             {%- if cb.custom_colors -%}
               <style>
                 #shopify-section-{{ sid }} #ctabs-btn-{{ block.id }} {
-                  background: {{ cb.bg | default: '#14142B' }} !important;
-                  border-color: {{ cb.bg | default: '#14142B' }} !important;
-                  color: {{ cb.text_color | default: '#FFFFFF' }} !important;
+                  background: {% render 'scheme-color', color: cb.bg, fallback: 'var(--btn-primary-bg-color)' %} !important;
+                  border-color: {% render 'scheme-color', color: cb.bg, fallback: 'var(--btn-primary-bg-color)' %} !important;
+                  color: {% render 'scheme-color', color: cb.text_color, fallback: 'var(--btn-primary-color)' %} !important;
                 }
                 #shopify-section-{{ sid }} #ctabs-btn-{{ block.id }}:hover {
-                  background: {{ cb.bg_hover | default: '#2A2550' }} !important;
-                  border-color: {{ cb.bg_hover | default: '#2A2550' }} !important;
+                  background: {% render 'scheme-color', color: cb.bg_hover, fallback: 'var(--btn-primary-hover-bg-color)' %} !important;
+                  border-color: {% render 'scheme-color', color: cb.bg_hover, fallback: 'var(--btn-primary-hover-bg-color)' %} !important;
+                  color: {% render 'scheme-color', color: cb.text_color, fallback: 'var(--btn-primary-hover-color)' %} !important;
                 }
 {% comment %}{% endcomment %}              </style>
             {%- endif -%}
@@ -576,10 +578,12 @@
 
 <script>
   (function () {
+  function init() {
     var root = document.getElementById('shopify-section-{{ sid }}');
     if (!root) return;
     var track = root.querySelector('[data-ctabs-track]');
-    if (!track) return;
+    if (!track || track.dataset.ctabsInit) return;
+    track.dataset.ctabsInit = '1';
     var prev = root.querySelector('[data-ctabs-prev]');
     var next = root.querySelector('[data-ctabs-next]');
 
@@ -635,6 +639,14 @@
       if (dragged) { e.preventDefault(); e.stopPropagation(); dragged = false; }
     }, true);
     track.addEventListener('dragstart', function (e) { e.preventDefault(); });
+  }
+  init();
+  if (!window['__ctabsLoad_{{ sid }}']) {
+    window['__ctabsLoad_{{ sid }}'] = true;
+    document.addEventListener('storelib:section-load', function (e) {
+      if (e.detail && String(e.detail.sectionId) === '{{ sid }}') init();
+    });
+  }
   })();
 {% comment %}{% endcomment %}</script>
 
@@ -1498,9 +1510,39 @@
     "class": "section-content-tabs",
     "settings": [
       {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "container",
+        "options": [
+          {
+            "value": "container",
+            "label": "Default"
+          },
+          {
+            "value": "fluid",
+            "label": "Wide"
+          },
+          {
+            "value": "stretch",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
         "type": "checkbox",
         "id": "reset_spacing",
-        "label": "Remove default space between sections",
+        "label": "Remove section spacing",
         "default": true
       },
       {
@@ -1508,31 +1550,18 @@
         "content": "Color"
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme",
-        "info": "Heading, highlights, arrows and buttons inherit this scheme's colors and the theme fonts."
-      },
-      {
         "type": "color",
         "id": "background",
-        "label": "Section background",
-        "info": "Leave empty to use the color scheme background."
+        "label": "Section background"
       },
       {
         "type": "header",
         "content": "Highlights row"
       },
       {
-        "type": "paragraph",
-        "content": "Add 'Highlight' blocks below for the small icon + text items shown under the heading."
-      },
-      {
         "type": "color",
         "id": "highlights_color",
-        "label": "Highlights color",
-        "info": "Leave empty to inherit the theme heading color."
+        "label": "Highlights color"
       },
       {
         "type": "range",
@@ -1693,14 +1722,12 @@
       {
         "type": "color",
         "id": "arrow_icon_color",
-        "label": "Arrow icon color",
-        "info": "Leave empty to inherit the theme heading color."
+        "label": "Arrow icon color"
       },
       {
         "type": "color",
         "id": "arrow_border_color",
-        "label": "Arrow border color",
-        "info": "Leave empty to inherit the theme border color."
+        "label": "Arrow border color"
       },
       {
         "type": "header",
@@ -1759,26 +1786,6 @@
       {
         "type": "header",
         "content": "Section padding & margin"
-      },
-      {
-        "type": "select",
-        "id": "section_width",
-        "label": "Section width",
-        "default": "container",
-        "options": [
-          {
-            "value": "container",
-            "label": "Default"
-          },
-          {
-            "value": "fluid",
-            "label": "Wide"
-          },
-          {
-            "value": "stretch",
-            "label": "Full width"
-          }
-        ]
       },
       {
         "type": "range",
@@ -1876,13 +1883,12 @@
           {
             "type": "color",
             "id": "heading_color",
-            "label": "Heading color",
-            "info": "Leave empty to inherit the theme heading color."
+            "label": "Heading color"
           },
           {
             "type": "select",
             "id": "text_align",
-            "label": "Heading & highlights alignment (desktop)",
+            "label": "Alignment (desktop)",
             "default": "center",
             "options": [
               {
@@ -1902,7 +1908,7 @@
           {
             "type": "select",
             "id": "text_align_mobile",
-            "label": "Heading & highlights alignment (mobile)",
+            "label": "Alignment (mobile)",
             "default": "center",
             "options": [
               {
@@ -1944,21 +1950,16 @@
             "content": "Heading font"
           },
           {
-            "type": "paragraph",
-            "content": "By default the heading uses your theme heading font and weight. Turn this on to choose a custom font for this heading only."
-          },
-          {
             "type": "checkbox",
             "id": "heading_custom_font_enable",
-            "label": "Use a custom font for the heading",
+            "label": "Custom heading font",
             "default": false
           },
           {
             "type": "font_picker",
             "id": "heading_font",
             "label": "Heading font",
-            "default": "assistant_n4",
-            "info": "Only applied when the toggle above is on."
+            "default": "assistant_n4"
           },
           {
             "type": "select",
@@ -2094,8 +2095,7 @@
           {
             "type": "url",
             "id": "link",
-            "label": "Link (optional)",
-            "info": "If set, the whole card becomes clickable."
+            "label": "Link (optional)"
           },
           {
             "type": "header",
@@ -2146,14 +2146,12 @@
           {
             "type": "color",
             "id": "badge_bg",
-            "label": "Badge background",
-            "default": "#E6E3FF"
+            "label": "Badge background"
           },
           {
             "type": "color",
             "id": "badge_text_color",
-            "label": "Badge text color",
-            "default": "#2A2550"
+            "label": "Badge text color"
           }
         ]
       },
@@ -2198,27 +2196,23 @@
           {
             "type": "checkbox",
             "id": "custom_colors",
-            "label": "Override theme button colors",
-            "default": false,
-            "info": "Off = uses the color scheme's button styling."
+            "label": "Custom button colors",
+            "default": false
           },
           {
             "type": "color",
             "id": "bg",
-            "label": "Background",
-            "default": "#14142B"
+            "label": "Background"
           },
           {
             "type": "color",
             "id": "bg_hover",
-            "label": "Hover background",
-            "default": "#2A2550"
+            "label": "Hover background"
           },
           {
             "type": "color",
             "id": "text_color",
-            "label": "Text color",
-            "default": "#FFFFFF"
+            "label": "Text color"
           }
         ]
       },
@@ -2236,8 +2230,7 @@
           {
             "type": "color",
             "id": "footer_color",
-            "label": "Footer color",
-            "info": "Leave empty to inherit the theme text color."
+            "label": "Footer color"
           },
           {
             "type": "range",
