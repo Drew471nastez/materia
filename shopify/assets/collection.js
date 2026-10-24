@@ -396,10 +396,15 @@ var eventCollectionShopify = (function () {
     },
 
     renderSectionFilter: function (url, searchParams) {
+      // A newer filter, sort or view choice cancels the request still in
+      // flight, so a slow older response can never paint over a newer one.
+      if (this._filterRequest) this._filterRequest.abort();
+      const request = (this._filterRequest = new AbortController());
+      const isCurrent = () => this._filterRequest === request;
       this.toggleLoading(document.body, true);
       const grid_list = document.querySelector('grid-list')
-      grid_list.hideGridItems();
-      fetch(`${url}`)
+      grid_list?.hideGridItems?.();
+      fetch(`${url}`, { signal: request.signal })
         .then((response) => {
           if (!response.ok) {
             var error = new Error(response.status);
@@ -408,6 +413,7 @@ var eventCollectionShopify = (function () {
           return response.text();
         })
         .then((responseText) => {
+          if (!isCurrent()) return;
           if (window.innerWidth <= 1024) {
             const collectionFilterBlocks = new DOMParser()
               .parseFromString(responseText, 'text/html')
@@ -454,9 +460,12 @@ var eventCollectionShopify = (function () {
           }
         })
         .catch((error) => {
+          if (error && error.name === 'AbortError') return;
           throw error;
         })
         .finally(() => {
+          if (!isCurrent()) return;
+          this._filterRequest = null;
           // Always clear the loading bar — even when the fetch errored, so the
           // animated body.loading::after progress bar can't get stranded.
           eventCollectionShopify.toggleLoading(document.body, false);

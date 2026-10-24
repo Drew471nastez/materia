@@ -260,6 +260,8 @@
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     scroll-snap-type: x proximity;
+    scroll-padding-inline: 16px;
+    overscroll-behavior-x: contain;
     scrollbar-width: none;
     -ms-overflow-style: none;
     gap: {{ st.tab_gap | default: 10 }}px;
@@ -267,20 +269,29 @@
     padding: 4px 16px;
     box-sizing: border-box;
     max-width: 100%;
-    justify-content:
-      {%- if tabs_alignment == 'left' -%} flex-start
-      {%- elsif tabs_alignment == 'right' -%} flex-end
-      {%- else -%} center
-      {%- endif -%};
+    min-width: 0;
+    position: relative;
+    isolation: isolate;
+    justify-content: flex-start;
   }
+  {%- comment -%} Alignment with auto margins, not justify-content: a centred
+    row that overflows would cut off its first pills where no scroll
+    reaches them. {%- endcomment -%}
+  {%- if tabs_alignment != 'left' -%}
+    #shopify-section-{{ sid }} .ti-tabs__nav > .ti-tabs__btn:first-of-type { margin-inline-start: auto; }
+  {%- endif -%}
+  {%- if tabs_alignment == 'center' -%}
+    #shopify-section-{{ sid }} .ti-tabs__nav > .ti-tabs__btn:last-of-type { margin-inline-end: auto; }
+  {%- endif -%}
   /* On mobile pills can overflow — keep them inside the viewport edge
      with side padding so the active pill never gets clipped. */
   @media (max-width: 767px) {
     #shopify-section-{{ sid }} .ti-tabs__nav {
       padding-left: 16px;
       padding-right: 16px;
-      justify-content: flex-start;
     }
+    #shopify-section-{{ sid }} .ti-tabs__nav > .ti-tabs__btn:first-of-type { margin-inline-start: 0; }
+    #shopify-section-{{ sid }} .ti-tabs__nav > .ti-tabs__btn:last-of-type { margin-inline-end: 0; }
     {% if tabs_full_width %}
       /* "Full width" mode on mobile — was previously `flex: 1 1 0;
          min-width: 0;` which forced all tabs to share the row
@@ -329,7 +340,41 @@
     padding:
       {{ st.tab_padding_y | default: 10 }}px
       {{ st.tab_padding_x | default: 22 }}px;
-    transition: background-color .2s ease, color .2s ease, border-color .2s ease, transform .2s ease;
+    min-height: 44px;
+    box-sizing: border-box;
+    position: relative;
+    z-index: 1;
+    flex: 0 0 auto;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color .25s ease, color .25s ease, border-color .25s ease;
+  }
+  #shopify-section-{{ sid }} .ti-tabs__btn:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+  {%- comment -%} The moving indicator. JS places it under the active tab
+    (transform for the move, width for the size) and only then clears the
+    active tab's own fill, in the same frame, so nothing flashes. Without
+    JS the active tab keeps its own fill. {%- endcomment -%}
+  #shopify-section-{{ sid }} .ti-tabs__indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+    pointer-events: none;
+    box-sizing: border-box;
+    opacity: 0;
+    transform: translate3d(var(--ti-x, 0px), var(--ti-y, 0px), 0);
+    width: var(--ti-w, 0px);
+    height: var(--ti-h, 0px);
+  }
+  #shopify-section-{{ sid }} .ti-tabs__nav.has-indicator .ti-tabs__indicator { opacity: 1; }
+  #shopify-section-{{ sid }} .ti-tabs__nav.is-moving .ti-tabs__indicator {
+    transition: transform .38s cubic-bezier(.2, .7, .2, 1), width .38s cubic-bezier(.2, .7, .2, 1), height .38s cubic-bezier(.2, .7, .2, 1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ sid }} .ti-tabs__nav.is-moving .ti-tabs__indicator,
+    #shopify-section-{{ sid }} .ti-tabs__btn { transition: none; }
   }
 
   /* Tab style: pill (default) */
@@ -344,6 +389,11 @@
       color: {% render 'scheme-color', color: st.tab_checked_text_color, fallback: tab_active_text_fb %} !important;
       border: {{ st.tab_checked_border_thickness | default: 0 }}px solid {% render 'scheme-color', color: st.tab_checked_border_color, fallback: tab_active_border_fb %};
     }
+    #shopify-section-{{ sid }} .ti-tabs__indicator {
+      background-color: {% render 'scheme-color', color: st.tab_checked_bg_color, fallback: 'var(--btn-primary-bg-color)' %};
+      border: {{ st.tab_checked_border_thickness | default: 0 }}px solid {% render 'scheme-color', color: st.tab_checked_border_color, fallback: tab_active_border_fb %};
+      border-radius: {{ st.tab_border_radius | default: 999 }}px;
+    }
   {%- endif -%}
 
   /* Tab style: button (sharp/rounded square) */
@@ -357,6 +407,11 @@
       background-color: {% render 'scheme-color', color: st.tab_checked_bg_color, fallback: 'var(--btn-primary-bg-color)' %} !important;
       color: {% render 'scheme-color', color: st.tab_checked_text_color, fallback: tab_active_text_fb %} !important;
       border: {{ st.tab_checked_border_thickness | default: 1 }}px solid {% render 'scheme-color', color: st.tab_checked_border_color, fallback: tab_active_border_fb %};
+    }
+    #shopify-section-{{ sid }} .ti-tabs__indicator {
+      background-color: {% render 'scheme-color', color: st.tab_checked_bg_color, fallback: 'var(--btn-primary-bg-color)' %};
+      border: {{ st.tab_checked_border_thickness | default: 1 }}px solid {% render 'scheme-color', color: st.tab_checked_border_color, fallback: tab_active_border_fb %};
+      border-radius: {{ st.tab_border_radius | default: 6 }}px;
     }
   {%- endif -%}
 
@@ -374,6 +429,9 @@
       color: {% render 'scheme-color', color: st.tab_checked_text_color, fallback: tab_active_text_fb %} !important;
       border-bottom: {{ st.tab_checked_border_thickness | default: 2 }}px solid {% render 'scheme-color', color: st.tab_checked_border_color, fallback: tab_active_border_fb %};
     }
+    #shopify-section-{{ sid }} .ti-tabs__indicator {
+      background-color: {% render 'scheme-color', color: st.tab_checked_border_color, fallback: tab_active_border_fb %};
+    }
   {%- endif -%}
 
   /* Tab style: minimal text */
@@ -387,6 +445,27 @@
       color: {% render 'scheme-color', color: st.tab_checked_text_color, fallback: tab_active_text_fb %} !important;
       font-weight: 700;
     }
+    {%- comment -%} Each label reserves its bold width, so the active tab
+      turning bold never pushes its neighbours. {%- endcomment -%}
+    #shopify-section-{{ sid }} .ti-tabs__btn-text { display: inline-flex; flex-direction: column; align-items: center; }
+    #shopify-section-{{ sid }} .ti-tabs__btn-text::after {
+      content: attr(data-text);
+      font-weight: 700;
+      height: 0;
+      overflow: hidden;
+      visibility: hidden;
+      pointer-events: none;
+      user-select: none;
+    }
+  {%- endif -%}
+
+  {%- if tab_style == 'pill' or tab_style == 'button' -%}
+    #shopify-section-{{ sid }} .ti-tabs__nav.has-indicator .ti-tabs__btn.is-active {
+      background-color: transparent !important;
+      border-color: transparent !important;
+    }
+  {%- elsif tab_style == 'underline' -%}
+    #shopify-section-{{ sid }} .ti-tabs__nav.has-indicator .ti-tabs__btn.is-active { border-bottom-color: transparent; }
   {%- endif -%}
 
   /* Tab hover state */
@@ -408,47 +487,69 @@
     flex: 0 0 auto;
   }
 
-  /* ===== TAB PANELS (bulletproof hide/show) ===== */
-  #shopify-section-{{ sid }} .ti-tabs__panel {
-    display: none !important;
-    opacity: 0;
+  /* ===== TAB PANELS =====
+     Every panel sits in the same grid cell, so the panel area is always as
+     tall as the tallest tab: switching never changes the height, never
+     moves the content below, and the outgoing grid stays painted under the
+     incoming one while they cross-fade (no blank frame). Panels that are
+     not shown are inert and out of the accessibility tree. Their images
+     load with the page, so a tab never opens on empty boxes. */
+  #shopify-section-{{ sid }} .ti-tabs__panels {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #shopify-section-{{ sid }} .ti-tabs__panels > .ti-tabs__panel {
+    grid-area: 1 / 1;
+    display: block !important;
+    min-width: 0;
+  }
+  #shopify-section-{{ sid }} .ti-tabs__panel:not(.is-active) {
     visibility: hidden;
+    pointer-events: none;
+    z-index: 0;
+  }
+  {%- comment -%} The tab being left stays fully painted underneath until the
+    new one has faded in over it, then hides. {%- endcomment -%}
+  #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel:not(.is-active) {
+    transition: visibility 0s linear {% if tab_switch_animation == 'none' %}0s{% elsif tab_switch_animation contains 'flip' %}.55s{% else %}.4s{% endif %};
   }
   #shopify-section-{{ sid }} .ti-tabs__panel.is-active {
-    display: block !important;
-    opacity: 1;
     visibility: visible;
+    z-index: 1;
   }
+  #shopify-section-{{ sid }} .ti-tabs__panel:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
 
-  /* Tab switch animation (entry only, applied to active panel) */
+  /* Tab switch animation: the incoming panel, only after a switch (the
+     first tab is not animated on page load). */
   {%- case tab_switch_animation -%}
     {%- when 'fade' -%}
-      #shopify-section-{{ sid }} .ti-tabs__panel.is-active { animation: ti-tabs-fade-{{ sid }} .35s ease both; }
+      #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel.is-active { animation: ti-tabs-fade-{{ sid }} .35s ease both; }
       @keyframes ti-tabs-fade-{{ sid }} { from { opacity: 0; } to { opacity: 1; } }
     {%- when 'fade-in' -%}
-      #shopify-section-{{ sid }} .ti-tabs__panel.is-active { animation: ti-tabs-fadein-{{ sid }} .4s ease-in-out both; }
+      #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel.is-active { animation: ti-tabs-fadein-{{ sid }} .4s ease-in-out both; }
       @keyframes ti-tabs-fadein-{{ sid }} { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
     {%- when 'slide-up' -%}
-      #shopify-section-{{ sid }} .ti-tabs__panel.is-active { animation: ti-tabs-slideup-{{ sid }} .4s ease both; }
+      #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel.is-active { animation: ti-tabs-slideup-{{ sid }} .4s ease both; }
       @keyframes ti-tabs-slideup-{{ sid }} { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
     {%- when 'slide-down' -%}
-      #shopify-section-{{ sid }} .ti-tabs__panel.is-active { animation: ti-tabs-slidedown-{{ sid }} .4s ease both; }
+      #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel.is-active { animation: ti-tabs-slidedown-{{ sid }} .4s ease both; }
       @keyframes ti-tabs-slidedown-{{ sid }} { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
     {%- when 'zoom-in' -%}
-      #shopify-section-{{ sid }} .ti-tabs__panel.is-active { animation: ti-tabs-zoomin-{{ sid }} .4s ease both; }
+      #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel.is-active { animation: ti-tabs-zoomin-{{ sid }} .4s ease both; }
       @keyframes ti-tabs-zoomin-{{ sid }} { from { opacity: 0; transform: scale(.95); } to { opacity: 1; transform: scale(1); } }
     {%- when 'zoom-out' -%}
-      #shopify-section-{{ sid }} .ti-tabs__panel.is-active { animation: ti-tabs-zoomout-{{ sid }} .4s ease both; }
+      #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel.is-active { animation: ti-tabs-zoomout-{{ sid }} .4s ease both; }
       @keyframes ti-tabs-zoomout-{{ sid }} { from { opacity: 0; transform: scale(1.05); } to { opacity: 1; transform: scale(1); } }
     {%- when 'flip-x' -%}
-      #shopify-section-{{ sid }} .ti-tabs__panel.is-active { animation: ti-tabs-flipx-{{ sid }} .55s ease both; }
+      #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel.is-active { animation: ti-tabs-flipx-{{ sid }} .55s ease both; }
       @keyframes ti-tabs-flipx-{{ sid }} { from { opacity: 0; transform: perspective(600px) rotateX(60deg); } to { opacity: 1; transform: perspective(600px) rotateX(0deg); } }
     {%- when 'flip-y' -%}
-      #shopify-section-{{ sid }} .ti-tabs__panel.is-active { animation: ti-tabs-flipy-{{ sid }} .55s ease both; }
+      #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel.is-active { animation: ti-tabs-flipy-{{ sid }} .55s ease both; }
       @keyframes ti-tabs-flipy-{{ sid }} { from { opacity: 0; transform: perspective(600px) rotateY(60deg); } to { opacity: 1; transform: perspective(600px) rotateY(0deg); } }
   {%- endcase -%}
   @media (prefers-reduced-motion: reduce) {
-    #shopify-section-{{ sid }} .ti-tabs__panel.is-active { animation: none !important; }
+    #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel,
+    #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel.is-active { animation: none !important; transition: none !important; }
   }
 
   /* ===== EMPTY STATE ===== */
@@ -497,7 +598,7 @@
         {{ st.empty_state_message | default: fb_accessibility_add_collection_tab_hint }}
       </div>
     {%- else -%}
-      <tab-items data-type="horizontal" data-section-id="{{ sid }}">
+      <div class="ti-tabs__root" data-ti-tabs data-section-id="{{ sid }}">
         {%- if heading != blank or subheading != blank -%}
           <div class="ti-tabs__header">
             {%- if heading != blank -%}
@@ -510,7 +611,8 @@
         {%- endif -%}
 
         {%- comment -%} ============== TAB BUTTONS ============== {%- endcomment -%}
-        <div class="ti-tabs__nav collection-tab__ta" role="tablist">
+        <div class="ti-tabs__nav collection-tab__ta" role="tablist" aria-orientation="horizontal"{% if heading != blank %} aria-label="{{ heading | strip_html | escape }}"{% endif %}>
+          <span class="ti-tabs__indicator" aria-hidden="true"></span>
           {%- for block in section.blocks -%}
             {%- liquid
               assign bs = block.settings
@@ -531,17 +633,19 @@
             -%}
             <button
               type="button"
+              id="ti-tabs-btn-{{ sid }}-{{ block.id }}"
               class="ti-tabs__btn collection-tab__tab-item{% if forloop.first %} is-active active{% endif %}"
               data-block-id="{{ block.id }}"
               role="tab"
               aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+              tabindex="{% if forloop.first %}0{% else %}-1{% endif %}"
               aria-controls="ti-tabs-panel-{{ sid }}-{{ block.id }}"
               {{ block.shopify_attributes }}
             >
               {%- if st.show_tab_icon and tab_icon != blank -%}
                 {{ tab_icon | image_url: width: 64 | image_tag: class: 'ti-tabs__icon', alt: col_title, loading: 'lazy', width: 22, height: 22 }}
               {%- endif -%}
-              <span class="ti-tabs__btn-text">{{ col_title }}</span>
+              <span class="ti-tabs__btn-text" data-text="{{ col_title | escape }}">{{ col_title }}</span>
               {%- if st.show_product_count and col_obj != blank -%}
                 <span class="ti-tabs__count">({{ col_obj.products_count }})</span>
               {%- endif -%}
@@ -564,8 +668,9 @@
               class="ti-tabs__panel collection-tab__tab-content collection-tab-{{ block.id }}{% if forloop.first %} is-active active{% endif %}"
               data-block-id="{{ block.id }}"
               role="tabpanel"
-              aria-labelledby="ti-tabs-btn-{{ block.id }}"
-              {% if forloop.first == false %}hidden{% endif %}
+              aria-labelledby="ti-tabs-btn-{{ sid }}-{{ block.id }}"
+              tabindex="0"
+              {% if forloop.first == false %}inert aria-hidden="true"{% endif %}
               {{ block.shopify_attributes }}
             >
               {%- if col_obj != blank and col_obj.products_count > 0 -%}
@@ -695,7 +800,7 @@
             </div>
           {%- endfor -%}
         </div>
-      </tab-items>
+      </div>
     {%- endif -%}
   </div>
 </div>
@@ -705,31 +810,119 @@
     var sectionEl = document.getElementById('section-{{ sid }}');
     if (!sectionEl) return;
 
-    // ----- Tab switching (works alongside theme.js tab-items, plus a hard fallback) -----
-    var tabContainer = sectionEl.querySelector('tab-items');
-    if (tabContainer) {
-      var btns = tabContainer.querySelectorAll('.ti-tabs__btn');
-      var panels = tabContainer.querySelectorAll('.ti-tabs__panel');
-      function activate(blockId) {
-        btns.forEach(function(b) {
-          var on = b.getAttribute('data-block-id') === blockId;
+    // ----- Tabs -----
+    // Arrow keys, Home and End move between tabs and open them; the
+    // indicator slides with transform; the panels cross-fade in one shared
+    // grid cell, so the height never changes. A section the builder draws
+    // again gets the same set up (the flag lives on the new element).
+    var tabStyle = {{ tab_style | json }};
+    function initTabs(root) {
+      if (!root || root.__tiTabs) return;
+      root.__tiTabs = true;
+      var nav = root.querySelector('.ti-tabs__nav');
+      var indicator = nav && nav.querySelector('.ti-tabs__indicator');
+      var panelsWrap = root.querySelector('.ti-tabs__panels');
+      var btns = Array.prototype.slice.call(root.querySelectorAll('.ti-tabs__btn'));
+      var panels = Array.prototype.slice.call(root.querySelectorAll('.ti-tabs__panel'));
+      if (!nav || !btns.length) return;
+      var useIndicator = !!indicator && tabStyle !== 'text';
+      var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+      var isRtl = function () { return getComputedStyle(nav).direction === 'rtl'; };
+      var current = function () { return btns.filter(function (b) { return b.classList.contains('is-active'); })[0] || btns[0]; };
+
+      function place(animate) {
+        if (!useIndicator) return;
+        var btn = current();
+        if (!btn.offsetWidth) return;
+        var x = btn.offsetLeft, y = btn.offsetTop, w = btn.offsetWidth, h = btn.offsetHeight;
+        if (tabStyle === 'underline') {
+          var line = parseFloat(getComputedStyle(btn).borderBottomWidth) || 2;
+          y = y + h - line; h = line;
+        }
+        nav.classList.toggle('is-moving', !!animate && !reduce.matches);
+        indicator.style.setProperty('--ti-x', x + 'px');
+        indicator.style.setProperty('--ti-y', y + 'px');
+        indicator.style.setProperty('--ti-w', w + 'px');
+        indicator.style.setProperty('--ti-h', h + 'px');
+        nav.classList.add('has-indicator');
+      }
+
+      function reveal(btn, smooth) {
+        // Scroll the pill row only, never the page.
+        if (nav.scrollWidth <= nav.clientWidth + 1) return;
+        var left = btn.offsetLeft - (nav.clientWidth - btn.offsetWidth) / 2;
+        nav.scrollTo({ left: left, behavior: smooth && !reduce.matches ? 'smooth' : 'auto' });
+      }
+
+      function activate(btn, focus) {
+        if (!btn) return;
+        if (focus) btn.focus({ preventScroll: true });
+        if (btn.classList.contains('is-active')) return;
+        var blockId = btn.getAttribute('data-block-id');
+        btns.forEach(function (b) {
+          var on = b === btn;
           b.classList.toggle('is-active', on);
           b.classList.toggle('active', on);
           b.setAttribute('aria-selected', on ? 'true' : 'false');
+          b.tabIndex = on ? 0 : -1;
         });
-        panels.forEach(function(p) {
+        if (panelsWrap) panelsWrap.setAttribute('data-switched', '');
+        panels.forEach(function (p) {
           var on = p.getAttribute('data-block-id') === blockId;
           p.classList.toggle('is-active', on);
           p.classList.toggle('active', on);
-          if (on) { p.removeAttribute('hidden'); } else { p.setAttribute('hidden', ''); }
+          p.removeAttribute('hidden');
+          if (on) { p.removeAttribute('inert'); p.removeAttribute('aria-hidden'); }
+          else { p.setAttribute('inert', ''); p.setAttribute('aria-hidden', 'true'); }
         });
+        place(true);
+        reveal(btn, true);
       }
-      btns.forEach(function(btn) {
-        btn.addEventListener('click', function() {
-          activate(btn.getAttribute('data-block-id'));
-        });
+
+      nav.addEventListener('click', function (e) {
+        var btn = e.target.closest('.ti-tabs__btn');
+        if (btn && nav.contains(btn)) activate(btn, false);
+      });
+      nav.addEventListener('keydown', function (e) {
+        var i = btns.indexOf(e.target.closest('.ti-tabs__btn'));
+        if (i < 0) return;
+        var step = isRtl() ? -1 : 1, next = null;
+        if (e.key === 'ArrowRight') next = btns[(i + step + btns.length) % btns.length];
+        else if (e.key === 'ArrowLeft') next = btns[(i - step + btns.length) % btns.length];
+        else if (e.key === 'Home') next = btns[0];
+        else if (e.key === 'End') next = btns[btns.length - 1];
+        if (!next) return;
+        e.preventDefault();
+        activate(next, true);
+      });
+      if (indicator) indicator.addEventListener('transitionend', function (e) {
+        if (e.propertyName === 'transform') nav.classList.remove('is-moving');
+      });
+      // Labels change width when the web font arrives, the row when the
+      // window resizes: follow without animating.
+      if ('ResizeObserver' in window) {
+        var ro = new ResizeObserver(function () { if (!nav.classList.contains('is-moving')) place(false); });
+        ro.observe(nav);
+        btns.forEach(function (b) { ro.observe(b); });
+      }
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { place(false); });
+      place(false);
+      reveal(current(), false);
+      // Builder: selecting a tab's block opens that tab.
+      root.addEventListener('shopify:block:select', function (e) {
+        var id = e.target && e.target.getAttribute && e.target.getAttribute('data-block-id');
+        var btn = id && btns.filter(function (b) { return b.getAttribute('data-block-id') === id; })[0];
+        if (btn) activate(btn, false);
       });
     }
+    initTabs(sectionEl.querySelector('[data-ti-tabs]'));
+    ['storelib:section-load', 'shopify:section:load'].forEach(function (name) {
+      document.addEventListener(name, function (e) {
+        if (!e.detail || e.detail.sectionId !== {{ sid | json }}) return;
+        var el = document.getElementById('section-{{ sid }}');
+        if (el) initTabs(el.querySelector('[data-ti-tabs]'));
+      });
+    });
 
     // ----- Reveal-on-scroll (live storefront only, not in editor) -----
     //
