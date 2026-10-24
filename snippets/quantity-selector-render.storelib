@@ -1,0 +1,560 @@
+<template compat="shopify">
+{%- comment -%}
+  ═══════════════════════════════════════════════════════════════════════
+  QUANTITY SELECTOR — RENDER SNIPPET
+  ═══════════════════════════════════════════════════════════════════════
+  Image-card quantity picker. Two layouts:
+
+    layout = 'grid'  → cards side-by-side (default, matches "Single / 2 Pack / 3 Pack")
+    layout = 'list'  → stacked rows (great for "BUY X" detail rows)
+
+  Each card/row has:
+    • Single product image (per-option custom OR product featured image)
+    • Big label + optional "You save $XX" / savings subline
+    • Per-unit price ($XX/each) + optional total
+    • Optional floating "POPULAR" / "BEST VALUE" badge
+
+  Different focus from Bundle Pro: this block emphasizes PER-UNIT
+  pricing (good for unit/pack comparison — "$25.00/each").
+
+  ───────────────────────────────────────────────────────────────────────
+  HOW DISCOUNTS ACTUALLY APPLY — IMPORTANT FOR MERCHANTS
+  ───────────────────────────────────────────────────────────────────────
+  This block SETS THE QUANTITY when a shopper picks an option. The
+  percent shown in each option's "Per-unit discount %" is just a
+  preview number. To actually charge less at checkout, you need to do
+  ONE of these in Shopify Admin:
+
+  OPTION A — Automatic Quantity Discount (recommended, no code)
+  ─────────────────────────────────────────────────────────────
+    1. Shopify Admin → Discounts → Create discount
+    2. Pick "Amount off products" → "Quantity discount" (tier pricing)
+    3. Add tiers matching your block options, e.g.:
+         • Buy 2, get 17% off
+         • Buy 3, get 38% off
+    4. Method: Automatic (no code required)
+    Result: clicks update quantity → discount auto-applies in cart.
+
+  OPTION B — Per-option Discount Code
+  ────────────────────────────────────
+    1. Create discount codes in Shopify Admin (e.g. PACK2, PACK3)
+    2. Paste each code into the option's "Discount code" setting
+    3. After Add-to-Cart we fetch('/discount/<CODE>') so it applies
+       to the cart before checkout. No app, no extra setup.
+
+  Learn more (Shopify Help):
+    https://help.shopify.com/en/manual/discounts/discount-types
+    https://help.shopify.com/en/manual/discounts/discount-types/quantity-discounts
+
+  ───────────────────────────────────────────────────────────────────────
+  TECHNICAL NOTES — for theme developers
+  ───────────────────────────────────────────────────────────────────────
+    • enable_oN gates each option; capture → split builds the option list.
+    • Settings read via dynamic key:
+        {%- assign x = qs[ 'o' | append: idx | append: '_qty' ] -%}
+    • Radio input source of truth; :has(:checked) + .is-checked fallback.
+    • Per-unit price math (JS):
+        basePrice    = variant.price (current variant)
+        comparePrice = variant.compare_at_price || basePrice
+        perUnit      = basePrice × (1 − discount/100)
+        total        = perUnit × qty
+        compare      = comparePrice × qty
+        savings      = compare − total
+    • Quantity sync: writes to form[name="quantity"] + dispatches events.
+    • Discount code: on form submit, fetch('/discount/<code>') 500ms later.
+
+  Inputs to this snippet:
+      block, section, product, shop
+{%- endcomment -%}
+{%- assign qs = block.settings -%}
+{%- assign qs_layout = qs.layout | default: 'grid' -%}
+{%- assign qs_accent = qs.accent | default: '#3B82F6' -%}
+{%- assign qs_text   = qs.text_color | default: '#111111' -%}
+{%- assign qs_muted  = qs.muted_color | default: '#666666' -%}
+{%- assign qs_bg     = qs.card_bg | default: '#ffffff' -%}
+{%- assign qs_border = qs.border_color | default: '#e5e5e5' -%}
+{%- assign qs_sel_bg = qs.selected_bg | default: '#EFF6FF' -%}
+{%- assign qs_radius = qs.card_radius | default: 14 -%}
+
+{%- capture qs_indices -%}
+  {%- if qs.enable_o1 -%}1,{%- endif -%}
+  {%- if qs.enable_o2 -%}2,{%- endif -%}
+  {%- if qs.enable_o3 -%}3,{%- endif -%}
+  {%- if qs.enable_o4 -%}4,{%- endif -%}
+  {%- if qs.enable_o5 -%}5,{%- endif -%}
+{%- endcapture -%}
+{%- assign qs_options = qs_indices | split: ',' -%}
+
+{%- assign qs_fallback_img = product.featured_image -%}
+
+<div id="QtySelector-{{ block.id }}"
+     class="qty-selector qty-selector--{{ qs_layout }}"
+     data-qty-selector
+     data-block-id="{{ block.id }}"
+     {{ block.shopify_attributes }}
+     style="
+       --qs-accent: {{ qs_accent }};
+       --qs-text: {{ qs_text }};
+       --qs-muted: {{ qs_muted }};
+       --qs-bg: {{ qs_bg }};
+       --qs-border: {{ qs_border }};
+       --qs-sel-bg: {{ qs_sel_bg }};
+       --qs-radius: {{ qs_radius }}px;
+       --qs-gap: {{ qs.card_gap | default: 12 }}px;
+       --qs-mt: {{ qs.mt | default: 16 }}px;
+       --qs-mb: {{ qs.mb | default: 16 }}px;
+       --qs-header-gap: {{ qs.header_gap | default: 14 }}px;
+     ">
+
+  {%- if qs.title != blank -%}
+    <h3 class="qty-selector__title"
+        style="color: {{ qs.title_color | default: qs_text }}; font-size: {{ qs.title_size | default: 16 }}px; font-weight: {{ qs.title_weight | default: 500 }}; text-align: {{ qs.title_align | default: 'left' }}; letter-spacing: {{ qs.title_letter_spacing | default: 0.0 }}em; text-transform: {% if qs.title_uppercase %}uppercase{% else %}none{% endif %};">{{ qs.title }}</h3>
+  {%- endif -%}
+
+  {%- if qs.subtitle != blank -%}
+    <p class="qty-selector__subtitle" style="color: {{ qs.subtitle_color | default: qs_muted }}; font-size: {{ qs.subtitle_size | default: 13 }}px; text-align: {{ qs.title_align | default: 'left' }};">{{ qs.subtitle }}</p>
+  {%- endif -%}
+
+  <div class="qty-selector__list" role="radiogroup" aria-label="{{ qs.aria_label | default: 'Choose quantity' | escape }}">
+    {%- for idx_str in qs_options -%}
+      {%- assign idx = idx_str | strip -%}
+      {%- if idx == blank -%}{%- continue -%}{%- endif -%}
+
+      {%- assign qty_key      = 'o' | append: idx | append: '_qty' -%}
+      {%- assign label_key    = 'o' | append: idx | append: '_label' -%}
+      {%- assign sub_key      = 'o' | append: idx | append: '_sublabel' -%}
+      {%- assign discount_key = 'o' | append: idx | append: '_discount' -%}
+      {%- assign badge_key    = 'o' | append: idx | append: '_badge' -%}
+      {%- assign popular_key  = 'o' | append: idx | append: '_popular' -%}
+      {%- assign default_key  = 'o' | append: idx | append: '_default' -%}
+      {%- assign image_key    = 'o' | append: idx | append: '_image' -%}
+      {%- assign badge_bg_key = 'o' | append: idx | append: '_badge_bg' -%}
+      {%- assign code_key     = 'o' | append: idx | append: '_discount_code' -%}
+      {%- assign savings_key  = 'o' | append: idx | append: '_savings_text' -%}
+
+      {%- assign qty       = qs[qty_key]      | default: idx -%}
+      {%- assign qty_num   = qty | plus: 0 -%}
+      {%- assign label     = qs[label_key]    -%}
+      {%- assign sublabel  = qs[sub_key]      -%}
+      {%- assign disc_pct  = qs[discount_key] | default: 0 -%}
+      {%- assign badge_txt = qs[badge_key]    -%}
+      {%- assign is_pop    = qs[popular_key]  -%}
+      {%- assign is_def    = qs[default_key]  -%}
+      {%- assign opt_img   = qs[image_key]    | default: qs_fallback_img -%}
+      {%- assign badge_bg  = qs[badge_bg_key] -%}
+      {%- assign disc_code = qs[code_key]     | strip -%}
+      {%- assign savings_txt = qs[savings_key] -%}
+
+      {%- if label == blank -%}
+        {%- if qty_num == 1 -%}
+          {%- assign label = qs.label_single | default: 'Single' -%}
+        {%- else -%}
+          {%- assign label_suffix = qs.label_pack_suffix | default: 'Pack' -%}
+          {%- assign label = qty_num | append: ' ' | append: label_suffix -%}
+        {%- endif -%}
+      {%- endif -%}
+
+      <label class="qty-selector__option {% if is_pop %}is-popular{% endif %} {% if is_def %}is-default{% endif %}"
+             data-qs-option
+             data-qty="{{ qty_num }}"
+             data-discount="{{ disc_pct }}"
+             {% if savings_txt != blank %}data-savings-text="{{ savings_txt | escape }}"{% endif %}
+             {% if disc_code != blank %}data-discount-code="{{ disc_code | escape }}"{% endif %}>
+        <input type="radio" name="qty-selector-{{ block.id }}" value="{{ qty_num }}" class="qty-selector__radio" {% if is_def %}checked{% endif %}>
+
+        {%- comment -%} Badge text priority: per-option override > global popular_label (when is_pop) > nothing {%- endcomment -%}
+        {%- assign final_badge_text = '' -%}
+        {%- if badge_txt != blank -%}
+          {%- assign final_badge_text = badge_txt -%}
+        {%- elsif is_pop and qs.popular_label != blank -%}
+          {%- assign final_badge_text = qs.popular_label -%}
+        {%- endif -%}
+        {%- if final_badge_text != blank -%}
+          {%- assign computed_badge_bg = badge_bg -%}
+          {%- if computed_badge_bg == blank -%}
+            {%- if is_pop -%}{%- assign computed_badge_bg = qs.popular_bg | default: '#1a1a1a' -%}
+            {%- else -%}{%- assign computed_badge_bg = qs.badge_bg | default: '#A3E635' -%}{%- endif -%}
+          {%- endif -%}
+          <span class="qty-selector__badge"
+                style="background: {{ computed_badge_bg }}; color: {{ qs.badge_text | default: '#FFFFFF' }};">
+            {{ final_badge_text | escape }}
+          </span>
+        {%- endif -%}
+
+        {%- if qs.show_images and opt_img != blank -%}
+          <span class="qty-selector__image-wrap qty-selector__image-wrap--{{ qs.image_aspect | default: 'square' }} qty-selector__image-wrap--{{ qs.image_fit | default: 'cover' }}"
+                aria-hidden="true"
+                style="border-radius: {{ qs.image_radius | default: 8 }}px;">
+            {{ opt_img | image_url: width: 360 | image_tag: loading: 'lazy', class: 'qty-selector__image', alt: '' }}
+          </span>
+        {%- endif -%}
+
+        <span class="qty-selector__main">
+          <span class="qty-selector__label">{{ label | escape }}</span>
+          {%- if sublabel != blank -%}
+            <span class="qty-selector__sub">{{ sublabel | escape }}</span>
+          {%- endif -%}
+          {%- if qs.show_savings -%}
+            <span class="qty-selector__savings" data-qs-savings>—</span>
+          {%- endif -%}
+        </span>
+
+        <span class="qty-selector__price-col">
+          <span class="qty-selector__per-unit" data-qs-per-unit>—</span>
+          {%- if qs.show_total_price -%}
+            <span class="qty-selector__total" data-qs-total>—</span>
+          {%- endif -%}
+          {%- if qs.show_compare -%}
+            <span class="qty-selector__compare" data-qs-compare>—</span>
+          {%- endif -%}
+        </span>
+      </label>
+    {%- endfor -%}
+  </div>
+
+  {%- if qs.footer_note != blank -%}
+    <p class="qty-selector__footer" style="color: {{ qs.footer_color | default: qs_muted }};">{{ qs.footer_note }}</p>
+  {%- endif -%}
+</div>
+
+<style>
+  #QtySelector-{{ block.id }} {
+    margin: var(--qs-mt) 0 var(--qs-mb);
+    color: var(--qs-text);
+    font-family: var(--body-font, inherit);
+  }
+  #QtySelector-{{ block.id }} *, #QtySelector-{{ block.id }} *::before, #QtySelector-{{ block.id }} *::after { box-sizing: border-box; }
+  #QtySelector-{{ block.id }} .qty-selector__title {
+    margin: 0 0 6px;
+  }
+  #QtySelector-{{ block.id }} .qty-selector__subtitle { margin: 0 0 14px; }
+
+  /* ── GRID LAYOUT ── */
+  #QtySelector-{{ block.id }}.qty-selector--grid .qty-selector__list {
+    display: grid;
+    grid-template-columns: repeat({{ qs.cols_desktop | default: 3 }}, minmax(0, 1fr));
+    gap: var(--qs-gap);
+    margin-top: var(--qs-header-gap);
+  }
+  @media (max-width: 749px) {
+    #QtySelector-{{ block.id }}.qty-selector--grid .qty-selector__list {
+      grid-template-columns: repeat({{ qs.cols_mobile | default: 3 }}, minmax(0, 1fr));
+      gap: {{ qs.card_gap_mobile | default: 8 }}px;
+    }
+  }
+  #QtySelector-{{ block.id }}.qty-selector--grid .qty-selector__option {
+    display: flex; flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 8px;
+    padding: 18px 12px 14px;
+    min-height: 180px;
+    justify-content: space-between;
+  }
+  #QtySelector-{{ block.id }}.qty-selector--grid .qty-selector__image-wrap {
+    width: 100%;
+    height: {{ qs.image_height | default: 80 }}px;
+    margin-top: 4px;
+  }
+  #QtySelector-{{ block.id }}.qty-selector--grid .qty-selector__badge {
+    position: absolute;
+    top: -10px; left: 50%;
+    transform: translateX(-50%);
+  }
+
+  /* ── LIST LAYOUT ── */
+  #QtySelector-{{ block.id }}.qty-selector--list .qty-selector__list {
+    display: flex; flex-direction: column;
+    gap: var(--qs-gap);
+    margin-top: var(--qs-header-gap);
+  }
+  #QtySelector-{{ block.id }}.qty-selector--list .qty-selector__option {
+    display: grid;
+    grid-template-columns: {% if qs.show_images %}auto 1fr auto{% else %}1fr auto{% endif %};
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    text-align: left;
+  }
+  #QtySelector-{{ block.id }}.qty-selector--list .qty-selector__main {
+    align-items: flex-start;
+  }
+  #QtySelector-{{ block.id }}.qty-selector--list .qty-selector__price-col {
+    align-items: flex-end;
+    margin-top: 0;
+  }
+  #QtySelector-{{ block.id }}.qty-selector--list .qty-selector__image-wrap {
+    width: {{ qs.image_size | default: 56 }}px;
+    height: {{ qs.image_size | default: 56 }}px;
+    flex-shrink: 0;
+    margin-top: 0;
+  }
+  #QtySelector-{{ block.id }}.qty-selector--list .qty-selector__badge {
+    position: absolute;
+    top: 50%;
+    right: 16px;
+    transform: translateY(-50%) translateY(-22px);
+    font-size: 9px;
+    padding: 3px 8px;
+  }
+  @media (max-width: 480px) {
+    #QtySelector-{{ block.id }}.qty-selector--list .qty-selector__badge {
+      top: 8px; right: 8px; transform: none;
+    }
+  }
+
+  /* ── SHARED ──
+     Selection uses constant border-width (no jump) + a 2nd inset-ring via
+     box-shadow animated for smooth scale-in. Border thickness is from the
+     selected_border_width setting; both states keep the SAME border thickness
+     so there's zero layout jump on selection. */
+  #QtySelector-{{ block.id }} .qty-selector__option {
+    position: relative;
+    background: var(--qs-bg);
+    border: {{ qs.selected_border_width | default: 2 }}px solid var(--qs-border);
+    border-radius: var(--qs-radius);
+    cursor: pointer;
+    transition: border-color .35s cubic-bezier(.4,0,.2,1),
+                background .35s cubic-bezier(.4,0,.2,1),
+                transform .2s cubic-bezier(.4,0,.2,1),
+                box-shadow .35s cubic-bezier(.4,0,.2,1);
+    will-change: border-color, background;
+  }
+  #QtySelector-{{ block.id }} .qty-selector__option:hover:not(:has(.qty-selector__radio:checked)):not(.is-checked) {
+    border-color: color-mix(in srgb, var(--qs-accent) 25%, var(--qs-border));
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+  }
+  #QtySelector-{{ block.id }} .qty-selector__option:has(.qty-selector__radio:checked),
+  #QtySelector-{{ block.id }} .qty-selector__option.is-checked {
+    border-color: var(--qs-accent);
+    background: var(--qs-sel-bg);
+  }
+  {%- if qs.selected_ring_size > 0 -%}
+  #QtySelector-{{ block.id }} .qty-selector__option:has(.qty-selector__radio:checked),
+  #QtySelector-{{ block.id }} .qty-selector__option.is-checked {
+    box-shadow: 0 0 0 {{ qs.selected_ring_size | default: 0 }}px color-mix(in srgb, var(--qs-accent) 25%, transparent);
+  }
+  {%- endif -%}
+  #QtySelector-{{ block.id }} .qty-selector__radio { position: absolute; opacity: 0; pointer-events: none; }
+  #QtySelector-{{ block.id }} .qty-selector__badge {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    padding: 4px 10px;
+    border-radius: 999px;
+    line-height: 1;
+    white-space: nowrap;
+    z-index: 2;
+  }
+  /* Image wrap: aspect-ratio + object-fit driven by per-block settings */
+  #QtySelector-{{ block.id }} .qty-selector__image-wrap {
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    background: {{ qs.image_bg | default: '#F5F5F5' }};
+  }
+  /* Aspect-ratio variants — applied to grid layout only; list uses fixed size */
+  #QtySelector-{{ block.id }}.qty-selector--grid .qty-selector__image-wrap--square    { aspect-ratio: 1 / 1; height: auto; }
+  #QtySelector-{{ block.id }}.qty-selector--grid .qty-selector__image-wrap--portrait  { aspect-ratio: 3 / 4; height: auto; }
+  #QtySelector-{{ block.id }}.qty-selector--grid .qty-selector__image-wrap--landscape { aspect-ratio: 4 / 3; height: auto; }
+  #QtySelector-{{ block.id }}.qty-selector--grid .qty-selector__image-wrap--auto     { /* keep declared height */ }
+  /* Object-fit variants */
+  #QtySelector-{{ block.id }} .qty-selector__image-wrap--cover .qty-selector__image   { width: 100%; height: 100%; object-fit: cover;   max-width: none; max-height: none; }
+  #QtySelector-{{ block.id }} .qty-selector__image-wrap--contain .qty-selector__image { width: 100%; height: 100%; object-fit: contain; max-width: none; max-height: none; }
+  #QtySelector-{{ block.id }} .qty-selector__image-wrap--fill .qty-selector__image    { width: 100%; height: 100%; object-fit: fill;    max-width: none; max-height: none; }
+  #QtySelector-{{ block.id }} .qty-selector__image {
+    display: block;
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+  #QtySelector-{{ block.id }} .qty-selector__main {
+    display: flex; flex-direction: column; gap: 2px;
+    min-width: 0;
+  }
+  #QtySelector-{{ block.id }} .qty-selector__label {
+    font-weight: {{ qs.label_weight | default: 500 }};
+    font-size: {{ qs.label_size | default: 15 }}px;
+    line-height: 1.2;
+    color: var(--qs-text);
+    text-transform: {% if qs.label_uppercase %}uppercase{% else %}none{% endif %};
+    letter-spacing: {% if qs.label_uppercase %}0.04em{% else %}normal{% endif %};
+  }
+  #QtySelector-{{ block.id }} .qty-selector__sub {
+    font-size: 12px;
+    color: var(--qs-muted);
+    line-height: 1.3;
+  }
+  #QtySelector-{{ block.id }} .qty-selector__savings {
+    font-size: {{ qs.savings_size | default: 12 }}px;
+    color: {{ qs.savings_color | default: qs_muted }};
+    line-height: 1.3;
+  }
+  #QtySelector-{{ block.id }} .qty-selector__price-col {
+    display: flex; flex-direction: column; gap: 2px;
+    margin-top: 4px;
+  }
+  #QtySelector-{{ block.id }} .qty-selector__per-unit {
+    font-weight: {{ qs.price_weight | default: 800 }};
+    font-size: {{ qs.per_unit_size | default: 15 }}px;
+    line-height: 1.1;
+    color: var(--qs-text);
+  }
+  #QtySelector-{{ block.id }} .qty-selector__total {
+    font-size: 11px;
+    color: var(--qs-muted);
+    line-height: 1.2;
+  }
+  #QtySelector-{{ block.id }} .qty-selector__compare {
+    font-size: 12px;
+    color: var(--qs-muted);
+    text-decoration: line-through;
+    line-height: 1.1;
+  }
+  #QtySelector-{{ block.id }} .qty-selector__footer {
+    margin: 12px 0 0;
+    font-size: 12px;
+    text-align: center;
+  }
+  @media (max-width: 749px) {
+    #QtySelector-{{ block.id }}.qty-selector--grid .qty-selector__option { padding: 14px 8px 12px; min-height: 150px; }
+    #QtySelector-{{ block.id }}.qty-selector--grid .qty-selector__image-wrap { height: {{ qs.image_height_mobile | default: 60 }}px; }
+    #QtySelector-{{ block.id }} .qty-selector__label { font-size: 13px; }
+    #QtySelector-{{ block.id }} .qty-selector__per-unit { font-size: 13px; }
+    #QtySelector-{{ block.id }} .qty-selector__badge { font-size: 9px; padding: 3px 8px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #QtySelector-{{ block.id }} .qty-selector__option { transition: none !important; }
+  }
+{% comment %}{% endcomment %}</style>
+
+<script>
+(function(){
+  var root = document.getElementById('QtySelector-{{ block.id }}');
+  if (!root || root.__qsInit) return;
+  root.__qsInit = true;
+
+  var sectionId = '{{ section.id }}';
+  var product = {{ product | json }};
+  var moneyFormat = {{ shop.money_format | json }};
+  var perEachLabel = {{ qs.per_each_label | default: '/each' | json }};
+  var totalLabel = {{ qs.total_prefix | default: 'Total ' | json }};
+  var savingsTemplate = {{ qs.savings_template | default: 'You save %amount%' | json }};
+  var autoSavings = {% if qs.auto_savings %}true{% else %}false{% endif %};
+
+  function formatMoney(cents) {
+    var amount = (cents / 100).toFixed(2);
+    var formatted = moneyFormat || '${{amount}}';
+    return formatted
+      .replace(/\{\{\s*amount\s*\}\}/g, amount)
+      .replace(/\{\{\s*amount_no_decimals\s*\}\}/g, Math.round(cents/100))
+      .replace(/\{\{\s*amount_with_comma_separator\s*\}\}/g, amount.replace('.', ','))
+      .replace(/\{\{\s*amount_no_decimals_with_comma_separator\s*\}\}/g, String(Math.round(cents/100)));
+  }
+  function currentForm() {
+    return document.querySelector('form[id^="product_form_"]')
+        || document.querySelector('form#product-form-' + sectionId)
+        || document.querySelector('form[action*="/cart/add"][data-section-id="' + sectionId + '"]');
+  }
+  function currentVariant() {
+    var form = currentForm();
+    var vid;
+    if (form) {
+      var sel = form.querySelector('input[name="id"], select[name="id"]');
+      if (sel) vid = parseInt(sel.value, 10);
+    }
+    if (!vid) vid = product && product.selected_or_first_available_variant ? product.selected_or_first_available_variant.id : (product.variants && product.variants[0] && product.variants[0].id);
+    if (!product || !product.variants) return null;
+    for (var i = 0; i < product.variants.length; i++) {
+      if (product.variants[i].id == vid) return product.variants[i];
+    }
+    return product.variants[0];
+  }
+  function updatePrices() {
+    var v = currentVariant();
+    if (!v) return;
+    var basePrice = v.price;
+    var compareBase = v.compare_at_price && v.compare_at_price > v.price ? v.compare_at_price : v.price;
+    root.querySelectorAll('[data-qs-option]').forEach(function(opt) {
+      var qty = parseInt(opt.getAttribute('data-qty'), 10) || 1;
+      var disc = parseFloat(opt.getAttribute('data-discount')) || 0;
+      var perUnit = Math.round(basePrice * (1 - disc / 100));
+      var total = perUnit * qty;
+      var compare = compareBase * qty;
+      var manualSavings = opt.getAttribute('data-savings-text');
+
+      var perEl = opt.querySelector('[data-qs-per-unit]');
+      var totalEl = opt.querySelector('[data-qs-total]');
+      var cmpEl = opt.querySelector('[data-qs-compare]');
+      var savEl = opt.querySelector('[data-qs-savings]');
+
+      if (perEl) perEl.textContent = formatMoney(perUnit) + perEachLabel;
+      if (totalEl) totalEl.textContent = totalLabel + formatMoney(total);
+      if (cmpEl) cmpEl.textContent = (compare > total) ? formatMoney(compare) : '';
+      if (savEl) {
+        var saved = compare - total;
+        if (manualSavings) savEl.textContent = manualSavings;
+        else if (autoSavings && saved > 0) savEl.textContent = savingsTemplate.replace('%amount%', formatMoney(saved));
+        else savEl.textContent = '';
+      }
+    });
+  }
+  function syncQuantity(qty) {
+    var form = currentForm();
+    if (!form) return;
+    form.querySelectorAll('input[name="quantity"]').forEach(function(inp) {
+      inp.value = qty;
+      inp.dispatchEvent(new Event('change', { bubbles: true }));
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+  var pendingDiscountCode = null;
+  function selectOption(opt) {
+    root.querySelectorAll('[data-qs-option]').forEach(function(o) {
+      o.classList.toggle('is-checked', o === opt);
+      var r = o.querySelector('.qty-selector__radio');
+      if (r) r.checked = (o === opt);
+    });
+    var qty = parseInt(opt.getAttribute('data-qty'), 10) || 1;
+    syncQuantity(qty);
+    pendingDiscountCode = opt.getAttribute('data-discount-code') || null;
+  }
+  root.querySelectorAll('[data-qs-option]').forEach(function(opt) {
+    opt.addEventListener('click', function(e) {
+      if (e.target && e.target.tagName === 'INPUT') return;
+      e.preventDefault();
+      selectOption(opt);
+    });
+    var radio = opt.querySelector('.qty-selector__radio');
+    if (radio) radio.addEventListener('change', function(){ if (radio.checked) selectOption(opt); });
+  });
+  updatePrices();
+  var checkedRadio = root.querySelector('[data-qs-option] .qty-selector__radio:checked');
+  var defaultOpt = root.querySelector('[data-qs-option].is-default')
+                || (checkedRadio && checkedRadio.closest('[data-qs-option]'))
+                || root.querySelector('[data-qs-option]');
+  if (defaultOpt) selectOption(defaultOpt);
+
+  var form = currentForm();
+  if (form) {
+    form.addEventListener('submit', function() {
+      if (!pendingDiscountCode) return;
+      var code = pendingDiscountCode;
+      setTimeout(function() {
+        try { fetch('/discount/' + encodeURIComponent(code), { credentials: 'same-origin' }).catch(function(){}); } catch(_){}
+      }, 500);
+    });
+  }
+  document.addEventListener('variant:change', updatePrices);
+  document.addEventListener('change', function(e) {
+    if (e.target && e.target.name === 'id') updatePrices();
+  });
+  if (window.Shopify && Shopify.designMode) {
+    document.addEventListener('shopify:block:select', function(e) {
+      if (e.detail && e.detail.blockId === '{{ block.id }}') updatePrices();
+    });
+  }
+})();
+{% comment %}{% endcomment %}</script>
+
+</template>

@@ -1,0 +1,562 @@
+<template compat="shopify">
+{%- comment -%}
+  ═══════════════════════════════════════════════════════════════════════
+  BUNDLE PRO — RENDER SNIPPET
+  ═══════════════════════════════════════════════════════════════════════
+  Modern volume-discount bundle. Two layouts:
+
+    layout = 'grid'  → 3 cards side-by-side (great for "Single / Pack of 2 / Pack of 3")
+    layout = 'list'  → stacked rows (great for "BUY 1 / BUY 2 GET 1 FREE / BUY 3 GET 2 FREE")
+
+  Each card/row has:
+    • Single product image (per-tier custom OR product featured image)
+    • Big label + optional "You save $XX" / savings subline (auto-computed or manual)
+    • Price + optional crossed-out compare price
+    • Optional floating "POPULAR" / "BEST VALUE" badge
+
+  ───────────────────────────────────────────────────────────────────────
+  HOW DISCOUNTS ACTUALLY APPLY — IMPORTANT FOR MERCHANTS
+  ───────────────────────────────────────────────────────────────────────
+  This block SETS THE QUANTITY of the product. For the discount to apply
+  at checkout you have TWO supported workflows:
+
+  OPTION A — Automatic Quantity Discount (recommended, no code needed)
+  ───────────────────────────────────────────────────────────────
+    1. Shopify Admin → Discounts → Create discount
+    2. "Amount off products" → "Quantity discount"
+    3. Set tiers: e.g. "Buy 2 → 25% off", "Buy 3 → 40% off"
+    4. Method: Automatic (no code needed)
+    Result: shopper picks tier → quantity updates → discount auto-applies.
+
+  OPTION B — Per-tier Discount Code
+  ───────────────────────────────────
+    1. Create regular discount codes (e.g. BUNDLE10, BUNDLE25)
+    2. Paste each code into the tier's "Discount code" setting below
+    3. After Add-to-Cart we call /discount/<CODE> automatically.
+
+  Learn more (Shopify Help):
+    https://help.shopify.com/en/manual/discounts/discount-types
+
+  ───────────────────────────────────────────────────────────────────────
+  TECHNICAL NOTES — for theme developers reading this source
+  ───────────────────────────────────────────────────────────────────────
+    • Tier loop: enable_tN flags captured → split → iterated.
+    • Settings read via dynamic keys (Liquid has no computed-key syntax):
+        {%- assign x = bp[ 't' | append: idx | append: '_qty' ] -%}
+    • Radio input is the source of truth. CSS :has(:checked) +
+      JS-toggled .is-checked class for older-browser fallback.
+    • Live price math (JS):
+        basePrice    = product.variants[current_id].price
+        comparePrice = variant.compare_at_price || basePrice
+        tierTotal    = basePrice × qty × (1 − discount/100)
+        tierCompare  = comparePrice × qty
+        savings      = tierCompare − tierTotal     (when > 0)
+    • Quantity sync: writes to every form[name="quantity"] + dispatches
+      change/input events so buy button + sticky cart react.
+    • Discount code: on form submit, after 500ms fetch('/discount/<code>')
+      attaches the code to the current cart via Shopify's built-in route.
+
+  Inputs to this snippet (passed by main-product.liquid render call):
+      block, section, product, shop
+{%- endcomment -%}
+{%- assign bp = block.settings -%}
+{%- assign bp_layout = bp.layout | default: 'grid' -%}
+{%- assign bp_accent = bp.accent | default: '#3B82F6' -%}
+{%- assign bp_text   = bp.text_color | default: '#111111' -%}
+{%- assign bp_muted  = bp.muted_color | default: '#666666' -%}
+{%- assign bp_bg     = bp.card_bg | default: '#ffffff' -%}
+{%- assign bp_border = bp.border_color | default: '#e5e5e5' -%}
+{%- assign bp_sel_bg = bp.selected_bg | default: '#EFF6FF' -%}
+{%- assign bp_radius = bp.card_radius | default: 14 -%}
+
+{%- capture bp_tier_indices -%}
+  {%- if bp.enable_t1 -%}1,{%- endif -%}
+  {%- if bp.enable_t2 -%}2,{%- endif -%}
+  {%- if bp.enable_t3 -%}3,{%- endif -%}
+  {%- if bp.enable_t4 -%}4,{%- endif -%}
+  {%- if bp.enable_t5 -%}5,{%- endif -%}
+{%- endcapture -%}
+{%- assign bp_tiers = bp_tier_indices | split: ',' -%}
+
+{%- assign bp_fallback_img = product.featured_image -%}
+
+<div id="BundlePro-{{ block.id }}"
+     class="bundle-pro bundle-pro--{{ bp_layout }}"
+     data-bundle-pro
+     data-block-id="{{ block.id }}"
+     {{ block.shopify_attributes }}
+     style="
+       --bp-accent: {{ bp_accent }};
+       --bp-text: {{ bp_text }};
+       --bp-muted: {{ bp_muted }};
+       --bp-bg: {{ bp_bg }};
+       --bp-border: {{ bp_border }};
+       --bp-sel-bg: {{ bp_sel_bg }};
+       --bp-radius: {{ bp_radius }}px;
+       --bp-gap: {{ bp.tier_gap | default: 10 }}px;
+       --bp-mt: {{ bp.mt | default: 16 }}px;
+       --bp-mb: {{ bp.mb | default: 16 }}px;
+       --bp-header-gap: {{ bp.header_gap | default: 14 }}px;
+     ">
+
+  {%- if bp.title != blank -%}
+    <h3 class="bundle-pro__title"
+        style="color: {{ bp.title_color | default: bp_text }}; font-size: {{ bp.title_size | default: 16 }}px; font-weight: {{ bp.title_weight | default: 500 }}; text-align: {{ bp.title_align | default: 'left' }}; letter-spacing: {{ bp.title_letter_spacing | default: 0.0 }}em; text-transform: {% if bp.title_uppercase %}uppercase{% else %}none{% endif %};">{{ bp.title }}</h3>
+  {%- endif -%}
+
+  {%- if bp.subtitle != blank -%}
+    <p class="bundle-pro__subtitle" style="color: {{ bp.subtitle_color | default: bp_muted }}; font-size: {{ bp.subtitle_size | default: 13 }}px; text-align: {{ bp.title_align | default: 'center' }};">{{ bp.subtitle }}</p>
+  {%- endif -%}
+
+  <div class="bundle-pro__list" role="radiogroup" aria-label="{{ 'accessibility.bundle_save_options' | t }}">
+    {%- for idx_str in bp_tiers -%}
+      {%- assign idx = idx_str | strip -%}
+      {%- if idx == blank -%}{%- continue -%}{%- endif -%}
+
+      {%- assign qty_key      = 't' | append: idx | append: '_qty' -%}
+      {%- assign label_key    = 't' | append: idx | append: '_label' -%}
+      {%- assign sub_key      = 't' | append: idx | append: '_sublabel' -%}
+      {%- assign discount_key = 't' | append: idx | append: '_discount' -%}
+      {%- assign badge_key    = 't' | append: idx | append: '_badge' -%}
+      {%- assign popular_key  = 't' | append: idx | append: '_popular' -%}
+      {%- assign default_key  = 't' | append: idx | append: '_default' -%}
+      {%- assign image_key    = 't' | append: idx | append: '_image' -%}
+      {%- assign badge_bg_key = 't' | append: idx | append: '_badge_bg' -%}
+      {%- assign code_key     = 't' | append: idx | append: '_discount_code' -%}
+      {%- assign savings_key  = 't' | append: idx | append: '_savings_text' -%}
+
+      {%- assign qty       = bp[qty_key]      | default: idx -%}
+      {%- assign qty_num   = qty | plus: 0 -%}
+      {%- assign label     = bp[label_key]    -%}
+      {%- assign sublabel  = bp[sub_key]      -%}
+      {%- assign disc_pct  = bp[discount_key] | default: 0 -%}
+      {%- assign badge_txt = bp[badge_key]    -%}
+      {%- assign is_pop    = bp[popular_key]  -%}
+      {%- assign is_def    = bp[default_key]  -%}
+      {%- assign tier_img  = bp[image_key]    | default: bp_fallback_img -%}
+      {%- assign badge_bg  = bp[badge_bg_key] -%}
+      {%- assign disc_code = bp[code_key]     | strip -%}
+      {%- assign savings_txt = bp[savings_key] -%}
+
+      {%- if label == blank -%}
+        {%- if qty_num == 1 -%}
+          {%- assign label = bp.label_single | default: 'Single' -%}
+        {%- else -%}
+          {%- assign label_prefix = bp.label_prefix | default: 'Bundle of' -%}
+          {%- assign label = label_prefix | append: ' ' | append: qty_num -%}
+        {%- endif -%}
+      {%- endif -%}
+
+      <label class="bundle-pro__tier {% if is_pop %}is-popular{% endif %} {% if is_def %}is-default{% endif %}"
+             data-tier
+             data-qty="{{ qty_num }}"
+             data-discount="{{ disc_pct }}"
+             {% if savings_txt != blank %}data-savings-text="{{ savings_txt | escape }}"{% endif %}
+             {% if disc_code != blank %}data-discount-code="{{ disc_code | escape }}"{% endif %}>
+        <input type="radio" name="bundle-pro-{{ block.id }}" value="{{ qty_num }}" class="bundle-pro__radio" {% if is_def %}checked{% endif %}>
+
+        {%- comment -%} Badge text priority: per-tier override > global popular_label (when is_pop) > nothing {%- endcomment -%}
+        {%- assign final_badge_text = '' -%}
+        {%- if badge_txt != blank -%}
+          {%- assign final_badge_text = badge_txt -%}
+        {%- elsif is_pop and bp.popular_label != blank -%}
+          {%- assign final_badge_text = bp.popular_label -%}
+        {%- endif -%}
+        {%- if final_badge_text != blank -%}
+          {%- assign computed_badge_bg = badge_bg -%}
+          {%- if computed_badge_bg == blank -%}
+            {%- if is_pop -%}{%- assign computed_badge_bg = bp.popular_bg | default: '#1a1a1a' -%}
+            {%- else -%}{%- assign computed_badge_bg = bp.badge_bg | default: '#27AE60' -%}{%- endif -%}
+          {%- endif -%}
+          <span class="bundle-pro__badge"
+                style="background: {{ computed_badge_bg }}; color: {{ bp.badge_text | default: '#FFFFFF' }};">
+            {{ final_badge_text | escape }}
+          </span>
+        {%- endif -%}
+
+        {%- if bp.show_images and tier_img != blank -%}
+          <span class="bundle-pro__image-wrap bundle-pro__image-wrap--{{ bp.image_aspect | default: 'square' }} bundle-pro__image-wrap--{{ bp.image_fit | default: 'cover' }}"
+                aria-hidden="true"
+                style="border-radius: {{ bp.image_radius | default: 8 }}px;">
+            {{ tier_img | image_url: width: 360 | image_tag: loading: 'lazy', class: 'bundle-pro__image', alt: '' }}
+          </span>
+        {%- endif -%}
+
+        <span class="bundle-pro__main">
+          <span class="bundle-pro__label">{{ label | escape }}</span>
+          {%- if sublabel != blank -%}
+            <span class="bundle-pro__sub">{{ sublabel | escape }}</span>
+          {%- endif -%}
+          {%- if bp.show_savings -%}
+            <span class="bundle-pro__savings" data-bp-savings>—</span>
+          {%- endif -%}
+        </span>
+
+        <span class="bundle-pro__price-col">
+          <span class="bundle-pro__price" data-bp-price>—</span>
+          {%- if bp.show_compare -%}
+            <span class="bundle-pro__compare" data-bp-compare>—</span>
+          {%- endif -%}
+          {%- if bp.show_per_unit and qty_num > 1 -%}
+            <span class="bundle-pro__per-unit" data-bp-per-unit>—</span>
+          {%- endif -%}
+        </span>
+      </label>
+    {%- endfor -%}
+  </div>
+
+  {%- if bp.footer_note != blank -%}
+    <p class="bundle-pro__footer" style="color: {{ bp.footer_color | default: bp_muted }};">{{ bp.footer_note }}</p>
+  {%- endif -%}
+</div>
+
+<style>
+  #BundlePro-{{ block.id }} {
+    margin: var(--bp-mt) 0 var(--bp-mb);
+    color: var(--bp-text);
+    font-family: var(--body-font, inherit);
+  }
+  #BundlePro-{{ block.id }} *, #BundlePro-{{ block.id }} *::before, #BundlePro-{{ block.id }} *::after { box-sizing: border-box; }
+  #BundlePro-{{ block.id }} .bundle-pro__title {
+    margin: 0 0 6px;
+  }
+  #BundlePro-{{ block.id }} .bundle-pro__subtitle { margin: 0 0 14px; }
+
+  /* ── LIST LAYOUT (stacked rows, default) ── */
+  #BundlePro-{{ block.id }}.bundle-pro--list .bundle-pro__list {
+    display: flex; flex-direction: column;
+    gap: var(--bp-gap);
+    margin-top: var(--bp-header-gap);
+  }
+  #BundlePro-{{ block.id }}.bundle-pro--list .bundle-pro__tier {
+    display: grid;
+    grid-template-columns: {% if bp.show_images %}auto 1fr auto{% else %}1fr auto{% endif %};
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    text-align: left;
+  }
+  #BundlePro-{{ block.id }}.bundle-pro--list .bundle-pro__main {
+    text-align: left;
+    align-items: flex-start;
+  }
+  #BundlePro-{{ block.id }}.bundle-pro--list .bundle-pro__price-col {
+    text-align: right;
+    align-items: flex-end;
+    margin-top: 0;
+  }
+  #BundlePro-{{ block.id }}.bundle-pro--list .bundle-pro__image-wrap {
+    width: {{ bp.image_size | default: 56 }}px;
+    height: {{ bp.image_size | default: 56 }}px;
+    flex-shrink: 0;
+    margin-top: 0;
+  }
+  #BundlePro-{{ block.id }}.bundle-pro--list .bundle-pro__badge {
+    position: absolute;
+    top: 50%;
+    right: 16px;
+    transform: translateY(-50%) translateY(-22px);
+    font-size: 9px;
+    padding: 3px 8px;
+  }
+  @media (max-width: 480px) {
+    #BundlePro-{{ block.id }}.bundle-pro--list .bundle-pro__badge {
+      top: 8px;
+      right: 8px;
+      transform: none;
+    }
+  }
+
+  /* ── GRID LAYOUT (3 cards side-by-side) ── */
+  #BundlePro-{{ block.id }}.bundle-pro--grid .bundle-pro__list {
+    display: grid;
+    grid-template-columns: repeat({{ bp.cols_desktop | default: 3 }}, minmax(0, 1fr));
+    gap: var(--bp-gap);
+    margin-top: var(--bp-header-gap);
+  }
+  @media (max-width: 749px) {
+    #BundlePro-{{ block.id }}.bundle-pro--grid .bundle-pro__list {
+      grid-template-columns: repeat({{ bp.cols_mobile | default: 3 }}, minmax(0, 1fr));
+      gap: {{ bp.tier_gap_mobile | default: 8 }}px;
+    }
+  }
+  #BundlePro-{{ block.id }}.bundle-pro--grid .bundle-pro__tier {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 8px;
+    padding: 18px 12px 14px;
+    min-height: 180px;
+    justify-content: space-between;
+  }
+  #BundlePro-{{ block.id }}.bundle-pro--grid .bundle-pro__image-wrap {
+    width: 100%;
+    height: {{ bp.image_height | default: 80 }}px;
+    margin-top: 4px;
+  }
+  #BundlePro-{{ block.id }}.bundle-pro--grid .bundle-pro__badge {
+    position: absolute;
+    top: -10px; left: 50%;
+    transform: translateX(-50%);
+  }
+
+  /* ── SHARED STYLES ──
+     Selection uses constant border-width (no jump) + smooth easing. */
+  #BundlePro-{{ block.id }} .bundle-pro__tier {
+    position: relative;
+    background: var(--bp-bg);
+    border: {{ bp.selected_border_width | default: 2 }}px solid var(--bp-border);
+    border-radius: var(--bp-radius);
+    cursor: pointer;
+    transition: border-color .35s cubic-bezier(.4,0,.2,1),
+                background .35s cubic-bezier(.4,0,.2,1),
+                transform .2s cubic-bezier(.4,0,.2,1),
+                box-shadow .35s cubic-bezier(.4,0,.2,1);
+    will-change: border-color, background;
+  }
+  #BundlePro-{{ block.id }} .bundle-pro__tier:hover:not(:has(.bundle-pro__radio:checked)):not(.is-checked) {
+    border-color: color-mix(in srgb, var(--bp-accent) 25%, var(--bp-border));
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+  }
+  #BundlePro-{{ block.id }} .bundle-pro__tier:has(.bundle-pro__radio:checked),
+  #BundlePro-{{ block.id }} .bundle-pro__tier.is-checked {
+    border-color: var(--bp-accent);
+    background: var(--bp-sel-bg);
+  }
+  {%- if bp.selected_ring_size > 0 -%}
+  #BundlePro-{{ block.id }} .bundle-pro__tier:has(.bundle-pro__radio:checked),
+  #BundlePro-{{ block.id }} .bundle-pro__tier.is-checked {
+    box-shadow: 0 0 0 {{ bp.selected_ring_size | default: 0 }}px color-mix(in srgb, var(--bp-accent) 25%, transparent);
+  }
+  {%- endif -%}
+  #BundlePro-{{ block.id }} .bundle-pro__radio { position: absolute; opacity: 0; pointer-events: none; }
+  #BundlePro-{{ block.id }} .bundle-pro__badge {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    padding: 4px 10px;
+    border-radius: 999px;
+    line-height: 1;
+    white-space: nowrap;
+    z-index: 2;
+  }
+  /* Image wrap: aspect-ratio + object-fit driven by per-block settings */
+  #BundlePro-{{ block.id }} .bundle-pro__image-wrap {
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    background: {{ bp.image_bg | default: '#F5F5F5' }};
+  }
+  /* Aspect-ratio variants — grid layout only; list uses fixed size */
+  #BundlePro-{{ block.id }}.bundle-pro--grid .bundle-pro__image-wrap--square    { aspect-ratio: 1 / 1; height: auto; }
+  #BundlePro-{{ block.id }}.bundle-pro--grid .bundle-pro__image-wrap--portrait  { aspect-ratio: 3 / 4; height: auto; }
+  #BundlePro-{{ block.id }}.bundle-pro--grid .bundle-pro__image-wrap--landscape { aspect-ratio: 4 / 3; height: auto; }
+  #BundlePro-{{ block.id }}.bundle-pro--grid .bundle-pro__image-wrap--auto     { /* keep declared height */ }
+  /* Object-fit variants */
+  #BundlePro-{{ block.id }} .bundle-pro__image-wrap--cover .bundle-pro__image   { width: 100%; height: 100%; object-fit: cover;   max-width: none; max-height: none; }
+  #BundlePro-{{ block.id }} .bundle-pro__image-wrap--contain .bundle-pro__image { width: 100%; height: 100%; object-fit: contain; max-width: none; max-height: none; }
+  #BundlePro-{{ block.id }} .bundle-pro__image-wrap--fill .bundle-pro__image    { width: 100%; height: 100%; object-fit: fill;    max-width: none; max-height: none; }
+  #BundlePro-{{ block.id }} .bundle-pro__image {
+    display: block;
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+  #BundlePro-{{ block.id }} .bundle-pro__main {
+    display: flex; flex-direction: column; gap: 2px;
+    min-width: 0;
+  }
+  #BundlePro-{{ block.id }} .bundle-pro__label {
+    font-weight: {{ bp.label_weight | default: 700 }};
+    font-size: {{ bp.label_size | default: 15 }}px;
+    line-height: 1.2;
+    color: var(--bp-text);
+    text-transform: {% if bp.label_uppercase %}uppercase{% else %}none{% endif %};
+    letter-spacing: {% if bp.label_uppercase %}0.04em{% else %}normal{% endif %};
+  }
+  #BundlePro-{{ block.id }} .bundle-pro__sub {
+    font-size: 12px;
+    color: var(--bp-muted);
+    line-height: 1.3;
+  }
+  #BundlePro-{{ block.id }} .bundle-pro__savings {
+    font-size: {{ bp.savings_size | default: 12 }}px;
+    color: {{ bp.savings_color | default: bp_muted }};
+    line-height: 1.3;
+  }
+  #BundlePro-{{ block.id }} .bundle-pro__price-col {
+    display: flex; flex-direction: column; gap: 2px;
+    margin-top: 4px;
+  }
+  #BundlePro-{{ block.id }} .bundle-pro__price {
+    font-weight: {{ bp.price_weight | default: 800 }};
+    font-size: {{ bp.price_size | default: 17 }}px;
+    line-height: 1.1;
+    color: var(--bp-text);
+  }
+  #BundlePro-{{ block.id }} .bundle-pro__per-unit {
+    font-size: 11px;
+    color: var(--bp-muted);
+    line-height: 1.2;
+  }
+  #BundlePro-{{ block.id }} .bundle-pro__compare {
+    font-size: 12px;
+    color: var(--bp-muted);
+    text-decoration: line-through;
+    line-height: 1.1;
+  }
+  #BundlePro-{{ block.id }} .bundle-pro__footer {
+    margin: 12px 0 0;
+    font-size: 12px;
+    text-align: center;
+  }
+  @media (max-width: 749px) {
+    #BundlePro-{{ block.id }}.bundle-pro--grid .bundle-pro__tier { padding: 14px 8px 12px; min-height: 150px; }
+    #BundlePro-{{ block.id }}.bundle-pro--grid .bundle-pro__image-wrap { height: {{ bp.image_height_mobile | default: 60 }}px; }
+    #BundlePro-{{ block.id }} .bundle-pro__label { font-size: 13px; }
+    #BundlePro-{{ block.id }} .bundle-pro__price { font-size: 14px; }
+    #BundlePro-{{ block.id }} .bundle-pro__badge { font-size: 9px; padding: 3px 8px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #BundlePro-{{ block.id }} .bundle-pro__tier { transition: none !important; }
+  }
+{% comment %}{% endcomment %}</style>
+
+<script>
+(function(){
+  var root = document.getElementById('BundlePro-{{ block.id }}');
+  if (!root || root.__bpInit) return;
+  root.__bpInit = true;
+
+  var sectionId = '{{ section.id }}';
+  var product = {{ product | json }};
+  var moneyFormat = {{ shop.money_format | json }};
+  var perEachLabel = {{ bp.per_each_label | default: '/each' | json }};
+  var savingsTemplate = {{ bp.savings_template | default: 'You save %amount%' | json }};
+  var autoSavings = {% if bp.auto_savings %}true{% else %}false{% endif %};
+
+  function formatMoney(cents) {
+    var amount = (cents / 100).toFixed(2);
+    var formatted = moneyFormat || '${{amount}}';
+    return formatted
+      .replace(/\{\{\s*amount\s*\}\}/g, amount)
+      .replace(/\{\{\s*amount_no_decimals\s*\}\}/g, Math.round(cents/100))
+      .replace(/\{\{\s*amount_with_comma_separator\s*\}\}/g, amount.replace('.', ','))
+      .replace(/\{\{\s*amount_no_decimals_with_comma_separator\s*\}\}/g, String(Math.round(cents/100)));
+  }
+  function currentForm() {
+    return document.querySelector('form[id^="product_form_"]')
+        || document.querySelector('form#product-form-' + sectionId)
+        || document.querySelector('form[action*="/cart/add"][data-section-id="' + sectionId + '"]');
+  }
+  function currentVariant() {
+    var form = currentForm();
+    var vid;
+    if (form) {
+      var sel = form.querySelector('input[name="id"], select[name="id"]');
+      if (sel) vid = parseInt(sel.value, 10);
+    }
+    if (!vid) vid = product && product.selected_or_first_available_variant ? product.selected_or_first_available_variant.id : (product.variants && product.variants[0] && product.variants[0].id);
+    if (!product || !product.variants) return null;
+    for (var i = 0; i < product.variants.length; i++) {
+      if (product.variants[i].id == vid) return product.variants[i];
+    }
+    return product.variants[0];
+  }
+  function updatePrices() {
+    var v = currentVariant();
+    if (!v) return;
+    var basePrice = v.price;
+    var compareBase = v.compare_at_price && v.compare_at_price > v.price ? v.compare_at_price : v.price;
+    root.querySelectorAll('[data-tier]').forEach(function(tier) {
+      var qty = parseInt(tier.getAttribute('data-qty'), 10) || 1;
+      var disc = parseFloat(tier.getAttribute('data-discount')) || 0;
+      var tierTotal = Math.round(basePrice * qty * (1 - disc / 100));
+      var tierCompare = compareBase * qty;
+      var manualSavings = tier.getAttribute('data-savings-text');
+
+      var priceEl = tier.querySelector('[data-bp-price]');
+      var perUnitEl = tier.querySelector('[data-bp-per-unit]');
+      var cmpEl = tier.querySelector('[data-bp-compare]');
+      var savEl = tier.querySelector('[data-bp-savings]');
+
+      if (priceEl) priceEl.textContent = formatMoney(tierTotal);
+      if (perUnitEl) perUnitEl.textContent = formatMoney(Math.round(tierTotal / qty)) + perEachLabel;
+      if (cmpEl) {
+        if (tierCompare > tierTotal) cmpEl.textContent = formatMoney(tierCompare);
+        else cmpEl.textContent = '';
+      }
+      if (savEl) {
+        var saved = tierCompare - tierTotal;
+        if (manualSavings) {
+          savEl.textContent = manualSavings;
+        } else if (autoSavings && saved > 0) {
+          savEl.textContent = savingsTemplate.replace('%amount%', formatMoney(saved));
+        } else {
+          savEl.textContent = '';
+        }
+      }
+    });
+  }
+  function syncQuantity(qty) {
+    var form = currentForm();
+    if (!form) return;
+    form.querySelectorAll('input[name="quantity"]').forEach(function(inp) {
+      inp.value = qty;
+      inp.dispatchEvent(new Event('change', { bubbles: true }));
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+  var pendingDiscountCode = null;
+  function selectTier(tier) {
+    root.querySelectorAll('[data-tier]').forEach(function(t) {
+      t.classList.toggle('is-checked', t === tier);
+      var r = t.querySelector('.bundle-pro__radio');
+      if (r) r.checked = (t === tier);
+    });
+    var qty = parseInt(tier.getAttribute('data-qty'), 10) || 1;
+    syncQuantity(qty);
+    pendingDiscountCode = tier.getAttribute('data-discount-code') || null;
+  }
+  root.querySelectorAll('[data-tier]').forEach(function(tier) {
+    tier.addEventListener('click', function(e) {
+      if (e.target && e.target.tagName === 'INPUT') return;
+      e.preventDefault();
+      selectTier(tier);
+    });
+    var radio = tier.querySelector('.bundle-pro__radio');
+    if (radio) radio.addEventListener('change', function(){ if (radio.checked) selectTier(tier); });
+  });
+  updatePrices();
+  var checkedRadio = root.querySelector('[data-tier] .bundle-pro__radio:checked');
+  var defaultTier = root.querySelector('[data-tier].is-default')
+                 || (checkedRadio && checkedRadio.closest('[data-tier]'))
+                 || root.querySelector('[data-tier]');
+  if (defaultTier) selectTier(defaultTier);
+
+  var form = currentForm();
+  if (form) {
+    form.addEventListener('submit', function() {
+      if (!pendingDiscountCode) return;
+      var code = pendingDiscountCode;
+      setTimeout(function() {
+        try {
+          fetch('/discount/' + encodeURIComponent(code), { credentials: 'same-origin' }).catch(function(){});
+        } catch(_){}
+      }, 500);
+    });
+  }
+  document.addEventListener('variant:change', updatePrices);
+  document.addEventListener('change', function(e) {
+    if (e.target && e.target.name === 'id') updatePrices();
+  });
+  if (window.Shopify && Shopify.designMode) {
+    document.addEventListener('shopify:block:select', function(e) {
+      if (e.detail && e.detail.blockId === '{{ block.id }}') updatePrices();
+    });
+  }
+})();
+{% comment %}{% endcomment %}</script>
+
+</template>
