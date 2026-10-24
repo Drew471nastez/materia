@@ -169,10 +169,17 @@
         panel on larger screens. Closes on the backdrop, Escape and its
         close button.
      ------------------------------------------------------------------- */
-  var lockCount = 0;
-  function lockPage(on) {
-    lockCount = Math.max(0, lockCount + (on ? 1 : -1));
-    document.documentElement.classList.toggle("mt-lock", lockCount > 0);
+  var lockOwners = new Set();
+  function refreshLocks() {
+    lockOwners.forEach(function (owner) {
+      if (!owner.isConnected || !owner.open) lockOwners.delete(owner);
+    });
+    document.documentElement.classList.toggle("mt-lock", lockOwners.size > 0);
+  }
+  function lockPage(on, owner) {
+    if (on) lockOwners.add(owner);
+    else lockOwners.delete(owner);
+    refreshLocks();
   }
   function openSheet(dialog, opener) {
     if (!dialog || dialog.open) return;
@@ -190,7 +197,7 @@
     } catch (err) {
       dialog.setAttribute("open", "");
     }
-    lockPage(true);
+    lockPage(true, dialog);
     dialog.classList.remove("is-closing");
     requestAnimationFrame(function () {
       requestAnimationFrame(function () {
@@ -213,7 +220,7 @@
       } catch (err) {
         dialog.removeAttribute("open");
       }
-      lockPage(false);
+      lockPage(false, dialog);
       var opener = dialog._mtOpener;
       if (opener) {
         opener.setAttribute("aria-expanded", "false");
@@ -370,7 +377,7 @@
     } catch (err) {
       d.setAttribute("open", "");
     }
-    lockPage(true);
+    lockPage(true, d);
     lb.opener = startEl;
     lb.go(start, true);
     requestAnimationFrame(function () {
@@ -396,7 +403,7 @@
       } catch (err) {
         d.removeAttribute("open");
       }
-      lockPage(false);
+      lockPage(false, d);
       lb.track.innerHTML = "";
       if (lb.opener && document.contains(lb.opener) && lb.opener.focus) lb.opener.focus({ preventScroll: true });
     }
@@ -604,6 +611,9 @@
     });
   }
   function rescan(e) {
+    // A builder redraw may remove an open sheet without its close callback.
+    // Release only disconnected owners, never another active dialog's lock.
+    refreshLocks();
     var root = e && e.target && e.target.querySelectorAll ? e.target : document;
     scanVideos(root);
   }

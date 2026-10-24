@@ -257,7 +257,7 @@ const bodyAttrs = s => `data-btn-style="${s.btn_style || 'solid'}" data-btn-seco
 const CSS = ['critical.css', 'section-isolation.css', 'animation.css', 'product-card.css', 'theme.css', 'theme-button-contract.css'].map(f => read('shopify/assets/' + f)).join('\n');
 const EXPERIENCE = read('shopify/assets/materia-experience.js');
 async function draw(page, html, s, extraCss = '') {
-  await page.setContent(`<!doctype html><html dir="ltr"><head><style>${themeRoot(s)}</style><style>${CSS}</style><style>${extraCss}</style></head><body ${bodyAttrs(s)}>${html}</body></html>`);
+  await page.setContent(`<!doctype html><html dir="ltr" data-badge-custom="${s.enable_custom_badges === true}"><head><style>${themeRoot(s)}</style><style>${CSS}</style><style>${extraCss}</style></head><body ${bodyAttrs(s)}>${html}</body></html>`);
   await page.evaluate(() => { window.__materiaExperienceReady = false; });
   await page.addScriptTag({content: EXPERIENCE});
   await page.evaluate(() => document.fonts.ready);
@@ -634,7 +634,7 @@ async function snapshot(page) {
         return page.$$eval('.product__badges', els => els.map(st => ({stack: (() => { const b = st.getBoundingClientRect(), i = st.closest('.product-item__inner').getBoundingClientRect(); return {x: b.x - i.x, y: b.y - i.y, r: i.right - b.right, b: i.bottom - b.bottom}; })(), filter: getComputedStyle(st).filter,
           items: [...st.querySelectorAll('.product__badges-inner')].map(n => { const cs = getComputedStyle(n), b = n.getBoundingClientRect(); return {cls: n.className.split(' ')[0], shown: cs.display !== 'none', text: n.textContent.trim(), radius: cs.borderTopLeftRadius, clip: cs.clipPath, fs: cs.fontSize, fw: cs.fontWeight, tt: cs.textTransform, ls: cs.letterSpacing, pl: cs.paddingLeft, pt: cs.paddingTop, bg: cs.backgroundColor, color: cs.color, anim: cs.animationName, y: b.y, b: b.bottom, h: b.height}; })})));
       };
-      const s0 = {...base, badges_position: 'top_start', badges_shape: 'rectangle', badges_rounded_corner: 4, badges_size: 'medium', badges_uppercase: true, badges_letter_spacing: 1, badges_font_weight: '600', badges_padding_x: 10, badges_padding_y: 5, sale_badge_type: 'text', sale_label: 'Sale', badges_drop_shadow: false};
+      const s0 = {...base, enable_custom_badges:true, badges_position: 'top_start', badges_shape: 'rectangle', badges_rounded_corner: 4, badges_size: 'medium', badges_uppercase: true, badges_letter_spacing: 1, badges_font_weight: '600', badges_padding_x: 10, badges_padding_y: 5, sale_badge_type: 'text', sale_label: 'Sale', badges_drop_shadow: false};
       for (const width of WIDTHS) {
         const ref = await badge(s0, width);
         const first = ref[0].items[0];

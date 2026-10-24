@@ -135,6 +135,7 @@ function filt(ctx, v, f) {
     case 'json': return JSON.stringify(v ?? null);
     case 'strip': return String(v ?? '').trim();
     case 'strip_newlines': return String(v ?? '').replace(/\n/g, '');
+    case 'newline_to_br': return String(v ?? '').replace(/\r?\n/g, '<br />');
     case 'money': return 'R$' + (Number(v || 0) / 100).toFixed(2);
     case 'date': return v === 'now' ? Math.floor(Date.now() / 1000) : Math.floor(new Date(v).getTime() / 1000);
     case 'where': return (v || []).filter(x => x[a[0]] === a[1]);
@@ -250,7 +251,7 @@ const bodyAttrs = s => `data-btn-style="${s.btn_style || 'solid'}" data-btn-seco
 const CSS = ['critical.css', 'section-isolation.css', 'animation.css', 'product-card.css', 'theme.css', 'theme-button-contract.css'].map(f => read('shopify/assets/' + f)).join('\n');
 const EXPERIENCE = read('shopify/assets/materia-experience.js');
 async function draw(page, html, s, extraCss = '') {
-  await page.setContent(`<!doctype html><html dir="ltr"><head><style>${themeRoot(s)}</style><style>${CSS}</style><style>${extraCss}</style></head><body ${bodyAttrs(s)}>${html}</body></html>`);
+  await page.setContent(`<!doctype html><html dir="ltr" data-badge-custom="${s.enable_custom_badges === true}"><head><style>${themeRoot(s)}</style><style>${CSS}</style><style>${extraCss}</style></head><body ${bodyAttrs(s)}>${html}</body></html>`);
   await page.evaluate(() => { window.__materiaExperienceReady = false; });
   await page.addScriptTag({content: EXPERIENCE});
   await page.evaluate(() => document.fonts.ready);
@@ -417,7 +418,7 @@ const grid = cards => `<div class="container" style="padding:0 16px;box-sizing:b
     /* ── 4. Badges: every Product badges setting ── */
     {
       const many = product(5, {sale: true, new: true, custom: 'Organic'});
-      const base = {...config, show_sale: true, show_new: true, show_sold_out: true, show_wishlist: true, sale_badge_type: 'text', badges_stack_max: 4};
+      const base = {...config, enable_custom_badges:true, show_sale: true, show_new: true, show_sold_out: true, show_wishlist: true, sale_badge_type: 'text', badges_stack_max: 4};
       const measure = async (s, width = 1366, p = many) => {
         await page.setViewportSize({width, height: 900});
         await draw(page, grid([card(p, {}, s), card(product(6), {}, s)]), s);

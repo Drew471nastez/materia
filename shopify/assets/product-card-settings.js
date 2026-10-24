@@ -10,6 +10,7 @@
   document.head.append(sheet);
   window.materiaCardSettings = settings;
   let frame = 0;
+  let syncRoles = true;
   const colours = new Map();
   const colourContext = document.createElement('canvas').getContext('2d');
   const usableColour = value => {
@@ -67,15 +68,33 @@
     }
     sheet.textContent = rules.join('\n');
     document.querySelectorAll('style[data-pc-custom-actions]').forEach(el => { el.media = 'not all'; });
-    document.dispatchEvent(new CustomEvent('materia:card-settings-applied'));
+    if (syncRoles) document.dispatchEvent(new CustomEvent('materia:card-settings-applied'));
+    syncRoles = false;
   };
   document.addEventListener('storelib:settings-change', event => {
     if (event.detail?.section) return;
     let changed = false;
     Object.entries(event.detail?.settings || {}).forEach(([key,value]) => {
-      if (Object.hasOwn(settings,key)) { settings[key] = value; changed = true; }
+      if (Object.hasOwn(settings,key)) {
+        settings[key] = value; changed = true;
+        if (key === 'enable_custom_card_actions' || key === 'card_atc_button') syncRoles = true;
+      }
     });
     if (changed && !frame) frame = requestAnimationFrame(apply);
   });
   apply();
+})();
+
+(() => {
+  const source = document.querySelector('[data-badge-style-settings]');
+  if (!source) return;
+  let enabled = false, frame = 0;
+  try { enabled = JSON.parse(source.textContent) === true; } catch (_) {}
+  const apply = () => { frame = 0; document.documentElement.dataset.badgeCustom = String(enabled); };
+  apply();
+  document.addEventListener('storelib:settings-change', event => {
+    if (event.detail?.section || !Object.hasOwn(event.detail?.settings || {},'enable_custom_badges')) return;
+    enabled = event.detail.settings.enable_custom_badges === true;
+    if (!frame) frame = requestAnimationFrame(apply);
+  });
 })();
