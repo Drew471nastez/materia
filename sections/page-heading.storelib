@@ -56,6 +56,9 @@
 {%- comment -%}Section isolation — prevent CSS/JS bleed between sections{%- endcomment -%}
 <style>
   #shopify-section-{{ section.id }} { isolation: isolate; position: relative; }
+  /* Height: Adapt to image keeps the picture's shape; the picture fills it. */
+  #shopify-section-{{ section.id }} .sec__page-heading[style*="--aspect-ratio"] { aspect-ratio: var(--aspect-ratio); }
+  #shopify-section-{{ section.id }} .sec__page-heading .overlay-bg { position: absolute; inset: 0; z-index: -1; overflow: hidden; }
 {% comment %}{% endcomment %}</style>
 {%- comment -%}
   Materia Themes. Developed By Materia Themes.
@@ -105,11 +108,10 @@
             {%- when 'heading' -%}
               <motion-element
                 data-motion="fade-up-lg"
-                data-motion-delay="50"
                 {% if scroll_animation != 'slide_in' %}
                   hold
                 {% endif %}
-               data-motion-delay="{{ forloop.index0 | times: 50 }}"
+                data-motion-delay="{{ forloop.index0 | times: 50 }}"
                 class="{% if scroll_animation == 'slide_in' %} opacity-0 {% endif %} block"
               >
                 <h1
@@ -120,11 +122,11 @@
                     {{ block_st.page_title }}
                   {%- else -%}
                     {% if template contains 'blog' %}
-                      {{ blog.title }}
+                      {{ blog.title | default: page_title }}
                     {% elsif template contains 'cart' %}
                       {{- 'general.cart.title' | t -}}
                     {% else %}
-                      {{ page.title }}
+                      {{ page.title | default: page_title }}
                     {% endif %}
                   {% endif %}
                 </h1>
@@ -153,12 +155,73 @@
                 {% if scroll_animation != 'slide_in' %}
                   hold
                 {% endif %}
-               data-motion-delay="{{ forloop.index0 | times: 50 }}"
+                data-motion-delay="{{ forloop.index0 | times: 50 }}"
                 class="{% if scroll_animation == 'slide_in' %} opacity-0 {% endif %} block"
               >
-                <div class="page-title-breadcrumb">
-                  {%- render 'breadcrumbs' -%}
-                </div>
+                {%- liquid
+                  assign bc_sep = block_st.separator | default: 'chevron'
+                  assign bc_align = section_st.alignment | default: 'center'
+                  assign bc_current = page_title
+                  case t
+                    when 'page'
+                      assign bc_current = page.title | default: page_title
+                    when 'cart'
+                      assign bc_current = 'general.cart.title' | t
+                    when 'blog'
+                      assign bc_current = blog.title | default: page_title
+                    when 'article'
+                      assign bc_current = article.title | default: page_title
+                  endcase
+                -%}
+                {%- comment -%} The same trail, separators and colours as the Breadcrumb section. {%- endcomment -%}
+                <style>
+                  #shopify-section-{{ section.id }} .bc {
+                    --bc-link: {% render 'scheme-color', color: block_st.link_color, fallback: 'color-mix(in srgb, var(--color-text) 72%, transparent)' %};
+                    --bc-current: {% render 'scheme-color', color: block_st.current_color, fallback: 'var(--color-heading)' %};
+                    font-family: var(--body-font, inherit);
+                    font-size: {{ block_st.font_size | default: 13 }}px;
+                    font-weight: var(--body-weight, 400);
+                    line-height: 1.4;
+                    {%- if block_st.uppercase %} text-transform: uppercase; letter-spacing: 0.06em;{% endif %}
+                  }
+                  #shopify-section-{{ section.id }} .bc__trail {
+                    display: flex; align-items: center; flex-wrap: wrap; row-gap: 4px; min-width: 0; margin: 0; padding: 0; list-style: none;
+                    justify-content: {% case bc_align %}{% when 'center' %}center{% when 'right' %}flex-end{% else %}flex-start{% endcase %};
+                  }
+                  #shopify-section-{{ section.id }} .bc__item { display: inline-flex; align-items: center; min-width: 0; }
+                  #shopify-section-{{ section.id }} .bc__item + .bc__item::before {
+                    flex: none; margin-inline: 10px; color: color-mix(in srgb, var(--bc-link) 70%, transparent);
+                    {%- case bc_sep -%}
+                      {%- when 'slash' %} content: "/";
+                      {%- when 'dot' %} content: ""; width: 3px; height: 3px; border-radius: 50%; background: currentColor;
+                      {%- else %} content: ""; width: 6px; height: 6px; border: solid currentColor; border-width: 1.5px 1.5px 0 0; transform: rotate(45deg); margin-inline: 9px 11px;
+                    {%- endcase %}
+                  }
+                  #shopify-section-{{ section.id }} .bc__link {
+                    color: var(--bc-link); text-decoration: none; white-space: nowrap;
+                    background: linear-gradient(currentColor, currentColor) no-repeat 0 100% / 0 1px;
+                    transition: color .2s ease, background-size .3s cubic-bezier(.2,.7,.2,1);
+                  }
+                  #shopify-section-{{ section.id }} .bc__link:is(:hover, :focus-visible) { color: var(--bc-current); background-size: 100% 1px; }
+                  #shopify-section-{{ section.id }} .bc__current { color: var(--bc-current); overflow-wrap: anywhere; }
+                  @media (prefers-reduced-motion: reduce) { #shopify-section-{{ section.id }} .bc__link { transition: none; } }
+{% comment %}{% endcomment %}                </style>
+                <nav class="bc page-title-breadcrumb" aria-label="{{ 'general.breadcrumb.home' | t | escape }}" {{ block.shopify_attributes }}>
+                  <ol class="bc__trail">
+                    <li class="bc__item"><a class="bc__link" href="{{ routes.root_url }}">{{ 'general.breadcrumb.home' | t }}</a></li>
+                    {%- if t == 'blog' and current_tags -%}
+                      <li class="bc__item"><a class="bc__link" href="{{ blog.url }}">{{ blog.title }}</a></li>
+                      <li class="bc__item"><span class="bc__current" aria-current="page">{{ current_tags | join: ' + ' }}</span></li>
+                    {%- else -%}
+                      {%- if t == 'article' and blog.url != blank -%}
+                        <li class="bc__item"><a class="bc__link" href="{{ blog.url }}">{{ blog.title }}</a></li>
+                      {%- endif -%}
+                      {%- if bc_current != blank -%}
+                        <li class="bc__item"><span class="bc__current" aria-current="page">{{ bc_current }}</span></li>
+                      {%- endif -%}
+                    {%- endif -%}
+                  </ol>
+                </nav>
               </motion-element>
           {%- endcase -%}
         {%- endfor -%}
@@ -586,7 +649,24 @@
       {
         "type": "breadcrumb",
         "name": "t:sections.all.page_heading.breadcrumb.label",
-        "limit": 1
+        "limit": 1,
+        "settings": [
+          {
+            "type": "select",
+            "id": "separator",
+            "label": "Separator",
+            "options": [
+              { "value": "chevron", "label": "Arrow" },
+              { "value": "slash", "label": "Slash" },
+              { "value": "dot", "label": "Dot" }
+            ],
+            "default": "chevron"
+          },
+          { "type": "range", "id": "font_size", "label": "Text size", "min": 11, "max": 18, "step": 1, "unit": "px", "default": 13 },
+          { "type": "checkbox", "id": "uppercase", "label": "Uppercase", "default": false },
+          { "type": "color", "id": "link_color", "label": "Link colour", "info": "Empty: the colour scheme's text." },
+          { "type": "color", "id": "current_color", "label": "Current page colour", "info": "Empty: the colour scheme's heading." }
+        ]
       },
       {
         "type": "heading",
