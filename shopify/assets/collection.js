@@ -754,7 +754,6 @@ eventCollectionShopify.init();
   if (customElements.get('facets-root')) return;
   const SORT_DROPDOWN = '(min-width: 750px)';
   const cssEscape = (value) => (window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, '\\$&'));
-  let request = null;
 
   class FacetsRoot extends HTMLElement {
     connectedCallback() {
@@ -801,7 +800,11 @@ eventCollectionShopify.init();
     }
 
     disconnectedCallback() {
-      document.documentElement.classList.remove('facets-locked');
+      this._request?.abort();
+      this._request = null;
+      this._pendingHref = null;
+      this.setBusy(false);
+      document.documentElement?.classList.remove('facets-locked');
       this.unwatchSortPanel();
     }
 
@@ -821,7 +824,7 @@ eventCollectionShopify.init();
         const panel = sort.closest('[popover]');
         if (panel && panel.matches(':popover-open')) panel.hidePopover();
         if (sort.getAttribute('aria-current') === 'true') return;
-        const url = new URL(location.href);
+        const url = new URL(this._pendingHref || location.href);
         url.searchParams.set('sort_by', sort.dataset.facetsSort);
         url.searchParams.delete('page');
         this.markSort(sort.dataset.facetsSort);
@@ -834,16 +837,31 @@ eventCollectionShopify.init();
         if (link.getAttribute('aria-disabled') === 'true') return;
         // Show the choice at once (the box, the count on the Filter button);
         // the section's fresh markup then confirms it.
+        let href = link.href;
         if (link.getAttribute('role') === 'checkbox') {
           const on = link.getAttribute('aria-checked') !== 'true';
+          if (link.dataset.facetsParam) {
+            const next = new URL(this._pendingHref || location.href);
+            const key = link.dataset.facetsParam, value = link.dataset.facetsValue || '';
+            const values = next.searchParams.getAll(key).filter(item => item !== value);
+            if (on) values.push(value);
+            next.searchParams.delete(key);
+            values.forEach(item => next.searchParams.append(key, item));
+            next.searchParams.delete('page');
+            href = next.href;
+          }
           link.setAttribute('aria-checked', String(on));
           this.bumpBadge(on ? 1 : -1);
         } else if (link.matches('.facets-pill:not(.facets-pill--clear)')) {
           this.bumpBadge(-1);
         } else if (link.matches('.facets-pill--clear, .facets-panel__clear, .facets-empty__action, .facets-empty__clear')) {
           this.bumpBadge(-Infinity);
+          const next = new URL(this._pendingHref || link.href);
+          [...next.searchParams.keys()].filter(key => key.startsWith('filter.')).forEach(key => next.searchParams.delete(key));
+          next.searchParams.delete('page');
+          href = next.href;
         }
-        this.go(link.href);
+        this.go(href);
         return;
       }
       const page = event.target.closest('.pagination a[href]');
@@ -873,7 +891,7 @@ eventCollectionShopify.init();
       const form = event.target.closest('form[data-facets-price]');
       if (!form || !this.contains(form)) return;
       event.preventDefault();
-      const url = new URL(location.href);
+      const url = new URL(this._pendingHref || location.href);
       url.searchParams.delete('page');
       form.querySelectorAll('input[name]:not([type="hidden"])').forEach((input) => {
         const value = String(input.value || '').trim().replace(',', '.');
@@ -1014,10 +1032,12 @@ eventCollectionShopify.init();
       const { push = true, focus = null, scroll = false } = options;
       const url = new URL(href, location.href);
       url.searchParams.delete('section_id');
+      if (this._request && this._pendingHref === url.href) return;
       const fetchUrl = new URL(url.href);
       fetchUrl.searchParams.set('section_id', this.sectionId);
-      if (request) request.abort();
-      const mine = (request = new AbortController());
+      this._request?.abort();
+      const mine = (this._request = new AbortController());
+      this._pendingHref = url.href;
       this.setBusy(true);
       try {
         const response = await fetch(fetchUrl.href, {
@@ -1027,11 +1047,9 @@ eventCollectionShopify.init();
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const html = await response.text();
-        if (mine !== request) return;
+        if (mine !== this._request || !this.isConnected) return;
         const doc = new DOMParser().parseFromString(html, 'text/html');
-        const next =
-          doc.querySelector(`facets-root[data-section-id="${cssEscape(this.sectionId)}"]`) ||
-          doc.querySelector('facets-root');
+        const next = doc.querySelector(`facets-root[data-section-id="${cssEscape(this.sectionId)}"]`);
         if (!next) throw new Error('No facets in the response');
         const target = url.pathname + url.search + url.hash;
         if (push && target !== location.pathname + location.search + location.hash) {
@@ -1043,8 +1061,9 @@ eventCollectionShopify.init();
         // The page itself always answers: fall back to loading it.
         if (push) location.assign(url.href);
       } finally {
-        if (mine === request) {
-          request = null;
+        if (mine === this._request) {
+          this._request = null;
+          this._pendingHref = null;
           this.setBusy(false);
         }
       }

@@ -435,11 +435,12 @@ const grid = cards => `<div class="container" style="padding:0 16px;box-sizing:b
       for (const pos of ['top_start', 'top_end', 'bottom_start', 'bottom_end']) for (const width of [375, 1366]) {
         const m = await measure({...base, badges_position: pos, badges_offset_x: 14, badges_offset_y: 9}, width);
         const first = m.items[0].r;
-        if (pos.startsWith('top')) assert.equal(Math.round(m.box.y - m.inner.y), 9, `${pos}@${width}: top offset`);
+        if (pos === 'top_start') assert.equal(Math.round(m.box.y - m.inner.y), 9, `${pos}@${width}: top offset`);
+        else if (pos === 'top_end') assert.ok(m.box.y - m.inner.y >= 9, `${pos}@${width}: corner stack clears actions vertically`);
         else assert.ok(m.inner.bottom - m.box.bottom >= 9 - 0.5, `${pos}@${width}: bottom offset`);
         if (pos.endsWith('start')) assert.equal(Math.round(first.x - m.inner.x), 14, `${pos}@${width}: side offset`);
-        else assert.ok(m.inner.right - first.right >= 14 - 0.5, `${pos}@${width}: side offset end`);
-        for (const it of m.items) for (const icon of m.icons) if (icon.width) assert.ok(!overlaps(it.r, icon), `${pos}@${width}: badge "${it.text}" clear of the card buttons`);
+        else assert.ok(Math.abs(m.inner.right - first.right - 14) < 1, `${pos}@${width}: end badge stays at the selected image edge`);
+        for (const it of m.items) for (const icon of m.icons) if (icon.width) assert.ok(!overlaps(it.r, icon), `${pos}@${width}: badge "${it.text}" clear of the card buttons ${JSON.stringify({badge:it.r,icon,inner:m.inner,box:m.box})}`);
         assert.ok(m.items.every(it => it.r.x >= m.inner.x && it.r.right <= m.inner.right + 0.5), `${pos}@${width}: badges inside the image`);
       }
       // Bottom badges step out of the add to cart strip on hover (desktop).

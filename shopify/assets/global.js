@@ -813,16 +813,25 @@ class SwatchInit extends HTMLElement {
     });
   }
   checkSwatches(e) {
+    const previewType = window.__materiaSwatchSettings?.swatch_item_type;
+    if (previewType && e.hasAttribute('data-color')) {
+      e.dataset.swatchType = previewType;
+      e.classList.remove('color_swatches','variant_images');
+      e.classList.add(previewType);
+    }
     const { color, image, customValue, swatchType, optionSwatchValue } =
       e.dataset;
+    // Custom colour rules use !important. They must not mask the variant's
+    // photograph after switching away from colour mode.
+    if (swatchType === 'variant_images' && image && customValue) e.classList.remove(customValue);
     if (color) {
       if (swatchType != "variant_images") {
-        if (optionSwatchValue.length == 0 || optionSwatchValue == null) {
+        if (!optionSwatchValue) {
           if (this.checkColor(color)) {
             e.style.backgroundColor = color;
-            e.classList.add(customValue);
+            if (customValue) e.classList.add(customValue);
           } else {
-            e.classList.add(customValue);
+            if (customValue) e.classList.add(customValue);
             if (image) {
               e.classList.add("color__" + color.replace(" ", "-"));
               e.style.backgroundColor = null;
@@ -837,7 +846,7 @@ class SwatchInit extends HTMLElement {
       } else {
         // Variant images: the variant's own picture first, then the
         // option's swatch, then the colour by name.
-        if (image || optionSwatchValue == null || optionSwatchValue.length == 0) {
+        if (image || !optionSwatchValue) {
           if (image) {
             e.classList.add("color__" + color.replace(" ", "-"));
             e.style.backgroundColor = null;
@@ -846,9 +855,9 @@ class SwatchInit extends HTMLElement {
             e.style.backgroundRepeat = "no-repeat";
           } else if (this.checkColor(color)) {
             e.style.backgroundColor = color;
-            e.classList.add(customValue);
+            if (customValue) e.classList.add(customValue);
           } else {
-            e.classList.add(customValue);
+            if (customValue) e.classList.add(customValue);
           }
         } else {
           e.style.setProperty("--swatch--background", optionSwatchValue);
@@ -859,10 +868,9 @@ class SwatchInit extends HTMLElement {
   // Theme settings > Variant swatches > Display style, live in the builder.
   refreshSwatches(type) {
     this.querySelectorAll(".product__color-swatches--js").forEach((btn) => {
-      if (btn.classList.contains("color_swatches") || btn.classList.contains("variant_images")) {
-        btn.classList.remove("color_swatches", "variant_images");
-        btn.classList.add(type);
-      }
+      if (!btn.hasAttribute('data-color')) return;
+      btn.classList.remove("color_swatches", "variant_images");
+      btn.classList.add(type);
       btn.dataset.swatchType = type;
       ["background-color", "background-image", "background-size", "background-repeat", "--swatch--background"].forEach((p) => btn.style.removeProperty(p));
       this.checkSwatches(btn);
@@ -1306,15 +1314,6 @@ customElements.define("copy-button", CopyButton);
 (function () {
   if (window.__materiaSwatchLive) return;
   window.__materiaSwatchLive = true;
-  function hosts() {
-    var set = new Set();
-    document.querySelectorAll(".product__color-swatches--js").forEach(function (btn) {
-      var host = btn.parentElement;
-      while (host && typeof host.refreshSwatches !== "function") host = host.parentElement;
-      if (host) set.add(host);
-    });
-    return set;
-  }
   function limit(value) {
     var max = value === "default" ? Infinity : parseInt(value, 10) || Infinity;
     document.querySelectorAll("variant-radios.product__color-swatches").forEach(function (group) {
@@ -1345,11 +1344,46 @@ customElements.define("copy-button", CopyButton);
       }
     });
   }
+  const state = (window.__materiaSwatchSettings ||= {});
+  let frame = 0, full = false;
+  const scopes = new Set();
+  function schedule(scope) {
+    if (scope === document) full = true;
+    else if (scope?.querySelectorAll) scopes.add(scope);
+    if (frame) return;
+    frame = requestAnimationFrame(function () {
+      frame = 0;
+      const roots = full ? [document] : [...scopes];
+      full = false; scopes.clear();
+      const readyHosts = new Set();
+      roots.forEach(root => {
+        const buttons = [...root.querySelectorAll('.product__color-swatches--js')];
+        if (root.matches?.('.product__color-swatches--js')) buttons.push(root);
+        buttons.forEach(button => {
+          let host = button.parentElement;
+          while (host && typeof host.refreshSwatches !== 'function') host = host.parentElement;
+          if (host) readyHosts.add(host);
+        });
+      });
+      if (state.swatch_item_type) readyHosts.forEach(host => host.refreshSwatches(state.swatch_item_type));
+      if (state.limit_color != null) limit(String(state.limit_color));
+    });
+  }
   document.addEventListener("storelib:settings-change", function (event) {
     var s = (event.detail && event.detail.settings) || {};
-    if (Object.prototype.hasOwnProperty.call(s, "swatch_item_type")) {
-      hosts().forEach(function (host) { host.refreshSwatches(s.swatch_item_type); });
-    }
-    if (Object.prototype.hasOwnProperty.call(s, "limit_color")) limit(String(s.limit_color));
+    if (event.detail?.section) return;
+    let changed = false;
+    if (['color_swatches','variant_images'].includes(s.swatch_item_type)) { state.swatch_item_type = s.swatch_item_type; changed = true; }
+    if (Object.prototype.hasOwnProperty.call(s, 'limit_color')) { state.limit_color = s.limit_color; changed = true; }
+    if (changed) schedule(document);
   });
+  ['storelib:section-load','shopify:section:load'].forEach(name => document.addEventListener(name, event => {
+    if (Object.keys(state).length) schedule(event.target?.nodeType === 1 ? event.target : document);
+  }));
+  new MutationObserver(records => {
+    if (!Object.keys(state).length) return;
+    for (const record of records) for (const node of record.addedNodes) {
+      if (node.nodeType === 1 && (node.matches?.('.product__color-swatches--js') || node.querySelector?.('.product__color-swatches--js'))) schedule(node);
+    }
+  }).observe(document.documentElement, {childList:true,subtree:true});
 })();
