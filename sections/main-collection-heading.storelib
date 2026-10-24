@@ -82,16 +82,34 @@
   assign alt = image_bg.alt | default: collection.title | escape
   assign height = section_st.height
   assign scroll_animation = settings.scroll_animation
+  assign heading_align = section_st.alignment | default: 'center'
+  comment
+    Adapt to image: the picture's own shape, read from its width and height
+    when the platform gives no aspect ratio.
+  endcomment
+  assign image_ratio = image_bg.aspect_ratio
+  if image_ratio == blank and image_bg.width != blank and image_bg.height != blank
+    assign image_ratio = image_bg.width | times: 1.0 | divided_by: image_bg.height
+  endif
+  comment
+    The empty picture stands in for the collection image only in the
+    builder; a visitor never sees it.
+  endcomment
+  assign show_placeholder = false
+  if image_bg == blank and show_collection_image and request.design_mode
+    assign show_placeholder = true
+  endif
 -%}
 {%- capture style -%}
-  --section-pt: {{ section_st.padding_top }}; --section-pb: {{ section_st.padding_bottom }};{%- if image_bg != blank and height == 'adapt' -%}--aspect-ratio: {{ image_bg.aspect_ratio }}{% endif %};--overlay-opacity: {{ section_st.overlay_opacity }}%;
+  --section-pt: {{ section_st.padding_top }}; --section-pb: {{ section_st.padding_bottom }};{%- if image_bg != blank and height == 'adapt' and image_ratio != blank -%}--aspect-ratio: {{ image_ratio }};{% endif %}--overlay-opacity: {{ section_st.overlay_opacity }}%;
 {%- endcapture -%}
-{%- if section.blocks.size > 0 -%}
+{%- if section.blocks.size > 0 or image_bg != blank or show_placeholder -%}
   <div
-    class="section remove_spacing sec__page-heading color-{{ color_scheme }} gradient{% if image_bg != blank %} bg-transparent relative mb-60{% else %} mb-60{% endif %} flex align-center justify-content-{{ section_st.alignment }}"
+    class="section remove_spacing sec__page-heading color-{{ color_scheme }} gradient{% if image_bg != blank or show_placeholder %} bg-transparent relative has-image{% endif %} mb-60 flex align-center justify-content-{{ heading_align }}"
+    data-align="{{ heading_align }}"
     style="{{ style | strip | strip_newlines }}"
   >
-    {% if show_collection_image or background_image != blank %}
+    {% if image_bg != blank or show_placeholder %}
       <div class="overlay-bg">
         {%- if image_bg != blank -%}
           {% render 'responsive-image',
@@ -128,13 +146,14 @@
                 {% endif %}
                 data-motion-delay="{{ forloop.index0 | times: 50 }}"
                 class=" {% if scroll_animation == 'slide_in' %} opacity-0 {% endif %} block"
+                {{ block.shopify_attributes }}
               >
               <h1 class="heading-title heading-letter-spacing h2 mt-8 mb-0 {{ header_size }}">
                 {%- if block_st.page_title != blank -%}
-                  {{ block_st.page_title }}
+                  {{ block_st.page_title | escape }}
                 {%- else -%}
-                  {{ collection.title }}
-                {% endif %}
+                  {{ collection.title | escape }}
+                {%- endif -%}
               </h1>
             </motion-element>
             {%- when 'description' -%}
@@ -145,7 +164,8 @@
                     hold
                   {% endif %}
                   data-motion-delay="{{ forloop.index0 | times: 50   }}"                             
-                  class="heading-description mt-10 block {% if scroll_animation == 'slide_in' %} opacity-0 {% endif %} rich__text-m0">
+                  class="heading-description mt-10 block {% if scroll_animation == 'slide_in' %} opacity-0 {% endif %} rich__text-m0"
+                  {{ block.shopify_attributes }}>
                   {{ collection.description }}
                 </motion-element>
               {% endif %}

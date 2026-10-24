@@ -20,18 +20,14 @@ const renderCollection=({editor=false,extras=false,filters=true,enabled=true}={}
    await page.setContent('<html class="'+(editor?'shopify-design-mode':'')+'"><style>'+read('shopify/assets/collection-page.css')+'</style>'+renderCollection({editor,extras:true,filters:false}));
    assert.equal(await page.locator('[data-facets-panel]').count(),1,'sidebar blocks survive absent facet data');
    assert((await page.locator('[data-facets-panel]').textContent()).includes('Sidebar information'));
-   assert.equal(await page.locator('.facets-preview-notice').isVisible(),editor);checks++;
+   assert.equal(await page.locator('.facets-preview-notice').count(),0,'no preview sentence');checks++;
   }
-  // The live page never invents filters; the builder, which draws the page
-  // without filter data, previews the groups from the collection's products,
-  // marked as a preview and with nothing that filters (no links or forms).
-  await page.setContent('<html><style>'+read('shopify/assets/collection-page.css')+'</style>'+renderCollection({editor:false,filters:false,extras:true}));assert.equal(await page.locator('[data-facets-preview]:visible').count(),0,'missing backend facets are never fabricated live');
+  // Without filter data (the builder never gets any) the groups are built
+  // from the collection's products, with real filter links, on both pages.
   await page.setViewportSize({width:1366,height:900});
   await page.setContent('<html><style>'+read('shopify/assets/collection-page.css')+'</style>'+renderCollection({editor:false,filters:false}));
-  assert.equal(await page.locator('[data-facets-panel]').isVisible(),false);
-  await page.evaluate(()=>document.documentElement.classList.add('shopify-design-mode'));
-  assert.equal(await page.locator('[data-facets-panel]').isVisible(),true,'client editor detection reveals server-retained sidebar');
-  await page.setContent(renderCollection({editor:true,filters:false}));assert.ok(await page.locator('[data-facets-preview]').count()>0,'the builder previews the filter groups');assert.equal(await page.locator('[data-facets-preview] :is(a,form,[data-facets-link])').count(),0,'the preview filters nothing');assert.equal(await page.locator('.facets-preview-notice').count(),1);checks++;
+  assert.equal(await page.locator('[data-facets-panel]').isVisible(),true,'the sidebar shows with no editor class');
+  await page.setContent(renderCollection({editor:true,filters:false}));assert.ok(await page.locator('[data-facets-source="products"] a[data-facets-link]').count()>0,'the builder draws working filter groups');assert.equal(await page.locator('.facets-preview-notice').count(),0);checks++;
   await page.setContent(renderCollection({editor:true,enabled:false}));assert.equal(await page.locator('[data-facets-panel]').count(),0,'disabled filter setting remains respected');checks++;
   for(const editor of [false,true])for(const width of [1280,375]){
    await page.setViewportSize({width,height:900});await page.setContent('<style>'+h.themeRoot()+'</style>'+renderCollection({editor}));

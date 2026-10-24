@@ -1,10 +1,11 @@
 /* Materia Themes. Developed By Materia Themes. */
-/* Keep the missing-data preview in the DOM so an imported-theme editor can
-   reveal it even when its server omits request.design_mode. Never fabricate
-   working facets on a published page without the platform's facet data. */
-html:not(.shopify-design-mode) :is([data-facets-preview], .facets-preview-notice) { display:none !important; }
-html:not(.shopify-design-mode) .facets[data-facets-no-data='true'] :is(.facets-panel, .facets-toolbar__filter) { display:none !important; }
-html:not(.shopify-design-mode) .facets[data-facets-no-data='true'] .facets__layout { grid-template-columns:minmax(0,1fr) !important; }
+/* Filters never wait for a class or a script to show. Without the platform's
+   filter data (the builder's canvas) snippets/facets-panel builds the same
+   groups from the collection's products, as working filter links, so nothing
+   here hides them; only a collection with no products and no sidebar content
+   has no Filter button and no sidebar. */
+.facets[data-facets-no-data='true'] :is(.facets-panel, .facets-toolbar__filter) { display:none !important; }
+.facets[data-facets-no-data='true'] .facets__layout { grid-template-columns:minmax(0,1fr) !important; }
 @media (min-width: 576px) {
   .product-type-list .product-item__information {
     flex: 0 0 calc(100% - var(--col-width) - var(--gap, 1.5rem));
@@ -1141,7 +1142,6 @@ facets-root { display: block; }
   --facets-tint: color-mix(in srgb, var(--color-heading, #111) 6%, transparent);
   --facets-ease: cubic-bezier(0.32, 0.72, 0, 1);
 }
-html.facets-locked { overflow: hidden; }
 .facets :is(a, button, summary, input):focus-visible {
   outline: 2px solid var(--color-heading, #111);
   outline-offset: 2px;
@@ -1151,16 +1151,22 @@ html.facets-locked { overflow: hidden; }
 .facets-toolbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: stretch;
   gap: 12px 16px;
   margin: 0 0 16px;
 }
+/* Filter takes its size from Theme settings > Buttons; Sort by matches its
+   height so the two stay on one line. */
+.facets-toolbar > .facets-toolbar__count { align-self: center; }
+.facets-sort { display: flex; }
+/* The Filter button is a theme button (data-theme-button, .btn-secondary):
+   its colours, appearance, size, corners and hover all come from Theme
+   settings > Buttons, so nothing here sets them. */
 .facets-toolbar__filter {
-  --mb-padding-y: 10px;
-  --mb-padding-x: 18px;
-  --mb-font-size: 14px;
   gap: 8px;
   min-height: 44px;
+  cursor: pointer;
+  touch-action: manipulation;
 }
 .facets-toolbar__filter .facets-icon { width: 18px; height: 18px; flex: none; }
 .facets-toolbar__badge:empty { display: none; }
@@ -1338,25 +1344,44 @@ html.facets-locked { overflow: hidden; }
 }
 
 /* The filter drawer (phones, and computers with the Drawer layout) */
+/* The drawer slides on the compositor only (translate), its shade fades with
+   it, and both run backwards on close; the page under it is held still by
+   html:has(), which needs no script and keeps the scrollbar's room so
+   nothing moves sideways. */
 .facets-panel {
   position: fixed;
   inset: 0 auto 0 0;
   width: min(400px, calc(100vw - 40px));
   height: 100%;
+  height: 100dvh;
   max-height: 100dvh;
   overflow: hidden;
   flex-direction: column;
+  padding-inline-start: env(safe-area-inset-left, 0px);
   box-shadow: 12px 0 40px rgba(0, 0, 0, 0.16);
   translate: -100% 0;
+  backface-visibility: hidden;
   transition: translate 0.34s var(--facets-ease), overlay 0.34s allow-discrete, display 0.34s allow-discrete;
 }
-[dir='rtl'] .facets-panel { inset: 0 0 0 auto; translate: 100% 0; }
+.facets-panel:focus { outline: none; }
+[dir='rtl'] .facets-panel { inset: 0 0 0 auto; translate: 100% 0; padding-inline-start: env(safe-area-inset-right, 0px); }
 .facets-panel:popover-open { display: flex; translate: 0 0; }
 @starting-style {
   .facets-panel:popover-open { translate: -100% 0; }
   [dir='rtl'] .facets-panel:popover-open { translate: 100% 0; }
 }
-.facets-panel::backdrop { background: rgba(0, 0, 0, 0.4); }
+.facets-panel::backdrop {
+  background: rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transition: opacity 0.34s ease, overlay 0.34s allow-discrete, display 0.34s allow-discrete;
+}
+.facets-panel:popover-open::backdrop { opacity: 1; }
+@starting-style {
+  .facets-panel:popover-open::backdrop { opacity: 0; }
+}
+html:has(.facets-panel:popover-open),
+html.facets-locked { overflow: hidden; scrollbar-gutter: stable; }
+html:has(.facets-panel:popover-open) body { overscroll-behavior: none; }
 .facets-panel__head { flex: none; padding-top: max(8px, env(safe-area-inset-top, 0px)); }
 .facets-panel__body {
   flex: 1 1 auto;
@@ -1382,7 +1407,7 @@ html.facets-locked { overflow: hidden; }
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.facets-panel__done { --mb-padding-y: 10px; --mb-padding-x: 28px; min-height: 44px; }
+.facets-panel__done { min-height: 44px; }
 
 /* Computers: sidebar or a row of dropdowns, in the page */
 @media (min-width: 1025px) {
@@ -1417,12 +1442,17 @@ html.facets-locked { overflow: hidden; }
   }
   .facets--vertical.facets--end .facets__layout { grid-template-columns: minmax(0, 1fr) 260px; }
   .facets--vertical.facets--end .facets-panel { order: 2; }
+  /* The sidebar stays in view under a sticky header (collection.js writes
+     its height as --facets-sticky-top) and scrolls on its own when longer
+     than the window, without handing the scroll on to the page. */
   .facets-panel--vertical {
     position: sticky;
-    top: 30px;
-    max-height: calc(100vh - 60px);
+    top: calc(var(--facets-sticky-top, 0px) + 24px);
+    max-height: calc(100vh - var(--facets-sticky-top, 0px) - 48px);
     overflow: auto;
+    overscroll-behavior: contain;
     scrollbar-width: thin;
+    transition: top 0.3s var(--facets-ease), max-height 0.3s var(--facets-ease);
   }
   .facets-panel--vertical .facets-group:first-child .facets-group__summary { padding-top: 0; min-height: 0; }
   .facets-panel--horizontal { margin-bottom: 16px; }
@@ -1491,6 +1521,24 @@ html.facets-locked { overflow: hidden; }
 .facets-group__chevron { margin-inline-start: auto; flex: none; transition: rotate 0.2s ease; }
 .facets-group[open] > .facets-group__summary .facets-group__chevron { rotate: 180deg; }
 .facets-group__content { padding: 0 0 16px; }
+/* A group opens and closes by easing its height (browsers that can animate
+   details content); the row of dropdowns on a computer opens at once. */
+@supports selector(::details-content) {
+  .facets { interpolate-size: allow-keywords; }
+  .facets-panel .facets-group::details-content {
+    block-size: 0;
+    overflow: clip;
+    overflow-clip-margin: 6px;
+    transition: block-size 0.28s var(--facets-ease), content-visibility 0.28s allow-discrete;
+  }
+  .facets-panel .facets-group[open]::details-content { block-size: auto; }
+  @media (min-width: 1025px) {
+    .facets-panel--horizontal .facets-group::details-content { block-size: auto; overflow: visible; transition: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .facets-panel .facets-group::details-content { transition: none; }
+  }
+}
 
 /* Values: tick boxes, colour swatches, size chips */
 .facets-values { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
@@ -1609,7 +1657,7 @@ html.facets-locked { overflow: hidden; }
 [dir='rtl'] .facets-price__input { --input-padding: 8px 34px 8px 10px; }
 .facets-price__input::-webkit-outer-spin-button,
 .facets-price__input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.facets-price__apply { --mb-padding-y: 9px; --mb-padding-x: 18px; --mb-font-size: 14px; width: 100%; margin-top: 12px; min-height: 44px; }
+.facets-price__apply { width: 100%; margin-top: 12px; min-height: 44px; }
 .facets-panel, .facets-group, .facets-group__content { min-width:0; box-sizing:border-box; }
 .facets-preview-notice { color:var(--facets-muted, var(--color-text)); font:inherit; font-size:13px; line-height:1.45; margin-block:0 12px; }
 @media (min-width:1025px) {
@@ -1691,6 +1739,7 @@ html.facets-locked { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .facets-sort__panel,
   .facets-panel,
+  .facets-panel::backdrop,
   .facets__results,
   .facets-sort__chevron,
   .facets-group__chevron { transition: none !important; animation: none !important; }

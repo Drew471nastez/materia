@@ -207,7 +207,7 @@ function run(nodes, ctx, env) {
   }
   return out;
 }
-const GLOBALS = ['settings', 'section', 'collections', 'collection', 'search', 'request', 'routes', 'cart', 'template', 'shop', 'now', 'pages', 'content_for_header', '__page', '__url'];
+const GLOBALS = ['settings', 'section', 'collections', 'collection', 'all_products', 'search', 'request', 'routes', 'cart', 'template', 'shop', 'now', 'pages', 'content_for_header', '__page', '__url'];
 function render(spec, ctx, env) {
   const first = spec.match(/^'([^']+)'\s*[,|]?\s*([\s\S]*)$/); const name = first[1];
   const local = Object.fromEntries(GLOBALS.map(k => [k, ctx[k]]));

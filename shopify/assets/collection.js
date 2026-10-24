@@ -759,6 +759,7 @@ eventCollectionShopify.init();
     connectedCallback() {
       if (this._bound) {
         this.markSort();
+        this.watchLayout();
         return;
       }
       this._bound = true;
@@ -785,6 +786,7 @@ eventCollectionShopify.init();
       );
       this.markSort();
       this.showClearFallback();
+      this.watchLayout();
       // A row of dropdowns on a computer is a drawer on a phone: open its
       // panels there as the section's Default state says.
       if (this.querySelector('.facets-panel--horizontal') && !this.dropdownRow) {
@@ -806,6 +808,119 @@ eventCollectionShopify.init();
       this.setBusy(false);
       document.documentElement?.classList.remove('facets-locked');
       this.unwatchSortPanel();
+      this.unwatchLayout();
+    }
+
+    get filterPanel() {
+      return this.querySelector('[data-facets-panel]');
+    }
+
+    /* The panel is a drawer below 1025px (and always with the Drawer
+       layout); a sidebar or a row of dropdowns above it. */
+    get panelInline() {
+      const panel = this.filterPanel;
+      return !!panel && window.matchMedia('(min-width: 1025px)').matches && !panel.matches('.facets-panel--drawer');
+    }
+
+    watchLayout() {
+      if (this._layoutWatch) return;
+      const wide = window.matchMedia('(min-width: 1025px)');
+      const onWidth = () => {
+        // A drawer left open while the window widens into the sidebar layout
+        // closes, so it never sits in the top layer over its own sidebar.
+        const panel = this.filterPanel;
+        if (panel && this.panelInline && panel.matches(':popover-open')) {
+          try { panel.hidePopover(); } catch (error) {}
+        }
+        this.placeSidebar();
+      };
+      let frame = 0;
+      const onScroll = () => {
+        if (frame) return;
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          this.placeSidebar();
+        });
+      };
+      wide.addEventListener('change', onWidth);
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('resize', onScroll, { passive: true });
+      this._layoutWatch = () => {
+        wide.removeEventListener('change', onWidth);
+        window.removeEventListener('scroll', onScroll);
+        window.removeEventListener('resize', onScroll);
+        if (frame) cancelAnimationFrame(frame);
+      };
+      this.placeSidebar();
+    }
+
+    unwatchLayout() {
+      if (this._layoutWatch) this._layoutWatch();
+      this._layoutWatch = null;
+    }
+
+    /* The sidebar sticks just under whatever header is pinned at the top of
+       the window (none, or a sticky header that shows and hides). */
+    placeSidebar() {
+      const panel = this.filterPanel;
+      if (!panel || !panel.matches('.facets-panel--vertical') || !this.panelInline) {
+        if (this._stickyTop != null) {
+          this.style.removeProperty('--facets-sticky-top');
+          this._stickyTop = null;
+        }
+        return;
+      }
+      let top = 0;
+      document.querySelectorAll('.shopify-section-group-header-group, sticky-header, header-sticky').forEach((el) => {
+        const position = getComputedStyle(el).position;
+        if (position !== 'sticky' && position !== 'fixed') return;
+        const box = el.getBoundingClientRect();
+        if (box.height > 0 && box.top <= 1 && box.bottom > top) top = box.bottom;
+      });
+      top = Math.max(0, Math.min(Math.round(top), Math.round(window.innerHeight / 2)));
+      if (top !== this._stickyTop) {
+        this._stickyTop = top;
+        this.style.setProperty('--facets-sticky-top', `${top}px`);
+      }
+    }
+
+    /* The open drawer keeps focus inside it: Tab from the last control goes
+       to the first, Shift+Tab from the first to the last. */
+    trapFocus(event) {
+      const panel = this.filterPanel;
+      if (!panel || !panel.matches(':popover-open')) return false;
+      const items = [...panel.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select, textarea, summary, [tabindex]:not([tabindex="-1"])')].filter(
+        (el) => el.getAttribute('aria-disabled') !== 'true' && el.getClientRects().length && !el.closest('details:not([open]) > :not(summary)')
+      );
+      if (!items.length) return false;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (!panel.contains(active) || active === panel) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+        return true;
+      }
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+        return true;
+      }
+      if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+        return true;
+      }
+      return false;
+    }
+
+    closeDrawer({ restoreFocus = false } = {}) {
+      const panel = this.filterPanel;
+      if (panel && panel.matches(':popover-open')) {
+        try { panel.hidePopover(); } catch (error) {}
+      }
+      document.documentElement.classList.remove('facets-locked');
+      if (restoreFocus) this.querySelector('[data-facets-open]')?.focus({ preventScroll: true });
     }
 
     get sectionId() {
@@ -872,6 +987,7 @@ eventCollectionShopify.init();
     }
 
     onKeydown(event) {
+      if (event.key === 'Tab' && this.trapFocus(event)) return;
       if (event.key === 'Escape' && this.dropdownRow) {
         const open = event.target.closest('details[data-facets-group][open]');
         if (open) {
@@ -954,6 +1070,16 @@ eventCollectionShopify.init();
       }
       if (pop.hasAttribute('data-facets-panel')) {
         document.documentElement.classList.toggle('facets-locked', open);
+        if (open) {
+          // Focus starts on the drawer itself, so the first Tab lands on its
+          // first control and a screen reader reads its title.
+          if (!pop.contains(document.activeElement)) pop.focus({ preventScroll: true });
+        } else {
+          const active = document.activeElement;
+          if (!active || active === document.body || pop.contains(active)) {
+            this.querySelector('[data-facets-open]')?.focus({ preventScroll: true });
+          }
+        }
       }
     }
 
@@ -1138,6 +1264,25 @@ eventCollectionShopify.init();
     }
   }
   customElements.define('facets-root', FacetsRoot);
+
+  // Leaving the page with the drawer open must not bring it back open, or
+  // the page locked, from the back/forward cache; a page shown again from
+  // that cache also re-reads its address (the sort and the Clear all link).
+  window.addEventListener('pagehide', (event) => {
+    if (!event.persisted) return;
+    document.querySelectorAll('facets-root').forEach((root) => root.closeDrawer());
+  });
+  window.addEventListener('pageshow', (event) => {
+    if (!event.persisted) return;
+    document.documentElement.classList.remove('facets-locked');
+    document.querySelectorAll('facets-root').forEach((root) => {
+      if (typeof root.closeDrawer !== 'function') return;
+      root.closeDrawer();
+      root.markSort();
+      root.showClearFallback();
+      root.placeSidebar();
+    });
+  });
 
   window.addEventListener('popstate', () => {
     document.querySelectorAll('facets-root').forEach((root) => {
