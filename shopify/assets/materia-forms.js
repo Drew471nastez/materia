@@ -328,11 +328,11 @@
     let placeholder = text;
     for (const w of [0.62, 0.72, 0.82, 0.9]) { const c = mix(text, surface, w); if (ratio(c, surface) >= 4.5) { placeholder = c; break; } }
     let out = `--field-surface:${css(surface)} !important;--field-text:${css(text)} !important;--field-placeholder:${css(placeholder)} !important;--field-placeholder-opacity:1 !important;--input-color:var(--field-text) !important;--input-placeholder-color:var(--field-placeholder) !important;`;
-    if (!(fb && fb.a > 0)) {
-      if (style === 'filled') out += '--input-bg:var(--field-surface) !important;';
-      else if (style === 'underline') out += '--input-bg:transparent !important;';
-    }
-    if (style === 'filled' && !rgba(s.storelib_input_border)) out += '--input-border-color:transparent !important;';
+    // Explicitly reset cleared pickers so the original saved color cannot leak
+    // through the live preview. Keep the same per-scheme contrast protection.
+    out += '--input-bg:' + (style === 'underline' && !(fb && fb.a > 0) ? 'transparent' : 'var(--field-surface)') + ' !important;';
+    const border = rgba(s.storelib_input_border);
+    out += '--input-border-color:' + (border ? `rgba(${border.r},${border.g},${border.b},${border.a})` : style === 'filled' ? 'transparent' : 'var(--color-border)') + ' !important;';
     return out;
   };
   const schemeClasses = () => {
@@ -353,7 +353,7 @@
     const style = String(s.field_style || 'outline');
     const radius = Number(s.storelib_input_radius);
     let out = 'html:root{';
-    if (style === 'underline') out += '--field-border-widths:0 0 max(1px, var(--inputs-border-width, 1px)) 0 !important;--input-padding:1rem 2px !important;' + (isFinite(radius) && radius >= 0 ? '' : '--input-border-radius:0px !important;');
+    if (style === 'underline') out += '--field-border-widths:0 0 var(--inputs-border-width, 1px) 0 !important;' + (isFinite(radius) && radius >= 0 ? '' : '--input-border-radius:0px !important;');
     else out += '--field-border-widths:var(--inputs-border-width, 1px) !important;';
     out += fieldsFor(schemeOf(html), s) + '}';
     const holder = document.createElement('div');

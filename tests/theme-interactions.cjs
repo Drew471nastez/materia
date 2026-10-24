@@ -191,7 +191,7 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
     assert.equal(await page.locator('#live-slide').getAttribute('data-button-appearance'),'outline');
     assert.equal(await page.locator('#live-slide').getAttribute('data-button-hover'),'slide');
     assert.equal(await page.$eval('#live-slide',el=>getComputedStyle(el).color),'rgb(17, 68, 136)');
-    assert.equal(await page.$eval('#live-slide',el=>getComputedStyle(el).borderTopColor),'rgb(17, 68, 136)');
+    assert.equal(await page.$eval('#live-slide',el=>getComputedStyle(el).borderTopColor),'rgb(0, 136, 0)','outline uses the chosen scheme border, not the fill/text color');
     assert.equal(await page.$eval('#live-slide',el=>getComputedStyle(el).getPropertyValue('--btn-primary-border-color').trim()),'#008800');passed++;
     await page.waitForTimeout(450); // leave live-drag mode before testing hover motion
     await page.hover('#live-slide');await page.waitForTimeout(100);

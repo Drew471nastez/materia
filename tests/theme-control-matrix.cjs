@@ -36,10 +36,18 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
   }
   await apply({btn_hover_effect:'scale'});
   for(const extra of ['theme','none','lift','darken','underline']){await apply({storelib_button_hover_effect:extra});await page.hover('#primary');if(extra==='lift')assert.equal(await css('#primary','translate'),'0px -2px');if(extra==='darken')assert.equal(await css('#primary','filter'),'brightness(0.9)');if(extra==='underline')assert((await css('#primary','textDecorationLine')).includes('underline'));assert.equal(await page.locator('#primary').getAttribute('data-button-hover'),'scale');checks++;}
-  await page.mouse.move(1100,700);await apply({storelib_button_hover_effect:'none',field_background:'#eef1f5',field_text:'#223344',field_height:58,field_padding_x:23,field_font_size:18,field_label_weight:'700',storelib_input_border:'#336699',storelib_input_focus:'#ff8800',storelib_input_radius:11});
+  await page.mouse.move(1100,700);await apply({storelib_button_hover_effect:'none',field_background:'#eef1f5',field_text:'#223344',field_height:58,field_padding_x:23,body_font_size:18,body_font_weight:700,storelib_input_border:'#336699',storelib_input_focus:'#ff8800',storelib_input_radius:11});
   assert.equal(await css('#field','color'),'rgb(34, 51, 68)');assert.equal(await css('#field','backgroundColor'),'rgb(238, 241, 245)');assert.equal(await css('#field','height'),'58px');assert.equal(await css('#field','paddingLeft'),'23px');assert.equal(await css('#field','fontSize'),'18px');assert.equal(await css('#field','borderRadius'),'11px');assert.equal(await css('#field','borderTopColor'),'rgb(51, 102, 153)');assert.equal(await css('label','fontWeight'),'700');
   assert.equal(await css('.mt-select-wrap__chev','color'),await css('select','color'));assert.equal(await css('.mt-select-wrap__chev path','stroke'),await css('select','color'));assert.equal(await css('select','paddingRight'),'44px');await page.focus('#field');assert.equal(await css('#field','outlineColor'),'rgb(255, 136, 0)');checks++;
   await apply({icon_btn_size:64});assert.equal(await css('.swiper-arrow','width'),'64px');assert.equal(await css('.swiper-arrow','height'),'64px');checks++;
+  await apply({field_font_size:13,field_label_weight:'400'});
+  assert.equal(await css('#field','fontSize'),'18px');assert.equal(await css('label','fontWeight'),'700','legacy field controls cannot override Typography');checks++;
+  await apply({color_schemes:{custom:{settings:{background:'#ffffff',text_color:'#223344',heading_color:'#123456',primary_color:'#aa0000',btn_primary_background:'#123456',btn_primary_border_color:'#135724',btn_primary_hover_border_color:'#246813',btn_secondary_hover_border_color:'#765432'}}}});
+  await page.$eval('#primary',el=>el.classList.add('color-custom'));await page.$eval('#secondary',el=>el.classList.add('color-custom'));
+  await apply({btn_style:'outline',btn_secondary_style:'outline',btn_hover_effect:'fade',storelib_button_hover_border:''});await page.mouse.move(1100,700);
+  assert.equal(await css('#primary','borderTopColor'),'rgb(19, 87, 36)');
+  await page.hover('#primary');assert.equal(await css('#primary','borderTopColor'),'rgb(36, 104, 19)');
+  await page.hover('#secondary');assert.equal(await css('#secondary','borderTopColor'),'rgb(118, 84, 50)');checks++;
   assert.deepEqual(errors,[]);console.log(`${checks} live button and field setting combinations passed`);
  } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1});

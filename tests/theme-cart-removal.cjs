@@ -50,7 +50,9 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
   await coupon.waitForTimeout(350);
   const remove=await coupon.$eval('.cart-discount-remove',el=>({w:el.getBoundingClientRect().width,h:el.getBoundingClientRect().height,bg:getComputedStyle(el).backgroundColor,role:el.hasAttribute('data-theme-button')}));
   assert.deepEqual(remove,{w:44,h:44,bg:'rgba(0, 0, 0, 0)',role:false});checks++;
-  assert.equal(await coupon.$eval('input',el=>getComputedStyle(el).borderTopWidth),'1px');
+  assert.equal(await coupon.$eval('input',el=>getComputedStyle(el).borderTopWidth),'0px','coupon fields honor zero border width');
+  await coupon.evaluate(()=>document.documentElement.style.setProperty('--inputs-border-width','2px'));
+  assert.equal(await coupon.$eval('input',el=>getComputedStyle(el).borderTopWidth),'2px');
   assert.notEqual(await coupon.$eval('input',el=>getComputedStyle(el).boxShadow),'none');checks++;
   await coupon.close();console.log(`${checks} pending/removal, stable subtotal and coupon UI checks passed`);
  } finally {await browser.close();}

@@ -80,7 +80,7 @@ const contrast=(a,b)=>{const x=lum(rgb(a))+0.05,y=lum(rgb(b))+0.05;return x>y?x/
   const values=JSON.parse(read('config/settings.json')).shopify;
   const group=name=>schema.find(g=>g.name===name).settings;
 
-  /* 1. Settings: one Field style, every old id kept, nothing conditional. */
+  /* 1. One Field style; retired typography ids remain saved but hidden. */
   const fields=group('Forms and fields');
   const fieldIds=fields.map(s=>s.id).filter(Boolean);
   for(const id of ['field_height','field_padding_x','field_border_width','input_radius','search_input_radius','storelib_input_radius','field_background','field_text','storelib_input_border','storelib_input_focus','field_font_size','field_label_weight'])assert(fieldIds.includes(id),'kept '+id);
@@ -91,9 +91,18 @@ const contrast=(a,b)=>{const x=lum(rgb(a))+0.05,y=lum(rgb(b))+0.05;return x>y?x/
   const cookie=group('Cookies & consent');
   for(const [id,def] of [['cookie_custom_text_sizes',false],['cookie_heading_size',16],['cookie_text_size',14],['cookie_button_text_size',14]]){
     assert.equal(cookie.find(s=>s.id===id).default,def,id);assert.equal(values[id],def,'value written for '+id);}
-  for(const s of [...fields,...cookie])assert(!('visible_if' in s),'no visible_if in theme settings: '+(s.id||s.content));
+  for(const s of [...fields,...cookie]) {
+    if(['field_font_size','field_label_weight'].includes(s.id))assert.equal(s.visible_if,'{{ false }}','retired control is hidden');
+    else assert(!('visible_if' in s),'active controls remain visible: '+(s.id||s.content));
+  }
+  assert(!fields.some(s=>s.type==='header'&&s.content==='Text'),'no redundant Text category');
   const ids=schema.flatMap(g=>(g.settings||[]).map(s=>s.id).filter(Boolean));
   assert.equal(new Set(ids).size,ids.length,'theme setting ids are unique');
+  const schemeDefinition=group('Colors').find(s=>s.id==='color_schemes').definition;
+  for(const id of ['btn_primary_border_color','btn_primary_hover_border_color','btn_secondary_hover_border_color'])assert(schemeDefinition.some(s=>s.id===id),'border color is configurable: '+id);
+  const search=group('Search');
+  for(const id of ['search_show_trending','enable_search_suggestion','popular_key_word'])assert(search.some(s=>s.id===id),'search control preserved: '+id);
+  for(const file of ['snippets/search-popup.storelib','snippets/search-drawer.storelib'])assert(read(file).includes('if show_trending and enable_search_suggestion and popular_key_word != blank'),'trending visibility still wired: '+file);
   const layout=read('layout/theme.storelib');
   assert(!/--field-text-override:\s*\{\{\s*settings\.field_text/.test(layout),'field text is no longer written over every scheme');
   assert.match(layout,/\{%- render 'field-colors' -%\}/);
@@ -175,6 +184,15 @@ const contrast=(a,b)=>{const x=lum(rgb(a))+0.05,y=lum(rgb(b))+0.05;return x>y?x/
     assert.deepEqual((await measure('e-scheme-light')).bw,['0px','1px']);
     await live({field_style:'filled',field_text:''});
     m=await measure('e-scheme-dark');assert(contrast(m.text,m.bg)>=4.5&&m.bg!=='rgb(15, 19, 43)');
+    await live({field_style:'outline',field_background:'#111111',field_text:'#ffffff',storelib_input_border:'#228844'});
+    assert.equal((await measure('e-scheme-light')).bg,'rgb(17, 17, 17)');
+    assert.equal((await measure('e-scheme-light')).bc,'rgb(34, 136, 68)');
+    await live({field_background:'',field_text:'',storelib_input_border:''});
+    m=await measure('e-scheme-light');assert.equal(m.bg,'rgb(255, 255, 255)');assert.equal(m.text,'rgb(15, 15, 15)');assert.equal(m.bc,'rgb(206, 206, 206)');
+    await page.addStyleTag({content:':root{--inputs-border-width:0px;--input-padding:10px 23px}'});
+    await live({field_style:'underline'});
+    m=await measure('e-scheme-light');assert.deepEqual(m.bw,['0px','0px']);
+    assert.equal(await page.$eval('#e-scheme-light',el=>getComputedStyle(el).paddingLeft),'23px','underline honors the side-padding control');
     assert.deepEqual(errors,[]);ok();
     await page.close();
 
