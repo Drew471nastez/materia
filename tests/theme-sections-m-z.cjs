@@ -31,16 +31,7 @@ const snippetsDir = path.join(root, 'snippets');
 
 // file -> { 'block_type:id' or 'section:id': reason } for visible settings that
 // are not read on purpose.
-const ALLOW = {
-  'theme-header.storelib': {
-    'menu_badges:hot': 'Read as badges_st[label] in snippets/horizontal-menu, label being a menu block\'s Badge label value.',
-    'menu_badges:new': 'Read as badges_st[label] in snippets/horizontal-menu.',
-    'menu_badges:sale': 'Read as badges_st[label] in snippets/horizontal-menu.',
-    'menu_badges:popular': 'Read as badges_st[label] in snippets/horizontal-menu.',
-    'menu_badges:custom_1': 'Read as badges_st[label] in snippets/horizontal-menu.',
-    'menu_badges:custom_2': 'Read as badges_st[label] in snippets/horizontal-menu.',
-  },
-};
+const ALLOW = {};
 
 // Hosts of the old store's demo pictures and videos. Any http(s) address of a
 // picture or video file on a host not listed in MEDIA_OK is refused as well.

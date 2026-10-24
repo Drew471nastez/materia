@@ -75,7 +75,7 @@
       box-sizing: border-box;
     }
     #shopify-section-{{ section.id }} .header__menu .horizontal-list:has(.menu_label) > .level0 > menu-item > a { padding-top: 16px !important; }
-    #shopify-section-{{ section.id }} .header__menu .menu_label { top: max(0px, calc(50% - 24px)) !important; }
+    #shopify-section-{{ section.id }} .header__menu .horizontal-list > .level0 > menu-item .menu_label { top: max(0px, calc(50% - 24px)) !important; }
     /* The hover line sits under the words, not at a fixed spot in the link box,
        so a badge's extra top padding or a larger menu font never lets it cross the text. */
     #shopify-section-{{ section.id }} .header__menu .horizontal-list > .level0 > menu-item > a::after { display: none !important; }
@@ -84,28 +84,7 @@
       display: inline-block;
       line-height: 1.25;
     }
-    #shopify-section-{{ section.id }} header.header[data-menu-hover^='underline'] .header__menu .horizontal-list > .level0 > menu-item > a > span:first-child::after {
-      content: '';
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: -0.3em;
-      height: 1px;
-      background-color: currentColor;
-      transform: scaleX(0);
-      transform-origin: 100% 0;
-      transition: transform 0.5s cubic-bezier(0.3, 1, 0.3, 1);
-      pointer-events: none;
-    }
-    #shopify-section-{{ section.id }} header.header[data-menu-hover='underline'] .header__menu .horizontal-list > .level0 > menu-item > a:is(:hover, :focus-visible) > span:first-child::after {
-      transform: scaleX(1);
-      transform-origin: 0 100%;
-    }
-    #shopify-section-{{ section.id }} header.header[data-menu-hover='underline_reverse'] .header__menu .horizontal-list > .level0 > menu-item > a > span:first-child::after { transform-origin: 0 0; }
-    #shopify-section-{{ section.id }} header.header[data-menu-hover='underline_reverse'] .header__menu .horizontal-list > .level0 > menu-item > a:is(:hover, :focus-visible) > span:first-child::after { transform: scaleX(1); }
-    @media (prefers-reduced-motion: reduce) {
-      #shopify-section-{{ section.id }} .header__menu .horizontal-list > .level0 > menu-item > a > span:first-child::after { transition: none; }
-    }
+    /* The hover itself (line, colour, fade, highlight) is Header > Menu link hover, in navigation.css. */
   }
 {% comment %}{% endcomment %}</style>
 <script>
@@ -116,8 +95,32 @@
   if (window.MateriaHeaderDimensions) return;
   window.MateriaHeaderDimensions = true;
   let frame, pending = {};
+  /* Header > Main navigation and Dropdowns & mega menus: the same variables
+     sections/theme-header writes, set on the header while a slider moves. */
+  const px = v => Number(v) + 'px';
+  const ease = v => {
+    const s = Math.min(100, Math.max(0, Number(v))) / 100, r = n => Math.round(n * 1000) / 1000;
+    return `cubic-bezier(${r(0.25 - 0.09 * s)}, ${r(0.25 + 0.75 * s)}, ${r(0.75 - 0.45 * s)}, ${r(0.75 + 0.25 * s)})`;
+  };
+  const MENU_VARS = {
+    dropdowns_speed: ['--dd-duration', v => Number(v) + 'ms'],
+    dropdowns_smoothness: ['--dd-ease', ease],
+    dropdown_width: ['--dd-width', px],
+    dropdown_padding: [['--dd-pad-y', px], ['--dd-pad-x', v => Math.round(Number(v) * 1.5) + 'px']],
+    dropdown_link_spacing: ['--dd-link-space', px],
+    dropdown_radius: ['--dd-radius', px],
+    mega_column_gap: ['--mega-gap', px],
+    mega_card_radius: ['--mega-card-radius', px],
+  };
   document.addEventListener('storelib:settings-change', event => {
     const detail = event.detail || {}, settings = detail.settings || {};
+    const own = detail.section ? document.querySelector(`#shopify-section-${CSS.escape(detail.section)} > header.header`) : null;
+    if (own) {
+      for (const [key, spec] of Object.entries(MENU_VARS)) {
+        if (!Object.prototype.hasOwnProperty.call(settings, key) || !Number.isFinite(Number(settings[key]))) continue;
+        for (const [name, fn] of Array.isArray(spec[0]) ? spec : [spec]) own.style.setProperty(name, fn(settings[key]));
+      }
+    }
     for (const key of ['header_height', 'header_height_mobile']) {
       if (Object.prototype.hasOwnProperty.call(settings, key)) pending[key] = settings[key];
     }
