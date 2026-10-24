@@ -136,6 +136,8 @@ const STORELIB_CHART = {name: 'Pants', unit: 'cm', columns: ['Size', 'Waist', 'H
         if (url.pathname.startsWith('/assets/')) return route.fulfill({contentType: url.pathname.endsWith('.js') ? 'text/javascript' : 'text/css', body: read('shopify/assets/' + url.pathname.slice(8))});
         if (url.pathname === '/clip.webm') return route.fulfill({contentType: 'video/webm', body: Buffer.from(WEBM, 'base64')});
         if (pages.has(url.pathname)) return route.fulfill({contentType: 'text/html', body: pages.get(url.pathname)});
+        // The test renderer's asset_url gives a bare file name (product-offers.js).
+        if (/^\/[\w.-]+\.(js|css)$/.test(url.pathname) && fs.existsSync(path.join(root, 'shopify/assets', url.pathname.slice(1)))) return route.fulfill({contentType: url.pathname.endsWith('.js') ? 'text/javascript' : 'text/css', body: read('shopify/assets/' + url.pathname.slice(1))});
         return route.fallback();
       });
       return ctx;
@@ -306,6 +308,7 @@ const STORELIB_CHART = {name: 'Pants', unit: 'cm', columns: ['Size', 'Waist', 'H
           const body = JSON.parse(req.postData() || '{}'); posts.push([url.pathname, body]);
           if (url.pathname === '/cart/add.js') for (const it of body.items || [body]) cart.items.push({id: it.id, quantity: it.quantity});
           if (url.pathname === '/cart/update.js') for (const [id, q] of Object.entries(body.updates || {})) if (!q) cart.items = cart.items.filter(i => i.id !== id);
+          if (url.pathname === '/cart/change.js' && !body.quantity) cart.items = cart.items.filter(i => i.id !== body.id);
         }
         cart.item_count = cart.items.length;
         return route.fulfill({contentType: 'application/json', body: JSON.stringify(cart)});
@@ -322,13 +325,14 @@ const STORELIB_CHART = {name: 'Pants', unit: 'cm', columns: ['Size', 'Waist', 'H
       assert((await btn.boundingBox()).height >= 44, '44px button');
       await btn.tap();
       await tab.waitForTimeout(400);
-      assert.deepEqual(posts[0], ['/cart/add.js', {items: [{id: 'p-xl', quantity: 1}]}], 'Add puts the chosen variant in the cart');
+      assert.equal(posts[0][0], '/cart/add.js'); assert.deepEqual(posts[0][1].items.map(({id, quantity}) => ({id, quantity})), [{id: 'p-xl', quantity: 1}], 'Add puts the chosen variant in the cart'); assert.equal(posts[0][1].items[0].properties._sl_offer, 'pair', 'marked as a pair-with line');
       assert.equal((await btn.textContent()).trim(), 'Added');
       assert.equal(await btn.getAttribute('aria-pressed'), 'true');
+      await tab.waitForFunction(() => document.querySelector('.cart-count').textContent.trim() === '1', null, {timeout: 3000}).catch(() => {});
       assert.equal((await tab.locator('.cart-count').textContent()).trim(), '1', 'the cart count follows');
       await btn.tap();
       await tab.waitForTimeout(400);
-      assert.deepEqual(posts[1], ['/cart/update.js', {updates: {'p-xl': 0}}], 'Added takes it out again');
+      assert.equal(posts[1][0], '/cart/change.js'); assert.equal(posts[1][1].id, 'p-xl'); assert.equal(posts[1][1].quantity, 0, 'Added takes it out again');
       assert.equal((await btn.textContent()).trim(), 'Add product');
       assert(await tab.evaluate(() => document.querySelector('.pw-card .pw-variant-wrap') && document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll at 375');
       assert.deepEqual(tab.errors, []);

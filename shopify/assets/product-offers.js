@@ -128,6 +128,7 @@
     }
     if (!cart) {
       if (options.open !== false) window.location.href = window.routes?.cart_url || '/cart';
+      else refreshCounts();
       return data;
     }
     renderDrawer(cart, data);
