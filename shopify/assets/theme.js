@@ -2056,7 +2056,40 @@ class LocalizationForm extends HTMLElement {
     if (!panel || !panel.hasAttribute("data-country-options") || panel.firstElementChild) return true;
     if (!fill) return false;
     const source = document.getElementById("materia-country-options");
-    if (source?.content) panel.appendChild(source.content.cloneNode(true));
+    let rows = [];
+    try { rows = JSON.parse(source?.textContent || "[]"); } catch (e) {}
+    const current = source?.dataset.current || this.elements.input?.value;
+    const flag = (code) => "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 24"><text x="16" y="19" font-size="20" text-anchor="middle">' +
+      String(code).toUpperCase().replace(/[A-Z]/g, (c) => String.fromCodePoint(0x1f1a5 + c.charCodeAt(0))) + "</text></svg>");
+    const fragment = document.createDocumentFragment();
+    for (const [code, name, currency, symbol, image] of rows) {
+      const li = document.createElement("li");
+      li.className = "disclosure__item py-4";
+      li.tabIndex = -1;
+      const a = document.createElement("a");
+      a.href = "#";
+      a.className = "no-underline reversed-links text-color hover-heading-color";
+      if (code === current) a.setAttribute("aria-current", "true");
+      a.dataset.value = code;
+      a.setAttribute("aria-label", name);
+      const row = document.createElement("span");
+      row.className = "flex align-center gap-10";
+      const holder = document.createElement("span");
+      holder.className = "rounded-50 border localization-flags";
+      const img = document.createElement("img");
+      img.src = image || flag(code);
+      img.alt = name;
+      img.loading = "lazy";
+      img.decoding = "async";
+      holder.appendChild(img);
+      const label = document.createElement("span");
+      label.textContent = `${name} (${currency} ${symbol})`;
+      row.append(holder, label);
+      a.appendChild(row);
+      li.appendChild(a);
+      fragment.appendChild(li);
+    }
+    panel.appendChild(fragment);
     this.setupMobileSheet();
     return true;
   }

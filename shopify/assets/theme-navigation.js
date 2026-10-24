@@ -27,6 +27,26 @@
   };
   const connection = navigator.connection;
   if (connection?.saveData || /2g/.test(connection?.effectiveType || '')) return;
+  // Checkout is Storelib's own page and pays through Stripe. When a shopper
+  // heads for a checkout button (or opens the cart page), the connection to
+  // Stripe is opened ahead, once. The checkout page itself is never fetched
+  // early: Storelib keeps it out of prefetching on purpose.
+  let checkoutWarm = false;
+  const warmCheckout = () => {
+    if (checkoutWarm) return;
+    checkoutWarm = true;
+    for (const href of ['https://js.stripe.com', 'https://api.stripe.com']) {
+      const link = document.createElement('link');
+      link.rel = 'preconnect'; link.href = href; link.crossOrigin = 'anonymous';
+      document.head.appendChild(link);
+    }
+  };
+  const checkoutTarget = '[name="checkout"], .btn-checkout, a[href*="/checkout"], [data-checkout]';
+  const nearCheckout = event => { if (event.target.closest?.(checkoutTarget)) warmCheckout(); };
+  document.addEventListener('pointerover', nearCheckout, {passive: true});
+  document.addEventListener('touchstart', nearCheckout, {passive: true});
+  document.addEventListener('focusin', nearCheckout);
+  if (/^\/cart\/?$/.test(location.pathname)) warmCheckout();
   // Storelib's own speculation rules already fetch a link the visitor rests on
   // or presses (and prerender it when that is safe). Where the browser has
   // them, the theme only names the few product pages in view, as rules of the
