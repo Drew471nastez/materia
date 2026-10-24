@@ -14,12 +14,16 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
     const main=read('shopify/assets/main-product.js');
     await page.addScriptTag({content:main.slice(0,main.indexOf('class SoldProduct'))});
     await page.evaluate(()=>{window.scrollTo(0,400);Object.defineProperty(window,'innerHeight',{configurable:true,get:()=>document.documentElement.clientHeight-35});});
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(50);
     const geometry=()=>page.evaluate(()=>{
       const bar=document.querySelector('sticky-add-cart'),nav=document.querySelector('mobile-navigation-bar');
       return {bottom:bar.getBoundingClientRect().bottom,navTop:nav.getBoundingClientRect().top,offset:parseFloat(bar.style.getPropertyValue('--mt-sticky-offset')),shown:bar.classList.contains('show-sticky-cart')};
     });
-    let g=await geometry();assert(g.shown);assert.equal(g.offset,95);assert(g.bottom<=g.navTop+.1,'fractional safe-area nav height must never be undercounted');passed++;
+    let g=await geometry();assert(g.bottom<=g.navTop+.1,'entrance animation must not pass through the navigation');passed++;
+    await page.waitForTimeout(450);
+    g=await geometry();assert(g.shown);assert.equal(g.offset,95);assert(g.bottom<=g.navTop+.1,'fractional safe-area nav height must never be undercounted');passed++;
+    await page.evaluate(()=>document.querySelector('mobile-navigation-bar').style.height='70px');
+    await page.waitForTimeout(80);assert.equal((await geometry()).offset,95,'sub-pixel rounding must not bounce the cart by one pixel');passed++;
     await page.evaluate(()=>document.querySelector('mobile-navigation-bar').style.height='105px');
     await page.waitForTimeout(80);g=await geometry();assert.equal(g.offset,129);assert(g.bottom<=g.navTop+.1);passed++;
     await page.evaluate(()=>{const root=document.getElementById('nav-section');root.innerHTML='<mobile-navigation-bar style="height:91px">Replaced navigation</mobile-navigation-bar>';root.dispatchEvent(new CustomEvent('storelib:section-load',{bubbles:true}));});
