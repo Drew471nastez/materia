@@ -143,6 +143,8 @@ function filt(ctx, v, f) {
     case 'where': return (v || []).filter(x => x[a[0]] === a[1]);
     case 'image_url': return v?.src ?? v;
     case 'truncatewords': { const w = String(v ?? '').split(/\s+/).filter(Boolean); const n = Number(a[0] ?? 15); return w.length > n ? w.slice(0, n).join(' ') + '...' : w.join(' '); }
+    case 'join': return Array.isArray(v) ? v.join(a[0] ?? ' ') : v;
+    case 'newline_to_br': return String(v ?? '').replace(/\n/g, '<br />\n');
     case 'stylesheet_tag': return `<link rel="stylesheet" href="${v}">`;
     case 'url': case 'asset_url': return v;
     default: return v;
@@ -347,15 +349,14 @@ const rect = el => { const r = el.getBoundingClientRect(); return {x: r.x, y: r.
       assert.equal(hearts.length, 4, `${where}: a heart on every card`);
       for (const h of hearts) {
         assert.ok(h.shown, `${where}: the heart is in view at rest, without hovering`);
-        // Phones (two cards a row) draw the heart at 36px; a ring around it
-        // keeps the 44px tap area.
-        const size = width < 750 ? 36 : 44;
+        // A 44px circle on every width, in the image's top end corner.
+        const size = 44;
         assert.equal(Math.round(h.w), size, `${where}: ${size}px wide`); assert.equal(Math.round(h.h), size, `${where}: ${size}px tall`);
         assert.equal(h.pad, '0px', `${where}: the theme's button padding does not squeeze the icon`);
         assert.ok(h.svgW >= 14 && h.svgH >= 14, `${where}: the heart icon is drawn (${h.svgW}x${h.svgH})`);
         assert.ok(h.x >= h.img.x && h.r <= h.img.r + 0.5 && h.y >= h.img.y && h.b <= h.img.b + 0.5, `${where}: on the picture`);
         assert.ok(h.r > (h.img.x + h.img.r) / 2, `${where}: on the end side`);
-        if (width >= 1025) assert.ok(h.y - h.img.y < 40, `${where}: top end corner`);
+        assert.ok(h.y - h.img.y < 40, `${where}: top end corner`);
         assert.equal(h.role, 'button'); assert.equal(h.pressed, 'false'); assert.match(h.label, /Add to wishlist: /);
       }
       // Click: saved, filled, pressed, every card of that product, the count and the event.
@@ -451,7 +452,7 @@ const rect = el => { const r = el.getBoundingClientRect(); return {x: r.x, y: r.
         }));
         assert.deepEqual(view.ids, ['14', '11'], `@${width}: the saved products, in the order saved (an unknown id is skipped)`);
         assert.deepEqual(view.titles, ['Linen shirt', 'Pants Down'], `@${width}: drawn with the theme's product card`);
-        const xSize = width < 750 ? 36 : 44;
+        const xSize = 44;
         assert.ok(view.x.every(x => Math.round(x.w) === xSize && Math.round(x.h) === xSize && x.icon > 8 && /Remove from wishlist/.test(x.label)), `@${width}: a ${xSize}px remove button on each: ${JSON.stringify(view.x)}`);
         assert.equal(view.hearts, 0, `@${width}: no heart next to the remove button`);
         assert.equal(view.empty, true); assert.equal(view.busy, 'false'); assert.equal(view.loading, true, 'loading cards gone');
@@ -528,7 +529,7 @@ const rect = el => { const r = el.getBoundingClientRect(); return {x: r.x, y: r.
             assert.notEqual(m.border, 'rgb(254, 254, 254)', `${at}: the outline is visible on the page (custom light colour)`);
             assert.equal(m.bw, '1px', `${at}: outline drawn`);
           }
-          assert.ok(m.heart && m.heart.w === (width < 750 ? 36 : 44) && m.heart.x >= m.img.x && m.heart.r <= m.img.r + .5, `${at}: heart on the picture`);
+          assert.ok(m.heart && m.heart.w === 44 && m.heart.x >= m.img.x && m.heart.r <= m.img.r + .5, `${at}: heart on the picture`);
         }
         const rows = new Map(); cards.forEach(c => { const key = Math.round(c.card.y); rows.set(key, [...(rows.get(key) || []), c]); });
         for (const row of rows.values()) if (row.length > 1) {
@@ -565,7 +566,7 @@ const rect = el => { const r = el.getBoundingClientRect(); return {x: r.x, y: r.
       for (const st of group.settings.filter(x => x.id)) assert.ok(new RegExp(`(settings|theme_st|s)\\.${st.id}\\b`).test(used), `Product cards > ${st.id} is read`);
       const headers = group.settings.map((x, k) => x.type === 'header' ? k : -1).filter(k => k >= 0);
       for (const k of headers) assert.ok(group.settings[k + 1] && group.settings[k + 1].type !== 'header' || group.settings[k + 1]?.type === 'header' && group.settings[k - 1]?.id === 'enable_custom_card_actions', `header "${group.settings[k].content}" has settings under it`);
-      for (const setting of group.settings.filter(s=>s.id?.startsWith('card_') || ['product_size','price_size','product_name_text_transform'].includes(s.id))) assert.equal(setting.visible_if,'{{ settings.enable_custom_card_actions }}',setting.id+' is opt-in');
+      for (const setting of group.settings.filter(s=>s.id?.startsWith('card_') || ['product_size','price_size','product_name_text_transform'].includes(s.id))) assert.equal(setting.visible_if,undefined,setting.id+' stays in view (Storelib\'s Theme settings panel never applies visible_if); Enable custom card styling switches it on and off');
       ok('vendor and description');
     }
 

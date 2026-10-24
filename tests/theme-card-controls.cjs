@@ -37,7 +37,8 @@ const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
    await update({card_atc_bg:color});
    assert.equal(await button.evaluate(el=>getComputedStyle(el).getPropertyValue('--mb-bg').trim()),'',color+' falls back to the scheme');
   }
-  assert.equal(JSON.parse(read('config/settings.json')).shopify.enable_custom_card_actions,false);
+  // The creator may switch it on; what matters is that it starts off.
+  assert.equal(JSON.parse(read('shopify/config/settings_schema.json')).flatMap(g=>g.settings||[]).find(x=>x.id==='enable_custom_card_actions').default,false);
   console.log('Card override defaults, live toggle, retained colours, typography and primary/secondary roles passed');
  } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

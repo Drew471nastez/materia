@@ -319,9 +319,9 @@ const grid = cards => `<div class="container" style="padding:0 16px;box-sizing:b
       for (const [k, c] of cards.entries()) {
         const where = `${tag} ${states[k][0]}`;
         assert.ok(c.role, `${where}: button carries data-theme-button in the markup`);
-        // Phones (two cards a row) draw the icon buttons (+ and heart) at
-        // 36px with 8px edges; text buttons stay 44px everywhere.
-        const phone = width < 750, icon = phone ? 36 : 44, edge = phone ? 8 : 12, glyph = phone ? 14 : 16;
+        // The icon buttons (+ and heart) are 44px circles on every width,
+        // 8px from the edge on phones (two cards a row), 12px on tablets.
+        const phone = width < 750, icon = 44, edge = phone ? 8 : 12, glyph = 16;
         const iconButton = style === 'standard' && width < 1025;
         assert.equal(c.btn.h, iconButton ? icon : 44, `${where}: one ${iconButton ? icon : 44}px height`);
         assert.ok(c.btn.w >= (iconButton ? icon : 44), `${where}: at least a ${iconButton ? icon : 44}px button`);
@@ -331,7 +331,7 @@ const grid = cards => `<div class="container" style="padding:0 16px;box-sizing:b
             assert.ok(c.icon && c.icon.w === glyph, `${where}: the + icon is drawn`);
             assert.ok(Math.abs(Math.round(c.btn.x + c.icon.w / 2 + (c.btn.w - c.icon.w) / 2) - Math.round(c.icon.x + c.icon.w / 2)) <= 1, `${where}: icon centred`);
             assert.ok(Math.abs(c.media.r - c.btn.r - edge) <= 1 && Math.abs(c.media.b - c.btn.b - edge) <= 1, `${where}: ${edge}px from the image's bottom end corner (got ${c.media.r - c.btn.r}, ${c.media.b - c.btn.b})`);
-            if (wishlist) assert.ok(Math.abs(c.wish.x - c.btn.x) <= 1 && c.wish.w === icon && c.wish.b <= c.btn.y, `${where}: wishlist stacked in the same column`);
+            if (wishlist) assert.ok(Math.abs(c.wish.x - c.btn.x) <= 1 && c.wish.w === icon && Math.abs(c.wish.y - c.media.y - edge) <= 1, `${where}: the heart in the top end corner, in the +'s column`);
           } else {
             assert.ok(Math.abs(c.btn.x - c.media.x - 15) <= 1 && Math.abs(c.media.r - c.btn.r - 15) <= 1, `${where}: full width with 15px sides`);
             assert.ok(Math.abs(c.media.b - c.btn.b - 15) <= 1, `${where}: 15px above the image's bottom edge`);

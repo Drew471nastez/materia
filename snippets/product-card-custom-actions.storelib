@@ -25,9 +25,54 @@
   scheme default).
 {%- endcomment -%}
 {%- assign card_setting_keys = 'enable_custom_card_actions,card_atc_button,product_size,price_size,product_name_text_transform,card_atc_bg,card_atc_color,card_atc_hover_bg,card_atc_hover_color,card_wish_bg,card_wish_color,card_wish_border,card_wish_active_bg,card_wish_active_color,card_wish_active_border,card_wish_hover_bg,card_wish_hover_color,card_close_bg,card_close_color,card_close_hover_bg,card_close_hover_color' | split: ',' -%}
-<script type="application/json" data-card-style-settings>{ {% for key in card_setting_keys %}{{ key | json }}:{{ settings[key] | json }}{% unless forloop.last %},{% endunless %}{% endfor %} }</script>
+{%- comment -%}
+  Colours go into the snapshot as CSS colour strings: Storelib gives a
+  colour setting as an object (red, green, blue, alpha, hex, rgba), which
+  assets/product-card-settings.js could not read, so with the toggle on
+  it drew no colour at all and switched this file's own <style> off. A
+  colour cleared to transparent is an empty string (follow the theme).
+{%- endcomment -%}
+<script type="application/json" data-card-style-settings>{ {% for key in card_setting_keys %}{%- assign v = settings[key] -%}{{ key | json }}:{% if key contains 'card_' and key != 'card_atc_button' %}{% if v == blank or v == 'transparent' or v.alpha == 0 %}""{% elsif v.hex != blank %}{% if v.alpha < 1 %}"rgb({{ v.rgba }})"{% else %}{{ v.hex | json }}{% endif %}{% else %}{{ v | json }}{% endif %}{% else %}{{ v | json }}{% endif %}{% unless forloop.last %},{% endunless %}{% endfor %} }</script>
 <style>html:not([data-card-custom='true']) .product-item .product-item__name { font-size:var(--body-font-size, 16px); text-transform:var(--heading-text-transform, none) !important; } html:not([data-card-custom='true']) .product-item .product-item__price { font-size:var(--body-font-size, 16px); }</style>
 <script>document.documentElement.dataset.cardCustom = {{ settings.enable_custom_card_actions | json }} === true ? 'true' : 'false';</script>
+{%- comment -%}
+  Touch feedback for the card image's hover effect (product-card.css,
+  "IMAGE HOVER EFFECTS ON TOUCH"): data-pc-press on the card image while a
+  finger or pen is down, held at least 380ms so a quick tap still shows
+  it, dropped at once when the browser takes the gesture for a scroll.
+  Passive listeners that prevent nothing: the first tap opens the product.
+  Not on the card's buttons (heart, +), which have their own press state.
+{%- endcomment -%}
+<script>(function () {
+  if (window.__materiaCardPress) return;
+  window.__materiaCardPress = true;
+  var held = null, pending = null, since = 0, timer = 0, opts = {passive: true, capture: true};
+  function drop(el) { if (el) el.removeAttribute('data-pc-press'); }
+  function release(event) {
+    if (!held) return;
+    var el = held;
+    held = null;
+    clearTimeout(timer);
+    if (event && event.type === 'pointercancel') { drop(el); return; }
+    pending = el;
+    timer = setTimeout(function () { drop(el); pending = null; }, Math.max(0, 380 - (Date.now() - since)));
+  }
+  document.addEventListener('pointerdown', function (event) {
+    if (event.pointerType === 'mouse' || !event.isPrimary || !event.target.closest) return;
+    var el = event.target.closest('.product-item__inner.hover-effect');
+    if (!el || event.target.closest('button, button-wishlist, product-form, .pc-corner')) return;
+    clearTimeout(timer);
+    if (pending && pending !== el) drop(pending);
+    if (held && held !== el) drop(held);
+    pending = null;
+    held = el;
+    since = Date.now();
+    el.setAttribute('data-pc-press', '');
+  }, opts);
+  document.addEventListener('pointerup', release, opts);
+  document.addEventListener('pointercancel', release, opts);
+  window.addEventListener('pagehide', function () { release(); document.querySelectorAll('[data-pc-press]').forEach(drop); });
+})();</script>
 {%- if settings.enable_custom_card_actions -%}
   {%- assign s = settings -%}
   <style data-pc-custom-actions>
