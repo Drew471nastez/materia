@@ -8973,7 +8973,16 @@ class SlideWithThumbs extends HTMLElement {
     const main = this.globalSlide;
     if (!main || main.destroyed || !this.thumbnailSlide || !main.thumbs) return;
     main.params.thumbs = Object.assign({}, main.params.thumbs, { swiper: this.thumbnailSlide });
-    main.thumbs.init();
+    // Swiper's thumbs.init() sets two options on the strip and lays the whole
+    // strip out again (update(), ~30ms). The strip was just built with those
+    // options (initThumbnail), so that second layout is skipped.
+    const thumbs = this.thumbnailSlide;
+    thumbs.update = () => {};
+    try {
+      main.thumbs.init();
+    } finally {
+      delete thumbs.update;
+    }
     main.thumbs.update(true);
   }
 
@@ -9098,6 +9107,8 @@ class SlideWithThumbs extends HTMLElement {
       slidesPerView: 5,
       watchSlidesVisibility: watchSlidesVisibility,
       watchSlidesProgress: true,
+      // What Swiper's thumbs module sets when it connects the strip.
+      slideToClickedSlide: false,
       watchOverflow: watchOverflow,
       breakpoints: {
         768: {

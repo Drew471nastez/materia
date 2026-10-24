@@ -489,8 +489,22 @@
         function h(e) { if (!rail.isConnected) { target.removeEventListener(type, h, opts); return; } fn(e); }
         target.addEventListener(type, h, opts);
       }
-      whileHere(window, 'resize', update);
-      update();
+      // Measured after the browser has laid the page out, never while the
+      // page loads: a ResizeObserver reports the rail and its cards once they
+      // have a size (before the first paint) and again only when one changes.
+      // Reading scrollWidth here at DOMContentLoaded forced the whole page's
+      // first layout inside this script (50-130ms).
+      if ('ResizeObserver' in window) {
+        var ro = new ResizeObserver(function () {
+          if (!rail.isConnected) { ro.disconnect(); return; }
+          update();
+        });
+        ro.observe(rail);
+        Array.prototype.forEach.call(rail.children, function (card) { ro.observe(card); });
+      } else {
+        whileHere(window, 'resize', update);
+        window.requestAnimationFrame(update);
+      }
 
       /* ---- 3. Desktop mouse drag with rAF + inertia ---- */
       var isDown = false, moved = false, startX = 0, startScroll = 0;

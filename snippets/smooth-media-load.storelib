@@ -58,18 +58,28 @@
   }
 
   // First read: everything already in the first screen (or above it) is left
-  // alone, measured in one pass before any listener is added.
+  // alone. An IntersectionObserver says which those are from the browser's
+  // own first layout; measuring every picture here at DOMContentLoaded
+  // forced that layout inside this script (50-100ms) before the page could
+  // show.
+  function sort(el, inView) {
+    if (inView) { if (seen) { seen.add(el); } return; }
+    prep(el);
+  }
   function firstScan() {
     var nodes = document.querySelectorAll('img, video');
-    var fold = window.innerHeight;
-    var inView = [];
-    for (var i = 0; i < nodes.length; i++) {
-      var r = nodes[i].getBoundingClientRect();
-      inView.push(r.top < fold && r.bottom > 0 && r.left < window.innerWidth && r.right > 0);
+    if (!('IntersectionObserver' in window)) {
+      for (var k = 0; k < nodes.length; k++) { sort(nodes[k], false); }
+      return;
     }
+    var io = new IntersectionObserver(function (entries) {
+      for (var i = 0; i < entries.length; i++) {
+        io.unobserve(entries[i].target);
+        sort(entries[i].target, entries[i].isIntersecting);
+      }
+    });
     for (var j = 0; j < nodes.length; j++) {
-      if (inView[j]) { if (seen) { seen.add(nodes[j]); } continue; }
-      prep(nodes[j]);
+      if (eligible(nodes[j])) { io.observe(nodes[j]); }
     }
   }
 

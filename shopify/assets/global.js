@@ -220,6 +220,49 @@ class MotionElement extends HTMLElement {
 }
 customElements.define("motion-element", MotionElement);
 
+// Swiper measures a slider again when its box changes. Its own observer
+// compares the observer's fractional size with the whole pixels Swiper
+// measured itself (clientWidth), so a gallery 591.94px wide ran the whole
+// resize (updateSlides, 40-90ms) once right after it was built although
+// nothing had moved, and a horizontal slider ran it again when only its
+// height changed (the dots appearing under a slideshow). This observer
+// compares whole pixels, and for a horizontal slider only its width (a
+// vertical slider or a cube both). Window resizes still reach Swiper directly
+// (resizeObserver off makes Swiper listen to the window).
+(function () {
+  if (typeof Swiper !== "function" || typeof ResizeObserver === "undefined" || Swiper.__materiaResize) return;
+  Swiper.__materiaResize = true;
+  Swiper.extendDefaults({ resizeObserver: false });
+  Swiper.use(function materiaResize({ swiper, on, emit }) {
+    let ro = null;
+    let frame = 0;
+    on("init", () => {
+      if (swiper.params.resizeObserver || !swiper.el) return;
+      ro = new ResizeObserver((entries) => {
+        const entry = entries.find((e) => e.target === swiper.el);
+        if (!entry) return;
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          if (!swiper || swiper.destroyed || !swiper.initialized) return;
+          const box = entry.contentRect;
+          const both = !swiper.isHorizontal() || swiper.params.effect === "cube";
+          const moved = Math.abs(box.width - (swiper.width || 0)) >= 1 || (both && Math.abs(box.height - (swiper.height || 0)) >= 1);
+          if (!moved) return;
+          emit("beforeResize");
+          emit("resize");
+        });
+      });
+      ro.observe(swiper.el);
+    });
+    on("destroy", () => {
+      cancelAnimationFrame(frame);
+      if (ro) ro.disconnect();
+      ro = null;
+    });
+  });
+})();
+
 class SlideSection extends HTMLElement {
   constructor() {
     super();
