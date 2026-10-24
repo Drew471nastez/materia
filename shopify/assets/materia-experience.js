@@ -42,8 +42,11 @@
     const attr = (node, name, value) => {
       if (node.getAttribute(name) !== value) node.setAttribute(name, value);
     };
+    select('.cart-discount-remove[data-theme-button]').forEach(button => {
+      ['data-theme-button','data-sl-button','data-button-appearance','data-button-hover'].forEach(name => button.removeAttribute(name));
+    });
     const purchase = '.product-detail__buy-buttons :is(button[name="add"], .shopify-payment-button__button:not(.shopify-payment-button__button--branded)), .product-detail__information :is(.btn-primary, .btn-secondary, .btn-outline, [data-sl-button]):not(.btn-reset):not(.icon-btn):not(.quantity__button), .product-item__button-submit, .footer__newsletter button[type="submit"], #minicart_wrapper .cart__addon-content :is(.btn-save, .coupon-apply, .add-giftwrap, .btn-cancel), #minicart_wrapper .drawer-bottom :is(.btn-primary, .btn-outline, .btn-secondary)';
-    const shared = ':is(a, button, input[type="submit"]):is(.btn, .btn-white, .btn-primary, .btn-secondary, .btn-outline, [data-sl-button], [data-button-role]):not(.btn-reset):not(.icon-btn):not(.btn-icon--circle):not(.quantity__button):not(.swiper-arrow)';
+    const shared = ':is(a, button, input[type="submit"]):is(.btn, .btn-white, .btn-primary, .btn-secondary, .btn-outline, [data-sl-button], [data-button-role]):not(.btn-reset):not(.icon-btn):not(.btn-icon--circle):not(.quantity__button):not(.swiper-arrow):not(.cart-discount-remove)';
     select(purchase + ', ' + shared).forEach(button => {
       const declared = button.dataset.buttonRole;
       const role = button.dataset.themeButton || (['primary','secondary'].includes(declared) ? declared : (button.matches('.shopify-payment-button__button, .btn-secondary, .btn-outline, .btn-cancel') ? 'secondary' : 'primary'));

@@ -1,4 +1,27 @@
 
+/* Server-confirmed removal only: pending requests keep their row and icon.
+   Keep animation work local and honour reduced motion; never delay a failure. */
+async function materiaAnimateCartRemoval(row) {
+  if (!row?.isConnected || !row.animate || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const style = getComputedStyle(row);
+  row.classList.add('materia-row-exit');
+  row.style.minHeight = '0';
+  row.style.overflow = 'hidden';
+  const animation = row.animate([
+    {height:row.getBoundingClientRect().height+'px',opacity:1,transform:'translateX(0)',marginTop:style.marginTop,marginBottom:style.marginBottom,paddingTop:style.paddingTop,paddingBottom:style.paddingBottom},
+    {height:'0px',opacity:0,transform:'translateX(-6px)',marginTop:'0px',marginBottom:'0px',paddingTop:'0px',paddingBottom:'0px'},
+  ], {duration:220,easing:'cubic-bezier(.22,.61,.36,1)',fill:'forwards'});
+  await animation.finished.catch(() => {});
+}
+
+function materiaUpdateCartValue(target, source) {
+  if (!target || !source || target.innerHTML === source.innerHTML) return;
+  target.innerHTML = source.innerHTML;
+  if (target.matches('[data-cart-subtotal-price]') && target.animate && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    target.animate([{opacity:.65},{opacity:1}], {duration:180,easing:'ease-out'});
+  }
+}
+
 /* Materia: stable cart reconciliation. The previous full innerHTML replacement
    destroyed recommendations, quantity controls and images on every +/- tap. */
 function materiaPatchDrawerCart(target, incoming) {
@@ -43,9 +66,9 @@ function materiaPatchDrawerCart(target, incoming) {
   }
   while (oldItems.children.length > wanted.length) oldItems.lastElementChild.remove();
   // Cart subtotal/discounts can change; payment icons and messages do not need a rebuild.
-  for (const sel of ['[data-cart-subtotal-price]', '[data-discounts-list]']) {
-    const dst = target.querySelector(sel), src = incoming.querySelector(sel);
-    if (dst && src && dst.innerHTML !== src.innerHTML) dst.innerHTML = src.innerHTML;
+  for (const sel of ['[data-cart-subtotal-price]', '[data-discounts-list]', '.cart-discount__codes']) {
+    const fresh = incoming.querySelectorAll(sel);
+    target.querySelectorAll(sel).forEach((dst,index) => materiaUpdateCartValue(dst,fresh[index]));
   }
   // Recalculate savings text when installed without remounting the panel.
   const savingsOld = target.querySelector('.cda-savings');
@@ -749,15 +772,18 @@ class CartNotification extends HTMLElement {
            ================================================ */
         try {
           if (!parsedState.error && parsedState.item_count != undefined) {
-            this.getSectionsToRender().forEach((section) => {
+            for (const section of this.getSectionsToRender()) {
               try {
                 const elementToReplace = document.getElementById(section.id);
-                if (!elementToReplace) return;
+                if (!elementToReplace) continue;
                 const sectionHTML = parsedState.sections && parsedState.sections[section.id];
-                if (!sectionHTML) return;
+                if (!sectionHTML) continue;
                 const html = new DOMParser().parseFromString(sectionHTML, "text/html");
                 const minicartForm = html.querySelector("#minicart-form");
-                if (!minicartForm) return;
+                if (!minicartForm) continue;
+                const row = Number(quantity) === 0 && cart_item?.closest('.cart-item');
+                if (row?.id && !minicartForm.querySelector('#' + CSS.escape(row.id))) await materiaAnimateCartRemoval(row);
+                if (!elementToReplace.isConnected) continue;
                 if (!materiaPatchDrawerCart(elementToReplace, minicartForm)) elementToReplace.innerHTML = minicartForm.innerHTML;
                 // Instantly un-gray already-cached thumbnails so there's no
                 // flash between skeleton → new content on qty updates.
@@ -776,7 +802,7 @@ class CartNotification extends HTMLElement {
               } catch (perSectionErr) {
                 console.warn("[cart] section render failed for", section.id, perSectionErr);
               }
-            });
+            }
           }
         } catch (renderErr) {
           console.warn("[cart] section render block threw", renderErr);
@@ -786,7 +812,8 @@ class CartNotification extends HTMLElement {
         try { if (typeof window.cdaTick === "function") window.cdaTick(); } catch (_) {}
       })
       .catch((e) => {
-        throw e;
+        console.error('[cart] Quantity update failed:', e);
+        this.updateMessageErrors(id, window.cartStrings?.error || e.message, _this);
       })
       .finally(() => {
         /* CRITICAL — clear the .cart-refreshing class FIRST so the

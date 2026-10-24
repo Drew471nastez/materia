@@ -72,7 +72,10 @@ class MinicartDiscount extends HTMLElement {
       signal: abortController.signal,
     });
 
-    return response.json();
+    if (!response.ok) throw new Error(`Discount update failed: HTTP ${response.status}`);
+    const data = await response.json();
+    if (data.errors) throw new Error(typeof data.errors === 'string' ? data.errors : 'Discount update failed');
+    return data;
   }
 
   /**
@@ -88,10 +91,8 @@ class MinicartDiscount extends HTMLElement {
           document.getElementById(section.section);
 
         if (elementToReplace) {
-          elementToReplace.innerHTML = this.getSectionInnerHTML(
-            data.sections[section.section],
-            section.section
-          );
+          const incoming = new DOMParser().parseFromString(data.sections[section.section], 'text/html').getElementById(section.section);
+          if (incoming && !window.materiaPatchDrawerCart?.(elementToReplace,incoming)) elementToReplace.innerHTML = incoming.innerHTML;
         }
       }
     });

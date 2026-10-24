@@ -1,0 +1,57 @@
+const {chromium}=require('playwright');
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
+(async()=>{
+ const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});let checks=0;
+ try {
+  const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const row=(key)=>`<div class="cart-item" id="minicart__product-${key}" style="height:120px;margin-bottom:12px;display:flex"><img id="image-${key}" alt=""><mini-cart-remove-button data-index="${key}"><a class="cart-remove"><svg class="remove-icon" width="16" height="16"></svg><div class="icon-rotator"></div></a></mini-cart-remove-button><div id="CartDrawer-LineItemError-${key}"><span class="cart-item__error-text"></span></div></div>`;
+  const form=rows=>`<div id="minicart-form"><form id="minicart"><div class="minicart-body"><div class="items">${rows}</div></div></form><span data-cart-subtotal-price>€20.00</span></div>`;
+  await page.setContent(`<style>body{margin:0}</style><test-quantity-cart id="minicart_wrapper"><div class="minicart__wrapper">${form(row('a')+row('b'))}</div></test-quantity-cart>`);
+  for(const f of ['theme.css','minicart.css','materia-experience.css'])await page.addStyleTag({content:read('shopify/assets/'+f)});
+  await page.evaluate(()=>{
+    window.root=document.documentElement;window.debounce=fn=>fn;window.routes={cart_change_url:'/cart/change.js'};
+    window.fetchConfig=()=>({headers:{},method:'POST'});window.BlsLazyloadImg={init(){}};window.cartStrings={error:'Update failed'};
+    window.fetch=()=>new Promise(resolve=>{window.respond=resolve});
+  });
+  const source=read('shopify/assets/cart-components.js');
+  const helpers=source.slice(0,source.indexOf('// theme.js loads this file'));
+  const cartClass=source.slice(source.indexOf('class CartNotification extends HTMLElement'),source.indexOf('customElements.define("cart-notification"'));
+  await page.addScriptTag({content:helpers+cartClass+`;CartNotification.prototype.initialize=function(){this.notification=this};CartNotification.prototype.cartAction=function(){};customElements.define('test-quantity-cart',CartNotification);`});
+  await page.evaluate(()=>{window.stableRow=document.getElementById('minicart__product-b');window.stableImage=document.getElementById('image-b');document.querySelector('test-quantity-cart').updateQuantity('a',0);});
+  await page.waitForTimeout(200);
+  assert.equal(await page.locator('.cart-item').count(),2,'pending request must not remove a row');
+  assert(Number(await page.$eval('[data-index=a] .remove-icon',el=>getComputedStyle(el).opacity))>.3,'trash icon stays visible during pending work');checks++;
+  const updated=form(row('b')).replace('€20.00','€10.00');
+  await page.evaluate(html=>respond({text:async()=>JSON.stringify({item_count:1,items:[],items_subtotal_price:1000,sections:{'minicart-form':html}})}),updated);
+  await page.waitForTimeout(80);
+  const middle=await page.$eval('#minicart__product-a',el=>({opacity:Number(getComputedStyle(el).opacity),height:el.getBoundingClientRect().height}));
+  assert(middle.opacity>0&&middle.opacity<1,'confirmed removal has intermediate opacity');
+  assert(middle.height>0&&middle.height<120,'confirmed row collapses smoothly');checks++;
+  await page.waitForTimeout(220);
+  assert.equal(await page.locator('.cart-item').count(),1);
+  assert(await page.evaluate(()=>document.getElementById('minicart__product-b')===stableRow&&document.getElementById('image-b')===stableImage),'other rows/images must not remount');
+  assert.equal(await page.locator('[data-cart-subtotal-price]').textContent(),'€10.00');
+  assert(Number(await page.$eval('[data-cart-subtotal-price]',el=>getComputedStyle(el).opacity))>.5,'subtotal update never flashes invisible');checks++;
+  await page.evaluate(()=>document.querySelector('test-quantity-cart').updateQuantity('b',0));
+  await page.evaluate(()=>respond({text:async()=>JSON.stringify({errors:'Cannot remove this item'})}));await page.waitForTimeout(50);
+  assert.equal(await page.locator('.cart-item').count(),1);assert.equal(await page.locator('.materia-row-exit').count(),0);
+  assert.equal(await page.$eval('[data-index=b]',el=>el.classList.contains('loading')),false);checks++;
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.evaluate(()=>document.querySelector('test-quantity-cart').updateQuantity('b',0));
+  await page.evaluate(()=>respond({text:async()=>JSON.stringify({item_count:0,items:[],items_subtotal_price:0,sections:{'minicart-form':'<div id="minicart-form"><div class="cart-body">Empty</div></div>'}})}));await page.waitForTimeout(50);
+  assert.equal(await page.locator('.cart-item').count(),0,'last-item empty state works without motion delay');checks++;
+  assert.deepEqual(errors,[]);await page.close();
+
+  const coupon=await browser.newPage({viewport:{width:390,height:844}});
+  await coupon.setContent('<style>:root{--color-background:#fff;--color-text:#222;--color-border:#ccc;--inputs-border-width:0px;--btn-padding-x:50px;--btn-padding-y:30px;--input-bg:#fff}cart-discount{display:block;width:350px}form{display:flex}form>div{flex:1}input{width:100%}</style><cart-discount class="cart__discount"><form><div><input name="discount"></div><button class="btn-primary">Apply</button></form><ul class="cart-discount__codes"><li class="cart-discount__item"><p class="cart-discount-code">DREW</p><button class="cart-discount-remove btn" data-theme-button="primary"><svg class="remove-icon"></svg></button></li></ul></cart-discount>');
+  for(const f of ['theme-button-contract.css','materia-experience.css'])await coupon.addStyleTag({content:read('shopify/assets/'+f)});
+  await coupon.addScriptTag({content:read('shopify/assets/materia-experience.js')});
+  await coupon.waitForTimeout(350);
+  const remove=await coupon.$eval('.cart-discount-remove',el=>({w:el.getBoundingClientRect().width,h:el.getBoundingClientRect().height,bg:getComputedStyle(el).backgroundColor,role:el.hasAttribute('data-theme-button')}));
+  assert.deepEqual(remove,{w:44,h:44,bg:'rgba(0, 0, 0, 0)',role:false});checks++;
+  assert.equal(await coupon.$eval('input',el=>getComputedStyle(el).borderTopWidth),'1px');
+  assert.notEqual(await coupon.$eval('input',el=>getComputedStyle(el).boxShadow),'none');checks++;
+  await coupon.close();console.log(`${checks} pending/removal, stable subtotal and coupon UI checks passed`);
+ } finally {await browser.close();}
+})().catch(e=>{console.error(e);process.exitCode=1});
