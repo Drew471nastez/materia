@@ -166,7 +166,12 @@
         state.attributes.observe(header, {attributes: true, attributeFilter: ['data-sticky', 'data-sticky-mobile']});
       }
       const {section} = state;
-      const y = Math.max(0, scrollY);
+      /* Clamped to the real scroll range: the rubber band past the top or the
+         bottom of the page on a phone is not a scroll up or down. Every read
+         happens before the first write, so a frame lays the page out once. */
+      const y = Math.min(Math.max(0, scrollY), Math.max(0, document.documentElement.scrollHeight - innerHeight));
+      const headerHeight = header.offsetHeight;
+      const barTop = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--storelib-header-top')) || 0;
       let mode = header.dataset.sticky;
       if (!['always', 'on-scroll-up'].includes(mode) ||
           (innerWidth < 1025 && header.dataset.stickyMobile === 'false')) mode = 'none';
@@ -184,7 +189,7 @@
         state.marker.style.cssText = 'display:block;height:0;pointer-events:none;';
         section.before(state.marker);
       }
-      const threshold = state.marker.getBoundingClientRect().top + y + header.offsetHeight;
+      const threshold = state.marker.getBoundingClientRect().top + y + headerHeight;
       const pinned = document.documentElement.matches('.nav-open, .open-search, .open-minicart') ||
         header.contains(document.activeElement) ||
         (header.classList.contains('open-submenu') && header.matches(':hover'));
@@ -206,8 +211,12 @@
       section.classList.toggle('header-sticky', mode === 'on-scroll-up' && y > threshold);
       const overlay = (header.classList.contains('transparent') && innerWidth >= 1025) ||
         (header.classList.contains('transparent-mobile') && innerWidth < 1025);
-      if (overlay) section.style.setProperty('margin-bottom', (-header.offsetHeight) + 'px', 'important');
-      else section.style.removeProperty('margin-bottom');
+      const margin = overlay ? (-headerHeight) + 'px' : '';
+      if (state.margin !== margin) {
+        state.margin = margin;
+        if (margin) section.style.setProperty('margin-bottom', margin, 'important');
+        else section.style.removeProperty('margin-bottom');
+      }
       /* Solid only after leaving the top. A full header-height threshold left
          the bar transparent for a stretch of the scroll, then snapped solid. */
       section.classList.toggle('shopify-section-header-sticky', mode !== 'none' && y > 16);
@@ -215,8 +224,7 @@
       /* --sticky-top: the bottom edge of what is pinned at the top right now
          (sticky announcement, plus the header while it shows). Sticky columns
          such as the product gallery sit under it. */
-      const barTop = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--storelib-header-top')) || 0;
-      const stickyTop = Math.round(barTop + (mode !== 'none' && !state.hidden ? header.offsetHeight : 0)) + 'px';
+      const stickyTop = Math.round(barTop + (mode !== 'none' && !state.hidden ? headerHeight : 0)) + 'px';
       const productTop = stickyTop;
       if (state.productTop !== productTop) {
         state.productTop = productTop;
@@ -318,6 +326,8 @@
     new MutationObserver(sync).observe(root, {attributes: true, attributeFilter: ['class']});
     phone.addEventListener?.('change', sync);
     document.addEventListener('keydown', e => {
+      // theme.js (MateriaMenu) closes the open level first, then the drawer.
+      if (window.MateriaMenu) return;
       if (e.key === 'Escape' && root.classList.contains('nav-open') && !document.querySelector('.materia-localization-sheet.is-open')) document.querySelector('.navigation.mobile close-menu')?.click();
     });
     window.StorelibMenuLayer = {sync};

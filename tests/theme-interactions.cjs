@@ -132,14 +132,14 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
     // panel is fixed. The drawer variant must still cover the full viewport.
     await page.setViewportSize({width:1200,height:800});
     for(const mode of ['popup','basic','drawer']) {
-      await page.setContent(`<style>:root{--color-background:white;--color-heading:#222;--color-border:#ccc}body{margin:0}.bls__drawer{visibility:hidden}.open-search .bls__drawer.open{visibility:visible}</style><div id="search-form" class="search__type-${mode} bls__drawer open"><div class="search__type-${mode}"><div class="container"><div class="search__type-popup-bar"><form action="/search" class="search-modal__form"><input class="search__input" placeholder="Search"><button class="btn-search-close">Close</button></form></div></div></div></div>`);
+      await page.setContent(`<style>:root{--color-background:white;--color-heading:#222;--color-border:#ccc}body{margin:0}.bls__drawer{visibility:hidden}.open-search .bls__drawer.open{visibility:visible}</style><div id="search-form" data-search-mode="${mode==='drawer'?'drawer':'popup'}" class="search-overlay search-overlay--${mode==='drawer'?'drawer':'popup'} search__type-${mode} open"><div class="search__type-${mode}"><div class="container"><div class="search__type-popup-bar"><form action="/search" class="search-modal__form"><input class="search__input" placeholder="Search"><button class="btn-search-close">Close</button></form></div></div></div></div>`);
       await page.addStyleTag({content:read('shopify/assets/search-type-default.css')});
       await page.addStyleTag({content:read('shopify/assets/materia-experience.css')});
       await page.evaluate(()=>document.documentElement.classList.add('open-search'));
       const rect=await page.$eval('#search-form',el=>({height:el.getBoundingClientRect().height,top:getComputedStyle(el).top}));
       assert.equal(rect.top,'0px');
       if(mode==='drawer')assert.equal(rect.height,800);
-      else {assert(rect.height<180,mode+' popup must not expand to viewport height');assert.equal(await page.$eval('#search-form > div',el=>getComputedStyle(el).position),'relative');}
+      else {assert(rect.height<180,mode+' popup must not expand to viewport height');assert.equal(await page.$eval('#search-form > div',el=>getComputedStyle(el).position),'static');}
       passed++;
     }
     assert(read('sections/slideshow.storelib').includes('data-theme-button="primary"'),'slideshow must opt into tested contract');

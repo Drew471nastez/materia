@@ -506,6 +506,249 @@ function HoverIntent(exitTime, elements, userConfig) {
   init(exitTime, elements, userConfig);
 }
 
+/* materia-menu:start
+   The phone menu drawer, its drill-down levels and the desktop dropdowns'
+   keyboard support. Everything is handled once, on document, so a header the
+   builder draws again (storelib:section-load, or a redraw with no event at
+   all) works on the first tap, and running init again never adds a second
+   listener. Open and close are idempotent: html.nav-open is the one state,
+   every hamburger reflects it, and a close always clears the timers, the
+   scroll lock and the open levels it set. */
+(() => {
+  if (window.MateriaMenu) return;
+  const html = document.documentElement;
+  const TOGGLE = '.nav-toggle, [data-action="toggle-nav"]';
+  const KEY_BUTTONS = 'close-menu, back-menu, open-children-toggle[role="button"], [data-action="toggle-nav"]:not(button)';
+  const phone = matchMedia("(max-width: 1024.98px)");
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  let settleTimer = 0;
+  let lastToggle = -Infinity;
+  const drawer = () => document.querySelector(".navigation.mobile");
+  const lockTarget = () => document.body;
+  const visibleToggle = () =>
+    [...document.querySelectorAll(TOGGLE)].find((t) => t.getClientRects().length) ||
+    document.querySelector(TOGGLE);
+  const isOpen = () => html.classList.contains("nav-open");
+  const otherDrawerOpen = () =>
+    html.classList.contains("open-minicart") ||
+    html.classList.contains("open-search") ||
+    !!document.querySelector("#minicart_wrapper .minicart__wrapper.open");
+
+  function sync() {
+    const open = isOpen();
+    document.querySelectorAll(TOGGLE).forEach((t) => {
+      t.classList.toggle("open", open);
+      if (t.getAttribute("aria-expanded") !== String(open)) t.setAttribute("aria-expanded", String(open));
+    });
+  }
+
+  function resetLevels(scope) {
+    (scope || document).querySelectorAll(".navigation menu-item.is-open").forEach((item) => {
+      item.classList.remove("is-open");
+      item.querySelectorAll('open-children-toggle[role="button"]').forEach((t) => t.setAttribute("aria-expanded", "false"));
+    });
+  }
+
+  function open() {
+    clearTimeout(settleTimer);
+    settleTimer = 0;
+    if (isOpen()) return sync();
+    const bar = window.getScrollBarWidth?.init?.() || 0;
+    if (bar) lockTarget().style.setProperty("padding-right", bar + "px");
+    html.classList.add("nav-open", "open-drawer");
+    if (!document.querySelector(".navigation.horizontal")) html.classList.add("nav-verticalmenu");
+    sync();
+    const nav = drawer();
+    const first = nav?.querySelector("close-menu");
+    if (first && document.activeElement?.matches?.(TOGGLE)) {
+      requestAnimationFrame(() => { try { first.focus({ preventScroll: true }); } catch (e) {} });
+    }
+  }
+
+  function close(immediate) {
+    const wasOpen = isOpen();
+    if (!wasOpen && !immediate) return sync();
+    const focusInside = drawer()?.contains(document.activeElement);
+    html.classList.remove("nav-open", "nav-verticalmenu");
+    sync();
+    clearTimeout(settleTimer);
+    const settle = () => {
+      settleTimer = 0;
+      if (isOpen()) return;
+      if (!otherDrawerOpen()) html.classList.remove("open-drawer");
+      lockTarget().style.removeProperty("padding-right");
+      resetLevels();
+    };
+    // The drawer slides shut first, then the page unlocks and the levels go
+    // back to the top, so nothing jumps while it is still on screen.
+    if (immediate || reduced.matches || !wasOpen) settle();
+    else settleTimer = setTimeout(settle, 450);
+    if (focusInside) {
+      try { visibleToggle()?.focus({ preventScroll: true }); } catch (e) {}
+    }
+  }
+
+  function toggle() {
+    // One tap is one toggle, whatever mix of touch, pointer and click events
+    // the browser or an old listener produces for it.
+    const now = performance.now();
+    if (now - lastToggle < 250) return;
+    lastToggle = now;
+    isOpen() ? close() : open();
+  }
+
+  // Drill-down levels in the phone drawer.
+  function levelToggle(el) {
+    return el.closest("menu-item");
+  }
+  function openLevel(toggleEl, viaKeyboard) {
+    const item = levelToggle(toggleEl);
+    if (!item) return;
+    const opening = !item.classList.contains("is-open");
+    item.classList.toggle("is-open", opening);
+    item.querySelectorAll('open-children-toggle[role="button"]').forEach((t) => t.setAttribute("aria-expanded", String(opening)));
+    if (opening && viaKeyboard) {
+      const back = item.nextElementSibling?.querySelector("back-menu");
+      if (back) setTimeout(() => { try { back.focus({ preventScroll: true }); } catch (e) {} }, reduced.matches ? 0 : 60);
+    }
+  }
+  function backLevel(backEl) {
+    const level = backEl.closest(".submenu, .sub-children-menu");
+    const item = level?.previousElementSibling?.matches?.("menu-item")
+      ? level.previousElementSibling
+      : backEl.closest(backEl.classList.contains("back-lv1") ? ".level-1" : ".level0")?.querySelector("menu-item");
+    if (!item) return;
+    const hadFocus = level?.contains(document.activeElement);
+    item.classList.remove("is-open");
+    const opener = item.querySelector('open-children-toggle[role="button"]');
+    opener?.setAttribute("aria-expanded", "false");
+    if (hadFocus && opener) { try { opener.focus({ preventScroll: true }); } catch (e) {} }
+  }
+  function deepestOpenLevel() {
+    const items = drawer()?.querySelectorAll("menu-item.is-open");
+    return items && items.length ? items[items.length - 1] : null;
+  }
+
+  // Keyboard: role="button" on the theme's custom elements (each one calls
+  // this when it is connected, so a redrawn header is covered too), Enter and
+  // Space press them.
+  function upgradeEl(el) {
+    if (!el || el.nodeType !== 1 || !el.closest(".navigation")) return;
+    const tag = el.tagName;
+    if (tag === "OPEN-CHILDREN-TOGGLE") {
+      // Only the arrow beside the link in the phone drawer is a button; the
+      // copy inside the link stays part of the link.
+      if (!el.closest(".navigation.mobile") || el.closest("a") || el.parentElement?.tagName !== "MENU-ITEM") return;
+      el.setAttribute("aria-expanded", String(el.parentElement.classList.contains("is-open")));
+      if (!el.hasAttribute("aria-label")) {
+        const text = el.parentElement.querySelector("a span")?.textContent.trim();
+        if (text) el.setAttribute("aria-label", text);
+      }
+    } else if (tag === "CLOSE-MENU") {
+      if (!el.hasAttribute("aria-label")) el.setAttribute("aria-label", el.dataset.label || "Close");
+    } else if (tag !== "BACK-MENU") return;
+    if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "0");
+    if (el.getAttribute("role") !== "button") el.setAttribute("role", "button");
+  }
+  function upgrade(scope) {
+    (scope || document).querySelectorAll(".navigation :is(close-menu, back-menu, open-children-toggle)").forEach(upgradeEl);
+    (scope || document).querySelectorAll(TOGGLE).forEach((t) => {
+      if (t.tagName !== "BUTTON") {
+        if (!t.hasAttribute("tabindex")) t.setAttribute("tabindex", "0");
+        t.setAttribute("role", "button");
+      }
+    });
+    sync();
+  }
+
+  document.addEventListener("click", (event) => {
+    const t = event.target.closest?.(TOGGLE);
+    if (t) {
+      event.preventDefault();
+      toggle();
+      return;
+    }
+    // A link in the drawer that leaves the page closes the drawer at once,
+    // so the page it goes to (or comes back from) is never under it.
+    const link = event.target.closest?.(".navigation.mobile a[href]");
+    if (link && isOpen() && !event.target.closest("open-children-toggle") && !event.defaultPrevented) {
+      const href = link.getAttribute("href") || "";
+      if (href && href !== "#" && !href.startsWith("javascript:") && link.target !== "_blank") close(true);
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      const nav = drawer();
+      if (isOpen() && phone.matches) {
+        if (document.querySelector(".materia-localization-sheet.is-open")) return;
+        const level = deepestOpenLevel();
+        if (level) {
+          const back = level.nextElementSibling?.querySelector("back-menu");
+          if (back) backLevel(back);
+          else level.classList.remove("is-open");
+        } else {
+          close();
+        }
+        event.stopImmediatePropagation();
+        return;
+      }
+      // Desktop dropdown that holds focus: close it, focus its link.
+      const item = document.activeElement?.closest?.(".navigation.horizontal:not(.mobile) li.menu-parent.visible");
+      if (item) {
+        desktopExit(item);
+        item.querySelector(":scope > menu-item > a")?.focus();
+      }
+      return;
+    }
+    if ((event.key === "Enter" || event.key === " ") && event.target.matches?.(KEY_BUTTONS)) {
+      event.preventDefault();
+      event.target.click();
+    }
+  });
+
+  // Desktop dropdowns from the keyboard: the same open and close as hover.
+  const menuApi = () => { try { return BlsMainMenuShopify; } catch (e) { return null; } };
+  function desktopEnter(item) {
+    if (phone.matches || item.classList.contains("visible")) return;
+    const api = menuApi();
+    document.querySelectorAll(".navigation.horizontal:not(.mobile) li.menu-parent.visible").forEach((other) => {
+      if (other !== item) desktopExit(other);
+    });
+    if (api?.menuEnter) api.menuEnter(item); else item.classList.add("visible");
+    item.isActive = true;
+  }
+  function desktopExit(item) {
+    const api = menuApi();
+    if (api?.menuExit) api.menuExit(item); else item.classList.remove("visible");
+    item.isActive = false;
+  }
+  document.addEventListener("focusin", (event) => {
+    const item = event.target.closest?.(".navigation.horizontal:not(.mobile) li.menu-parent");
+    if (item && event.target.matches(":focus-visible")) desktopEnter(item);
+  });
+  document.addEventListener("focusout", (event) => {
+    const item = event.target.closest?.(".navigation.horizontal:not(.mobile) li.menu-parent.visible");
+    if (item && !item.contains(event.relatedTarget) && !item.matches(":hover")) desktopExit(item);
+  });
+
+  function resetAll() {
+    if (isOpen() || document.querySelector(".nav-toggle.open")) close(true);
+    document.querySelectorAll(".navigation.horizontal li.menu-parent.visible").forEach(desktopExit);
+  }
+  // Back and forward restore the page as it was left: start closed.
+  addEventListener("pageshow", (event) => { if (event.persisted) resetAll(); });
+  addEventListener("popstate", () => { if (isOpen()) close(true); });
+  addEventListener("hashchange", () => { if (isOpen()) close(); });
+  // Leaving the phone layout with the drawer open would leave the page locked.
+  phone.addEventListener?.("change", () => { if (!phone.matches && isOpen()) close(true); });
+
+  window.MateriaMenu = { open, close, toggle, sync, upgrade, upgradeEl, resetAll, openLevel, backLevel, isOpen, phone };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => upgrade());
+  else upgrade();
+})();
+/* materia-menu:end */
+
 let BlsMainMenuShopify = (function () {
   return {
     init: function () {
@@ -549,13 +792,17 @@ let BlsMainMenuShopify = (function () {
       this.updateMenuTabState(elements);
       this.updateMenuVerticalMobile(elements);
 
-      // Add resize event listener for responsive behavior
-      window.addEventListener("resize", () =>
-        this.updateMenuTabState(elements)
-      );
-      window.addEventListener("resize", () =>
-        this.updateMenuVerticalMobile(elements)
-      );
+      // One resize listener for the page, reading the elements of the latest
+      // init: a header redraw runs init again and must not stack listeners
+      // that hold the replaced elements.
+      this._menuElements = elements;
+      if (!this._menuResizeBound) {
+        this._menuResizeBound = true;
+        window.addEventListener("resize", () => {
+          this.updateMenuTabState(this._menuElements);
+          this.updateMenuVerticalMobile(this._menuElements);
+        }, { passive: true });
+      }
     },
 
     calculateSectionPadding: function (header) {
@@ -570,16 +817,25 @@ let BlsMainMenuShopify = (function () {
 
     initFadeInDownAnimation: function (header, sectionPbValue) {
       const fadeInDown = document.querySelector(".fade-in-down");
+      // The same open and close the pointer uses, kept for the keyboard
+      // (MateriaMenu opens a dropdown when focus enters it).
+      const expanded = (item, open) => {
+        const link = item.querySelector(":scope > menu-item > a");
+        if (link && item.querySelector(".submenu, .sub-children-menu")) link.setAttribute("aria-expanded", String(open));
+      };
       if (!fadeInDown) {
         // Simple hover intent for non-fade-in menus
+        this.menuEnter = (item) => { item.classList.add("visible"); expanded(item, true); };
+        this.menuExit = (item) => { item.classList.remove("visible"); expanded(item, false); };
         this.setupSimpleHoverIntent(180, ".menu-parent__horizontal");
         return;
       }
+      this.menuEnter = (item) => { this.handleMenuEnter(item, header, sectionPbValue); expanded(item, true); };
+      this.menuExit = (item) => { this.handleMenuExit(item, header); expanded(item, false); };
 
       HoverIntent(180, document.querySelectorAll(".menu-parent__horizontal"), {
-        onEnter: (targetItem) =>
-          this.handleMenuEnter(targetItem, header, sectionPbValue),
-        onExit: (targetItem) => this.handleMenuExit(targetItem, header),
+        onEnter: (targetItem) => this.menuEnter(targetItem),
+        onExit: (targetItem) => this.menuExit(targetItem),
       });
     },
 
@@ -587,9 +843,11 @@ let BlsMainMenuShopify = (function () {
       HoverIntent(time, document.querySelectorAll(selector), {
         onEnter: function (targetItem) {
           targetItem.classList.add("visible");
+          if (targetItem.querySelector(".submenu, .sub-children-menu")) targetItem.querySelector(":scope > menu-item > a")?.setAttribute("aria-expanded", "true");
         },
         onExit: function (targetItem) {
           targetItem.classList.remove("visible");
+          if (targetItem.querySelector(".submenu, .sub-children-menu")) targetItem.querySelector(":scope > menu-item > a")?.setAttribute("aria-expanded", "false");
         },
       });
     },
@@ -908,36 +1166,11 @@ let BlsMainMenuShopify = (function () {
     },
 
     setupNavToggle: function () {
-      document.querySelectorAll(".nav-toggle").forEach((navToggle) => {
-        navToggle.addEventListener("click", (e) => {
-          const target = e.currentTarget;
-          const main_menu = document.querySelector(".navigation.horizontal");
-
-          if (document.documentElement.classList.contains("nav-open")) {
-            // Close menu
-            root.style.removeProperty("padding-right");
-            document.documentElement.classList.remove(
-              "nav-open",
-              "open-drawer"
-            );
-            target.classList.remove("open");
-            if (!main_menu) {
-              document.documentElement.classList.remove("nav-verticalmenu");
-            }
-          } else {
-            // Open menu
-            root.style.setProperty(
-              "padding-right",
-              getScrollBarWidth.init() + "px"
-            );
-            document.documentElement.classList.add("nav-open", "open-drawer");
-            target.classList.add("open");
-            if (!main_menu) {
-              document.documentElement.classList.add("nav-verticalmenu");
-            }
-          }
-        });
-      });
+      // The hamburger is handled once, on document, by MateriaMenu (below):
+      // a listener on each button was lost when the builder redrew the
+      // header, and stacked twice (open then close in one tap) when init ran
+      // again over buttons that had not been replaced.
+      window.MateriaMenu?.upgrade();
     },
 
     setupMenuMouseEvents: function () {
@@ -967,12 +1200,13 @@ let BlsMainMenuShopify = (function () {
         document.querySelector(".section-top-bar")?.clientHeight || 0;
       let headerpage = document.querySelector("header")?.clientHeight || 0;
 
-      document
-        .querySelector("body")
-        .setAttribute(
-          "style",
-          `--height-bar: ${announcement_bar}px; --height-header: ${headerpage}px; --height-topbar: ${top_bar}px`
-        );
+      // Set the three values only: replacing the whole style attribute wiped
+      // the scroll lock's padding and anything else set on <body> each time
+      // the header was redrawn.
+      const bodyStyle = document.body.style;
+      bodyStyle.setProperty("--height-bar", `${announcement_bar}px`);
+      bodyStyle.setProperty("--height-header", `${headerpage}px`);
+      bodyStyle.setProperty("--height-topbar", `${top_bar}px`);
     },
 
     initStickyHeader: function (header) {
@@ -989,11 +1223,13 @@ let BlsMainMenuShopify = (function () {
 
       this.addCssSubMenu();
 
+      if (this._subMenuResizeBound) return;
+      this._subMenuResizeBound = true;
       window.addEventListener("resize", () => {
         if (window.innerWidth > 1024) {
           this.addCssSubMenu();
         }
-      });
+      }, { passive: true });
     },
 
     addCssSubMenu: function () {
@@ -1067,11 +1303,16 @@ try { BlsMainMenuShopify.init(); } catch (e) { console.error("[theme] menu init"
 
 // Re-initialize header behaviors after Theme Editor reloads the section
 document.addEventListener("storelib:section-load", (event) => {
-  const section = event.target;
-  if (!section || section.nodeType !== 1 || !section.querySelector("header.header[data-sticky]")) return;
+  const target = event.target;
+  if (!target || target.nodeType !== 1) return;
+  // The event may come from the section wrapper, the <header> itself or an
+  // element inside it: find the section either way.
+  const section = target.closest?.('[id^="shopify-section-"], .shopify-section') || target;
+  if (!section.querySelector?.("header.header[data-sticky], .navigation.mobile") && !target.matches?.("header.header")) return;
   // The redrawn header has no open menu or search; the cart drawer is not part
   // of it and keeps its own state.
   const html = document.documentElement;
+  if (window.MateriaMenu) window.MateriaMenu.close(true);
   html.classList.remove("nav-open", "open-search", "nav-verticalmenu");
   if (!document.querySelector("#minicart_wrapper .minicart__wrapper.open")) html.classList.remove("open-drawer", "open-minicart");
   try { BlsMainMenuShopify.init(); } catch (e) {}
@@ -1103,285 +1344,216 @@ document.addEventListener("shopify:section:unload", (event) => {
   );
 });
 
+/* Search overlay (Theme settings > Search > Search type: popup or drawer).
+   #search-form and .overlay_search are manual popovers (snippets/top-search):
+   shown, they sit in the browser's top layer, so nothing on the page (the
+   header, a sticky or pill header, the announcement bar, the mobile
+   navigation bar) can be drawn over them. The popup is placed over the header
+   bar as measured when it opens; the drawer is a full height side sheet. All
+   motion is CSS (search-type-default.css); this only toggles classes.
+   One delegated click listener serves every toggle, so a header redrawn in
+   the builder (storelib:section-load) needs no new listeners. */
 var BlsSearchShopify = (function () {
+  const html = document.documentElement;
+  const canPopover =
+    typeof HTMLElement !== "undefined" &&
+    typeof HTMLElement.prototype.showPopover === "function";
+  const panel = () => document.getElementById("search-form");
+  const scrim = () => document.querySelector(".overlay_search");
+  const isDrawer = (f) => f && f.getAttribute("data-search-mode") === "drawer";
+  const showLayer = (el) => {
+    if (!canPopover || !el || !el.hasAttribute("popover")) return;
+    try { if (!el.matches(":popover-open")) el.showPopover(); } catch (e) {}
+  };
+  const hideLayer = (el) => {
+    if (!canPopover || !el || !el.hasAttribute("popover")) return;
+    try { if (el.matches(":popover-open")) el.hidePopover(); } catch (e) {}
+  };
+  const FOCUSABLE =
+    'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"])';
+
   return {
+    isOpen: false, // predictive results listbox
+    panelOpen: false,
+
     init: function () {
-      var predictive = document.querySelector("#predictive-search");
-      if (predictive) {
-        this.setupEventListeners();
+      if (!this._wired) {
+        this._wired = true;
+        this._onKeydown = this.onPanelKeydown.bind(this);
+        document.addEventListener("click", this.onDocumentClick.bind(this));
+        // Whatever else closes the search by its <html> class (the cart
+        // opening, a header redraw, the scroll-lock watchdog, back/forward
+        // cache) closes the panel and its layers with it.
+        new MutationObserver(() => {
+          if (this.panelOpen && !html.classList.contains("open-search")) this.closePanel();
+        }).observe(html, { attributes: true, attributeFilter: ["class"] });
+        let frame = 0;
+        window.addEventListener("resize", () => {
+          if (!this.panelOpen || frame) return;
+          frame = requestAnimationFrame(() => {
+            frame = 0;
+            const f = panel();
+            if (this.panelOpen && f && !isDrawer(f)) this.placePopup(f);
+          });
+        }, { passive: true });
       }
-      document.querySelectorAll(".top-search-toggle").forEach((navToggle) => {
-        navToggle.onclick = (e) => {
-          const target = e.currentTarget;
-          // Looked up on click: the form may be redrawn after init.
-          const form = document.querySelector("#search-form");
-          if (!form) return;
-          if (!form.classList.contains("open")) {
-            form.classList.add("open");
-            target.classList.add("open");
-            document.documentElement.classList.add(
-              "open-drawer",
-              "open-search"
-            );
-            setTimeout(function () {
-              form.querySelector('input[type="search"]')?.focus();
-            }, 100);
-          } else {
-            form.classList.remove("open");
-            target.classList.remove("open");
-            setTimeout(() => {
-              const html = document.documentElement;
-              if (html.classList.contains("open-search") || html.classList.contains("open-minicart")) return;
-              html.classList.remove("open-drawer");
-              root.style.removeProperty("padding-right");
-            }, 300);
-
-            document.documentElement.classList.remove("open-search");
-          }
-        };
-      });
-      document.querySelectorAll(".btn-search-close").forEach((navToggle) => {
-        navToggle.onclick = () => {
-          const form = document.querySelector("#search-form");
-          if (form) {
-            form.classList.remove("open");
-          }
-          document
-            .querySelector(".dropdown-toggle .top-search-toggle")
-            ?.classList.remove("open");
-          document.documentElement.classList.remove("open-search");
-          setTimeout(() => {
-            const html = document.documentElement;
-            // Keep the lock if the search or the cart was opened meanwhile.
-            if (html.classList.contains("open-search") || html.classList.contains("open-minicart")) return;
-            html.classList.remove("open-drawer");
-            root.style.removeProperty("padding-right");
-          }, 300);
-        };
-        const overlay_search = document.querySelector(".overlay_search");
-        if (overlay_search) {
-          overlay_search.onclick = () => {
-            navToggle.click();
-          };
-        }
-      });
-      const sf = document.querySelector(".search-full");
-      if (sf) {
-        const hs = sf.closest(".header_search");
-        var unSubcribeCloseCanvas;
-        if (unSubcribeCloseCanvas) {
-          unSubcribeCloseCanvas();
-          unSubcribeCloseCanvas = null;
-        }
-        unSubcribeCloseCanvas = subscribe("closeCanvas", (data) => {
-          if (document.documentElement.classList.contains("open-search")) {
-            const width = window.innerWidth;
-            const ps = document.querySelector(".popup-search");
-            if (width >= 767.95 && ps) {
-              this.closeDefaultSearch();
-            }
-          }
-        });
-        this._boundHandleClickSearch =
-          this._boundHandleClickSearch || this.handleClickSearch.bind(this);
-
-        document.removeEventListener("click", this._boundHandleClickSearch);
-
-        document.addEventListener("click", this._boundHandleClickSearch);
-      }
-    },
-    handleClickSearch: function (e) {
-      const sf = document.querySelector(".search-full");
-      const hs = sf.closest(".header_search");
-      const ehs = e.target.closest(".header_search");
-
-      const search_container = e.target.closest("header-search");
-
-      if (ehs || search_container) {
-        const ps = document.querySelector(".popup-search");
-        const width = window.innerWidth;
-        if (ps) {
-          ps.classList.add("popup-search-show");
-          if (document.documentElement.classList.contains("open-search")) {
-            return;
-          }
-          if (width >= 767.95) {
-            this.openDefaultSearch();
-          }
-        }
-      } else {
-        if (hs) {
-          if (document.documentElement.classList.contains("open-search")) {
-            const width = window.innerWidth;
-            if (width >= 767.95) {
-              this.closeDefaultSearch();
-            } else {
-              const form = document.querySelector("#search-form");
-              form.classList.remove("open");
-              if (
-                document.documentElement.classList.contains("open-minicart")
-              ) {
-                document.documentElement.classList.remove("open-search");
-              } else {
-                document.documentElement.classList.remove(
-                  "open-drawer",
-                  "open-search"
-                );
-                root.style.removeProperty("padding-right");
-              }
-            }
-          }
-        }
-      }
-    },
-    openDefaultSearch: function () {
-      // Check everything this needs before touching the header or locking the
-      // page, and ignore a second click while the panel is still sliding in.
-      if (!document.querySelector(".overlay_search") || !document.querySelector(".popup-search")) return;
-      if (this._searchOpening && Date.now() - this._searchOpening < 1000) return;
-      this._searchOpening = Date.now();
-      const headerNavigation = document.querySelector(
-        ".header-bottom__navigation"
-      );
-      const headerTopActions = document.querySelector(".header-top__actions");
-      const headerWrapper = document.querySelector("header");
-      if (headerNavigation && headerWrapper) {
-        const headerNavigationHeight = headerNavigation.offsetHeight;
-        headerNavigation.style.opacity = "0";
-        headerNavigation.style.transition = "opacity 0.3s ease";
-        headerNavigation.style.display = "none";
-        headerWrapper.style.marginBottom = `${headerNavigationHeight}px`;
-      }
-      const overlay_search = document.querySelector(".overlay_search");
-      overlay_search.classList.add("open");
-      const containsHeaderLayoutOne =
-        document.querySelector(".header__layout-1");
-      const containsHeaderLayoutTwo =
-        document.querySelector(".header__layout-2");
-      const containsHeaderLayoutThree =
-        document.querySelector(".header__layout-3");
-      const sf = document.querySelector(
-        containsHeaderLayoutOne
-          ? "header"
-          : containsHeaderLayoutTwo
-          ? "header-inner"
-          : containsHeaderLayoutThree
-          ? ".header-mega-store"
-          : ".search-full"
-      );
-      let topCaculate = sf ? sf.getBoundingClientRect().bottom : (headerWrapper ? headerWrapper.getBoundingClientRect().bottom : 0);
-      const ps = document.querySelector(".popup-search");
-      document.documentElement.classList.add("open-drawer");
-      // No scrollbar compensation: the layout keeps the gutter (scrollbar-gutter:
-      // stable) and pins body padding-right to 0, so measuring it only forced a
-      // full layout on every open.
-      Promise.all([
-        motionAnimate(
-          ps,
-          {
-            y: ["-105%", topCaculate],
-            visibility: ["hidden", "visible"],
-          },
-          {
-            ease: [0.7, 0, 0.2, 1],
-            duration: 0.4,
-          }
-        ),
-
-        motionAnimate(
-          overlay_search,
-          {
-            opacity: [0, 1],
-            visibility: ["hidden", "visible"],
-          },
-          {
-            ease: [0.7, 0, 0.2, 1],
-            duration: 0.4,
-          }
-        ),
-      ]).catch(() => {}).then(() => {
-        this._searchOpening = 0;
-        setTimeout(() => {
-          document.documentElement.classList.add("open-search");
-        }, 20);
-      });
+      this.setupEventListeners();
     },
 
-    closeDefaultSearch: function () {
-      const headerNavigation = document.querySelector(
-        ".header-bottom__navigation"
-      );
-      const headerWrapper = document.querySelector("header");
-      const ps = document.querySelector(".popup-search");
-      const sf = document.querySelector(".search-full");
-      const overlay_search = document.querySelector(".overlay_search");
-      if (!overlay_search || !ps) {
-        document.documentElement.classList.remove("open-search");
-        if (!document.documentElement.classList.contains("open-minicart")) document.documentElement.classList.remove("open-drawer");
+    onDocumentClick: function (e) {
+      const t = e.target;
+      if (!t || !t.closest) return;
+      const toggle = t.closest(".top-search-toggle");
+      // Search type "Search page only" is a plain link to /search.
+      if (toggle && toggle.tagName !== "A") {
+        if (!panel()) return;
+        e.preventDefault();
+        if (this.panelOpen) this.closePanel();
+        else this.openPanel(toggle);
         return;
       }
-      overlay_search.classList.remove("open");
-      ps.classList.remove("popup-search-show");
-      let topCaculate = (sf ? sf.getBoundingClientRect().bottom : 0) + 10;
-      if (headerNavigation && headerWrapper) {
-        headerNavigation.style.opacity = "";
-        headerNavigation.style.transition = "";
-        headerNavigation.style.display = "";
-        headerWrapper.style.marginBottom = "";
+      if (!this.panelOpen) return;
+      if (t.closest("#search-form .btn-search-close") || t.closest(".overlay_search")) {
+        e.preventDefault();
+        this.closePanel();
       }
-      Promise.all([
-        motionAnimate(
-          ps,
-          {
-            y: [topCaculate, "-105%"],
-            visibility: ["visible", "hidden"],
-          },
-          {
-            ease: [0.7, 0, 0.2, 1],
-            duration: 0.4,
-          }
-        ),
+    },
 
-        motionAnimate(
-          overlay_search,
-          {
-            opacity: [1, 0],
-            visibility: ["visible", "hidden"],
-          },
-          {
-            ease: [0.7, 0, 0.2, 1],
-            duration: 0.4,
-          }
-        ),
-      ]).catch(() => {}).then(() => {
-        setTimeout(() => {
-          if (document.documentElement.classList.contains("open-minicart")) {
-            document.documentElement.classList.remove("open-search");
-          } else {
-            document.documentElement.classList.remove(
-              "open-drawer",
-              "open-search"
-            );
-            root.style.removeProperty("padding-right");
-          }
-        }, 20);
+    // The header bar as it is now: sticky, scrolled, hidden or below the
+    // announcement bar. The popup takes its place exactly.
+    placePopup: function (f) {
+      const header =
+        document.querySelector(".section-header header.header") ||
+        document.querySelector("header.header") ||
+        document.querySelector("header");
+      const vw = html.clientWidth || window.innerWidth;
+      let top = 0, left = 0, width = vw, height = 0, radius = "0px";
+      if (header) {
+        const r = header.getBoundingClientRect();
+        height = Math.round(r.height);
+        if (r.width > 0) { left = Math.round(r.left); width = Math.round(r.width); }
+        // Out of view (hidden while scrolling): the header comes back pinned
+        // at the top of the screen, so the popup opens there.
+        if (r.bottom > 0 && r.top < window.innerHeight) top = Math.max(0, Math.round(r.top));
+        if (header.classList.contains("is-pill")) radius = getComputedStyle(header).borderRadius || "0px";
+      }
+      if (!height) height = 72;
+      const s = f.style;
+      s.setProperty("--sh-top", top + "px");
+      s.setProperty("--sh-left", left + "px");
+      s.setProperty("--sh-width", width + "px");
+      s.setProperty("--sh-height", height + "px");
+      s.setProperty("--sh-radius", radius);
+    },
+
+    setToggles: function (open) {
+      document.querySelectorAll(".top-search-toggle").forEach((t) => {
+        t.classList.toggle("open", open);
+        if (t.tagName !== "A") t.setAttribute("aria-expanded", open ? "true" : "false");
       });
+    },
+
+    openPanel: function (trigger) {
+      const f = panel();
+      if (!f || this.panelOpen) return;
+      clearTimeout(this._hideTimer);
+      this.panelOpen = true;
+      this._trigger = trigger || document.activeElement;
+      if (!isDrawer(f)) this.placePopup(f);
+      const s = scrim();
+      // Scrim first, so the panel is above it in the top layer.
+      showLayer(s);
+      showLayer(f);
+      html.classList.add("open-drawer", "open-search");
+      if (s) s.classList.add("open");
+      f.classList.add("open");
+      this.setToggles(true);
+      document.addEventListener("keydown", this._onKeydown, true);
+      // Synchronously, inside the click, so phones raise the keyboard.
+      const input = f.querySelector('input[type="search"]');
+      if (input) {
+        try { input.focus({ preventScroll: true }); } catch (e) { input.focus(); }
+      }
+    },
+
+    closePanel: function () {
+      if (!this.panelOpen) return;
+      this.panelOpen = false;
+      const f = panel();
+      const s = scrim();
+      if (f) f.classList.remove("open");
+      if (s) s.classList.remove("open");
+      html.classList.remove("open-search");
+      this.setToggles(false);
+      document.removeEventListener("keydown", this._onKeydown, true);
+      const trigger = this._trigger;
+      this._trigger = null;
+      if (f && f.contains(document.activeElement)) {
+        if (trigger && trigger.isConnected) {
+          try { trigger.focus({ preventScroll: true }); } catch (e) {}
+        } else document.activeElement.blur();
+      }
+      clearTimeout(this._hideTimer);
+      // Leave the top layer and unlock the page once the panel has gone.
+      this._hideTimer = setTimeout(() => {
+        if (this.panelOpen) return;
+        hideLayer(f);
+        hideLayer(s);
+        if (!html.classList.contains("open-minicart") && !html.classList.contains("nav-open")) {
+          html.classList.remove("open-drawer");
+        }
+        if (typeof root !== "undefined" && root && root.style) root.style.removeProperty("padding-right");
+      }, isDrawer(f) ? 360 : 290);
+    },
+
+    // Kept for anything that still calls the theme's original names.
+    openDefaultSearch: function () { this.openPanel(); },
+    closeDefaultSearch: function () { this.closePanel(); },
+
+    onPanelKeydown: function (e) {
+      if (!this.panelOpen) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        this.closePanel();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const f = panel();
+      if (!f) return;
+      const items = [...f.querySelectorAll(FOCUSABLE)].filter((el) => el.offsetParent !== null || el === document.activeElement);
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !f.contains(document.activeElement))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (document.activeElement === last || !f.contains(document.activeElement))) {
+        e.preventDefault();
+        first.focus();
+      }
+    },
+
+    /* ---- Predictive search ---- */
+    input: function () {
+      const f = panel();
+      return f ? f.querySelector('input[type="search"]') : null;
     },
 
     setupEventListeners: function () {
-      const input = document.querySelector('input[type="search"]');
-      const form = document.querySelector("form.search");
-      if (!input || !form) return;
-      form.addEventListener("submit", this.onFormSubmit.bind(this));
-      input.addEventListener(
-        "input",
-        this.debounce((event) => {
-          this.onChange(event);
-        }, 300).bind(this)
-      );
-      input.addEventListener("focus", this.onFocus.bind(this));
-      document.addEventListener("focusout", this.onFocusOut.bind(this));
-      document.addEventListener("keyup", this.onKeyup.bind(this));
+      const f = panel();
+      const input = this.input();
+      const form = input && input.form;
+      if (!f || !input || !form || input._blsSearchWired) return;
+      input._blsSearchWired = true;
+      form.addEventListener("submit", (e) => {
+        if (!this.getQuery().length) e.preventDefault();
+      });
+      // Basic search type: a plain form, no requests while typing.
+      if (!f.querySelector("#predictive-search")) return;
+      input.addEventListener("input", this.debounce(() => this.onChange(), 250));
+      input.addEventListener("focus", () => this.onFocus());
+      input.addEventListener("keydown", (e) => this.onInputKeydown(e));
     },
 
     debounce: function (fn, wait) {
@@ -1393,272 +1565,180 @@ var BlsSearchShopify = (function () {
     },
 
     getQuery: function () {
-      return document.querySelector('input[type="search"]').value.trim();
+      const input = this.input();
+      return input ? input.value.trim() : "";
     },
 
     onChange: function () {
       const searchTerm = this.getQuery();
-
       if (!searchTerm.length) {
+        this.abortSearch();
         this.close(true);
         return;
       }
-
       this.getSearchResults(searchTerm);
-    },
-
-    onFormSubmit: function (event) {
-      if (
-        !this.getQuery().length ||
-        this.querySelector('[aria-selected="true"] a')
-      )
-        event.preventDefault();
     },
 
     onFocus: function () {
       const searchTerm = this.getQuery();
       if (!searchTerm.length) return;
-      // Basic search type has no predictive-search element — bail out so the
-      // form submits to /search like a regular form on Enter.
-      const predictiveEl = document.querySelector("#predictive-search");
-      if (!predictiveEl) return;
-      if (predictiveEl.classList.contains("results")) {
-        this.open();
-      } else {
-        this.getSearchResults(searchTerm);
+      const predictive = document.querySelector("#search-form #predictive-search");
+      if (!predictive) return;
+      if (predictive.classList.contains("results")) this.open();
+      else this.getSearchResults(searchTerm);
+    },
+
+    options: function () {
+      const predictive = document.querySelector("#search-form #predictive-search");
+      return predictive ? [...predictive.querySelectorAll('[role="option"]')] : [];
+    },
+
+    onInputKeydown: function (e) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        const list = this.options();
+        if (!list.length) return;
+        e.preventDefault();
+        const current = list.findIndex((el) => el.getAttribute("aria-selected") === "true");
+        const step = e.key === "ArrowDown" ? 1 : -1;
+        const next = list[(current + step + list.length) % list.length];
+        if (current > -1) list[current].setAttribute("aria-selected", "false");
+        next.setAttribute("aria-selected", "true");
+        if (next.id) e.currentTarget.setAttribute("aria-activedescendant", next.id);
+        next.scrollIntoView({ block: "nearest" });
+      } else if (e.key === "Enter") {
+        const selected = document.querySelector('#search-form [aria-selected="true"]');
+        const link = selected && (selected.matches("a, button") ? selected : selected.querySelector("a, button"));
+        if (link) {
+          e.preventDefault();
+          link.click();
+        }
       }
     },
 
-    onFocusOut: function () {
-      setTimeout(() => {
-        if (!document.contains(document.activeElement)) this.close();
-      });
-    },
-
-    onKeyup: function (event) {
-      if (!this.getQuery().length) this.close(true);
-      event.preventDefault();
-
-      switch (event.code) {
-        case "ArrowUp":
-          this.switchOption("up");
-          break;
-        case "ArrowDown":
-          this.switchOption("down");
-          break;
-        case "Enter":
-          this.selectOption();
-          break;
-      }
-    },
-
-    switchOption: function (direction) {
-      if (!this.getAttribute("open")) return;
-      const moveUp = direction === "up";
-      const selectedElement = document.querySelector('[aria-selected="true"]');
-      const allElements = document.querySelectorAll("li");
-      let activeElement = document.querySelector("li");
-
-      if (moveUp && !selectedElement) return;
-
-      this.statusElement.textContent = "";
-
-      if (!moveUp && selectedElement) {
-        activeElement = selectedElement.nextElementSibling || allElements[0];
-      } else if (moveUp) {
-        activeElement =
-          selectedElement.previousElementSibling ||
-          allElements[allElements.length - 1];
-      }
-
-      if (activeElement === selectedElement) return;
-
-      activeElement.setAttribute("aria-selected", true);
-      if (selectedElement) selectedElement.setAttribute("aria-selected", false);
-      document
-        .querySelector('input[type="search"]')
-        .setAttribute("aria-activedescendant", activeElement.id);
-    },
-
-    selectOption: function () {
-      const selectedProduct = document.querySelector(
-        '[aria-selected="true"] a, [aria-selected="true"] button'
-      );
-
-      if (selectedProduct) selectedProduct.click();
+    abortSearch: function () {
+      if (this._controller) this._controller.abort();
+      this._controller = null;
     },
 
     getSearchResults: function (searchTerm) {
-      // Basic search type — no predictive UI rendered, no ajax needed.
+      // Basic search type: no predictive UI rendered, no request.
       if (
-        document.querySelector(".search__type-basic") ||
-        document.querySelector('[data-search-basic="true"]') ||
-        !document.querySelector("#predictive-search")
+        document.querySelector("#search-form .search__type-basic") ||
+        !document.querySelector("#search-form #predictive-search")
       ) {
         return;
       }
-      const cachedResults = {};
-      const queryKey = searchTerm.replace(" ", "-").toLowerCase();
-      this.setLiveRegionLoadingState();
-      if (cachedResults[queryKey]) {
-        this.renderSearchResults(cachedResults[queryKey]);
+      const queryKey = searchTerm.replace(/\s+/g, " ").toLowerCase();
+      this._cache = this._cache || new Map();
+      if (this._cache.has(queryKey)) {
+        this.abortSearch();
+        this.renderSearchResults(this._cache.get(queryKey));
         return;
       }
-      var loading = document.querySelector(".search__loading-state");
-      var collection_suggest = document.querySelector(".collection-suggest");
-
-      if (collection_suggest) {
-        collection_suggest.style.display = "none";
-      }
-      var section_id = "search-predictive-grid";
-      if (document.querySelector(".predictive_search_suggest")) {
-        var search_url = `${
-          routes?.predictive_search_url
-        }?q=${encodeURIComponent(
-          searchTerm
-        )}&resources[options][fields]=title,tag,vendor,product_type,variants.title,variants.sku&resources[options][prefix]=last&resources[options][unavailable_products]=last&resources[type]=query,product,collection,page,article&section_id=${section_id}`;
-      } else {
-        var search_url = `${routes.search_url}?q=${encodeURIComponent(
-          searchTerm
-        )}&options[prefix]=last&options[unavailable_products]=last&type=query,product,collection,page,article&section_id=${section_id}`;
-      }
-      fetch(`${search_url}`)
+      // Only the latest query may land: the one before it is cancelled.
+      this.abortSearch();
+      const controller = typeof AbortController === "function" ? new AbortController() : null;
+      this._controller = controller;
+      this.setLiveRegionLoadingState();
+      const collection_suggest = document.querySelector("#search-form .collection-suggest");
+      if (collection_suggest) collection_suggest.style.display = "none";
+      const section_id = "search-predictive-grid";
+      const search_url =
+        `${routes?.predictive_search_url}?q=${encodeURIComponent(searchTerm)}` +
+        `&resources[options][fields]=title,tag,vendor,product_type,variants.title,variants.sku&resources[options][prefix]=last&resources[options][unavailable_products]=last&resources[type]=query,product,collection,page,article&section_id=${section_id}`;
+      fetch(search_url, controller ? { signal: controller.signal } : undefined)
         .then((response) => {
-          if (!response.ok) {
-            var error = new Error(response.status);
-            this.close();
-            throw error;
-          }
+          if (!response.ok) throw new Error(response.status);
           return response.text();
         })
         .then((text) => {
-          const resultsMarkup = new DOMParser()
+          if (controller && this._controller !== controller) return;
+          this._controller = null;
+          const section = new DOMParser()
             .parseFromString(text, "text/html")
-            .querySelector("#shopify-section-" + section_id + "").innerHTML;
-          cachedResults[queryKey] = resultsMarkup;
+            .querySelector("#shopify-section-" + section_id);
+          const resultsMarkup = section ? section.innerHTML : "";
+          this._cache.set(queryKey, resultsMarkup);
+          if (this._cache.size > 30) this._cache.delete(this._cache.keys().next().value);
+          // The field may have changed while this was on its way.
+          if (this.getQuery().replace(/\s+/g, " ").toLowerCase() !== queryKey) return;
           this.renderSearchResults(resultsMarkup);
-          BlsLazyloadImg.init();
         })
         .catch((error) => {
+          if (error && error.name === "AbortError") return;
+          if (controller && this._controller !== controller) return;
+          this._controller = null;
+          this.setLiveRegionResults();
           this.close();
-          throw error;
         });
     },
 
     setLiveRegionLoadingState: function () {
-      const form = document.querySelector("#search_mini_form");
-      const predictive = document.querySelector("#predictive-search");
+      const form = document.querySelector("#search-form #search_mini_form");
+      const predictive = document.querySelector("#search-form #predictive-search");
       if (form) form.classList.add("loading");
       if (predictive) predictive.classList.add("loading");
     },
 
     setLiveRegionResults: function () {
-      const form = document.querySelector("#search_mini_form");
-      const predictive = document.querySelector("#predictive-search");
+      const form = document.querySelector("#search-form #search_mini_form");
+      const predictive = document.querySelector("#search-form #predictive-search");
       if (form) form.classList.remove("loading");
       if (predictive) predictive.classList.remove("loading");
     },
 
     renderSearchResults: function (resultsMarkup) {
-      const target = document.querySelector("[data-predictive-search]");
-      const predictive = document.querySelector("#predictive-search");
-      // Basic search type has no predictive container — skip rendering.
+      const target = document.querySelector("#search-form [data-predictive-search]");
+      const predictive = document.querySelector("#search-form #predictive-search");
       if (!target || !predictive) return;
       target.innerHTML = resultsMarkup;
       predictive.classList.add("results");
-      if (document.querySelector(".search-not-sugges")) {
-        document
-          .querySelector(".search-not-sugges")
-          .classList.remove("search-hidden");
-        document.documentElement.classList.add("open-drawer", "open-search");
-        root.style.setProperty(
-          "padding-right",
-          getScrollBarWidth.init() + "px"
-        );
-      }
-      const quick_search = document.querySelector("#quick-search");
-      if (quick_search) {
-        quick_search.classList.add("hidden");
-      }
+      const notSuggest = document.querySelector("#search-form .search-not-sugges");
+      if (notSuggest) notSuggest.classList.remove("search-hidden");
+      const quick_search = document.querySelector("#search-form #quick-search");
+      if (quick_search) quick_search.classList.add("hidden");
       this.setLiveRegionResults();
+      if (typeof BlsLazyloadImg !== "undefined") {
+        try { BlsLazyloadImg.init(target); } catch (e) {}
+      }
       this.open();
     },
 
     open: function () {
-      document
-        .querySelector('input[type="search"]')
-        .setAttribute("aria-expanded", true);
+      const input = this.input();
+      if (input) input.setAttribute("aria-expanded", "true");
       this.isOpen = true;
     },
 
     close: function (clearSearchTerm = false) {
+      const input = this.input();
+      const predictive = document.querySelector("#search-form #predictive-search");
+      this.setLiveRegionResults();
       if (clearSearchTerm) {
-        document.querySelector('input[type="search"]').value = "";
-        document
-          .querySelector("#predictive-search")
-          .classList.remove("results");
-        if (document.querySelector(".search-not-sugges")) {
-          document
-            .querySelector(".search-not-sugges")
-            .classList.add("search-hidden");
-          document.documentElement.classList.remove(
-            "open-drawer",
-            "open-search"
-          );
-          root.style.removeProperty("padding-right");
-        }
-
-        const quick_search = document.querySelector("#quick-search");
-        if (quick_search) {
-          quick_search.classList.remove("hidden");
-        }
+        if (input) input.value = "";
+        if (predictive) predictive.classList.remove("results");
+        const notSuggest = document.querySelector("#search-form .search-not-sugges");
+        if (notSuggest) notSuggest.classList.add("search-hidden");
+        const quick_search = document.querySelector("#search-form #quick-search");
+        if (quick_search) quick_search.classList.remove("hidden");
       }
-      const selected = document.querySelector('[aria-selected="true"]');
-      if (selected) selected.setAttribute("aria-selected", false);
-      document
-        .querySelector('input[type="search"]')
-        .setAttribute("aria-activedescendant", "");
-      document
-        .querySelector('input[type="search"]')
-        .setAttribute("aria-expanded", false);
-      this.resultsMaxHeight = false;
-      document
-        .querySelector("[data-predictive-search]")
-        .removeAttribute("style");
+      const selected = document.querySelector('#search-form [aria-selected="true"]');
+      if (selected) selected.setAttribute("aria-selected", "false");
+      if (input) {
+        input.setAttribute("aria-activedescendant", "");
+        input.setAttribute("aria-expanded", "false");
+      }
+      const target = document.querySelector("#search-form [data-predictive-search]");
+      if (target) target.removeAttribute("style");
       this.isOpen = false;
     },
   };
 })();
 try { BlsSearchShopify.init(); } catch (e) { console.error("[theme] search init", e); }
-class HeaderSearch extends HTMLElement {
-  constructor() {
-    super();
-    this.init();
-  }
-  init() {
-    let width = window.innerWidth;
-    window.addEventListener("resize", function () {
-      const newWidth = window.innerWidth;
-      var popup_search_form_popup = document.querySelector(
-        ".search__type-popup, .search__type-basic"
-      );
-      if (
-        ((newWidth <= 767 && width > 767) ||
-          (newWidth > 767 && width <= 767)) &&
-        popup_search_form_popup &&
-        !document.documentElement.classList.contains("open-search")
-      ) {
-        popup_search_form_popup.style.display = "none";
-        setTimeout(() => {
-          popup_search_form_popup.style.display = "block";
-        }, 20);
-      }
-      width = newWidth;
-    });
-  }
-}
-
-customElements.define("header-search", HeaderSearch);;
+// The search panel lives in the layout, outside the header; the element
+// itself needs no behaviour of its own.
+class HeaderSearch extends HTMLElement {}
+customElements.define("header-search", HeaderSearch);
 class QuantityInput extends HTMLElement {
   constructor() {
     super();
@@ -1795,7 +1875,18 @@ class OpenChildrenToggle extends HTMLElement {
     super();
     this.addEventListener("click", this.onToggle.bind(this), false);
   }
-  onToggle() {
+  connectedCallback() {
+    window.MateriaMenu?.upgradeEl(this);
+  }
+  onToggle(event) {
+    // In the phone drawer a parent item opens its level, even where the
+    // arrow sits inside the item's link: the tap must not also follow it.
+    const menu = window.MateriaMenu;
+    if (menu && this.closest(".navigation.mobile") && menu.phone.matches) {
+      if (this.closest("a")) event.preventDefault();
+      menu.openLevel(this, event.detail === 0);
+      return;
+    }
     const parent = this.parentElement;
     if (parent) {
       if (!parent.classList.contains("is-open")) {
@@ -1813,8 +1904,14 @@ class CloseMenu extends HTMLElement {
     super();
     this.addEventListener("click", this.onClose.bind(this), false);
   }
+  connectedCallback() {
+    window.MateriaMenu?.upgradeEl(this);
+  }
   onClose() {
-    document.querySelector(".nav-toggle").classList.remove("open");
+    // One close for the drawer, however it was opened: every hamburger,
+    // the scroll lock and the open levels are reset by MateriaMenu.
+    if (window.MateriaMenu) return window.MateriaMenu.close();
+    document.querySelectorAll(".nav-toggle").forEach((t) => t.classList.remove("open"));
     document.querySelectorAll("menu-item").forEach((item) => {
       item.classList.remove("is-open");
     });
@@ -1861,15 +1958,19 @@ class BackMenu extends HTMLElement {
     super();
     this.addEventListener("click", this.onBackMenu.bind(this), false);
   }
+  connectedCallback() {
+    window.MateriaMenu?.upgradeEl(this);
+  }
   onBackMenu() {
+    if (window.MateriaMenu) return window.MateriaMenu.backLevel(this);
     if (this.classList.contains("back-lv1")) {
       this.closest(".level-1")
-        .querySelector("menu-item")
-        .classList.remove("is-open");
+        ?.querySelector("menu-item")
+        ?.classList.remove("is-open");
     } else {
       this.closest(".level0")
-        .querySelector("menu-item")
-        .classList.remove("is-open");
+        ?.querySelector("menu-item")
+        ?.classList.remove("is-open");
     }
   }
 }
