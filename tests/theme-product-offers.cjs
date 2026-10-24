@@ -215,7 +215,7 @@ const page = `<!doctype html><html lang="en"><head><meta name="viewport" content
     await tab.click('#ProductBundle-b1 [data-offer-add]');
     await tab.waitForFunction(() => document.getElementById('drawer').dataset.opened === '1');
     const add = requests.find(r => r.path === '/cart/add.js');
-    assert.deepEqual(add.body.items, [{id: 'v-a2', quantity: 1}, {id: 'v-b1', quantity: 1}, {id: 'v-c2', quantity: 1}], 'every ticked line in one request, ids kept as strings');
+    assert.deepEqual(add.body.items.map(({id, quantity}) => ({id, quantity})), [{id: 'v-a2', quantity: 1}, {id: 'v-b1', quantity: 1}, {id: 'v-c2', quantity: 1}], 'every ticked line in one request, ids kept as strings');
     assert.equal(requests.filter(r => r.path === '/cart/add.js').length, 1);
     const update = requests.find(r => r.path === '/cart/update.js');
     assert.equal(update.body.discount, 'WELCOME,BUNDLE10', 'code added to the codes already in the cart');
@@ -268,7 +268,7 @@ const page = `<!doctype html><html lang="en"><head><meta name="viewport" content
     await tab.click('#QuantityOffer-q1 .po-tier:nth-child(2)');
     await tab.click('#QuantityOffer-q1 [data-offer-add]');
     await tab.waitForFunction(() => document.getElementById('drawer').dataset.opened === '3');
-    assert.deepEqual(requests.find(r => r.path === '/cart/add.js').body.items, [{id: 'v-a1', quantity: 2}]);
+    assert.deepEqual(requests.find(r => r.path === "/cart/add.js").body.items.map(({id, quantity}) => ({id, quantity})), [{id: 'v-a1', quantity: 2}]);
     assert.equal(requests.find(r => r.path === '/cart/update.js').body.discount, 'WELCOME,PACK2', "the tier's code");
     checks++;
 

@@ -1215,6 +1215,16 @@
 
 {%- when 'pair_with_upsell' -%}
 {%- assign s = block.settings -%}
+{%- liquid
+  assign pw_add = 'accessibility.add' | t
+  if s.btn_label != blank
+    assign pw_add = s.btn_label
+  endif
+  assign pw_added = 'accessibility.added' | t
+  if s.btn_label_added != blank
+    assign pw_added = s.btn_label_added
+  endif
+-%}
 
 {%- assign selected_products = '' -%}
 {%- if s.p1 != blank -%}{%- assign selected_products = selected_products | append: 'p1,' -%}{%- endif -%}
@@ -1267,7 +1277,7 @@
     --pw-tab-border: {{ s.tab_border | default: 'var(--color-border)' }};
     --pw-tab-radius: {{ s.tab_radius | default: 12 }}px;
 
-    --pw-sel-h: 32px;
+    --pw-sel-h: 44px;
     --pw-sel-px: 10px;
     --pw-sel-fs: {{ s.text_size | default: 14 }}px;
   }
@@ -1337,7 +1347,7 @@
     display:block; width:100%; height:var(--pw-sel-h);
     padding:0 calc(var(--pw-sel-px) + 16px) 0 var(--pw-sel-px);
     font-size:var(--pw-sel-fs);
-    border:1px solid var(--pw-tab-border); border-radius:8px; background:#fff; color:var(--pw-text-color);
+    border:1px solid var(--pw-tab-border); border-radius:8px; background:var(--pw-card-bg); color:var(--pw-text-color);
     line-height:var(--pw-sel-h); cursor:pointer;
   }
   #PairWith-{{ block.id }} .pw-variant-wrap::after{
@@ -1354,10 +1364,14 @@
     border:var(--pw-btn-bw) solid var(--pw-btn-border);
     background:var(--pw-btn-bg);
     color:var(--pw-btn-text);
-    padding:8px 14px; font-size:var(--pw-text-size); line-height:1;
+    min-height:44px; min-width:44px; padding:8px 16px; font-size:var(--pw-text-size); line-height:1.2;
     cursor:pointer; transition:background .18s ease, color .18s ease, border-color .18s ease;
     white-space:nowrap;
   }
+  #PairWith-{{ block.id }} .pw-btn:focus-visible, #PairWith-{{ block.id }} .pw-variant:focus-visible, #PairWith-{{ block.id }} .pw-arrow:focus-visible{ outline:2px solid currentColor; outline-offset:2px; }
+  #PairWith-{{ block.id }} .pw-btn:disabled{ opacity:.55; cursor:not-allowed; }
+  #PairWith-{{ block.id }} .pw-btn.is-error{ border-color: var(--color-error, #b42318); }
+  #PairWith-{{ block.id }} .pw-price s{ font-weight:400; opacity:.6; margin-left:6px; }
   #PairWith-{{ block.id }} .pw-btn.is-added{
     background:var(--pw-btn-bg-added);
     color:var(--pw-btn-text-added);
@@ -1370,12 +1384,14 @@
 
   {% if s.layout == 'slider' %}
   #PairWith-{{ block.id }} .pw-nav{ margin-top:10px; display:flex; justify-content:space-between; gap:8px; }
-  #PairWith-{{ block.id }} .pw-arrow{ width:36px; height:36px; border-radius:999px; background:#fff; border:1px solid #dcdcdc; display:grid; place-items:center; cursor:pointer; }
+  #PairWith-{{ block.id }} .pw-arrow{ width:44px; height:44px; border-radius:999px; background:#fff; border:1px solid #dcdcdc; display:grid; place-items:center; cursor:pointer; }
   #PairWith-{{ block.id }} .pw-arrow svg{ width:18px; height:18px; }
   {% endif %}
 {% comment %}{% endcomment %}</style>
 
-<div id="PairWith-{{ block.id }}" {{ block.shopify_attributes }}>
+{{ 'product-offers.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'product-offers.js' | asset_url }}" defer="defer"></script>
+<pair-with id="PairWith-{{ block.id }}" data-block-id="{{ block.id }}" data-product-id="{{ product.id }}" data-open-drawer="{{ s.open_drawer_after_add }}" data-money-format="{{ shop.money_format | strip_html | escape }}" data-button-text="{{ pw_add | escape }}" data-added-text="{{ pw_added | escape }}" {{ block.shopify_attributes }}>
   <div class="pw-wrap">
     {%- if s.heading != blank -%}
       <h3 class="pw-heading">{{ s.heading }}</h3>
@@ -1389,18 +1405,19 @@
             {%- assign product_ref = all_products[product_obj] -%}
             {%- if product_ref != nil -%}
               {%- assign featured = product_ref.featured_image -%}
-              <div class="pw-card" data-product-id="{{ product_ref.id }}">
+              {%- assign pw_v0 = product_ref.selected_or_first_available_variant -%}
+              <div class="pw-card" data-product-id="{{ product_ref.id }}" data-variant-id="{{ pw_v0.id }}">
                 <div class="pw-top">
                   {%- if featured -%}
-                    <img class="pw-img" src="{{ featured | image_url: width: 300 }}" alt="{{ featured.alt | escape }}">
+                    <img class="pw-img" src="{{ featured | image_url: width: 300 }}" alt="{{ featured.alt | default: product_ref.title | escape }}" width="{{ s.image_size | default: 88 }}" height="{{ s.image_size | default: 88 }}" loading="lazy" decoding="async">
                   {%- else -%}
                     <div class="pw-img" style="display:grid;place-items:center;color:#bbb;">{{ 'accessibility.no_image' | t }}</div>
                   {%- endif -%}
                   <div>
-                    <p class="pw-title">{{ product_ref.title }}</p>
+                    <p class="pw-title">{{ product_ref.title | escape }}</p>
 
                     <div class="pw-variant-wrap">
-                      <select class="pw-variant" data-variant-select aria-label="{{ product_ref.title }} variant">
+                      <select class="pw-variant" data-variant-select aria-label="{{ product_ref.title | escape }}: {{ 'accessibility.select_variant' | t | escape }}">
                         {%- for v in product_ref.variants -%}
                           {%- capture v_label -%}
                             {%- if v.title == 'Default Title' -%}
@@ -1409,7 +1426,7 @@
                               {{ v.title }}
                             {%- endif -%}
                           {%- endcapture -%}
-                          <option value="{{ v.id }}" {% unless v.available %}disabled{% endunless %}>
+                          <option value="{{ v.id }}" data-price="{{ v.price }}" data-compare="{{ v.compare_at_price | default: 0 }}" data-available="{{ v.available }}"{% if v.id == pw_v0.id %} selected{% endif %}{% unless v.available %} disabled{% endunless %}>
                             {{- v_label -}}
                           </option>
                         {%- endfor -%}
@@ -1419,10 +1436,8 @@
                 </div>
 
                 <div class="pw-bottom">
-                  <span class="pw-price" data-price data-cents="{{ product_ref.variants.first.price }}"></span>
-                  <button class="pw-btn" data-add-btn type="button" aria-live="polite">
-                    {{ s.btn_label | default: fb_accessibility_add_product }}
-                  </button>
+                  <span class="pw-price"><span data-price>{{ pw_v0.price | money }}</span><s data-compare{% unless pw_v0.compare_at_price > pw_v0.price %} hidden{% endunless %}>{% if pw_v0.compare_at_price > pw_v0.price %}{{ pw_v0.compare_at_price | money }}{% endif %}</s></span>
+                  <button class="pw-btn" data-add-btn type="button" aria-pressed="false"{% unless pw_v0.available %} disabled{% endunless %}>{{ pw_add | escape }}</button>
                 </div>
               </div>
             {%- endif -%}
@@ -1442,97 +1457,14 @@
     </div>
     {% endif %}
   </div>
-</div>
+</pair-with>
 
 <script>
 (function(){
   var root  = document.getElementById('PairWith-{{ block.id }}');
   if(!root) return;
 
-  var DISPLAY_CURRENCY = {{ s.price_currency | default: 'shop' | json }};
-  var CURRENCY_CODE = (DISPLAY_CURRENCY === 'shop') ? {{ shop.currency | json }} : DISPLAY_CURRENCY;
-  var RATE = (DISPLAY_CURRENCY === 'shop') ? 1 : ({{ s.currency_rate | default: 1.0 }});
-
-  function formatMoneyFromCents(cents){
-    var value = ((cents || 0) * RATE) / 100;
-    try{
-      return (new Intl.NumberFormat('{{ shop.locale }}', { style:'currency', currency: CURRENCY_CODE })).format(value);
-    }catch(e){
-
-      var fmt = {{ shop.money_format | json }};
-      var str = value.toFixed(2);
-      return (DISPLAY_CURRENCY === 'shop') ? fmt.replace('{{amount}}', str).replace('{{ amount }}', str)
-        : (new Intl.NumberFormat('en', { style:'currency', currency: CURRENCY_CODE })).format(value);
-    }
-  }
-
-
-  root.querySelectorAll('[data-price]').forEach(function(node){
-    var cents = parseInt(node.getAttribute('data-cents'), 10);
-    node.textContent = formatMoneyFromCents(cents);
-  });
-
-
-  root.querySelectorAll('[data-variant-select]').forEach(function(sel){
-    var priceNode = sel.closest('.pw-card').querySelector('[data-price]');
-    function updatePrice(){
-      var v = sel.value; if(!v || !priceNode) return;
-      fetch('/variants/'+v+'.js').then(function(r){ return r.json(); }).then(function(json){
-        priceNode.setAttribute('data-cents', json.price);
-        priceNode.textContent = formatMoneyFromCents(json.price);
-        refreshAddedStateForCard(sel.closest('.pw-card'));
-      }).catch(function(){});
-    }
-    updatePrice();
-    sel.addEventListener('change', updatePrice);
-  });
-
-
-  root.querySelectorAll('[data-add-btn]').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      var card = btn.closest('.pw-card');
-      var sel  = card.querySelector('[data-variant-select]');
-      if(!sel || !sel.value) return;
-      var variantId = sel.value;
-
-      if(btn.classList.contains('is-added')){
-        btn.disabled = true;
-        fetch('/cart/update.js',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates:{[variantId]:0}})})
-        .then(function(r){ if(!r.ok) throw 0; return r.json(); })
-        .then(function(){ btn.classList.remove('is-added'); btn.textContent='{{ s.btn_label | default: fb_accessibility_add_product }}'; })
-        .catch(function(){ pulseError(btn); })
-        .finally(function(){ btn.disabled=false; });
-        return;
-      }
-
-      btn.disabled = true;
-      fetch('/cart/add.js',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:variantId,quantity:1})})
-      .then(function(r){ if(!r.ok) throw 0; return r.json(); })
-      .then(function(){ btn.classList.add('is-added'); btn.textContent='{{ s.btn_label_added | default: "Added" }}'; })
-      .catch(function(){ pulseError(btn); })
-      .finally(function(){ btn.disabled=false; });
-    });
-  });
-
-  function pulseError(btn){
-    var old = btn.style.borderColor; btn.style.borderColor = '#e11d48';
-    setTimeout(function(){ btn.style.borderColor = old || ''; }, 700);
-  }
-
-
-  var cartCache = null;
-  function fetchCart(){ return cartCache ? Promise.resolve(cartCache) : fetch('/cart.js').then(function(r){return r.json();}).then(function(j){cartCache=j; return j;}); }
-  function refreshAddedStateForCard(card){
-    var btn = card.querySelector('[data-add-btn]'); var sel = card.querySelector('[data-variant-select]');
-    if(!btn || !sel) return; var vid = sel.value;
-    fetchCart().then(function(cart){
-      var inCart = cart.items.some(function(it){ return String(it.id) === String(vid); });
-      if(inCart){ btn.classList.add('is-added'); btn.textContent='{{ s.btn_label_added | default: "Added" }}'; }
-      else { btn.classList.remove('is-added'); btn.textContent='{{ s.btn_label | default: fb_accessibility_add_product }}'; }
-    });
-  }
-  fetchCart().then(function(){ root.querySelectorAll('.pw-card').forEach(refreshAddedStateForCard); });
-
+  /* Prices, options and adding: shopify/assets/product-offers.js (pair-with). */
   {% if s.layout == 'slider' %}
 
   var track = document.getElementById('pw-track-{{ block.id }}');
@@ -1563,15 +1495,6 @@
 {% comment %}{% endcomment %}</script>
 
 
-{%- for key in selected_products -%}
-  {%- assign product_obj = s[key] -%}
-  {%- if product_obj != blank and all_products[product_obj] -%}
-    {%- assign product_ref = all_products[product_obj] -%}
-    <script type="application/json" data-product-json>
-      {{ product_ref | json }}
-{% comment %}{% endcomment %}    </script>
-  {%- endif -%}
-{%- endfor -%}
 {%- endif -%}
 
 {%- when 'lod_testimonials_block' -%}
@@ -2454,24 +2377,35 @@ media (min-width: 1024px){
   const root = document.getElementById('PA-{{ block.id }}');
   if(!root) return;
 
+  /* Ticking adds the add-on to the cart, unticking takes it out, and a new
+     option swaps the line. Variant ids stay strings (Storelib ids are not
+     numbers). The tick alone adds it, so the product form does not add it
+     a second time. */
   const checkbox = root.querySelector('[data-addon-check]');
   const card     = root.querySelector('[data-card]');
   const selectEl = root.querySelector('[data-variant]');
-  let variantId  = {{ display_variant.id | default: 'null' }};
-  const addonTitle = {{ addon.title | json }};
+  const variantId  = {{ display_variant.id | json }};
+  let addedId = null;
 
   function getVariantId(){
-    if (selectEl) return parseInt(selectEl.value,10);
-    return variantId;
+    if (selectEl && selectEl.value) return String(selectEl.value);
+    return variantId == null ? null : String(variantId);
   }
 
   async function ajax(url, payload){
     const res = await fetch(url, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
       body: JSON.stringify(payload)
     });
-    return res.json().catch(()=> ({}));
+    const data = await res.json().catch(()=> ({}));
+    if (!res.ok) throw new Error((data && (data.description || data.message)) || 'HTTP ' + res.status);
+    return data;
+  }
+
+  function refreshed(){
+    dispatchEvent(new CustomEvent('cart:refresh', {bubbles:true}));
+    document.dispatchEvent(new CustomEvent('cart:updated', {detail: {source: 'product-addon'}}));
   }
 
   async function addAddon(){
@@ -2479,21 +2413,23 @@ media (min-width: 1024px){
     if(!vid) return;
     card.classList.add('is-active');
     checkbox.setAttribute('aria-busy','true');
-    await ajax('/cart/add.js', { items: [{ id: vid, quantity: 1 }] });
+    try {
+      await ajax('/cart/add.js', { items: [{ id: vid, quantity: 1, properties: { _sl_offer: 'addon', _sl_block: {{ block.id | json }}, _sl_source: {{ product.id | json }} } }] });
+      addedId = vid;
+    } catch (_) { checkbox.checked = false; card.classList.remove('is-active'); }
     checkbox.removeAttribute('aria-busy');
-    dispatchEvent(new CustomEvent('cart:refresh', {bubbles:true}));
+    refreshed();
   }
 
   async function removeAddon(){
-    const vid = getVariantId();
+    const vid = addedId || getVariantId();
     if(!vid) return;
     card.classList.remove('is-active');
     checkbox.setAttribute('aria-busy','true');
-    await ajax('/cart/change.js', { id: vid, quantity: 0 });
+    try { await ajax('/cart/change.js', { id: vid, quantity: 0 }); addedId = null; } catch (_) {}
     checkbox.removeAttribute('aria-busy');
-    dispatchEvent(new CustomEvent('cart:refresh', {bubbles:true}));
+    refreshed();
   }
-
 
   async function onVariantChange(){
     if(!checkbox.checked) return;
@@ -2508,15 +2444,6 @@ media (min-width: 1024px){
 
   if(selectEl){
     selectEl.addEventListener('change', onVariantChange);
-  }
-
-
-  const productForm = root.closest('form[action*="/cart/add"]');
-  if (productForm){
-    productForm.addEventListener('submit', async (ev)=>{
-      if(!checkbox.checked) return;
-      await addAddon();
-    }, {capture:true});
   }
 })();
 {% comment %}{% endcomment %}</script>

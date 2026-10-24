@@ -2,17 +2,19 @@
 {%- assign fb_accessibility_add = 'accessibility.add' | t -%}
 {%- assign fb_accessibility_sold_out = 'accessibility.sold_out' | t -%}
 {%- comment -%}
-  Materia Themes — single Upsell Pro card.
+  Materia Themes. One Upsell Pro card.
   Pass:
-    p             - Product object (or string handle, will be resolved)
-    s             - block.settings
-    is_first      - bool
-    cur_id        - id of current product
-    hide_current  - bool
+    p                - Product object (or a handle, resolved below)
+    s                - block.settings
+    cur_id           - id of the current product
+    hide_current     - bool
     hide_unavailable - bool
+    mode             - 'each' (an Add button) or 'selected' (a tick)
+    dom_id           - the block's element id, for the tick's id
+  Every option carries its own price, compare at price and stock, so the card
+  shows the chosen option's price without asking the server.
 {%- endcomment -%}
 
-{%- comment -%} Resolve to a real Product object if a handle string was passed. {%- endcomment -%}
 {%- if p.title == blank -%}
   {%- assign p = all_products[p] -%}
 {%- endif -%}
@@ -23,19 +25,41 @@
 {%- if hide_unavailable and p.available == false -%}{%- assign skip = true -%}{%- endif -%}
 
 {%- unless skip -%}
-  {%- assign v = p.selected_or_first_available_variant -%}
+  {%- liquid
+    assign v = p.selected_or_first_available_variant
+    assign sold_out_text = s.soldout_text | default: fb_accessibility_sold_out
+    assign add_text = s.upsell_button_text | default: fb_accessibility_add
+    assign with_select = false
+    if p.variants.size > 1 and s.show_variant_selector
+      assign with_select = true
+    endif
+    assign on_sale = false
+    if v.compare_at_price > v.price
+      assign on_sale = true
+    endif
+    assign check_id = dom_id | append: '-' | append: p.id
+  -%}
   <div
-    class="upsell-card{% if p.available == false %} is-soldout{% endif %}{% if p.variants.size > 1 and s.show_variant_selector %} has-variants{% endif %}"
+    class="upsell-card{% if p.available == false %} is-soldout{% endif %}{% if with_select %} has-variants{% endif %}"
+    role="listitem"
+    data-upsell-card
+    data-product-id="{{ p.id }}"
     data-product-handle="{{ p.handle }}"
     data-variant-id="{{ v.id }}"
+    data-price="{{ v.price }}"
+    {%- if p.available == false %} data-unavailable{% endif %}
   >
+    {%- if mode == 'selected' -%}
+      <input type="checkbox" class="upsell-card__check" id="{{ check_id }}" data-upsell-check aria-label="{{ p.title | escape }}"{% if s.preselect and p.available %} checked{% endif %}{% unless p.available %} disabled{% endunless %}>
+      <label class="upsell-card__pick" for="{{ check_id }}"><span class="upsell-card__box" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none"><path d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></label>
+    {%- endif -%}
     {%- if s.show_image and p.featured_image != blank -%}
-      <a href="{{ p.url }}" class="upsell-card__media" aria-label="{{ p.title | escape }}">
-        <img src="{{ p.featured_image | image_url: width: 200 }}" alt="{{ p.title | escape }}" width="56" height="56" loading="lazy">
+      <a href="{{ p.url }}" class="upsell-card__media" tabindex="-1" aria-hidden="true">
+        <img src="{{ p.featured_image | image_url: width: 300 }}" alt="" width="{{ s.image_size_px | default: 56 }}" height="{{ s.image_size_px | default: 56 }}" loading="lazy" decoding="async">
       </a>
     {%- endif -%}
     <div class="upsell-card__info">
-      <a href="{{ p.url }}" class="upsell-card__title" style="text-decoration:none;color:inherit;">{{ p.title }}</a>
+      <a href="{{ p.url }}" class="upsell-card__title">{{ p.title | escape }}</a>
       {%- if s.show_subtitle -%}
         {%- assign sub_value = '' -%}
         {%- case s.subtitle_source -%}
@@ -45,35 +69,37 @@
           {%- when 'custom' -%}{%- assign sub_value = s.custom_subtitle -%}
         {%- endcase -%}
         {%- if sub_value != blank -%}
-          <span class="upsell-card__sub">{{ sub_value }}</span>
+          <span class="upsell-card__sub">{{ sub_value | escape }}</span>
         {%- endif -%}
       {%- endif -%}
       {%- if s.show_price -%}
         <div class="upsell-card__price">
-          {{ v.price | money }}
-          {%- if s.show_compare_at and v.compare_at_price > v.price -%}
-            <span class="compare-at">{{ v.compare_at_price | money }}</span>
-            {%- if s.show_sale_badge -%}<span class="upsell-card__sale-badge">SALE</span>{%- endif -%}
-          {%- endif -%}
+          <span data-upsell-price>{{ v.price | money }}</span>
+          {%- if s.show_compare_at -%}<s data-upsell-compare{% unless on_sale %} hidden{% endunless %}>{% if on_sale %}{{ v.compare_at_price | money }}{% endif %}</s>{%- endif -%}
+          {%- if s.show_sale_badge and s.sale_badge_text != blank -%}<span class="upsell-card__sale-badge" data-upsell-sale{% unless on_sale %} hidden{% endunless %}>{{ s.sale_badge_text | escape }}</span>{%- endif -%}
         </div>
       {%- endif -%}
-      {%- if p.variants.size > 1 and s.show_variant_selector -%}
+      {%- if with_select -%}
         <div class="upsell-card__variant">
-          <select class="upsell-card__variant-select" aria-label="{{ 'accessibility.select_variant' | t }}">
+          <select class="upsell-card__variant-select" data-upsell-variant aria-label="{{ p.title | escape }}: {{ 'accessibility.select_variant' | t | escape }}">
             {%- for variant in p.variants -%}
-              <option value="{{ variant.id }}"{% if variant.available == false %} disabled{% endif %}>
-                {{ variant.title }} — {{ variant.price | money }}{% if variant.available == false %} ({{ s.soldout_text | default: fb_accessibility_sold_out }}){% endif %}
+              <option value="{{ variant.id }}" data-price="{{ variant.price }}" data-compare="{{ variant.compare_at_price | default: 0 }}" data-available="{{ variant.available }}"{% if variant.id == v.id %} selected{% endif %}{% if variant.available == false %} disabled{% endif %}>
+                {{- variant.title | escape }}{% if variant.available == false %} ({{ sold_out_text | escape }}){% endif -%}
               </option>
             {%- endfor -%}
           </select>
         </div>
+      {%- else -%}
+        <input type="hidden" data-upsell-variant value="{{ v.id }}" data-price="{{ v.price }}" data-compare="{{ v.compare_at_price | default: 0 }}" data-available="{{ v.available }}">
       {%- endif -%}
     </div>
-    <div class="upsell-card__action">
-      <button type="button" class="upsell-card__btn" data-action="add"{% if p.available == false %} disabled{% endif %}>
-        {%- if p.available == false -%}{{ s.soldout_text | default: fb_accessibility_sold_out }}{%- else -%}{{ s.upsell_button_text | default: fb_accessibility_add }}{%- endif -%}
-      </button>
-    </div>
+    {%- if mode != 'selected' -%}
+      <div class="upsell-card__action">
+        <button type="button" class="btn upsell-card__btn" data-theme-button="secondary" data-sl-button data-button-role="secondary" data-upsell-add aria-label="{{ add_text | escape }}: {{ p.title | escape }}"{% if p.available == false %} disabled{% endif %}>
+          <span data-label>{%- if p.available == false -%}{{ sold_out_text | escape }}{%- else -%}{{ add_text | escape }}{%- endif -%}</span>
+        </button>
+      </div>
+    {%- endif -%}
   </div>
 {%- endunless -%}
 

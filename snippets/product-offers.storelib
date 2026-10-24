@@ -7,14 +7,33 @@
   Prices come from the products. A saving shown here is for display: Storelib
   checkout works out every price again and takes off only a bundle the creator
   set up in Storelib or a discount code (applied with the cart's own discount
-  request after the add). shopify/assets/product-offers.js does the adding.
+  request after the add). shopify/assets/product-offers.js does the adding and
+  reads Storelib's own bundles, so a matching one shows the saving checkout
+  takes off. docs/upsells-storelib.md says what each line carries.
+  Style: cards, list or bold. Custom style on: the block's own colours,
+  corners, border and spacing, else the colour scheme and theme buttons.
 {%- endcomment -%}
 {%- liquid
   assign bs = block.settings
   assign uid = block.id
   assign accent = bs.accent_color
   assign heading_level = 'h2'
+  assign po_style = bs.style | default: 'cards'
 -%}
+{%- capture po_vars -%}
+--po-pad-top: {{ bs.padding_top | default: 8 }}px; --po-pad-bottom: {{ bs.padding_bottom | default: 16 }}px;
+{%- if accent != blank %} --po-accent: {{ accent }};{% endif -%}
+{%- if bs.custom_style -%}
+  {%- if bs.custom_bg != blank %} --po-c-bg: {{ bs.custom_bg }};{% endif -%}
+  {%- if bs.custom_text != blank %} --po-c-text: {{ bs.custom_text }};{% endif -%}
+  {%- if bs.custom_heading != blank %} --po-c-heading: {{ bs.custom_heading }};{% endif -%}
+  {%- if bs.custom_border != blank %} --po-c-border: {{ bs.custom_border }};{% endif -%}
+  {%- if bs.custom_selected != blank %} --po-c-selected: {{ bs.custom_selected }};{% endif -%}
+  {%- if bs.custom_save != blank %} --po-c-save: {{ bs.custom_save }};{% endif -%}
+  {%- if bs.custom_badge_bg != blank %} --po-c-badge-bg: {{ bs.custom_badge_bg }};{% endif -%}
+  {%- if bs.custom_badge_text != blank %} --po-c-badge-text: {{ bs.custom_badge_text }};{% endif %} --po-c-radius: {{ bs.custom_radius | default: 12 }}px; --po-c-bw: {{ bs.custom_border_width | default: 1 }}px; --po-c-gap: {{ bs.custom_gap | default: 10 }}px;
+{%- endif -%}
+{%- endcapture -%}
 {{ 'product-offers.css' | asset_url | stylesheet_tag }}
 <script src="{{ 'product-offers.js' | asset_url }}" defer="defer"></script>
 {%- if kind == 'bundle' -%}
@@ -89,32 +108,41 @@
     <product-bundle
       class="po po-bundle"
       id="ProductBundle-{{ uid }}"
+      data-style="{{ po_style }}"
+      {%- if bs.custom_style %} data-custom-style{% endif %}
+      data-block-id="{{ uid }}"
+      data-product-id="{{ product.id }}"
       data-form-id="{{ product_form_id }}"
       data-discount="{{ pct }}"
       data-show-compare="{{ bs.show_compare }}"
       {%- if bs.discount_code != blank %} data-discount-code="{{ bs.discount_code | strip | escape }}"{% endif %}
       data-money-format="{{ shop.money_format | strip_html | escape }}"
       data-error="{{ bs.error_text | escape }}"
-      style="--po-pad-top: {{ bs.padding_top | default: 8 }}px; --po-pad-bottom: {{ bs.padding_bottom | default: 16 }}px;{% if accent != blank %} --po-accent: {{ accent }};{% endif %}"
+      style="{{ po_vars | strip }}"
       {{ block.shopify_attributes }}
     >
-      {%- if bs.heading != blank -%}<{{ heading_level }} class="po-heading h5 heading-color" id="ProductBundle-{{ uid }}-heading">{{ bs.heading | escape }}</{{ heading_level }}>{%- endif -%}
-      {%- if bs.text != blank -%}<p class="po-text">{{ bs.text | escape }}</p>{%- endif -%}
-      <ul class="po-bundle__lines" role="list"{% if bs.heading != blank %} aria-labelledby="ProductBundle-{{ uid }}-heading"{% endif %}>
-        {{- bundle_lines -}}
-      </ul>
-      <div class="po-summary" aria-live="polite">
-        <span class="po-summary__label">{{ bs.total_label | escape }}</span>
-        <span class="po-summary__prices">
-          <s class="po-summary__compare" data-total-compare{% if pct == 0 %} hidden{% endif %}>{{ full_total | money }}</s>
-          <span class="po-summary__amount" data-total>{{ full_total | minus: saving | money }}</span>
-        </span>
-        <span class="po-summary__saving" data-saving{% if pct == 0 %} hidden{% endif %}>{{ bs.savings_label | escape }} <span data-saving-amount>{{ saving | money }}</span></span>
+      {%- if bs.caption != blank -%}<p class="po-caption"><span>{{ bs.caption | escape }}</span></p>{%- endif -%}
+      <div class="po-box">
+        {%- if bs.badge != blank -%}<span class="po-box__badge">{{ bs.badge | escape }}</span>{%- endif -%}
+        {%- if bs.heading != blank -%}<{{ heading_level }} class="po-heading h5 heading-color" id="ProductBundle-{{ uid }}-heading">{{ bs.heading | escape }}</{{ heading_level }}>{%- endif -%}
+        {%- if bs.text != blank -%}<p class="po-text">{{ bs.text | escape }}</p>{%- endif -%}
+        <ul class="po-bundle__lines" role="list"{% if bs.heading != blank %} aria-labelledby="ProductBundle-{{ uid }}-heading"{% endif %}>
+          {{- bundle_lines -}}
+        </ul>
+        <div class="po-summary" aria-live="polite">
+          <span class="po-summary__label">{{ bs.total_label | escape }}</span>
+          <span class="po-summary__prices">
+            <s class="po-summary__compare" data-total-compare{% if pct == 0 %} hidden{% endif %}>{{ full_total | money }}</s>
+            <span class="po-summary__amount" data-total>{{ full_total | minus: saving | money }}</span>
+          </span>
+          <span class="po-summary__saving" data-saving{% if pct == 0 %} hidden{% endif %}>{{ bs.savings_label | escape }} <span data-saving-amount>{{ saving | money }}</span></span>
+        </div>
+        <button type="button" class="btn btn-primary po-button" data-theme-button="primary" data-sl-button data-button-role="primary" data-offer-add>
+          <span class="po-button__text">{{ bs.button_label | escape }}</span>
+        </button>
+        {%- if bs.checkout_note != blank -%}<p class="po-note" data-offer-note hidden>{{ bs.checkout_note | escape }}</p>{%- endif -%}
+        <p class="po-message" role="status" data-message hidden></p>
       </div>
-      <button type="button" class="btn btn-primary po-button" data-theme-button="primary" data-sl-button data-button-role="primary" data-offer-add>
-        <span class="po-button__text">{{ bs.button_label | escape }}</span>
-      </button>
-      <p class="po-message" role="status" data-message hidden></p>
     </product-bundle>
   {%- elsif request.design_mode -%}
     <p class="po-empty" {{ block.shopify_attributes }}>Bundle: pick one to three products to sell with this one.</p>
@@ -130,21 +158,27 @@
     <quantity-offer
       class="po po-qty"
       id="QuantityOffer-{{ uid }}"
+      data-style="{{ po_style }}"
+      {%- if bs.custom_style %} data-custom-style{% endif %}
+      data-block-id="{{ uid }}"
+      data-product-id="{{ product.id }}"
       data-form-id="{{ product_form_id }}"
       data-sync-form="{{ bs.sync_form_quantity }}"
       data-show-compare="{{ bs.show_compare }}"
       data-money-format="{{ shop.money_format | strip_html | escape }}"
       data-error="{{ bs.error_text | escape }}"
       data-sold-out="{{ 'products.product.sold_out' | t | escape }}"
-      style="--po-pad-top: {{ bs.padding_top | default: 8 }}px; --po-pad-bottom: {{ bs.padding_bottom | default: 16 }}px;{% if accent != blank %} --po-accent: {{ accent }};{% endif %}"
+      style="{{ po_vars | strip }}"
       {{ block.shopify_attributes }}
     >
+      {%- if bs.caption != blank -%}<p class="po-caption"><span>{{ bs.caption | escape }}</span></p>{%- endif -%}
       {%- if bs.heading != blank -%}<{{ heading_level }} class="po-heading h5 heading-color" id="QuantityOffer-{{ uid }}-heading">{{ bs.heading | escape }}</{{ heading_level }}>{%- endif -%}
-      <div class="po-tiers" role="radiogroup"{% if bs.heading != blank %} aria-labelledby="QuantityOffer-{{ uid }}-heading"{% else %} aria-label="{{ bs.button_label | escape }}"{% endif %}>
+      <div class="po-tiers" role="radiogroup"{% if bs.heading != blank %} aria-labelledby="QuantityOffer-{{ uid }}-heading"{% elsif bs.caption != blank %} aria-label="{{ bs.caption | escape }}"{% else %} aria-label="{{ bs.button_label | escape }}"{% endif %}>
         {%- for t in tiers -%}
           {%- liquid
             assign k_on = 'tier_' | append: t | append: '_enable'
             assign k_qty = 'tier_' | append: t | append: '_quantity'
+            assign k_free = 'tier_' | append: t | append: '_free'
             assign k_label = 'tier_' | append: t | append: '_label'
             assign k_disc = 'tier_' | append: t | append: '_discount'
             assign k_badge = 'tier_' | append: t | append: '_badge'
@@ -154,32 +188,36 @@
             endunless
             assign shown = shown | plus: 1
             assign qty = bs[k_qty] | default: 1
+            assign free = bs[k_free] | default: 0
+            assign units = qty | plus: free
             assign disc = bs[k_disc] | default: 0
-            assign full = v0.price | times: qty
-            assign each = 100 | minus: disc | times: v0.price | divided_by: 100
-            assign total = each | times: qty
+            assign each_paid = 100 | minus: disc | times: v0.price | divided_by: 100
+            assign total = each_paid | times: qty
+            assign each = total | divided_by: units
             assign compare_each = v0.price
-            if disc == 0 and v0.compare_at_price > v0.price
+            if disc == 0 and free == 0 and v0.compare_at_price > v0.price
               assign compare_each = v0.compare_at_price
             endif
-            assign compare_total = compare_each | times: qty
+            assign compare_total = compare_each | times: units
+            assign tier_saving = compare_total | minus: total
             assign checked = false
             if default_tier == t
               assign checked = true
             endif
           -%}
-          <label class="po-tier">
-            <input class="po-tier__radio" type="radio" name="QuantityOffer-{{ uid }}" value="{{ qty }}" data-discount="{{ disc }}"{% if bs[k_code] != blank %} data-discount-code="{{ bs[k_code] | strip | escape }}"{% endif %}{% if checked %} checked{% endif %}>
+          <label class="po-tier{% if bs[k_badge] != blank %} po-tier--badged{% endif %}">
+            <input class="po-tier__radio" type="radio" name="QuantityOffer-{{ uid }}" value="{{ units }}" data-paid="{{ qty }}" data-free="{{ free }}" data-discount="{{ disc }}"{% if bs[k_code] != blank %} data-discount-code="{{ bs[k_code] | strip | escape }}"{% endif %}{% if checked %} checked{% endif %}>
             <span class="po-tier__card">
               <span class="po-tier__dot" aria-hidden="true"></span>
               <span class="po-tier__main">
-                <span class="po-tier__label">{{ bs[k_label] | default: qty | escape }}</span>
+                <span class="po-tier__label">{{ bs[k_label] | default: units | escape }}</span>
                 {%- if disc > 0 and bs.save_label != blank -%}<span class="po-tier__save">{{ bs.save_label | escape }} {{ disc }}%</span>{%- endif -%}
+                {%- if bs.you_save_label != blank -%}<span class="po-tier__yousave" data-tier-saving{% unless tier_saving > 0 %} hidden{% endunless %}>{{ bs.you_save_label | escape }} <span data-tier-saving-amount>{{ tier_saving | money }}</span></span>{%- endif -%}
               </span>
               <span class="po-tier__prices">
                 <span class="po-tier__total" data-tier-total>{{ total | money }}</span>
                 <s class="po-tier__compare" data-tier-compare{% unless bs.show_compare and compare_total > total %} hidden{% endunless %}>{{ compare_total | money }}</s>
-                {%- if qty > 1 -%}<span class="po-tier__each"><span data-tier-each>{{ each | money }}</span> {{ bs.per_item_label | escape }}</span>{%- endif -%}
+                {%- if units > 1 and bs.per_item_label != blank -%}<span class="po-tier__each"><span data-tier-each>{{ each | money }}</span> {{ bs.per_item_label | escape }}</span>{%- endif -%}
               </span>
               {%- if bs[k_badge] != blank -%}<span class="po-tier__badge">{{ bs[k_badge] | escape }}</span>{%- endif -%}
             </span>
@@ -191,6 +229,7 @@
           <span class="po-button__text">{{ bs.button_label | escape }}</span>
         </button>
       {%- endif -%}
+      {%- if bs.checkout_note != blank -%}<p class="po-note" data-offer-note hidden>{{ bs.checkout_note | escape }}</p>{%- endif -%}
       <p class="po-message" role="status" data-message hidden></p>
       <script type="application/json" data-variants>[{%- for v in product.variants -%}{"id":{{ v.id | json }},"price":{{ v.price | default: 0 }},"compare":{{ v.compare_at_price | default: 0 }},"available":{{ v.available | json }}}{%- unless forloop.last -%},{%- endunless -%}{%- endfor -%}]</script>
       <script type="application/json" data-selected>{{ v0.id | json }}</script>
