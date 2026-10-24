@@ -2034,15 +2034,31 @@ class LocalizationForm extends HTMLElement {
     // especially when touch keyboards or mobile editor controls steal focus.
     // Click-away, Escape and the backdrop handle dismissal instead.
     this.addEventListener("keyup", this.onContainerKeyUp.bind(this));
-    this.querySelectorAll("a").forEach((item) =>
-      item.addEventListener("click", this.onItemClick.bind(this))
-    );
+    // One listener for every option. The list moves to <body> as a phone
+    // sheet, and a country list is copied in only when it first opens.
+    this.elements.list.addEventListener("click", (event) => {
+      const item = event.target.closest?.("a[data-value]");
+      if (item && this.elements.list.contains(item)) this.onItemClick(event, item);
+    });
     this.onBodyClick = this.handleBodyClick.bind(this);
+    if (!this.ensureOptions(false)) return;
     this.setupMobileSheet();
     this._onResize = () => {
       if (!window.matchMedia('(max-width: 1024.98px)').matches && this._sheetPortaled) this.hidePanel();
     };
     window.addEventListener('resize', this._onResize, {passive:true});
+  }
+
+  // Country lists are written once per page in template#materia-country-options.
+  // Returns false while this list still waits for them (filled on first open).
+  ensureOptions(fill = true) {
+    const panel = this.elements.panel;
+    if (!panel || !panel.hasAttribute("data-country-options") || panel.firstElementChild) return true;
+    if (!fill) return false;
+    const source = document.getElementById("materia-country-options");
+    if (source?.content) panel.appendChild(source.content.cloneNode(true));
+    this.setupMobileSheet();
+    return true;
   }
 
   setupMobileSheet() {
@@ -2315,10 +2331,10 @@ class LocalizationForm extends HTMLElement {
     this.elements.button.focus();
   }
 
-  onItemClick(event) {
+  onItemClick(event, item = event.currentTarget) {
     event.preventDefault();
     const form = this.querySelector("form");
-    this.elements.input.value = event.currentTarget.dataset.value;
+    this.elements.input.value = item.dataset.value;
     if (form) form.submit();
   }
 
@@ -2326,6 +2342,7 @@ class LocalizationForm extends HTMLElement {
     if (this.elements.button.classList.contains("open")) {
       this.hidePanel();
     } else {
+      this.ensureOptions();
       document.body.addEventListener("click", this.onBodyClick);
       this.elements.button.focus({preventScroll:true});
       document.querySelectorAll('localization-form').forEach(form => {

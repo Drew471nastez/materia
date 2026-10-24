@@ -163,9 +163,10 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
     await page.route('https://fixture.test/**',route=>route.fulfill({contentType:'text/html',body:'<a data-product-neighbor href="/products/b">Next</a><a data-product-neighbor href="/products/c">Previous</a><a data-product-neighbor href="/cart">Cart</a>'}));
     await page.goto('https://fixture.test/products/a');
     await page.addScriptTag({content:read('shopify/assets/theme-navigation.js')});await page.waitForTimeout(250);
-    assert.equal(await page.locator('link[rel=prefetch]').count(),2);
-    await page.locator('a').first().hover();await page.waitForTimeout(30);
-    assert.equal(await page.locator('link[rel=prefetch]').count(),2,'neighbour prefetch must be deduplicated');passed++;
+    const neighbourUrls=()=>page.evaluate(()=>[...document.querySelectorAll('script[type=speculationrules]')].flatMap(s=>JSON.parse(s.textContent).prefetch[0].urls).concat([...document.querySelectorAll('link[rel=prefetch]')].map(l=>new URL(l.href).pathname)));
+    assert.deepEqual(await neighbourUrls(),['/products/b','/products/c']);
+    await page.locator('a').first().hover();await page.waitForTimeout(120);
+    assert.deepEqual(await neighbourUrls(),['/products/b','/products/c'],'neighbour prefetch must be deduplicated');passed++;
     // A sticky announcement must keep its stacking context under the dimmer,
     // not be demoted behind the opaque product section when either drawer opens.
     await page.setContent('<style>body{margin:0}#bar{position:sticky;top:0;height:60px;background:white}main{position:relative;z-index:1;height:1000px;margin-top:-20px;background:white}</style><div id="bar" class="shopify-section-group-header-group section-announcement-bar">Shipping</div><main>Product</main>');

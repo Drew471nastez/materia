@@ -10,6 +10,18 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
     const page=await browser.newPage();
     const errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.route('https://fixture.test/**',route=>route.fulfill({contentType:'text/html',body:'<style>main a{display:block;height:30px}</style><main><a href="/products/a">A</a><a href="/products/a">Duplicate</a><a href="/products/b">B</a><a href="/products/c" data-no-prefetch>Excluded</a><a href="/products/d">D</a><a href="/products/e" style="display:none">Hidden</a><a href="/products/f?token=private">F</a><a href="/account/logout">Logout</a><a href="/cart">Cart</a></main>'}));
+    // Browsers with speculation rules: the visible products become one bounded
+    // prefetch list (the platform's own rules handle hover), and hover adds nothing.
+    await page.goto('https://fixture.test/collections/rules');
+    await page.addScriptTag({content:read('shopify/assets/theme-navigation.js')});
+    await page.waitForTimeout(250);
+    const rules=await page.evaluate(()=>[...document.querySelectorAll('script[type=speculationrules]')].map(s=>JSON.parse(s.textContent)));
+    assert.equal(rules.length,1);
+    assert.deepEqual(rules[0].prefetch[0].urls,['/products/a','/products/b','/products/d']);
+    await page.hover('a[href="/products/b"]');await page.waitForTimeout(120);
+    assert.equal(await page.locator('link[rel=prefetch]').count(),0,'no second fetch beside speculation rules');passed++;
+    // Browsers without them: plain prefetch hints.
+    await page.addInitScript(()=>{HTMLScriptElement.supports=()=>false;});
     await page.goto('https://fixture.test/collections/all');
     await page.addScriptTag({content:read('shopify/assets/theme-navigation.js')});
     await page.waitForTimeout(250);
@@ -20,7 +32,8 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
     assert.equal(await page.evaluate(()=>window.wasIntercepted),false);passed++;
     await page.hover('a[href="/account/logout"]');
     await page.hover('a[href="/cart"]');
-    assert.equal(await page.locator('link[rel=prefetch]').count(),3);passed++;
+    await page.hover('a[href="/products/f?token=private"]');await page.waitForTimeout(120);
+    assert.equal(await page.locator('link[rel=prefetch]').count(),4,'hover warms one more page, never cart or logout');passed++;
     const report=await page.evaluate(()=>materiaNavigationTiming());
     assert.equal(report.type,'navigate');
     assert(report.domReadyMs>=0);assert(report.serverResponseMs>=0);

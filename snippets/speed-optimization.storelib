@@ -11,10 +11,15 @@
     looping CSS animations of a content section (marquees, floats, shimmers)
     pause while they are off screen; sliders do not autoplay under reduced motion.
   Snappier page navigation (perf_nav)
-    speculation rules (prerender on hover or press, prefetch as fallback),
-    a short cross-fade between pages with the header held still, and hover
-    prefetch for browsers without speculation rules. A cart change drops pages
-    rendered in advance, so they never show an old cart.
+    On a live Storelib site the platform already moves between pages itself:
+    speculation rules on hover and press, a prerender only for pages that run
+    no outside scripts, and a view transition that holds the old page until
+    the new one is ready (no fade to the background, no blank header). The
+    theme's own rules and fade fought that (a second prerender of pages with
+    analytics, a dip to the background colour), so they are gone; the setting
+    now loads theme-navigation.js (scripts-tag), which only adds what the
+    platform does not: the few product pages in view, fetched ahead on idle so
+    a tap on a phone opens them from cache.
   Defer third-party apps & scripts (perf_thirdparty)
     review, chat, popup, pixel and heatmap scripts that apps inject are held
     until the visitor first interacts, or until the page has been idle a few
@@ -112,39 +117,12 @@
 {% comment %}{% endcomment %}</style>
 {%- endif -%}
 
-{%- if perf_nav and in_editor == false -%}
-  {%- comment -%}
-    Page to page: the old page fades into the new one in 0.18s. The header is
-    its own layer, shown at once in its new state, so it does not blink. The
-    name only applies while the browser takes the snapshot, so the sticky
-    header and its fixed mobile menu behave as usual the rest of the time.
-  {%- endcomment -%}
-  <style id="speed-view-transitions">
-    @view-transition { navigation: auto; }
-    @keyframes materia-page-out { to { opacity: 0; } }
-    @keyframes materia-page-in { from { opacity: 0; } to { opacity: 1; } }
-    ::view-transition-old(root) { animation: materia-page-out .18s ease-out both; }
-    ::view-transition-new(root) { animation: materia-page-in .22s ease-out both; }
-    @supports not (view-transition-name: none) {
-      main#MainContent { animation: materia-page-in .2s ease-out; }
-    }
-    [id^="shopify-section-"].section-header { view-transition-name: site-header; }
-    ::view-transition-group(site-header) { animation: none; }
-    ::view-transition-old(site-header) { display: none; }
-    ::view-transition-new(site-header) { animation: none; }
-    @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } main#MainContent { animation: none; } }
-{% comment %}{% endcomment %}  </style>
-  <script type="speculationrules" id="speed-speculation-rules">
-{"prerender":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/cart","/cart/*","/cart?*","/checkout*","/account*","/*logout*","/*/add*","/*add-to-cart*","/search*","/apps/*","/*challenge*"]}},{"not":{"selector_matches":"[rel~=nofollow], [target=_blank], [download], [data-no-prefetch], [data-no-prerender]"}}]},"eagerness":"moderate"}],"prefetch":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/cart","/cart/*","/cart?*","/checkout*","/account*","/*logout*","/*/add*","/*add-to-cart*","/search*","/apps/*","/*challenge*"]}},{"not":{"selector_matches":"[rel~=nofollow], [target=_blank], [download], [data-no-prefetch]"}}]},"eagerness":"moderate"}]}
-{% comment %}{% endcomment %}  </script>
-{%- endif -%}
 
 <script id="speed-optimization-js">
 (function () {
   var s = {
     images: {{ perf_images | json }},
     motion: {{ perf_motion | json }},
-    nav: {{ perf_nav | json }} && !{{ in_editor | json }},
     thirdParty: {{ perf_thirdparty | json }} && !{{ in_editor | json }}
   };
   var idle = window.requestIdleCallback || function (fn) { return setTimeout(fn, 120); };
@@ -190,69 +168,6 @@
       onReady(function () { tuneObserver.observe(document.body || document.documentElement, { childList: true, subtree: true }); });
       // Pictures that matter arrive with the page; stop watching once it has settled.
       addEventListener('load', function () { setTimeout(function () { tuneObserver.disconnect(); }, 10000); }, { once: true });
-    }
-  }
-
-  /* ---------- Snappier navigation ---------- */
-  if (s.nav) {
-    var hasSpeculation = !!(window.HTMLScriptElement && HTMLScriptElement.supports && HTMLScriptElement.supports('speculationrules'));
-    // Browsers without speculation rules (Safari, Firefox): fetch the next page
-    // when the pointer rests on a link, so it comes from cache on click.
-    if (!hasSpeculation) {
-      var prefetched = {};
-      var hoverTimer;
-      var skip = /\/(cart|checkout|account|search|apps)(\/|\?|$)|logout|add-to-cart|\/add(\/|\?|$)/;
-      document.addEventListener('mouseover', function (e) {
-        if (navigator.connection && (navigator.connection.saveData || /2g/.test(navigator.connection.effectiveType))) return;
-        var a = e.target.closest && e.target.closest('a[href]');
-        if (!a || a.target === '_blank' || a.hasAttribute('download') || a.hasAttribute('data-no-prefetch')) return;
-        if (a.origin !== location.origin || a.hash && a.pathname === location.pathname) return;
-        if (skip.test(a.pathname + a.search)) return;
-        var url = a.href;
-        clearTimeout(hoverTimer);
-        hoverTimer = setTimeout(function () {
-          if (prefetched[url]) return;
-          prefetched[url] = 1;
-          var l = document.createElement('link');
-          l.rel = 'prefetch';
-          l.href = url;
-          document.head.appendChild(l);
-        }, 80);
-      }, { passive: true, capture: true });
-      // Keyboard navigation warms the same cache without waiting for a hover.
-      document.addEventListener('focusin', function (e) {
-        var a = e.target.closest && e.target.closest('a[href]');
-        if (!a || a.origin !== location.origin || a.target || a.hasAttribute('download') || a.hasAttribute('data-no-prefetch')) return;
-        if (skip.test(a.pathname + a.search) || prefetched[a.href] || a.pathname === location.pathname) return;
-        if (navigator.connection && (navigator.connection.saveData || /2g/.test(navigator.connection.effectiveType))) return;
-        prefetched[a.href] = 1;
-        var link = document.createElement('link'); link.rel = 'prefetch'; link.href = a.href;
-        document.head.appendChild(link);
-      });
-      document.addEventListener('mouseout', function () { clearTimeout(hoverTimer); }, { passive: true, capture: true });
-    }
-    // A page rendered in advance keeps the cart as it was then. When the cart
-    // changes here, the rules are put back fresh, which drops those pages.
-    if (hasSpeculation && 'PerformanceObserver' in window) {
-      var refreshRules = function () {
-        var old = document.getElementById('speed-speculation-rules');
-        if (!old) return;
-        var fresh = document.createElement('script');
-        fresh.type = 'speculationrules';
-        fresh.id = old.id;
-        fresh.textContent = old.textContent;
-        old.remove();
-        document.head.appendChild(fresh);
-      };
-      var cartWrite = /\/cart\/(add|change|update|clear)(\.js|\.json)?(\?|$)/;
-      try {
-        new PerformanceObserver(function (list) {
-          var entries = list.getEntries();
-          for (var i = 0; i < entries.length; i++) {
-            if (cartWrite.test(entries[i].name)) { refreshRules(); return; }
-          }
-        }).observe({ type: 'resource', buffered: false });
-      } catch (_) {}
     }
   }
 
