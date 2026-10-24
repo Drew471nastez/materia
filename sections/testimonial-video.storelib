@@ -483,7 +483,13 @@
       rail.addEventListener('scroll', function () {
         if (!ticking) { window.requestAnimationFrame(function () { update(); ticking = false; }); ticking = true; }
       }, { passive: true });
-      window.addEventListener('resize', update);
+      // Page wide listeners remove themselves once this slider is gone (the
+      // builder draws the section again), so they never pile up.
+      function whileHere(target, type, fn, opts) {
+        function h(e) { if (!rail.isConnected) { target.removeEventListener(type, h, opts); return; } fn(e); }
+        target.addEventListener(type, h, opts);
+      }
+      whileHere(window, 'resize', update);
       update();
 
       /* ---- 3. Desktop mouse drag with rAF + inertia ---- */
@@ -524,8 +530,8 @@
         } else { setTimeout(function () { moved = false; }, 30); }
       }
       viewport.addEventListener('mousedown', onDown);
-      window.addEventListener('mousemove', onMove, { passive: false });
-      window.addEventListener('mouseup', onUp);
+      whileHere(window, 'mousemove', onMove, { passive: false });
+      whileHere(window, 'mouseup', onUp);
       viewport.addEventListener('mouseleave', onUp);
       viewport.addEventListener('click', function (e) { if (moved) { e.preventDefault(); e.stopPropagation(); } }, true);
 
@@ -548,8 +554,11 @@
         init();
       }
     }
-    document.addEventListener('shopify:section:load', onLoad);
-    document.addEventListener('storelib:section-load', onLoad);
+    if (!window['__ctvLoad_' + sid]) {
+      window['__ctvLoad_' + sid] = true;
+      document.addEventListener('shopify:section:load', onLoad);
+      document.addEventListener('storelib:section-load', onLoad);
+    }
   })();
 {% comment %}{% endcomment %}</script>
 

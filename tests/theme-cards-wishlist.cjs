@@ -275,7 +275,7 @@ const THEME_JS = read('shopify/assets/theme.js');
 const cut = (from, to) => { const a = THEME_JS.indexOf(from), b = THEME_JS.indexOf(to, a); assert.ok(a >= 0 && b > a, 'theme.js has ' + from); return THEME_JS.slice(a, b + to.length); };
 const STORE_JS = cut('/* ── Wishlist store', 'console.error("[theme] wishlist init", e); }') + '\n' +
   cut('class ButtonWishlist extends HTMLElement', 'customElements.define("button-wishlist", ButtonWishlist);') + '\n' +
-  cut('document.addEventListener("animationend", (event) => {\n  if (event.target && event.target.matches && event.target.matches("button-wishlist.is-toggled"))', '});');
+  cut('document.addEventListener("animationend", (event) => {\n  // The card plays the pop on the heart inside the button.', '});');
 const WISHLIST_JS = read('shopify/assets/wishlist.js');
 const WL_CSS = read('shopify/assets/wishlist-page.css');
 const SPRITE = templateOf(read('snippets/sprite-svg.storelib'));
@@ -343,7 +343,10 @@ const rect = el => { const r = el.getBoundingClientRect(); return {x: r.x, y: r.
       assert.equal(hearts.length, 4, `${where}: a heart on every card`);
       for (const h of hearts) {
         assert.ok(h.shown, `${where}: the heart is in view at rest, without hovering`);
-        assert.equal(Math.round(h.w), 44, `${where}: 44px wide`); assert.equal(Math.round(h.h), 44, `${where}: 44px tall`);
+        // Phones (two cards a row) draw the heart at 36px; a ring around it
+        // keeps the 44px tap area.
+        const size = width < 750 ? 36 : 44;
+        assert.equal(Math.round(h.w), size, `${where}: ${size}px wide`); assert.equal(Math.round(h.h), size, `${where}: ${size}px tall`);
         assert.equal(h.pad, '0px', `${where}: the theme's button padding does not squeeze the icon`);
         assert.ok(h.svgW >= 14 && h.svgH >= 14, `${where}: the heart icon is drawn (${h.svgW}x${h.svgH})`);
         assert.ok(h.x >= h.img.x && h.r <= h.img.r + 0.5 && h.y >= h.img.y && h.b <= h.img.b + 0.5, `${where}: on the picture`);
@@ -444,7 +447,8 @@ const rect = el => { const r = el.getBoundingClientRect(); return {x: r.x, y: r.
         }));
         assert.deepEqual(view.ids, ['14', '11'], `@${width}: the saved products, in the order saved (an unknown id is skipped)`);
         assert.deepEqual(view.titles, ['Linen shirt', 'Pants Down'], `@${width}: drawn with the theme's product card`);
-        assert.ok(view.x.every(x => Math.round(x.w) === 44 && Math.round(x.h) === 44 && x.icon > 8 && /Remove from wishlist/.test(x.label)), `@${width}: a 44px remove button on each: ${JSON.stringify(view.x)}`);
+        const xSize = width < 750 ? 36 : 44;
+        assert.ok(view.x.every(x => Math.round(x.w) === xSize && Math.round(x.h) === xSize && x.icon > 8 && /Remove from wishlist/.test(x.label)), `@${width}: a ${xSize}px remove button on each: ${JSON.stringify(view.x)}`);
         assert.equal(view.hearts, 0, `@${width}: no heart next to the remove button`);
         assert.equal(view.empty, true); assert.equal(view.busy, 'false'); assert.equal(view.loading, true, 'loading cards gone');
         assert.match(view.scheme, /color-default-color-scheme gradient/, 'on the section colour scheme');
@@ -520,7 +524,7 @@ const rect = el => { const r = el.getBoundingClientRect(); return {x: r.x, y: r.
             assert.notEqual(m.border, 'rgb(254, 254, 254)', `${at}: the outline is visible on the page (custom light colour)`);
             assert.equal(m.bw, '1px', `${at}: outline drawn`);
           }
-          assert.ok(m.heart && m.heart.w === 44 && m.heart.x >= m.img.x && m.heart.r <= m.img.r + .5, `${at}: heart on the picture`);
+          assert.ok(m.heart && m.heart.w === (width < 750 ? 36 : 44) && m.heart.x >= m.img.x && m.heart.r <= m.img.r + .5, `${at}: heart on the picture`);
         }
         const rows = new Map(); cards.forEach(c => { const key = Math.round(c.card.y); rows.set(key, [...(rows.get(key) || []), c]); });
         for (const row of rows.values()) if (row.length > 1) {

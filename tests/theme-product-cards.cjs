@@ -318,15 +318,19 @@ const grid = cards => `<div class="container" style="padding:0 16px;box-sizing:b
       for (const [k, c] of cards.entries()) {
         const where = `${tag} ${states[k][0]}`;
         assert.ok(c.role, `${where}: button carries data-theme-button in the markup`);
-        assert.equal(c.btn.h, 44, `${where}: one 44px height`);
-        assert.ok(c.btn.w >= 44, `${where}: at least a 44px target`);
+        // Phones (two cards a row) draw the icon buttons (+ and heart) at
+        // 36px with 8px edges; text buttons stay 44px everywhere.
+        const phone = width < 750, icon = phone ? 36 : 44, edge = phone ? 8 : 12, glyph = phone ? 14 : 16;
+        const iconButton = style === 'standard' && width < 1025;
+        assert.equal(c.btn.h, iconButton ? icon : 44, `${where}: one ${iconButton ? icon : 44}px height`);
+        assert.ok(c.btn.w >= (iconButton ? icon : 44), `${where}: at least a ${iconButton ? icon : 44}px button`);
         if (style === 'standard') {
           if (width < 1025) {
-            assert.equal(Math.round(c.btn.w), 44, `${where}: icon button is square`);
-            assert.ok(c.icon && c.icon.w === 16, `${where}: the + icon is drawn`);
+            assert.equal(Math.round(c.btn.w), icon, `${where}: icon button is square`);
+            assert.ok(c.icon && c.icon.w === glyph, `${where}: the + icon is drawn`);
             assert.ok(Math.abs(Math.round(c.btn.x + c.icon.w / 2 + (c.btn.w - c.icon.w) / 2) - Math.round(c.icon.x + c.icon.w / 2)) <= 1, `${where}: icon centred`);
-            assert.ok(Math.abs(c.media.r - c.btn.r - 12) <= 1 && Math.abs(c.media.b - c.btn.b - 12) <= 1, `${where}: 12px from the image's bottom end corner (got ${c.media.r - c.btn.r}, ${c.media.b - c.btn.b})`);
-            if (wishlist) assert.ok(Math.abs(c.wish.x - c.btn.x) <= 1 && c.wish.w === 44 && c.wish.b <= c.btn.y, `${where}: wishlist stacked in the same column`);
+            assert.ok(Math.abs(c.media.r - c.btn.r - edge) <= 1 && Math.abs(c.media.b - c.btn.b - edge) <= 1, `${where}: ${edge}px from the image's bottom end corner (got ${c.media.r - c.btn.r}, ${c.media.b - c.btn.b})`);
+            if (wishlist) assert.ok(Math.abs(c.wish.x - c.btn.x) <= 1 && c.wish.w === icon && c.wish.b <= c.btn.y, `${where}: wishlist stacked in the same column`);
           } else {
             assert.ok(Math.abs(c.btn.x - c.media.x - 15) <= 1 && Math.abs(c.media.r - c.btn.r - 15) <= 1, `${where}: full width with 15px sides`);
             assert.ok(Math.abs(c.media.b - c.btn.b - 15) <= 1, `${where}: 15px above the image's bottom edge`);
@@ -524,8 +528,7 @@ const grid = cards => `<div class="container" style="padding:0 16px;box-sizing:b
           window.__frames = []; window.__sample = true;
           const tick = () => {
             const visible = [...wrap.children].reduce((a, p) => Math.max(a, +getComputedStyle(p).opacity * (getComputedStyle(p).visibility === 'visible' ? 1 : 0)), 0);
-            const ind = document.querySelector('.ti-tabs__indicator');
-            window.__frames.push({h: wrap.offsetHeight, below: document.getElementById('below').getBoundingClientRect().top, visible, ind: getComputedStyle(ind).transform});
+            window.__frames.push({h: wrap.offsetHeight, below: document.getElementById('below').getBoundingClientRect().top, visible});
             if (window.__sample) requestAnimationFrame(tick);
           };
           requestAnimationFrame(tick);
@@ -547,15 +550,13 @@ const grid = cards => `<div class="container" style="padding:0 16px;box-sizing:b
         assert.ok(frames.every(f => Math.abs(f.h - panelsH) < 0.5), `${where}: panel height never jumps`);
         assert.ok(frames.every(f => Math.abs(f.below - frames[0].below) < 0.5), `${where}: content below never moves`);
         assert.ok(frames.every(f => f.visible > 0.45), `${where}: no blank frame (min ${Math.min(...frames.map(f => f.visible))})`);
-        if (tab_style !== 'text') {
-          const moves = new Set(frames.map(f => f.ind)).size;
-          assert.ok(moves > 4, `${where}: the indicator moves through in-between frames (${moves})`);
-          const ind = await page.$eval('.ti-tabs__indicator', el => ({r: el.getBoundingClientRect(), t: getComputedStyle(el).transform}));
-          const act = await page.$eval('[role="tab"][aria-selected="true"]', el => el.getBoundingClientRect());
-          assert.ok(Math.abs(ind.r.x - act.x) < 1 && Math.abs(ind.r.width - act.width) < 1, `${where}: indicator lands on the active tab`);
-          assert.match(ind.t, /matrix/, `${where}: indicator placed with transform`);
-          const activeBg = await page.$eval('[role="tab"][aria-selected="true"]', el => getComputedStyle(el).backgroundColor);
-          if (tab_style === 'pill' || tab_style === 'button') assert.equal(activeBg, 'rgba(0, 0, 0, 0)', `${where}: the indicator paints the active fill`);
+        // Nothing slides between pills: the active pill paints its own fill
+        // in place, with a short colour fade.
+        assert.equal(await page.locator('.ti-tabs__indicator').count(), 0, `${where}: no sliding indicator`);
+        if (tab_style === 'pill' || tab_style === 'button') {
+          const act = await page.$eval('[role="tab"][aria-selected="true"]', el => ({bg: getComputedStyle(el).backgroundColor, tr: getComputedStyle(el).transitionProperty}));
+          assert.notEqual(act.bg, 'rgba(0, 0, 0, 0)', `${where}: the active pill has its fill`);
+          assert.match(act.tr, /background-color/, `${where}: the fill fades in`);
         }
         // The active pill is scrolled into the row, the page is not.
         const vis = await page.$eval('[role="tab"][aria-selected="true"]', el => { const n = el.parentElement.getBoundingClientRect(), r = el.getBoundingClientRect(); return r.left >= n.left - 1 && r.right <= n.right + 1; });

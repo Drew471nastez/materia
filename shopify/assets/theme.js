@@ -3641,6 +3641,53 @@ class VariantRadiosQuickEdit extends SwatchInit {
 }
 customElements.define("variant-radios-quick-edit", VariantRadiosQuickEdit);
 
+/* A product card's picture changes to a variant's: the new picture is
+   decoded first, faded in over the old one (240ms), then set on the card's
+   own image underneath, so there is no blank frame, no jump and no wait.
+   A later choice supersedes one still on its way; reduced motion swaps at
+   once. */
+async function materiaSwapCardImage(img, next) {
+  const url = (s) => { try { return new URL(s, location.href).href; } catch (e) { return s; } };
+  const token = (img._materiaSwap = (img._materiaSwap || 0) + 1);
+  if (url(img.currentSrc || img.src) === url(next)) {
+    // Back to the picture already shown: fade out any change on its way.
+    img.parentElement?.querySelectorAll(":scope > .pc-swap-ghost").forEach((g) => {
+      g.style.opacity = "0";
+      setTimeout(() => g.remove(), 260);
+    });
+    return;
+  }
+  const loader = new Image();
+  loader.src = next;
+  try { await loader.decode(); } catch (e) {}
+  if (token !== img._materiaSwap) return;
+  const settle = () => {
+    img.removeAttribute("srcset");
+    img.removeAttribute("sizes");
+    img.src = next;
+  };
+  const holder = img.parentElement;
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (still || !holder || getComputedStyle(holder).position === "static") { settle(); return; }
+  const ghost = document.createElement("img");
+  ghost.className = "pc-swap-ghost";
+  ghost.alt = "";
+  ghost.setAttribute("aria-hidden", "true");
+  ghost.src = next;
+  const fit = getComputedStyle(img).objectFit || "cover";
+  ghost.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:" + fit + ";z-index:2;pointer-events:none;opacity:0;transition:opacity .24s ease;border-radius:inherit";
+  // After any overlay still fading, so a quick second choice never flashes
+  // the old picture.
+  (holder.querySelector(":scope > .pc-swap-ghost:last-of-type") || img).after(ghost);
+  ghost.getBoundingClientRect();
+  ghost.style.opacity = "1";
+  await new Promise((resolve) => { ghost.addEventListener("transitionend", resolve, { once: true }); setTimeout(resolve, 320); });
+  if (token !== img._materiaSwap) return;
+  settle();
+  // The card's image has the new picture decoded: drop the overlays next frame.
+  requestAnimationFrame(() => holder.querySelectorAll(":scope > .pc-swap-ghost").forEach((g) => g.remove()));
+}
+
 class VariantRadiosBundle extends SwatchInit {
   constructor() {
     super();
@@ -3751,21 +3798,7 @@ class VariantRadiosBundle extends SwatchInit {
     }
     const img = this.productTarget.querySelector(".product__media img");
     const preview = this.currentVariant.featured_media.preview_image;
-    const next = preview && preview.src;
-    if (img && next) {
-      // Decoded first, then swapped: no blank frame, and no wait for a load
-      // event that never comes for a picture already shown or cached.
-      const url = (s) => { try { return new URL(s, location.href).href; } catch (e) { return s; } };
-      if (url(img.currentSrc || img.src) === url(next)) return;
-      const token = (this._mediaToken = (this._mediaToken || 0) + 1);
-      const loader = new Image();
-      loader.src = next;
-      try { await loader.decode(); } catch (e) {}
-      if (token !== this._mediaToken) return;
-      img.removeAttribute("srcset");
-      img.removeAttribute("sizes");
-      img.src = next;
-    }
+    if (img && preview && preview.src) await materiaSwapCardImage(img, preview.src);
   }
 
   updateVariantInput() {
@@ -7160,22 +7193,7 @@ class VariantRadios extends SwatchFunctions {
     }
     const img = this.productTarget.querySelector(".product__media img");
     const preview = this.currentVariant.featured_media.preview_image;
-    const next = preview && preview.src;
-    if (img && next) {
-      // The variant's picture is decoded first and then swapped in, so the
-      // card never shows a blank frame (it used to fade out and wait for a
-      // load event that never came for a picture already shown or cached).
-      const url = (s) => { try { return new URL(s, location.href).href; } catch (e) { return s; } };
-      if (url(img.currentSrc || img.src) === url(next)) return;
-      const token = (this._mediaToken = (this._mediaToken || 0) + 1);
-      const loader = new Image();
-      loader.src = next;
-      try { await loader.decode(); } catch (e) {}
-      if (token !== this._mediaToken) return;
-      img.removeAttribute("srcset");
-      img.removeAttribute("sizes");
-      img.src = next;
-    }
+    if (img && preview && preview.src) await materiaSwapCardImage(img, preview.src);
   }
 }
 customElements.define("variant-radios", VariantRadios);

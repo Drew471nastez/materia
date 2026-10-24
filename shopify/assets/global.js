@@ -694,12 +694,22 @@ class SlideSection extends HTMLElement {
   // A slideshow redrawn by the builder is a new element; the old one stops its
   // Swiper (autoplay timer, listeners) here. Moved, not removed: it starts again.
   disconnectedCallback() {
-    if (!this.classList.contains("slideshow")) return;
-    this.stopSlideshow();
+    if (this.classList.contains("slideshow")) { this.stopSlideshow(); return; }
+    // Every other slider (product carousels, testimonials, logos) stops too:
+    // a Swiper left running keeps its document listeners and autoplay timer,
+    // and each redraw in the builder used to add another set. Checked a frame
+    // later, so an element that is only moved keeps its slider.
+    requestAnimationFrame(() => {
+      if (this.isConnected || !this.globalSlide || this.globalSlide.destroyed) return;
+      try { this.globalSlide.destroy(true, false); } catch (e) {}
+    });
   }
 
   connectedCallback() {
-    if (!this.classList.contains("slideshow")) return;
+    if (!this.classList.contains("slideshow")) {
+      if (this.globalSlide && this.globalSlide.destroyed && typeof this.initSlide === "function") this.initSlide();
+      return;
+    }
     if (!this.globalSlide || this.globalSlide.destroyed) this.initSlideshow();
   }
 

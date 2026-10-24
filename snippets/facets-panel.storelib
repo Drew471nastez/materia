@@ -59,6 +59,180 @@
       <p class="facets-preview-notice" role="status">{{ section_st.filter_preview_message | escape }}</p>
     {%- endif -%}
     {%- capture filter_groups -%}
+      {%- comment -%}
+        The builder draws this page without the store's filter data, so the
+        editor preview builds the same groups from the collection's own
+        products (availability, price, each option, brand). They look and
+        open like the real ones but filter nothing; the live page uses
+        results.filters below.
+      {%- endcomment -%}
+      {%- if request.design_mode and results.filters == blank and kind == 'collection' -%}
+        {%- liquid
+          assign pv_products = results.products
+          if pv_products.size == 0
+            assign pv_products = collections.all.products
+          endif
+          assign pv_in = 0
+          assign pv_out = 0
+          assign pv_max = 0
+          assign pv_names = ''
+          assign pv_vendors = ''
+          for p in pv_products limit: 50
+            if p.available
+              assign pv_in = pv_in | plus: 1
+            else
+              assign pv_out = pv_out | plus: 1
+            endif
+            if p.price_max > pv_max
+              assign pv_max = p.price_max
+            elsif p.price > pv_max
+              assign pv_max = p.price
+            endif
+            unless p.has_only_default_variant
+              for opt in p.options_with_values
+                assign pv_key = '|' | append: opt.name | append: '|'
+                unless pv_names contains pv_key
+                  assign pv_names = pv_names | append: pv_key
+                endunless
+              endfor
+            endunless
+            if p.vendor != blank
+              assign pv_key = '|' | append: p.vendor | append: '|'
+              unless pv_vendors contains pv_key
+                assign pv_vendors = pv_vendors | append: pv_key
+              endunless
+            endif
+          endfor
+          assign pv_groups = 'availability,price'
+          assign pv_option_names = pv_names | split: '|'
+          for n in pv_option_names
+            if n != blank
+              assign pv_groups = pv_groups | append: ',option:' | append: n
+            endif
+          endfor
+          if pv_vendors != blank
+            assign pv_groups = pv_groups | append: ',vendor'
+          endif
+          assign pv_groups = pv_groups | split: ','
+          assign pv_range = pv_max | divided_by: 100.0 | ceil
+        -%}
+        {%- for pv_group in pv_groups -%}
+          {%- liquid
+            assign group_index = group_index | plus: 1
+            assign default_open = true
+            if default_filter == 'close_all'
+              assign default_open = false
+            elsif default_filter == 'first_open' and group_index > 1
+              assign default_open = false
+            endif
+            assign group_open = default_open
+            if filter_layout == 'horizontal'
+              assign group_open = false
+            endif
+            assign pv_option = ''
+            case pv_group
+              when 'availability'
+                assign pv_label = 'Availability'
+              when 'price'
+                assign pv_label = 'Price'
+              when 'vendor'
+                assign pv_label = 'Brand'
+              else
+                assign pv_option = pv_group | remove_first: 'option:'
+                assign pv_label = pv_option
+            endcase
+            assign is_color = false
+            assign is_size = false
+            if pv_option != blank and color_options contains pv_option
+              assign is_color = true
+            endif
+            if pv_option != blank and size_options contains pv_option
+              assign is_size = true
+            endif
+            assign group_key = 'preview-' | append: pv_label | handleize
+          -%}
+          <details class="facets-group" data-facets-group="{{ group_key }}" data-facets-preview{% if default_open %} data-open-default{% endif %}{% if group_open %} open{% endif %}>
+            <summary class="facets-group__summary" data-facets-key="group-{{ group_key }}">
+              <span class="facets-group__name">{{ pv_label | escape }}</span>
+              <svg class="facets-group__chevron" width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m1 1.5 5 5 5-5"/></svg>
+            </summary>
+            <div class="facets-group__content">
+              {%- if pv_group == 'price' -%}
+                <div class="facets-price">
+                  <div class="facets-price__fields">
+                    <label class="facets-price__field">
+                      <span class="facets-price__name">{{ section_st.price_min_label | default: 'From' }}</span>
+                      <span class="facets-price__box">
+                        <span class="facets-price__currency" aria-hidden="true">{{ cart.currency.symbol }}</span>
+                        <input class="facets-price__input" type="number" inputmode="decimal" min="0" max="{{ pv_range }}" step="any" placeholder="0">
+                      </span>
+                    </label>
+                    <label class="facets-price__field">
+                      <span class="facets-price__name">{{ section_st.price_max_label | default: 'To' }}</span>
+                      <span class="facets-price__box">
+                        <span class="facets-price__currency" aria-hidden="true">{{ cart.currency.symbol }}</span>
+                        <input class="facets-price__input" type="number" inputmode="decimal" min="0" max="{{ pv_range }}" step="any" placeholder="{{ pv_range }}">
+                      </span>
+                    </label>
+                  </div>
+                  <button type="button" class="facets-price__apply" data-theme-button="secondary">{{ 'collections.sidebar.apply' | t }}</button>
+                </div>
+              {%- else -%}
+                {%- liquid
+                  assign pv_values = ''
+                  if pv_group == 'availability'
+                    assign pv_values = '|In stock|'
+                    if pv_out > 0
+                      assign pv_values = pv_values | append: 'Out of stock|'
+                    endif
+                  elsif pv_group == 'vendor'
+                    assign pv_values = pv_vendors
+                  else
+                    for p in pv_products limit: 50
+                      for opt in p.options_with_values
+                        if opt.name == pv_option
+                          for v in opt.values
+                            assign pv_key = '|' | append: v | append: '|'
+                            unless pv_values contains pv_key
+                              assign pv_values = pv_values | append: pv_key
+                            endunless
+                          endfor
+                        endif
+                      endfor
+                    endfor
+                  endif
+                  assign pv_list = pv_values | split: '|'
+                -%}
+                <ul class="facets-values{% if is_color %} facets-values--swatch{% elsif is_size %} facets-values--chips{% endif %}" role="list">
+                  {%- for v in pv_list limit: 24 -%}
+                    {%- if v != blank -%}
+                      {%- liquid
+                        assign pv_count = ''
+                        if pv_group == 'availability'
+                          if v == 'In stock'
+                            assign pv_count = pv_in
+                          else
+                            assign pv_count = pv_out
+                          endif
+                        endif
+                      -%}
+                      <li>
+                        <span class="facets-value" role="checkbox" aria-checked="false" aria-readonly="true">
+                          <span class="facets-value__box" aria-hidden="true">
+                            {%- if is_color -%}<span class="facets-value__swatch" style="--swatch: {{ v | downcase | escape }}"></span>{%- endif -%}
+                          </span>
+                          <span class="facets-value__label">{{ v | escape }}</span>
+                          {%- if show_counts and pv_count != '' -%}<span class="facets-value__count">({{ pv_count }})</span>{%- endif -%}
+                        </span>
+                      </li>
+                    {%- endif -%}
+                  {%- endfor -%}
+                </ul>
+              {%- endif -%}
+            </div>
+          </details>
+        {%- endfor -%}
+      {%- endif -%}
       {%- for filter in results.filters -%}
         {%- liquid
           assign group_index = group_index | plus: 1
