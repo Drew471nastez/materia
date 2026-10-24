@@ -1,0 +1,236 @@
+<template compat="shopify">
+{%- comment -%}
+  Materia Themes. The filters of the search and collection pages, from the
+  platform's own filter data (results.filters): a sidebar or a row of
+  dropdowns on a computer, as the section's Filter layout says, and a drawer
+  on a phone (and on a computer with the Drawer layout). The drawer is a
+  popover, so it opens, closes on Escape or a tap outside and keeps focus
+  without any script; collection.js only applies each choice in place.
+
+  Accepts:
+  - results: search or collection
+  - kind: 'search' or 'collection'
+  - section_st, section_id, filter_layout, default_filter
+  - base_url: where the price form goes without script
+  - terms: the search words as typed (search only)
+  - clear_url: the address with every filter off
+  - blocks: the section's sidebar blocks (collection), or nothing
+{%- endcomment -%}
+{%- liquid
+  assign show_counts = section_st.show_filter_counts
+  assign color_options = 'Color,Colour'
+  if settings.color_swatch_trigger != blank
+    assign color_options = settings.color_swatch_trigger | split: ','
+  endif
+  assign size_options = 'Size'
+  if settings.size_trigger != blank
+    assign size_options = settings.size_trigger | split: ','
+  endif
+  assign has_filter_block = false
+  for block in blocks
+    if block.type == 'filter'
+      assign has_filter_block = true
+    endif
+  endfor
+  assign group_index = 0
+-%}
+<div
+  id="FacetPanel-{{ section_id }}"
+  class="facets-panel facets-panel--{{ filter_layout }}"
+  popover
+  role="dialog"
+  aria-labelledby="FacetPanelTitle-{{ section_id }}"
+  data-facets-panel
+>
+  <div class="facets-sheet__head facets-panel__head">
+    <h2 class="facets-sheet__title h5" id="FacetPanelTitle-{{ section_id }}">{{ 'collections.toolbar.filter' | t }}</h2>
+    <button
+      type="button"
+      class="facets-sheet__close"
+      popovertarget="FacetPanel-{{ section_id }}"
+      popovertargetaction="hide"
+      aria-label="{{ 'accessibility.close' | t }}"
+    >
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m1 1 12 12M13 1 1 13"/></svg>
+    </button>
+  </div>
+  <div class="facets-panel__body" data-facets-part="filters">
+    {%- capture filter_groups -%}
+      {%- for filter in results.filters -%}
+        {%- liquid
+          assign group_index = group_index | plus: 1
+          comment
+            The row of dropdowns starts closed on a computer; in the drawer
+            (phones) the panels open as Default state says (collection.js
+            opens them from data-open-default).
+          endcomment
+          assign default_open = true
+          if default_filter == 'close_all'
+            assign default_open = false
+          elsif default_filter == 'first_open' and group_index > 1
+            assign default_open = false
+          endif
+          assign group_open = default_open
+          if filter_layout == 'horizontal'
+            assign group_open = false
+          endif
+          assign active_in_group = filter.active_values.size
+          if filter.type == 'price_range'
+            if filter.min_value.value != null or filter.max_value.value != null
+              assign active_in_group = 1
+            endif
+          endif
+          assign is_color = false
+          assign is_size = false
+          if color_options contains filter.label
+            assign is_color = true
+          endif
+          if size_options contains filter.label
+            assign is_size = true
+          endif
+          assign group_key = filter.label | handleize
+        -%}
+        <details class="facets-group" data-facets-group="{{ group_key }}"{% if default_open %} data-open-default{% endif %}{% if group_open %} open{% endif %}>
+          <summary class="facets-group__summary" data-facets-key="group-{{ group_key }}">
+            <span class="facets-group__name">{{ filter.label | escape }}</span>
+            {%- if active_in_group > 0 -%}<span class="facets-group__count">{{ active_in_group }}</span>{%- endif -%}
+            <svg class="facets-group__chevron" width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m1 1.5 5 5 5-5"/></svg>
+          </summary>
+          <div class="facets-group__content">
+            {%- if filter.type == 'price_range' -%}
+              {%- liquid
+                assign range_max = filter.range_max | divided_by: 100.0 | ceil
+                assign min_shown = ''
+                assign max_shown = ''
+                if filter.min_value.value != null
+                  assign min_shown = filter.min_value.value | divided_by: 100.0
+                endif
+                if filter.max_value.value != null
+                  assign max_shown = filter.max_value.value | divided_by: 100.0
+                endif
+              -%}
+              <form class="facets-price" action="{{ base_url }}" method="get" data-facets-price>
+                {%- if kind == 'search' -%}<input type="hidden" name="q" value="{{ terms | escape }}">{%- endif -%}
+                <div class="facets-price__fields">
+                  <label class="facets-price__field">
+                    <span class="facets-price__name">{{ section_st.price_min_label | default: 'From' }}</span>
+                    <span class="facets-price__box">
+                      <span class="facets-price__currency" aria-hidden="true">{{ cart.currency.symbol }}</span>
+                      <input
+                        class="facets-price__input"
+                        type="number"
+                        name="{{ filter.min_value.param_name }}"
+                        inputmode="decimal"
+                        min="0"
+                        max="{{ range_max }}"
+                        step="any"
+                        placeholder="0"
+                        value="{{ min_shown }}"
+                        data-facets-key="price-min"
+                      >
+                    </span>
+                  </label>
+                  <label class="facets-price__field">
+                    <span class="facets-price__name">{{ section_st.price_max_label | default: 'To' }}</span>
+                    <span class="facets-price__box">
+                      <span class="facets-price__currency" aria-hidden="true">{{ cart.currency.symbol }}</span>
+                      <input
+                        class="facets-price__input"
+                        type="number"
+                        name="{{ filter.max_value.param_name }}"
+                        inputmode="decimal"
+                        min="0"
+                        max="{{ range_max }}"
+                        step="any"
+                        placeholder="{{ range_max }}"
+                        value="{{ max_shown }}"
+                        data-facets-key="price-max"
+                      >
+                    </span>
+                  </label>
+                </div>
+                <button type="submit" class="facets-price__apply" data-theme-button="secondary" data-facets-key="price-apply">{{ 'collections.sidebar.apply' | t }}</button>
+              </form>
+            {%- else -%}
+              <ul class="facets-values{% if is_color %} facets-values--swatch{% elsif is_size %} facets-values--chips{% endif %}" role="list">
+                {%- for value in filter.values -%}
+                  {%- liquid
+                    assign value_disabled = false
+                    if value.count == 0 and value.active == false
+                      assign value_disabled = true
+                    endif
+                  -%}
+                  <li>
+                    <a
+                      class="facets-value"
+                      href="{% if value.active %}{{ value.url_to_remove }}{% else %}{{ value.url_to_add }}{% endif %}"
+                      role="checkbox"
+                      aria-checked="{% if value.active %}true{% else %}false{% endif %}"
+                      data-facets-link
+                      data-facets-key="value-{{ group_key }}-{{ value.value | handleize }}"
+                      {% if value_disabled %}aria-disabled="true" tabindex="-1"{% endif %}
+                    >
+                      <span class="facets-value__box" aria-hidden="true">
+                        {%- if is_color -%}<span class="facets-value__swatch" style="--swatch: {{ value.swatch.color | default: value.value | downcase | escape }}"></span>{%- endif -%}
+                      </span>
+                      <span class="facets-value__label">{{ value.label | escape }}</span>
+                      {%- if show_counts -%}<span class="facets-value__count">({{ value.count }})</span>{%- endif -%}
+                    </a>
+                  </li>
+                {%- endfor -%}
+              </ul>
+            {%- endif -%}
+          </div>
+        </details>
+      {%- endfor -%}
+    {%- endcapture -%}
+    {%- if has_filter_block -%}
+      {%- for block in blocks -%}
+        {%- case block.type -%}
+          {%- when 'filter' -%}
+            {{ filter_groups }}
+          {%- when 'categories' -%}
+            {%- if block.settings.menu != blank -%}
+              {%- assign group_key = 'menu-' | append: block.id -%}
+              <details class="facets-group facets-group--links" data-facets-group="{{ group_key }}"{% if filter_layout != 'horizontal' and default_filter != 'close_all' %} open{% endif %} {{ block.shopify_attributes }}>
+                <summary class="facets-group__summary" data-facets-key="group-{{ group_key }}">
+                  <span class="facets-group__name">{{ block.settings.title | default: block.settings.menu.title | escape }}</span>
+                  <svg class="facets-group__chevron" width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m1 1.5 5 5 5-5"/></svg>
+                </summary>
+                <div class="facets-group__content">
+                  <ul class="facets-links" role="list">
+                    {%- for link in block.settings.menu.links -%}
+                      <li><a class="facets-links__link" href="{{ link.url }}"{% if link.active %} aria-current="page"{% endif %}>{{ link.title | escape }}</a></li>
+                    {%- endfor -%}
+                  </ul>
+                </div>
+              </details>
+            {%- endif -%}
+          {%- else -%}
+            {%- if filter_layout != 'horizontal' -%}
+              {%- render 'facets-sidebar-block', block: block -%}
+            {%- endif -%}
+        {%- endcase -%}
+      {%- endfor -%}
+    {%- else -%}
+      {{ filter_groups }}
+    {%- endif -%}
+  </div>
+  <div class="facets-panel__foot">
+    <a class="facets-panel__clear" href="{{ clear_url }}" data-facets-link data-facets-key="panel-clear">{{ 'collections.sidebar.clear_all' | t }}</a>
+    <button
+      type="button"
+      class="facets-panel__done"
+      data-theme-button
+      popovertarget="FacetPanel-{{ section_id }}"
+      popovertargetaction="hide"
+    >
+      {%- if section_st.show_results_label != blank -%}
+        {{ section_st.show_results_label | escape }}
+      {%- else -%}
+        {{ 'collections.sidebar.apply' | t }}
+      {%- endif -%}
+    </button>
+  </div>
+</div>
+</template>

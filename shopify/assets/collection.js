@@ -738,3 +738,391 @@ eventCollectionShopify.init();
   document.addEventListener('shopify:section:load', initAll);
   window.addEventListener('pageshow', initAll);
 })();
+
+/* ==========================================================================
+   Facets: filters, sort, active pills and pages of the search and collection
+   sections (<facets-root>, drawn by snippets/facets-toolbar and
+   snippets/facets-panel). Every control is a link or a GET form that works
+   without this script; with it, a choice fetches the section alone
+   (?section_id=), swaps the parts marked data-facets-part in place, and
+   records the address with history.pushState so Back and Forward walk the
+   choices. The sort list and the filter drawer are popovers: the browser
+   opens and closes them; this only places the sort list under its button on
+   a computer.
+   ========================================================================== */
+(function facets() {
+  if (customElements.get('facets-root')) return;
+  const SORT_DROPDOWN = '(min-width: 750px)';
+  const cssEscape = (value) => (window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, '\\$&'));
+  let request = null;
+
+  class FacetsRoot extends HTMLElement {
+    connectedCallback() {
+      if (this._bound) {
+        this.markSort();
+        return;
+      }
+      this._bound = true;
+      this.onClick = this.onClick.bind(this);
+      this.onKeydown = this.onKeydown.bind(this);
+      this.onSubmit = this.onSubmit.bind(this);
+      this.onChange = this.onChange.bind(this);
+      this.onToggle = this.onToggle.bind(this);
+      this.placeSortPanel = this.placeSortPanel.bind(this);
+      this.addEventListener('click', this.onClick);
+      this.addEventListener('keydown', this.onKeydown);
+      this.addEventListener('submit', this.onSubmit);
+      this.addEventListener('change', this.onChange);
+      // toggle does not bubble: listen while it passes down to the popover.
+      this.addEventListener('toggle', this.onToggle, true);
+      this.addEventListener(
+        'beforetoggle',
+        (event) => {
+          if (event.newState === 'open' && event.target.hasAttribute && event.target.hasAttribute('data-facets-sort-panel')) {
+            this.placeSortPanel();
+          }
+        },
+        true
+      );
+      this.markSort();
+      this.showClearFallback();
+      // A row of dropdowns on a computer is a drawer on a phone: open its
+      // panels there as the section's Default state says.
+      if (this.querySelector('.facets-panel--horizontal') && !this.dropdownRow) {
+        this.querySelectorAll('details[data-facets-group][data-open-default]').forEach((group) => {
+          group.open = true;
+        });
+      }
+      if (!history.state || !history.state.facets) {
+        try {
+          history.replaceState(Object.assign({}, history.state, { facets: this.sectionId }), '', location.href);
+        } catch (error) {}
+      }
+    }
+
+    disconnectedCallback() {
+      document.documentElement.classList.remove('facets-locked');
+      this.unwatchSortPanel();
+    }
+
+    get sectionId() {
+      return this.dataset.sectionId;
+    }
+
+    get path() {
+      return this.dataset.facetsPath || location.pathname;
+    }
+
+    onClick(event) {
+      if (event.defaultPrevented || event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const sort = event.target.closest('a[data-facets-sort]');
+      if (sort && this.contains(sort)) {
+        event.preventDefault();
+        const panel = sort.closest('[popover]');
+        if (panel && panel.matches(':popover-open')) panel.hidePopover();
+        if (sort.getAttribute('aria-current') === 'true') return;
+        const url = new URL(location.href);
+        url.searchParams.set('sort_by', sort.dataset.facetsSort);
+        url.searchParams.delete('page');
+        this.markSort(sort.dataset.facetsSort);
+        this.go(url.href, { focus: '[data-facets-sort-trigger]' });
+        return;
+      }
+      const link = event.target.closest('a[data-facets-link]');
+      if (link && this.contains(link)) {
+        event.preventDefault();
+        if (link.getAttribute('aria-disabled') === 'true') return;
+        // Show the choice at once (the box, the count on the Filter button);
+        // the section's fresh markup then confirms it.
+        if (link.getAttribute('role') === 'checkbox') {
+          const on = link.getAttribute('aria-checked') !== 'true';
+          link.setAttribute('aria-checked', String(on));
+          this.bumpBadge(on ? 1 : -1);
+        } else if (link.matches('.facets-pill:not(.facets-pill--clear)')) {
+          this.bumpBadge(-1);
+        } else if (link.matches('.facets-pill--clear, .facets-panel__clear, .facets-empty__action, .facets-empty__clear')) {
+          this.bumpBadge(-Infinity);
+        }
+        this.go(link.href);
+        return;
+      }
+      const page = event.target.closest('.pagination a[href]');
+      if (page && this.contains(page)) {
+        event.preventDefault();
+        this.go(page.href, { scroll: true });
+      }
+    }
+
+    onKeydown(event) {
+      if (event.key === 'Escape' && this.dropdownRow) {
+        const open = event.target.closest('details[data-facets-group][open]');
+        if (open) {
+          open.open = false;
+          open.querySelector('summary').focus();
+        }
+        return;
+      }
+      if (event.key !== ' ' && event.key !== 'Spacebar') return;
+      const box = event.target.closest('a[role="checkbox"]');
+      if (!box || !this.contains(box)) return;
+      event.preventDefault();
+      box.click();
+    }
+
+    onSubmit(event) {
+      const form = event.target.closest('form[data-facets-price]');
+      if (!form || !this.contains(form)) return;
+      event.preventDefault();
+      const url = new URL(location.href);
+      url.searchParams.delete('page');
+      form.querySelectorAll('input[name]:not([type="hidden"])').forEach((input) => {
+        const value = String(input.value || '').trim().replace(',', '.');
+        if (value === '' || Number.isNaN(Number(value))) url.searchParams.delete(input.name);
+        else url.searchParams.set(input.name, String(Math.max(0, Number(value))));
+      });
+      this.go(url.href);
+    }
+
+    onChange(event) {
+      const input = event.target.closest('form[data-facets-price] input');
+      if (!input || !this.contains(input)) return;
+      const form = input.form;
+      if (form.requestSubmit) form.requestSubmit();
+      else form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+    }
+
+    /* The row of dropdowns on a computer: one open at a time, closed by a
+       click outside it or Escape. */
+    get dropdownRow() {
+      return window.matchMedia('(min-width: 1025px)').matches && this.querySelector('.facets-panel--horizontal');
+    }
+
+    closeDropdowns(except) {
+      this.querySelectorAll('.facets-panel--horizontal details[data-facets-group][open]').forEach((group) => {
+        if (group !== except) group.open = false;
+      });
+    }
+
+    onToggle(event) {
+      if (event.target.matches && event.target.matches('details[data-facets-group]')) {
+        if (event.target.open && this.dropdownRow) {
+          this.closeDropdowns(event.target);
+          if (!this._outside) {
+            this._outside = (e) => {
+              if (!this.isConnected) return document.removeEventListener('pointerdown', this._outside, true);
+              const inside = e.target.closest && e.target.closest('.facets-panel--horizontal details[data-facets-group]');
+              if (!inside || !this.contains(inside)) this.closeDropdowns();
+            };
+            document.addEventListener('pointerdown', this._outside, true);
+          }
+        }
+        return;
+      }
+      const pop = event.target;
+      if (!(pop instanceof HTMLElement) || !pop.hasAttribute('popover') || !this.contains(pop)) return;
+      const open = event.newState === 'open';
+      this.querySelectorAll(`[popovertarget="${cssEscape(pop.id)}"]:not([popovertargetaction="hide"])`).forEach((button) => {
+        button.setAttribute('aria-expanded', String(open));
+      });
+      if (pop.hasAttribute('data-facets-sort-panel')) {
+        if (open) {
+          this.placeSortPanel();
+          this.watchSortPanel();
+          const current = pop.querySelector('[aria-current="true"]') || pop.querySelector('a[data-facets-sort]');
+          if (current) current.focus({ preventScroll: true });
+        } else {
+          this.unwatchSortPanel();
+        }
+      }
+      if (pop.hasAttribute('data-facets-panel')) {
+        document.documentElement.classList.toggle('facets-locked', open);
+      }
+    }
+
+    get sortPanel() {
+      return this.querySelector('[data-facets-sort-panel]');
+    }
+
+    placeSortPanel() {
+      const panel = this.sortPanel;
+      const trigger = this.querySelector('[data-facets-sort-trigger]');
+      if (!panel || !trigger) return;
+      if (!window.matchMedia(SORT_DROPDOWN).matches) {
+        panel.style.removeProperty('top');
+        panel.style.removeProperty('left');
+        panel.style.removeProperty('width');
+        panel.removeAttribute('data-placed');
+        return;
+      }
+      // Placed before it is drawn (beforetoggle), so it never shows anywhere
+      // else first: the end edges line up, which needs no measuring.
+      const box = trigger.getBoundingClientRect();
+      const rtl = getComputedStyle(this).direction === 'rtl';
+      const width = Math.round(Math.max(box.width, 240));
+      const height = panel.offsetHeight;
+      let left = rtl ? box.left : box.right - width;
+      left = Math.min(Math.max(8, left), Math.max(8, document.documentElement.clientWidth - width - 8));
+      let top = box.bottom + 6;
+      if (height && top + height > window.innerHeight - 8 && box.top - height - 6 > 8) top = box.top - height - 6;
+      panel.style.width = `${width}px`;
+      panel.style.top = `${Math.round(top)}px`;
+      panel.style.left = `${Math.round(left)}px`;
+      panel.setAttribute('data-placed', '');
+    }
+
+    watchSortPanel() {
+      window.addEventListener('scroll', this.placeSortPanel, { passive: true });
+      window.addEventListener('resize', this.placeSortPanel, { passive: true });
+    }
+
+    unwatchSortPanel() {
+      window.removeEventListener('scroll', this.placeSortPanel);
+      window.removeEventListener('resize', this.placeSortPanel);
+    }
+
+    /* The option the address asks for is the current one, whatever the
+       platform printed (a search page may not echo sort_by back). */
+    markSort(value) {
+      const options = this.querySelectorAll('a[data-facets-sort]');
+      if (!options.length) return;
+      const wanted = value || new URL(location.href).searchParams.get('sort_by');
+      const match = wanted && [...options].find((option) => option.dataset.facetsSort === wanted);
+      if (!match) return;
+      options.forEach((option) => {
+        if (option === match) option.setAttribute('aria-current', 'true');
+        else option.removeAttribute('aria-current');
+      });
+      const current = this.querySelector('[data-facets-part="sort-current"]');
+      if (current) current.textContent = match.textContent.trim();
+    }
+
+    bumpBadge(delta) {
+      const badge = this.querySelector('[data-facets-part="badge"]');
+      if (!badge) return;
+      const next = Math.max(0, (parseInt(badge.textContent, 10) || 0) + delta);
+      badge.textContent = next > 0 ? String(next) : '';
+    }
+
+    showClearFallback() {
+      const fallback = this.querySelector('[data-facets-clear-fallback]');
+      if (!fallback) return;
+      const params = new URL(location.href).searchParams;
+      fallback.hidden = ![...params.keys()].some((key) => key.startsWith('filter.'));
+    }
+
+    async go(href, options = {}) {
+      const { push = true, focus = null, scroll = false } = options;
+      const url = new URL(href, location.href);
+      url.searchParams.delete('section_id');
+      const fetchUrl = new URL(url.href);
+      fetchUrl.searchParams.set('section_id', this.sectionId);
+      if (request) request.abort();
+      const mine = (request = new AbortController());
+      this.setBusy(true);
+      try {
+        const response = await fetch(fetchUrl.href, {
+          signal: mine.signal,
+          headers: { Accept: 'text/html' },
+          credentials: 'same-origin',
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const html = await response.text();
+        if (mine !== request) return;
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const next =
+          doc.querySelector(`facets-root[data-section-id="${cssEscape(this.sectionId)}"]`) ||
+          doc.querySelector('facets-root');
+        if (!next) throw new Error('No facets in the response');
+        const target = url.pathname + url.search + url.hash;
+        if (push && target !== location.pathname + location.search + location.hash) {
+          history.pushState({ facets: this.sectionId }, '', target);
+        }
+        this.swap(next, { focus, scroll });
+      } catch (error) {
+        if (error && error.name === 'AbortError') return;
+        // The page itself always answers: fall back to loading it.
+        if (push) location.assign(url.href);
+      } finally {
+        if (mine === request) {
+          request = null;
+          this.setBusy(false);
+        }
+      }
+    }
+
+    setBusy(busy) {
+      this.classList.toggle('is-loading', busy);
+      if (busy) this.setAttribute('aria-busy', 'true');
+      else this.removeAttribute('aria-busy');
+    }
+
+    swap(next, { focus = null, scroll = false } = {}) {
+      // A new layout (filters appear or go, results appear or go): replace it all.
+      if ((next.dataset.facetsShape || '') !== (this.dataset.facetsShape || '')) {
+        const panel = this.querySelector('[data-facets-panel]');
+        const reopen = panel && panel.matches(':popover-open');
+        this.replaceWith(next);
+        if (reopen) {
+          const nextPanel = next.querySelector('[data-facets-panel]');
+          try { nextPanel && nextPanel.showPopover(); } catch (error) {}
+        }
+        next.afterSwap(null, scroll);
+        return;
+      }
+      const active = document.activeElement;
+      const key = focus || (active && this.contains(active) && active.dataset.facetsKey ? `[data-facets-key="${cssEscape(active.dataset.facetsKey)}"]` : null);
+      const groups = new Map();
+      this.querySelectorAll('details[data-facets-group]').forEach((group) => groups.set(group.dataset.facetsGroup, group.open));
+      const results = this.querySelector('[data-facets-part="results"]');
+      if (results) this.holdHeight(results);
+      next.querySelectorAll('[data-facets-part]').forEach((part) => {
+        const here = this.querySelector(`[data-facets-part="${cssEscape(part.dataset.facetsPart)}"]`);
+        if (here) here.innerHTML = part.innerHTML;
+      });
+      this.querySelectorAll('details[data-facets-group]').forEach((group) => {
+        if (groups.has(group.dataset.facetsGroup)) group.open = groups.get(group.dataset.facetsGroup);
+      });
+      this.afterSwap(key, scroll);
+    }
+
+    afterSwap(key, scroll) {
+      this.markSort();
+      this.showClearFallback();
+      if (key) {
+        const target = this.querySelector(key);
+        if (target) target.focus({ preventScroll: true });
+      }
+      const grid = this.closest('grid-list');
+      if (grid && typeof grid.showGridItems === 'function') grid.showGridItems();
+      try {
+        if (typeof initLazyloadItem === 'function') initLazyloadItem();
+        if (typeof BlsLazyloadImg !== 'undefined' && BlsLazyloadImg.init) BlsLazyloadImg.init(this);
+      } catch (error) {}
+      if (scroll) {
+        const top = this.getBoundingClientRect().top + window.scrollY - 100;
+        if (window.scrollY > top) window.scrollTo({ top, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      }
+      this.dispatchEvent(new CustomEvent('facets:updated', { bubbles: true }));
+    }
+
+    /* Keep the results' height until the visitor next touches the page, so
+       fewer results never pull the footer up under them. */
+    holdHeight(results) {
+      results.style.minHeight = `${results.offsetHeight}px`;
+      const release = () => {
+        results.style.removeProperty('min-height');
+        document.removeEventListener('pointerdown', release, true);
+        document.removeEventListener('keydown', release, true);
+      };
+      document.addEventListener('pointerdown', release, true);
+      document.addEventListener('keydown', release, true);
+    }
+  }
+  customElements.define('facets-root', FacetsRoot);
+
+  window.addEventListener('popstate', () => {
+    document.querySelectorAll('facets-root').forEach((root) => {
+      if (location.pathname.replace(/\/$/, '') === root.path.replace(/\/$/, '')) root.go(location.href, { push: false });
+    });
+  });
+})();

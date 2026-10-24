@@ -1,0 +1,200 @@
+<template compat="shopify">
+{%- comment -%}
+  Materia Themes. The toolbar above a product grid on the search and
+  collection pages: the Filter button, the result count, Sort by and the
+  filters that are on as pills.
+
+  Accepts:
+  - results: search or collection (its filters, sort_options, sort_by)
+  - kind: 'search' or 'collection'
+  - section_st, section_id
+  - enable_filtering: draws the Filter button
+  - filter_layout: vertical, horizontal or drawer (desktop)
+  - count_text: the result count, already worded
+  - base_url: where sort links go (routes.search_url or collection.url)
+  - terms_url: the search words, url encoded (search only)
+  - clear_url: the address with every filter off
+  - part: 'toolbar' (the row) or 'active' (the pills, drawn at the top of
+    the results so that they arrive with them and never push the grid down)
+
+  Everything that changes with a filter or a sort is inside an element with
+  data-facets-part, which collection.js swaps in place from the section's
+  own fresh markup.
+{%- endcomment -%}
+{%- liquid
+  assign show_count = section_st.number_products_per_page
+  assign sorting = section_st.sorting
+  assign sort_by = results.sort_by | default: results.default_sort_by
+  assign sort_options = results.sort_options
+  assign use_fallback_sort = false
+  if sort_options.size == 0 and kind == 'search'
+    assign use_fallback_sort = true
+    assign sort_by = results.sort_by | default: 'relevance'
+  endif
+  assign fallback_sorts = 'relevance,price-ascending,price-descending,title-ascending,title-descending,created-descending' | split: ','
+  assign active_count = 0
+  for filter in results.filters
+    assign active_count = active_count | plus: filter.active_values.size
+    if filter.type == 'price_range'
+      if filter.min_value.value != null or filter.max_value.value != null
+        assign active_count = active_count | plus: 1
+      endif
+    endif
+  endfor
+  assign sort_label = 'products.facets.sort_by_label' | t
+  assign sort_title = sort_label | remove: ':' | strip
+  assign current_label = ''
+  if use_fallback_sort
+    for value in fallback_sorts
+      if value == sort_by
+        assign key = 'sort_' | append: value | replace: '-', '_'
+        assign current_label = section_st[key]
+      endif
+    endfor
+    if current_label == blank
+      assign current_label = section_st.sort_relevance
+    endif
+  else
+    for option in sort_options
+      if option.value == sort_by
+        assign current_label = option.name
+      endif
+    endfor
+    if current_label == blank
+      assign current_label = sort_options.first.name
+    endif
+  endif
+-%}
+{%- if part != 'active' -%}
+<div class="facets-toolbar facets-toolbar--{{ filter_layout }}">
+  {%- if enable_filtering -%}
+    <button
+      type="button"
+      class="facets-toolbar__filter"
+      data-theme-button="secondary"
+      popovertarget="FacetPanel-{{ section_id }}"
+      aria-controls="FacetPanel-{{ section_id }}"
+      aria-expanded="false"
+      data-facets-open
+    >
+      <svg class="facets-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false">
+        <path d="M4 7h9M17 7h3M4 17h3M11 17h9"/>
+        <circle cx="15" cy="7" r="2"/>
+        <circle cx="9" cy="17" r="2"/>
+      </svg>
+      <span>{{ 'collections.toolbar.filter' | t }}</span>
+      <span class="facets-toolbar__badge" data-facets-part="badge">{% if active_count > 0 %}{{ active_count }}{% endif %}</span>
+    </button>
+  {%- endif -%}
+  {%- if show_count -%}
+    <p class="facets-toolbar__count" role="status" aria-live="polite" data-facets-part="count">{{ count_text }}</p>
+  {%- endif -%}
+  {%- if sorting -%}
+    {%- if sort_options.size > 0 or use_fallback_sort -%}
+      <div class="facets-sort">
+        <button
+          type="button"
+          class="facets-sort__trigger input-style"
+          popovertarget="FacetSort-{{ section_id }}"
+          aria-controls="FacetSort-{{ section_id }}"
+          aria-expanded="false"
+          data-facets-sort-trigger
+        >
+          <span class="facets-sort__label">{{ sort_label }}</span>
+          <span class="facets-sort__current" data-facets-part="sort-current">{{ current_label | escape }}</span>
+          <svg class="facets-sort__chevron" width="12" height="8" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m1 1.5 5 5 5-5"/></svg>
+        </button>
+        <div
+          id="FacetSort-{{ section_id }}"
+          class="facets-sort__panel"
+          popover
+          role="dialog"
+          aria-labelledby="FacetSortTitle-{{ section_id }}"
+          data-facets-sort-panel
+        >
+          <div class="facets-sheet__head">
+            <p class="facets-sheet__title" id="FacetSortTitle-{{ section_id }}">{{ sort_title }}</p>
+            <button
+              type="button"
+              class="facets-sheet__close"
+              popovertarget="FacetSort-{{ section_id }}"
+              popovertargetaction="hide"
+              aria-label="{{ 'accessibility.close' | t }}"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m1 1 12 12M13 1 1 13"/></svg>
+            </button>
+          </div>
+          <ul class="facets-sort__options" role="list" data-facets-part="sort-options">
+            {%- if use_fallback_sort -%}
+              {%- for value in fallback_sorts -%}
+                {%- assign key = 'sort_' | append: value | replace: '-', '_' -%}
+                {%- assign label = section_st[key] -%}
+                {%- if label != blank -%}
+                  <li>
+                    <a
+                      class="facets-sort__option"
+                      href="{{ base_url }}?{% if terms_url != blank %}q={{ terms_url }}&{% endif %}sort_by={{ value }}"
+                      data-facets-sort="{{ value }}"
+                      data-facets-key="sort-{{ value }}"
+                      {% if value == sort_by %}aria-current="true"{% endif %}
+                    >{{ label | escape }}</a>
+                  </li>
+                {%- endif -%}
+              {%- endfor -%}
+            {%- else -%}
+              {%- for option in sort_options -%}
+                <li>
+                  <a
+                    class="facets-sort__option"
+                    href="{{ base_url }}?{% if terms_url != blank %}q={{ terms_url }}&{% endif %}sort_by={{ option.value | escape }}"
+                    data-facets-sort="{{ option.value | escape }}"
+                    data-facets-key="sort-{{ option.value | escape }}"
+                    {% if option.value == sort_by %}aria-current="true"{% endif %}
+                  >{{ option.name | escape }}</a>
+                </li>
+              {%- endfor -%}
+            {%- endif -%}
+          </ul>
+        </div>
+      </div>
+    {%- endif -%}
+  {%- endif -%}
+</div>
+{%- endif -%}
+{%- if part != 'toolbar' -%}
+<div class="facets-active">
+  {%- if active_count > 0 -%}
+    <ul class="facets-active__list" role="list">
+      {%- for filter in results.filters -%}
+        {%- if filter.type == 'price_range' -%}
+          {%- if filter.min_value.value != null or filter.max_value.value != null -%}
+            {%- assign min_value = filter.min_value.value | default: 0 -%}
+            {%- assign max_value = filter.max_value.value | default: filter.range_max -%}
+            <li>
+              <a class="facets-pill" href="{{ filter.url_to_remove }}" data-facets-link data-facets-key="pill-{{ filter.label | handleize }}">
+                <span>{{ min_value | money }} – {{ max_value | money }}</span>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m1 1 8 8M9 1 1 9"/></svg>
+                <span class="visually-hidden">{{ 'collections.sidebar.clear' | t }}</span>
+              </a>
+            </li>
+          {%- endif -%}
+        {%- else -%}
+          {%- for value in filter.active_values -%}
+            <li>
+              <a class="facets-pill" href="{{ value.url_to_remove }}" data-facets-link data-facets-key="pill-{{ filter.label | handleize }}-{{ value.value | handleize }}">
+                <span>{{ value.label | escape }}</span>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m1 1 8 8M9 1 1 9"/></svg>
+                <span class="visually-hidden">{{ 'collections.sidebar.clear' | t }}</span>
+              </a>
+            </li>
+          {%- endfor -%}
+        {%- endif -%}
+      {%- endfor -%}
+      <li>
+        <a class="facets-pill facets-pill--clear" href="{{ clear_url }}" data-facets-link data-facets-key="pill-clear">{{ 'collections.sidebar.clear_all' | t }}</a>
+      </li>
+    </ul>
+  {%- endif -%}
+</div>
+{%- endif -%}
+</template>
