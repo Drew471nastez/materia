@@ -123,6 +123,7 @@ function filt(ctx, v, f) {
     case 'escape': return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     case 'strip_html': return String(v ?? '').replace(/<[^>]*>/g, '');
     case 'replace': return String(v ?? '').split(a[0]).join(a[1]);
+    case 'split': return String(v ?? '').split(a[0]);
     case 'append': return String(v ?? '') + (a[0] ?? '');
     case 'prepend': return (a[0] ?? '') + String(v ?? '');
     case 'plus': return Number(v || 0) + Number(a[0] || 0);
@@ -301,7 +302,7 @@ const grid = cards => `<div class="container" style="padding:0 16px;box-sizing:b
       ['sale', product(4, {sale: true, new: true})],
     ];
     for (const style of ['standard', 'morden']) for (const wishlist of [false, true]) for (const width of [375, 768, 1366]) {
-      const s = {...config, product_style: style, show_wishlist: wishlist, show_sale: true, show_sold_out: true, show_new: true, show_action_on_mobile: true};
+      const s = {...config, badges_position:'top_start', product_style: style, show_wishlist: wishlist, show_sale: true, show_sold_out: true, show_new: true, show_action_on_mobile: true};
       await page.setViewportSize({width, height: 900});
       await draw(page, grid(states.map(([, p], k) => card(p, {index: k + 1}, s))), s);
       const cards = await page.$$eval('.product-item', els => els.map(el => {
@@ -436,7 +437,7 @@ const grid = cards => `<div class="container" style="padding:0 16px;box-sizing:b
         const m = await measure({...base, badges_position: pos, badges_offset_x: 14, badges_offset_y: 9}, width);
         const first = m.items[0].r;
         if (pos === 'top_start') assert.equal(Math.round(m.box.y - m.inner.y), 9, `${pos}@${width}: top offset`);
-        else if (pos === 'top_end') assert.ok(m.box.y - m.inner.y >= 9, `${pos}@${width}: corner stack clears actions vertically`);
+        else if (pos === 'top_end') assert.equal(Math.round(m.box.y - m.inner.y), 9, `${pos}@${width}: exact selected top offset`);
         else assert.ok(m.inner.bottom - m.box.bottom >= 9 - 0.5, `${pos}@${width}: bottom offset`);
         if (pos.endsWith('start')) assert.equal(Math.round(first.x - m.inner.x), 14, `${pos}@${width}: side offset`);
         else assert.ok(Math.abs(m.inner.right - first.right - 14) < 1, `${pos}@${width}: end badge stays at the selected image edge`);

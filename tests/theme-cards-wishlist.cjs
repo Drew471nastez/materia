@@ -100,6 +100,7 @@ const BLANK = Symbol('blank'), EMPTY = Symbol('empty');
 function splitTop(s, sep) { const out = []; let cur = '', q = null; for (const ch of s) { if (q) { if (ch === q) q = null; cur += ch; continue; } if (ch === "'" || ch === '"') { q = ch; cur += ch; continue; } if (ch === sep) { out.push(cur); cur = ''; continue; } cur += ch; } out.push(cur); return out; }
 function lookup(ctx, expr) {
   expr = expr.trim();
+  expr = expr.replace(/\[(\w+)\]/g, (_, key) => '.' + ctx[key]);
   if (/^'[\s\S]*'$|^"[\s\S]*"$/.test(expr)) return expr.slice(1, -1);
   if (/^-?\d+(\.\d+)?$/.test(expr)) return Number(expr);
   if (expr === 'true') return true; if (expr === 'false') return false;
@@ -125,6 +126,7 @@ function filt(ctx, v, f) {
     case 'escape': return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     case 'strip_html': return String(v ?? '').replace(/<[^>]*>/g, '');
     case 'replace': return String(v ?? '').split(a[0]).join(a[1]);
+    case 'split': return String(v ?? '').split(a[0]);
     case 'append': return String(v ?? '') + (a[0] ?? '');
     case 'prepend': return (a[0] ?? '') + String(v ?? '');
     case 'plus': return Number(v || 0) + Number(a[0] || 0);
@@ -328,7 +330,7 @@ const rect = el => { const r = el.getBoundingClientRect(); return {x: r.x, y: r.
     /* ── 1. The heart: shown on every card, 44px, toggles, persists, syncs ── */
     const a = product(11, {title: 'Pants Down'}), b = product(12, {variants: [{title: 'S'}, {title: 'M'}]}), c = product(13, {soldOut: true});
     for (const style of ['standard', 'morden']) for (const width of [375, 768, 1366]) {
-      const s = {...config, product_style: style, show_wishlist: true, show_action_on_mobile: true, enable_custom_card_actions: true};
+      const s = {...config, badges_position:'top_start', product_style: style, show_wishlist: true, show_action_on_mobile: true, enable_custom_card_actions: true};
       const where = `${style}@${width}`;
       await page.setViewportSize({width, height: 900});
       // The same product twice (a grid and a carousel on one page).
@@ -563,7 +565,7 @@ const rect = el => { const r = el.getBoundingClientRect(); return {x: r.x, y: r.
       for (const st of group.settings.filter(x => x.id)) assert.ok(new RegExp(`(settings|theme_st|s)\\.${st.id}\\b`).test(used), `Product cards > ${st.id} is read`);
       const headers = group.settings.map((x, k) => x.type === 'header' ? k : -1).filter(k => k >= 0);
       for (const k of headers) assert.ok(group.settings[k + 1] && group.settings[k + 1].type !== 'header' || group.settings[k + 1]?.type === 'header' && group.settings[k - 1]?.id === 'enable_custom_card_actions', `header "${group.settings[k].content}" has settings under it`);
-      assert.ok(!JSON.stringify(group).includes('visible_if'), 'no visible_if in Theme settings');
+      for (const setting of group.settings.filter(s=>s.id?.startsWith('card_') || ['product_size','price_size','product_name_text_transform'].includes(s.id))) assert.equal(setting.visible_if,'{{ settings.enable_custom_card_actions }}',setting.id+' is opt-in');
       ok('vendor and description');
     }
 

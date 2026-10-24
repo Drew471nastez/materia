@@ -226,6 +226,15 @@
       attr(button, 'data-sl-button', '');
     });
     select('[data-theme-button]').forEach(button => {
+      const cardSettings = window.materiaCardSettings;
+      if (cardSettings && button.closest('.product-item') && button.matches('button[name="add"], .product__add-cart, .product-item__button-submit')) {
+        let choice = cardSettings.enable_custom_card_actions === true ? cardSettings.card_atc_button || 'auto' : 'primary';
+        if (choice === 'auto') choice = button.closest('.product-item')?.classList.contains('morden') ? 'outline' : 'primary';
+        attr(button, 'data-theme-button', choice === 'primary' ? 'primary' : 'secondary');
+        attr(button, 'data-button-role', choice === 'primary' ? 'primary' : 'secondary');
+        attr(button, 'data-button-local-appearance', choice === 'outline' ? 'outline' : 'theme');
+        button.removeAttribute('data-button-outline');
+      }
       const role = button.getAttribute('data-theme-button');
       // Extra movement is additive. "None" must not cancel the main effect.
       attr(button, 'data-button-hover', document.body?.dataset.btnHover || 'fade');
@@ -254,6 +263,7 @@
       });
     });
   }
+  document.addEventListener('materia:card-settings-applied', () => syncButtons());
   /* Search opens from the header: --search-top is the header's bottom edge
      at the moment it opens (0 when the header is out of view). */
   const searchTop = () => {
