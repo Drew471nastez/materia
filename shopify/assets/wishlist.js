@@ -150,19 +150,36 @@
     var card = this.list && this.list.querySelector('[data-wishlist-card][data-wishlist-id="' + String(id).replace(/"/g, '\\"') + '"]:not([data-wishlist-sample])');
     if (!card) return;
     var done = function () {
+      // The cards after it slide into its place instead of jumping.
+      var rest = self.cards().filter(function (c) { return c !== card; });
+      var before = rest.map(function (c) { return c.getBoundingClientRect(); });
       card.remove();
       self.shown = self.shown.filter(function (x) { return x !== String(id); });
-      if (!self.cards().length) self.showEmpty(true);
+      if (!self.cards().length) { self.showEmpty(true); return; }
+      if (reduced()) return;
+      rest.forEach(function (c, i) {
+        var now = c.getBoundingClientRect();
+        var dx = before[i].left - now.left, dy = before[i].top - now.top;
+        if ((dx || dy) && typeof c.animate === "function") {
+          c.animate([{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }], { duration: 320, easing: "cubic-bezier(.2,.7,.2,1)" });
+        }
+      });
     };
     var message = this.root.dataset.removedMessage;
     if (message && this.status) {
-      this.status.textContent = "";
-      this.status.textContent = message;
-      this.status.classList.remove("visually-hidden");
-      this.status.classList.add("is-shown");
+      var status = this.status;
       clearTimeout(this.statusTimer);
+      status.classList.remove("is-leaving");
+      status.textContent = message;
+      status.classList.remove("visually-hidden");
+      status.classList.add("is-shown");
+      // Fade out, then back to a screen reader only status line.
       this.statusTimer = setTimeout(function () {
-        self.status.classList.remove("is-shown");
+        status.classList.add("is-leaving");
+        self.statusTimer = setTimeout(function () {
+          status.classList.remove("is-shown", "is-leaving");
+          status.classList.add("visually-hidden");
+        }, reduced() ? 0 : 220);
       }, 2600);
     }
     if (reduced() || typeof card.animate !== "function") { done(); return; }
