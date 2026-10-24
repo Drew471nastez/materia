@@ -370,7 +370,343 @@
     if (d.delivery) { const p = document.createElement('p'); p.className = 'materia-ship-result__note'; p.textContent = d.delivery; out.append(p); }
     if (!free && isFinite(freeMin) && freeMin > 0) { const p = document.createElement('p'); p.className = 'materia-ship-result__note'; p.textContent = fill(t.freeOver, {amount: money(freeMin, cur)}); out.append(p); }
   }
-  const scan = (scope = document) => scope.querySelectorAll('[data-address="root"]').forEach(prepare);
+  /* Country picker. The native select stays in the form as the value the
+     estimate reads; this draws the choice like the theme's own country and
+     language selector: a dropdown under the field on desktop, a bottom sheet
+     with a handle, search and drag to close on phones. Without script the
+     select is shown as it is. */
+  const pickers = new WeakMap();
+  const MOBILE = '(max-width: 1024.98px)';
+  const isMobile = () => window.matchMedia(MOBILE).matches;
+  const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const canPop = typeof HTMLElement !== 'undefined' && 'showPopover' in HTMLElement.prototype;
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+  let pickerSeq = 0, openPicker = null;
+  const layer = (el, show) => {
+    if (!el || !canPop || !el.hasAttribute('popover')) return;
+    try { if (show) { if (!el.matches(':popover-open')) el.showPopover(); } else if (el.matches(':popover-open')) el.hidePopover(); } catch (e) {}
+  };
+  const chevron = '<svg class="mcp-chevron" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const lens = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+
+  function buildPicker(select) {
+    const n = ++pickerSeq, id = 'mcp-' + n;
+    const wrap = document.createElement('div');
+    wrap.className = 'mcp';
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.id = id + '-trigger';
+    trigger.className = 'mcp-trigger form-control';
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.setAttribute('aria-controls', id + '-panel');
+    trigger.innerHTML = '<span class="mcp-value"></span>' + chevron;
+    const label = select.id && select.closest('form, [data-address="root"], body')?.querySelector('label[for="' + CSS.escape(select.id) + '"]');
+    if (label) {
+      if (!label.id) label.id = id + '-label';
+      trigger.setAttribute('aria-labelledby', label.id + ' ' + id + '-trigger');
+    }
+    const panel = document.createElement('div');
+    panel.id = id + '-panel';
+    panel.className = 'mcp-panel';
+    panel.hidden = true;
+    if (canPop) panel.setAttribute('popover', 'manual');
+    const searchLabel = select.dataset.searchLabel || 'Search';
+    panel.innerHTML = '<div class="mcp-head"><div class="mcp-grab" aria-hidden="true"></div><label class="mcp-search">' + lens + '<input type="search" autocomplete="off" spellcheck="false" enterkeyhint="search"></label></div><div class="mcp-list" role="listbox" tabindex="-1"></div><p class="mcp-empty" role="status" hidden></p>';
+    const input = panel.querySelector('input');
+    input.placeholder = searchLabel;
+    input.setAttribute('aria-label', searchLabel);
+    input.setAttribute('aria-controls', id + '-list');
+    input.setAttribute('aria-autocomplete', 'list');
+    const list = panel.querySelector('.mcp-list');
+    list.id = id + '-list';
+    if (label) list.setAttribute('aria-labelledby', label.id);
+    const empty = panel.querySelector('.mcp-empty');
+    empty.textContent = select.dataset.emptyLabel || 'No matches';
+    // The backdrop lives beside the panel, so a tap on it stays inside the
+    // drawer or form and closes only the picker.
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mcp-backdrop';
+    backdrop.setAttribute('aria-hidden', 'true');
+    if (canPop) backdrop.setAttribute('popover', 'manual');
+    backdrop.addEventListener('click', event => { event.stopPropagation(); api.close(true); });
+    wrap.append(trigger, backdrop, panel);
+    select.after(wrap);
+    select.classList.add('mcp-native');
+    select.setAttribute('tabindex', '-1');
+    select.setAttribute('aria-hidden', 'true');
+
+    let items = [], active = -1, closeTimer = 0, built = '';
+    const visible = () => items.filter(item => !item.hidden);
+    const sync = () => {
+      const opt = select.options[select.selectedIndex];
+      const text = opt && opt.value ? opt.textContent.trim() : (select.dataset.placeholder || read().text.choose || opt?.textContent.trim() || '');
+      const value = trigger.firstElementChild;
+      if (value.textContent !== text) value.textContent = text;
+      trigger.classList.toggle('is-placeholder', !(opt && opt.value));
+    };
+    const fillList = () => {
+      const key = [...select.options].map(o => o.value + ':' + o.textContent).join('|');
+      if (key !== built) {
+        built = key;
+        list.textContent = '';
+        items = [];
+        [...select.options].forEach((opt, i) => {
+          if (!opt.value || opt.disabled) return;
+          const item = document.createElement('div');
+          item.className = 'mcp-option';
+          item.id = id + '-o' + i;
+          item.setAttribute('role', 'option');
+          item.dataset.value = opt.value;
+          item.dataset.search = norm(opt.textContent + ' ' + opt.value);
+          item.textContent = opt.textContent.trim();
+          list.appendChild(item);
+          items.push(item);
+        });
+      }
+      items.forEach(item => item.setAttribute('aria-selected', item.dataset.value === select.value ? 'true' : 'false'));
+    };
+    const setActive = (index, scroll = true) => {
+      const shown = visible();
+      items.forEach(item => item.classList.remove('is-active'));
+      if (!shown.length) { active = -1; list.removeAttribute('aria-activedescendant'); input.removeAttribute('aria-activedescendant'); return; }
+      active = Math.max(0, Math.min(shown.length - 1, index));
+      const item = shown[active];
+      item.classList.add('is-active');
+      list.setAttribute('aria-activedescendant', item.id);
+      input.setAttribute('aria-activedescendant', item.id);
+      if (scroll) {
+        const top = item.offsetTop, bottom = top + item.offsetHeight;
+        if (top < list.scrollTop) list.scrollTop = top;
+        else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+      }
+    };
+    const filter = () => {
+      const q = norm(input.value);
+      let shown = 0;
+      items.forEach(item => { item.hidden = q !== '' && !item.dataset.search.includes(q); if (!item.hidden) shown++; });
+      empty.hidden = shown > 0;
+      list.scrollTop = 0;
+      setActive(0, false);
+    };
+    const place = () => {
+      if (panel.classList.contains('is-sheet')) return;
+      const r = trigger.getBoundingClientRect();
+      const gap = 6, below = innerHeight - r.bottom - gap - 8, above = r.top - gap - 8;
+      const up = below < 240 && above > below;
+      panel.style.left = Math.round(Math.max(8, Math.min(r.left, innerWidth - r.width - 8))) + 'px';
+      panel.style.width = Math.round(r.width) + 'px';
+      panel.style.maxHeight = Math.round(Math.min(360, Math.max(160, up ? above : below))) + 'px';
+      if (up) { panel.style.top = 'auto'; panel.style.bottom = Math.round(innerHeight - r.top + gap) + 'px'; }
+      else { panel.style.bottom = 'auto'; panel.style.top = Math.round(r.bottom + gap) + 'px'; }
+      panel.classList.toggle('is-up', up);
+    };
+    const onOutside = event => {
+      if (wrap.contains(event.target)) return;
+      api.close(false);
+    };
+    const onViewport = event => { if (!api.isOpen || (event?.type === 'scroll' && panel.contains(event.target))) return; if (isMobile() !== panel.classList.contains('is-sheet')) api.close(false); else place(); };
+    const api = {
+      wrap, select, sync, isOpen: false,
+      open(seed) {
+        if (api.isOpen) return;
+        if (openPicker && openPicker !== api) openPicker.close(false);
+        openPicker = api;
+        api.isOpen = true;
+        clearTimeout(closeTimer);
+        fillList();
+        const sheet = isMobile();
+        panel.classList.toggle('is-sheet', sheet);
+        panel.classList.toggle('is-dropdown', !sheet);
+        panel.classList.remove('is-open', 'is-dragging');
+        panel.style.removeProperty('--mcp-drag');
+        ['left', 'top', 'bottom', 'width', 'maxHeight', 'height'].forEach(p => { panel.style[p] = ''; });
+        input.value = seed || '';
+        panel.dataset.nav = seed ? 'key' : 'none';
+        filter();
+        trigger.setAttribute('aria-expanded', 'true');
+        wrap.classList.add('is-open');
+        layer(panel, false);
+        if (sheet) {
+          backdrop.style.removeProperty('opacity');
+          layer(backdrop, true);
+          requestAnimationFrame(() => { if (api.isOpen) backdrop.classList.add('open'); });
+        }
+        panel.hidden = false;
+        layer(panel, true);
+        place();
+        const current = visible().findIndex(item => item.dataset.value === select.value);
+        setActive(seed ? 0 : Math.max(0, current), false);
+        panel.getBoundingClientRect();
+        requestAnimationFrame(() => {
+          if (!api.isOpen) return;
+          panel.classList.add('is-open');
+          if (sheet) panel.style.height = panel.offsetHeight + 'px';
+          const item = visible()[active];
+          if (item) list.scrollTop = Math.max(0, item.offsetTop - list.clientHeight / 2 + item.offsetHeight / 2);
+        });
+        // Phones keep the keyboard down until the search is tapped.
+        (sheet && !seed ? list : input).focus({preventScroll: true});
+        document.addEventListener('pointerdown', onOutside, true);
+        addEventListener('resize', onViewport, {passive: true});
+        addEventListener('scroll', onViewport, {passive: true, capture: true});
+      },
+      close(focus) {
+        if (!api.isOpen) return;
+        api.isOpen = false;
+        if (openPicker === api) openPicker = null;
+        document.removeEventListener('pointerdown', onOutside, true);
+        removeEventListener('resize', onViewport);
+        removeEventListener('scroll', onViewport, {capture: true});
+        trigger.setAttribute('aria-expanded', 'false');
+        wrap.classList.remove('is-open');
+        panel.classList.remove('is-open', 'is-dragging');
+        panel.style.removeProperty('--mcp-drag');
+        backdrop.classList.remove('open');
+        backdrop.style.removeProperty('opacity');
+        const done = () => {
+          if (api.isOpen) return;
+          layer(panel, false);
+          panel.hidden = true;
+          layer(backdrop, false);
+        };
+        clearTimeout(closeTimer);
+        if (reduced()) done(); else closeTimer = setTimeout(done, panel.classList.contains('is-sheet') ? 420 : 200);
+        if (focus && trigger.isConnected) trigger.focus({preventScroll: true});
+      },
+      choose(item) {
+        if (!item) return;
+        const changed = select.value !== item.dataset.value;
+        select.value = item.dataset.value;
+        sync();
+        api.close(true);
+        if (changed) {
+          select.dispatchEvent(new Event('input', {bubbles: true}));
+          select.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+      },
+    };
+    trigger.addEventListener('click', () => (api.isOpen ? api.close(true) : api.open()));
+    trigger.addEventListener('keydown', event => {
+      if (api.isOpen) return;
+      if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key)) { event.preventDefault(); api.open(); }
+      else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey && /\S/.test(event.key)) { event.preventDefault(); api.open(event.key); }
+    });
+    // A click on the label lands on the hidden select; send it to the picker.
+    select.addEventListener('focus', () => trigger.focus({preventScroll: true}));
+    input.addEventListener('input', filter);
+    panel.addEventListener('keyup', event => { if (event.key === 'Escape') event.stopPropagation(); });
+    panel.addEventListener('keydown', event => {
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End', 'PageDown', 'PageUp'].includes(event.key)) panel.dataset.nav = 'key';
+      const shown = visible();
+      switch (event.key) {
+        case 'ArrowDown': event.preventDefault(); setActive(active + 1); break;
+        case 'ArrowUp': event.preventDefault(); setActive(active - 1); break;
+        case 'Home': if (event.target !== input) { event.preventDefault(); setActive(0); } break;
+        case 'End': if (event.target !== input) { event.preventDefault(); setActive(shown.length - 1); } break;
+        case 'PageDown': event.preventDefault(); setActive(active + 8); break;
+        case 'PageUp': event.preventDefault(); setActive(active - 8); break;
+        case 'Enter': event.preventDefault(); api.choose(shown[active]); break;
+        case 'Escape': event.preventDefault(); event.stopPropagation(); api.close(true); break;
+        case 'Tab': api.close(false); break;
+        default:
+          // Typing on the list (phones, before the search is tapped) searches.
+          if (event.target !== input && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+            input.value += event.key;
+            input.focus({preventScroll: true});
+            filter();
+            event.preventDefault();
+          }
+      }
+    });
+    list.addEventListener('click', event => api.choose(event.target.closest?.('.mcp-option')));
+    list.addEventListener('pointermove', event => {
+      if (event.pointerType !== 'mouse') return;
+      panel.dataset.nav = 'pointer';
+      const item = event.target.closest?.('.mcp-option');
+      const index = item ? visible().indexOf(item) : -1;
+      if (index > -1 && index !== active) setActive(index, false);
+    });
+
+    // Drag to close, from the handle or from the list once it is at the top.
+    let startY = 0, lastY = 0, lastT = 0, velocity = 0, dy = 0, tracking = false, dragging = false;
+    const setDrag = y => {
+      dy = y;
+      panel.style.setProperty('--mcp-drag', y + 'px');
+      backdrop.style.opacity = String(Math.max(0, 1 - y / (panel.offsetHeight || 1)));
+    };
+    const begin = (y, fromHead) => {
+      if (!api.isOpen || !panel.classList.contains('is-sheet')) return;
+      tracking = true; dragging = fromHead; startY = lastY = y; lastT = performance.now(); velocity = 0; dy = 0;
+      if (dragging) panel.classList.add('is-dragging');
+    };
+    const move = (y, event) => {
+      if (!tracking) return;
+      if (!dragging) {
+        if (y - startY > 4 && list.scrollTop <= 0) { dragging = true; startY = y; panel.classList.add('is-dragging'); }
+        else if (Math.abs(y - startY) > 4) { tracking = false; return; }
+        else return;
+      }
+      const now = performance.now();
+      velocity = (y - lastY) / Math.max(1, now - lastT);
+      lastY = y; lastT = now;
+      const d = y - startY;
+      setDrag(d > 0 ? d : d / 4);
+      if (event && event.cancelable) event.preventDefault();
+    };
+    const finish = () => {
+      if (!tracking) return;
+      tracking = false;
+      if (!dragging) return;
+      dragging = false;
+      panel.classList.remove('is-dragging');
+      if (dy > panel.offsetHeight * 0.3 || velocity > 0.5) api.close(true);
+      else { setDrag(0); backdrop.style.removeProperty('opacity'); }
+    };
+    panel.addEventListener('touchstart', event => {
+      if (event.touches.length !== 1 || event.target.closest('input')) return;
+      begin(event.touches[0].clientY, !!event.target.closest('.mcp-head'));
+    }, {passive: true});
+    panel.addEventListener('touchmove', event => move(event.touches[0].clientY, event), {passive: false});
+    panel.addEventListener('touchend', finish);
+    panel.addEventListener('touchcancel', finish);
+    const head = panel.querySelector('.mcp-head');
+    head.addEventListener('pointerdown', event => {
+      if (event.pointerType === 'touch' || event.target.closest('input')) return;
+      begin(event.clientY, true);
+      try { head.setPointerCapture(event.pointerId); } catch (e) {}
+    });
+    head.addEventListener('pointermove', event => { if (event.pointerType !== 'touch') move(event.clientY, event); });
+    head.addEventListener('pointerup', event => { if (event.pointerType !== 'touch') finish(); });
+    head.addEventListener('pointercancel', event => { if (event.pointerType !== 'touch') finish(); });
+
+    pickers.set(wrap, api);
+    sync();
+    return api;
+  }
+  /* Safe to run again and again: a redrawn form gets a new picker, a copy of
+     an old picker that lost its script is replaced, a live one is synced. */
+  function enhance(root) {
+    root.querySelectorAll('select[name="address[country]"]').forEach(select => {
+      let wrap = select.nextElementSibling;
+      if (wrap && wrap.classList.contains('mcp')) {
+        const api = pickers.get(wrap);
+        if (api && api.select === select) { api.sync(); return; }
+        wrap.remove();
+      }
+      buildPicker(select);
+    });
+  }
+  document.addEventListener('change', event => {
+    const select = event.target;
+    if (!select?.matches?.('select[name="address[country]"]')) return;
+    const wrap = select.nextElementSibling;
+    if (wrap?.classList.contains('mcp')) pickers.get(wrap)?.sync();
+  });
+  const scan = (scope = document) => {
+    if (openPicker && !openPicker.wrap.isConnected) { const gone = openPicker; openPicker = null; gone.close(false); }
+    scope.querySelectorAll('[data-address="root"]').forEach(root => { prepare(root); enhance(root); });
+  };
   /* Capture phase: answer before the theme's Shopify-only handlers. */
   document.addEventListener('click', event => {
     const button = event.target.closest('[data-action="shipping"], .btn-save[data-action="shipping"]');
@@ -384,6 +720,9 @@
   let queued = 0;
   new MutationObserver(() => { if (!queued) queued = requestAnimationFrame(() => { queued = 0; scan(); }); })
     .observe(document.documentElement, {childList: true, subtree: true});
+  /* A section the builder draws again brings its own form. */
+  document.addEventListener('storelib:section-load', event => scan(event.target?.nodeType === 1 ? event.target : document));
+  document.addEventListener('shopify:section:load', event => scan(event.target?.nodeType === 1 ? event.target : document));
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => scan());
   else scan();
 })();
