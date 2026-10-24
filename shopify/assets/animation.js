@@ -1,13 +1,21 @@
-/* Storelib theme reveals: initialize once and keep editor updates visible. */
+/* Storelib theme reveals: initialize once and keep editor updates visible.
+   One shared IntersectionObserver; nothing is measured on scroll. */
 const SCROLL_ANIMATION_TRIGGER_CLASSNAME = '.scroll-trigger';
 const SCROLL_ANIMATION_OFFSCREEN_CLASSNAME = 'scroll-trigger--offscreen';
 const SCROLL_ANIMATION_DONE_ATTR = 'data-animation-done';
+const REVEAL_MAX_STAGGER = 6;
 const revealInitialized = new WeakSet();
 const zoomInitialized = new WeakSet();
 const visibleZoom = new Set();
-const zoomObserver = 'IntersectionObserver' in window ? new IntersectionObserver(entries => {
+// Browsers with scroll-driven animations zoom .animate--zoom-in in CSS alone.
+const zoomInCss = !!(window.CSS && CSS.supports && CSS.supports('animation-timeline: view()'));
+const zoomObserver = !zoomInCss && 'IntersectionObserver' in window ? new IntersectionObserver(entries => {
   entries.forEach(({target, isIntersecting}) => isIntersecting ? visibleZoom.add(target) : visibleZoom.delete(target));
 }) : null;
+
+function reducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 function initializeScrollZoomAnimationTrigger(root = document) {
   if (reducedMotion() || window.Shopify?.designMode || !zoomObserver) return;
@@ -20,39 +28,45 @@ function initializeScrollZoomAnimationTrigger(root = document) {
   });
 }
 let zoomFrame = 0;
-window.addEventListener('scroll', () => {
-  if (zoomFrame || reducedMotion()) return;
+if (zoomObserver) window.addEventListener('scroll', () => {
+  if (zoomFrame || !visibleZoom.size || reducedMotion()) return;
   zoomFrame = requestAnimationFrame(() => {
-    visibleZoom.forEach(el => {
-      if (!el.isConnected) { visibleZoom.delete(el); zoomObserver?.unobserve(el); return; }
-      const rect = el.getBoundingClientRect();
-      const progress = Math.max(0, Math.min(1, (window.innerHeight - rect.top) / (window.innerHeight + rect.height)));
-      el.style.setProperty('--zoom-in-ratio', 1 + 0.2 * progress);
-    });
     zoomFrame = 0;
+    // Read every box first, then write: one layout per frame, not one per image.
+    const height = window.innerHeight;
+    const reads = [];
+    visibleZoom.forEach(el => {
+      if (!el.isConnected) { visibleZoom.delete(el); zoomObserver.unobserve(el); return; }
+      reads.push([el, el.getBoundingClientRect()]);
+    });
+    reads.forEach(([el, rect]) => {
+      const progress = Math.max(0, Math.min(1, (height - rect.top) / (height + rect.height)));
+      el.style.setProperty('--zoom-in-ratio', (1 + 0.2 * progress).toFixed(4));
+    });
   });
-}, {passive:true});
-
-function reducedMotion() {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
-function isInViewport(el) {
-  const rect = el.getBoundingClientRect();
-  return rect.top < window.innerHeight && rect.bottom > 0;
-}
+}, {passive: true});
 
 function markDone(el) {
   el.setAttribute(SCROLL_ANIMATION_DONE_ATTR, '');
   el.setAttribute('animation-end', '');
   el.classList.remove('scroll-trigger--offscreen', 'scroll-trigger--armed');
+  el.style.removeProperty('--reveal-order');
 }
 
+const msOf = value => value.trim().endsWith('ms') ? parseFloat(value) : parseFloat(value) * 1000;
+
 const revealObserver = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
-  entries.forEach(({target, isIntersecting}) => {
-    if (!isIntersecting) return;
+  // Things that come into view together play in reading order, a short
+  // stagger apart; the order comes from the observer's own boxes.
+  const entering = entries.filter(entry => entry.isIntersecting)
+    .sort((a, b) => (a.boundingClientRect.top - b.boundingClientRect.top) || (a.boundingClientRect.left - b.boundingClientRect.left));
+  entering.forEach(({target}, index) => {
     revealObserver.unobserve(target);
+    if (index) target.style.setProperty('--reveal-order', String(Math.min(index, REVEAL_MAX_STAGGER)));
     target.classList.remove('scroll-trigger--offscreen');
+  });
+  // Styles are read after every class change, in one pass.
+  entering.forEach(({target}) => {
     const end = event => {
       if (event.target !== target) return;
       target.removeEventListener('animationend', end);
@@ -60,12 +74,11 @@ const revealObserver = 'IntersectionObserver' in window ? new IntersectionObserv
     };
     target.addEventListener('animationend', end);
     const css = getComputedStyle(target);
-    const ms = value => value.trim().endsWith('ms') ? parseFloat(value) : parseFloat(value) * 1000;
-    const duration = Math.max(...css.animationDuration.split(',').map(ms), 0);
-    const delay = Math.max(...css.animationDelay.split(',').map(ms), 0);
+    const duration = Math.max(...css.animationDuration.split(',').map(msOf), 0);
+    const delay = Math.max(...css.animationDelay.split(',').map(msOf), 0);
     setTimeout(() => { target.removeEventListener('animationend', end); markDone(target); }, duration + delay + 100);
   });
-}, {threshold: 0}) : null;
+}, {threshold: 0, rootMargin: '0px 0px -6% 0px'}) : null;
 
 function initializeScrollAnimationTrigger(root = document, editorEvent = false) {
   initializeScrollZoomAnimationTrigger(root);
@@ -76,7 +89,10 @@ function initializeScrollAnimationTrigger(root = document, editorEvent = false) 
   const fresh = [];
   elements.forEach(el => {
     const essentialProductContent = el.closest(productInformation) || el.querySelector(productInformation);
-    if (essentialProductContent || editor || reducedMotion() || !revealObserver || el.hasAttribute(SCROLL_ANIMATION_DONE_ATTR)) {
+    // A wrapper whose cards reveal themselves does not animate as well: one
+    // movement per element, never a fade inside a fade.
+    const container = !!el.querySelector(SCROLL_ANIMATION_TRIGGER_CLASSNAME);
+    if (essentialProductContent || container || editor || reducedMotion() || !revealObserver || el.hasAttribute(SCROLL_ANIMATION_DONE_ATTR)) {
       revealObserver?.unobserve(el);
       markDone(el);
       return;
@@ -92,12 +108,14 @@ function initializeScrollAnimationTrigger(root = document, editorEvent = false) 
   const below = fresh.map(el => el.getBoundingClientRect().top >= fold);
   fresh.forEach((el, i) => {
     if (!below[i]) { markDone(el); return; }
+    // A motion element that gave way to this reveal pinned itself visible.
+    if (el.tagName === 'MOTION-ELEMENT') el.style.removeProperty('opacity');
     el.classList.add('scroll-trigger--offscreen', 'scroll-trigger--armed');
     revealObserver.observe(el);
   });
 }
 
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => initializeScrollAnimationTrigger(), {once:true});
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => initializeScrollAnimationTrigger(), {once: true});
 else initializeScrollAnimationTrigger();
 
 // storelib:section-load is the builder redrawing a section in place: it shows
