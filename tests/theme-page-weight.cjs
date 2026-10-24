@@ -54,3 +54,20 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
   } finally {await browser.close();}
   console.log(`${passed} page weight and theme-owned setting checks passed`);
 })().catch(error=>{console.error(error);process.exitCode=1});
+// Product information shows from the first paint, before any theme script runs.
+(async()=>{
+  const {chromium}=require('playwright');
+  const layout=fs.readFileSync(path.join(__dirname,'..','layout/theme.storelib'),'utf8');
+  const i=layout.indexOf('motion-element.opacity-0 {');
+  const css=layout.slice(i,layout.indexOf('{% comment %}{% endcomment %}',i));
+  const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});
+  try{
+    const page=await browser.newPage();
+    await page.setContent(`<style>.opacity-0{opacity:0}${css}</style><motion-element class="product-detail__information opacity-0">Buy</motion-element><motion-element class="other opacity-0">Later</motion-element>`);
+    await page.waitForTimeout(500);
+    assert.equal(await page.$eval('.product-detail__information',el=>getComputedStyle(el).opacity),'1');
+    assert.equal(await page.$eval('.product-detail__information',el=>el.getAnimations().length),0,'the fade ends and leaves nothing applied');
+    assert.equal(await page.$eval('.other',el=>getComputedStyle(el).opacity),'0','other motion elements keep their own reveal');
+    console.log('1 first-paint product information check passed');
+  } finally {await browser.close();}
+})().catch(error=>{console.error(error);process.exitCode=1});

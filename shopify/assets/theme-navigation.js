@@ -81,6 +81,15 @@
         urls.add(anchor.href); picked.push(anchor);
         if (++visible === 4) break;
       }
+      // The first few visible links of the header menu (home, shop, a
+      // collection): the pages most visitors open next.
+      let menu = 0;
+      for (const anchor of document.querySelectorAll('header nav a[href], .section-header nav a[href]')) {
+        if (menu === 4) break;
+        const rect = anchor.getBoundingClientRect();
+        if (!rect.width || !rect.height || rect.top >= innerHeight || urls.has(anchor.href)) continue;
+        urls.add(anchor.href); picked.push(anchor); menu++;
+      }
       if (speculation) warmList(picked); else picked.forEach(warm);
     }, {timeout: 1200});
   };
