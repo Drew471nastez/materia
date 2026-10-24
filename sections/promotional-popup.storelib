@@ -14,7 +14,7 @@
   assign s = section.settings
   assign sid = section.id
 
-  assign placeholder_src = s.placeholder_url | default: 'https://2dbags.co/wp-content/uploads/revslider/lookbook1-demo_slider/placeholder.jpg'
+  assign placeholder_src = s.placeholder_url
 
   assign eyebrow_block  = section.blocks | where: 'type', 'eyebrow'    | first
   assign heading_block  = section.blocks | where: 'type', 'heading'    | first
@@ -33,18 +33,20 @@
     position: fixed; inset: 0;
     background: {{ s.backdrop_color | default: 'rgba(0,0,0,0.55)' }};
     z-index: {{ s.z_index | default: 1000 }};
-    display: none;
-    opacity: 0;
-    transition: opacity 0.28s ease;
-    backdrop-filter: blur(2px);
-    -webkit-backdrop-filter: blur(2px);
-  }
-  #shopify-section-{{ sid }} .ppd-backdrop[data-open="true"] {
     display: flex;
-    opacity: 1;
     align-items: center;
     justify-content: center;
     padding: {{ s.backdrop_padding | default: 16 }}px;
+    overflow-y: auto; overscroll-behavior: contain;
+    opacity: 0; visibility: hidden;
+    transition: opacity 0.28s ease, visibility 0s linear 0.32s;
+  }
+  #shopify-section-{{ sid }} .ppd-backdrop[data-open="true"] {
+    opacity: 1; visibility: visible; transition-delay: 0s;
+  }
+  #shopify-section-{{ sid }} .ppd-backdrop[data-preview] {
+    {%- assign ppd_backdrop = s.backdrop_color | default: 'rgba(0,0,0,0.55)' -%}
+    background: {% render 'scheme-color', color: s.editor_preview_bg, fallback: ppd_backdrop %};
   }
 
   #shopify-section-{{ sid }} .ppd {
@@ -56,6 +58,7 @@
     border-radius: {{ s.modal_radius | default: 18 }}px;
     overflow: hidden;
     box-shadow: 0 24px 60px rgba(0,0,0,0.4);
+    margin: auto;
     transform: translateY(20px) scale(0.96);
     transition: transform 0.32s cubic-bezier(0.22, 0.61, 0.36, 1);
     display: grid;
@@ -106,6 +109,7 @@
     z-index: 5;
     width: {{ s.close_size | default: 36 }}px;
     height: {{ s.close_size | default: 36 }}px;
+    min-width: 44px; min-height: 44px;
     border: 0;
     background-color: {% render 'scheme-color', color: s.close_bg, fallback: 'color-mix(in srgb, currentColor 10%, transparent)' %};
     color: {% render 'scheme-color', color: s.close_color, fallback: 'var(--color-heading)' %};
@@ -118,7 +122,6 @@
   }
   #shopify-section-{{ sid }} .ppd__close:hover {
     background-color: {% render 'scheme-color', color: s.close_bg_hover, fallback: 'color-mix(in srgb, currentColor 20%, transparent)' %};
-    transform: scale(1.05);
   }
   #shopify-section-{{ sid }} .ppd__close svg { width: 16px; height: 16px; }
 
@@ -182,6 +185,7 @@
     color: var(--ppd-dismiss-color);
     transition: color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), opacity var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease);
     align-self: center;
+    min-height: 44px; padding: 8px 12px;
   }
   #shopify-section-{{ sid }} .ppd__dismiss:hover { text-decoration: underline; color: var(--ppd-dismiss-hover); }
   @media (prefers-reduced-motion: reduce) {
@@ -190,42 +194,53 @@
     #shopify-section-{{ sid }} .ppd__close,
     #shopify-section-{{ sid }} .ppd__field,
     #shopify-section-{{ sid }} .ppd__dismiss { transition: none; }
-    #shopify-section-{{ sid }} .ppd__close:hover { transform: none; }
+    #shopify-section-{{ sid }} .ppd { transform: none; }
   }
 
-  /* Editor preview — show inline (not as fixed modal) when in design mode */
-  .shopify-design-mode #shopify-section-{{ sid }} .ppd-backdrop {
-    position: relative !important;
-    display: flex !important;
-    opacity: 1 !important;
-    inset: auto !important;
-    padding: 24px;
-    background: {% render 'scheme-color', color: s.editor_preview_bg, fallback: 'transparent' %};
-  }
 {% comment %}{% endcomment %}</style>
 
+{%- liquid
+  case s.trigger
+    when 'scroll'
+      assign ppd_mode = 'scroll'
+    when 'exit'
+      assign ppd_mode = 'exit'
+    when 'click'
+      assign ppd_mode = 'manual'
+    when 'pageviews'
+      assign ppd_mode = 'pageviews'
+    else
+      assign ppd_mode = 'delay'
+  endcase
+-%}
+{%- capture ppd_config -%}
+  {"design": {{ request.design_mode | json }}, "preview": {{ s.show_in_builder | json }},
+   "trigger": {"mode": {{ ppd_mode | json }}, "delay": {{ s.delay | default: 3 | json }}, "scroll": {{ s.scroll_pct | default: 40 | json }}, "views": {{ s.page_views | default: 2 | json }} },
+   "frequency": {"mode": {{ s.frequency | default: 'session' | json }} } }
+{%- endcapture -%}
 <div
   id="ppd-{{ sid }}"
   class="ppd-backdrop"
   data-open="false"
-  data-trigger="{{ s.trigger | default: 'load' }}"
-  data-delay="{{ s.delay | default: 3 }}"
-  data-scroll-pct="{{ s.scroll_pct | default: 40 }}"
-  data-frequency="{{ s.frequency | default: 'session' }}"
   data-section-id="{{ sid }}"
-  role="dialog"
-  aria-modal="true"
+  data-popup-root="{{ sid }}"
+  data-popup-config="{{ ppd_config | strip_newlines | escape }}"
+  aria-hidden="true"
 >
-  <div class="ppd color-{{ color_scheme }} gradient" role="document">
-    <button type="button" class="ppd__close" aria-label="{{ 'accessibility.close' | t }}" data-ppd-close>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg>
+  <div class="ppd color-{{ color_scheme }} gradient" role="dialog" aria-modal="true"{% if heading_block %} aria-labelledby="ppd-title-{{ sid }}"{% endif %} tabindex="-1">
+    <button type="button" class="ppd__close" aria-label="{{ 'accessibility.close' | t }}" data-popup-close>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
     </button>
 
     <div class="ppd__media">
       {%- if s.image != blank -%}
         {{ s.image | image_url: width: 800 | image_tag: alt: '', loading: 'lazy', sizes: '(max-width: 760px) 100vw, 50vw', widths: '320, 480, 640, 800, 1000' }}
       {%- else -%}
-        <img src="{{ placeholder_src }}" alt="" loading="lazy">
+        {%- if placeholder_src != blank -%}
+          <img src="{{ placeholder_src }}" alt="" loading="lazy" width="800" height="1000">
+        {%- else -%}
+          {{ 'lifestyle-1' | placeholder_svg_tag }}
+        {%- endif -%}
       {%- endif -%}
     </div>
 
@@ -239,7 +254,7 @@
 
       {%- if heading_block and heading_block.settings.text != blank -%}
         {%- assign hb = heading_block.settings -%}
-        <{{ hb.tag | default: 'h2' }} class="ppd__heading"
+        <{{ hb.tag | default: 'h2' }} class="ppd__heading" id="ppd-title-{{ sid }}"
           data-bid="{{ heading_block.id }}"
           style="color: {% render 'scheme-color', color: hb.color, fallback: 'var(--color-heading)' %}; font-size: {{ hb.size_mobile | default: 26 }}px;"
           {{ heading_block.shopify_attributes }}>{{ hb.text | escape }}</{{ hb.tag | default: 'h2' }}>
@@ -283,11 +298,10 @@
           {%- assign email_ph_default = 'accessibility.email_placeholder' | t -%}
           {%- assign phone_ph_default = 'accessibility.phone_placeholder' | t -%}
           {%- assign get_coupon_default = 'accessibility.get_my_coupon' | t -%}
-          {%- form 'customer', id: ppd_form_id, class: 'ppd__form' -%}
-            <input type="hidden" name="contact[tags]" value="newsletter,promo-popup">
-            <input type="email" class="ppd__field" name="contact[email]" placeholder="{{ fbs.email_placeholder | default: email_ph_default | escape }}" aria-label="{{ 'accessibility.email_placeholder' | t }}" required>
+          <form id="{{ ppd_form_id }}" class="ppd__form" data-storelib-form="subscribe">
+            <input type="email" class="ppd__field" name="email" autocomplete="email" placeholder="{{ fbs.email_placeholder | default: email_ph_default | escape }}" aria-label="{{ 'accessibility.email_placeholder' | t }}" required data-popup-autofocus>
             {%- if fbs.show_phone -%}
-              <input type="tel" class="ppd__field" name="contact[phone]" placeholder="{{ fbs.phone_placeholder | default: phone_ph_default | escape }}" aria-label="{{ 'accessibility.phone_placeholder' | t }}">
+              <input type="tel" class="ppd__field" name="phone" autocomplete="tel" placeholder="{{ fbs.phone_placeholder | default: phone_ph_default | escape }}" aria-label="{{ 'accessibility.phone_placeholder' | t }}">
             {%- endif -%}
             {%- liquid
               assign ppd_custom = false
@@ -297,19 +311,15 @@
                 assign ppd_transform = 'uppercase'
               endif
             -%}
-            <button type="submit" class="ppd__btn" data-theme-button="primary" data-sl-button style="{%- render 'button-overrides', bg: fbs.btn_bg, text: fbs.btn_color, hover_bg: fbs.btn_bg_hover, custom: ppd_custom, radius: fbs.btn_radius, padding_y: fbs.btn_pad_y, font_size: fbs.btn_size, border_width: 0, transform: ppd_transform -%}">{{ fbs.button_label | default: get_coupon_default | escape }}</button>
-            {%- if form.posted_successfully? -%}
-              <p class="ppd__success">{{ fbs.success_text | default: 'Check your inbox — your coupon is on the way!' | escape }}</p>
-            {%- elsif form.errors -%}
-              <p class="ppd__error">{{ form.errors | default_errors }}</p>
-            {%- endif -%}
-          {%- endform -%}
+            <button type="submit" class="ppd__btn btn-primary" data-theme-button="primary" data-sl-button style="{%- render 'button-overrides', bg: fbs.btn_bg, text: fbs.btn_color, hover_bg: fbs.btn_bg_hover, custom: ppd_custom, radius: fbs.btn_radius, padding_y: fbs.btn_pad_y, font_size: fbs.btn_size, border_width: 0, transform: ppd_transform -%}">{{ fbs.button_label | default: get_coupon_default | escape }}</button>
+            <p class="ppd__success" data-storelib-success hidden>{{ fbs.success_text | default: 'Check your inbox. Your code is on the way.' | escape }}</p>
+          </form>
         </div>
       {%- endif -%}
 
       {%- if dismiss_block and dismiss_block.settings.label != blank -%}
         {%- assign dbs = dismiss_block.settings -%}
-        <button type="button" class="ppd__dismiss" data-ppd-close
+        <button type="button" class="ppd__dismiss" data-popup-close
                 style="--ppd-dismiss-color: {% render 'scheme-color', color: dbs.color, fallback: 'color-mix(in srgb, var(--color-text) 70%, transparent)' %}; --ppd-dismiss-hover: {% render 'scheme-color', color: dbs.hover_color, fallback: 'var(--color-text)' %}; font-size: {{ dbs.size | default: 13 }}px;"
                 {{ dismiss_block.shopify_attributes }}>{{ dbs.label | escape }}</button>
       {%- endif -%}
@@ -317,93 +327,34 @@
   </div>
 </div>
 
+<script src="{{ 'materia-popups.js' | asset_url }}" defer="defer"></script>
 <script>
 (function(){
-  function init() {
-  var modal = document.getElementById('ppd-{{ sid }}');
-  if (!modal || modal.__ppdInit) return;
-  modal.__ppdInit = true;
-  var inDesignMode = document.documentElement.classList.contains('shopify-design-mode') ||
-                     (window.Shopify && window.Shopify.designMode);
-  var key = 'ppd-dismissed-{{ sid }}';
-  var freq = modal.getAttribute('data-frequency') || 'session';
-  var trigger = modal.getAttribute('data-trigger') || 'load';
-  var delay = parseFloat(modal.getAttribute('data-delay')) || 0;
-  var scrollPct = parseInt(modal.getAttribute('data-scroll-pct'), 10) || 40;
-
-  function alreadySeen() {
-    if (inDesignMode) return false;
-    if (freq === 'always') return false;
-    try {
-      if (freq === 'session') return sessionStorage.getItem(key) === '1';
-      if (freq === 'once')    return localStorage.getItem(key) === '1';
-    } catch(e) { return false; }
-    return false;
-  }
-  function markSeen() {
-    if (inDesignMode) return;
-    try {
-      if (freq === 'session') sessionStorage.setItem(key, '1');
-      if (freq === 'once')    localStorage.setItem(key, '1');
-    } catch(e){}
-  }
-
-  function open() {
-    modal.setAttribute('data-open', 'true');
-    document.body.style.overflow = 'hidden';
-    var firstField = modal.querySelector('input[type="email"]');
-    if (firstField) setTimeout(function(){ firstField.focus(); }, 320);
-  }
-  function close() {
-    modal.setAttribute('data-open', 'false');
-    document.body.style.overflow = '';
-    markSeen();
-  }
-
-  modal.querySelectorAll('[data-ppd-close]').forEach(function(el){
-    el.addEventListener('click', close);
-  });
-  modal.addEventListener('click', function(e){
-    if (e.target === modal) close();
-  });
-  document.addEventListener('keydown', function(e){
-    if (e.key === 'Escape' && modal.getAttribute('data-open') === 'true') close();
-  });
-
-  if (alreadySeen()) return;
-
-  if (trigger === 'load') {
-    setTimeout(open, Math.max(0, delay) * 1000);
-  } else if (trigger === 'scroll') {
-    var fired = false;
-    function onScroll() {
-      var doc = document.documentElement;
-      var scrolled = (window.scrollY + window.innerHeight) / doc.scrollHeight * 100;
-      if (scrolled >= scrollPct && !fired) {
-        fired = true;
-        open();
-        window.removeEventListener('scroll', onScroll);
-      }
-    }
-    window.addEventListener('scroll', onScroll, { passive: true });
-  } else if (trigger === 'exit') {
-    var fired = false;
-    document.addEventListener('mouseleave', function(e) {
-      if (e.clientY < 0 && !fired) { fired = true; open(); }
+  var SID = {{ sid | json }};
+  function setup(P){
+    var modal = document.querySelector('[data-popup-root="' + SID + '"]');
+    if (!modal || modal.__ppd) return;
+    modal.__ppd = true;
+    var CFG = JSON.parse(modal.getAttribute('data-popup-config') || '{}');
+    var form = modal.querySelector('.ppd__form');
+    var api = P.register({
+      id: SID, root: modal, dialog: modal.querySelector('.ppd'), backdrop: modal,
+      design: CFG.design, preview: CFG.preview,
+      trigger: Object.assign({ selector: '[data-ppd-trigger="' + SID + '"]' }, CFG.trigger),
+      frequency: CFG.frequency,
+      open: function(o){ if (o.preview) modal.setAttribute('data-preview', ''); modal.setAttribute('data-open', 'true'); },
+      close: function(){ modal.setAttribute('data-open', 'false'); modal.removeAttribute('data-preview'); }
     });
-  } else if (trigger === 'click') {
-    var selector = '[data-ppd-trigger="{{ sid }}"]';
-    document.querySelectorAll(selector).forEach(function(el) {
-      el.addEventListener('click', function(e){ e.preventDefault(); open(); });
-    });
+    // Signed up: do not offer the discount again.
+    if (form) new MutationObserver(function(){
+      if (form.getAttribute('data-state') === 'done' && api) api.done(365);
+    }).observe(form, { attributes: true, attributeFilter: ['data-state'] });
   }
-
-  if (inDesignMode) modal.setAttribute('data-open', 'true');
-  }
-  init();
-  document.addEventListener('storelib:section-load', function(e){
-    if (e.detail && String(e.detail.sectionId) === '{{ sid }}') init();
-  });
+  function boot(){ (window.MateriaPopupsQueue = window.MateriaPopupsQueue || []).push(setup); }
+  boot();
+  function reload(e){ if (e.detail && String(e.detail.sectionId) === SID) boot(); }
+  document.addEventListener('storelib:section-load', reload);
+  document.addEventListener('shopify:section:load', reload);
 })();
 {% comment %}{% endcomment %}</script>
 
@@ -1043,52 +994,46 @@
   ],
   "presets": [],
   "shopify": {
-    "name": "Promotion Popup Discount",
+    "name": "Signup Discount Popup",
     "tag": "section",
     "class": "section sec__promotion-popup",
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
-      },
-      {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
-      },
-      {
-        "type": "header",
-        "content": "When to open"
+        "content": "Trigger"
       },
       {
         "type": "select",
         "id": "trigger",
-        "label": "Open the popup on",
+        "label": "Opens",
         "default": "load",
         "options": [
           {
             "value": "load",
-            "label": "Page load (after delay)"
+            "label": "After a delay"
           },
           {
             "value": "scroll",
-            "label": "Scroll percentage"
+            "label": "On scroll"
           },
           {
             "value": "exit",
-            "label": "Exit intent (mouse leaves window)"
+            "label": "On exit intent"
+          },
+          {
+            "value": "pageviews",
+            "label": "After page views"
           },
           {
             "value": "click",
-            "label": "Custom button click"
+            "label": "From a link"
           }
         ]
       },
       {
         "type": "range",
         "id": "delay",
-        "label": "Page-load delay",
+        "label": "Delay",
         "min": 0,
         "max": 30,
         "step": 1,
@@ -1098,41 +1043,53 @@
       {
         "type": "range",
         "id": "scroll_pct",
-        "label": "Scroll percentage",
+        "label": "Scrolled",
         "min": 10,
         "max": 100,
         "step": 5,
         "unit": "%",
-        "default": 40
+        "default": 50,
+        "visible_if": "{{ section.settings.trigger == 'scroll' }}"
+      },
+      {
+        "type": "range",
+        "id": "page_views",
+        "label": "Page views",
+        "min": 1,
+        "max": 10,
+        "step": 1,
+        "default": 2,
+        "visible_if": "{{ section.settings.trigger == 'pageviews' }}"
+      },
+      {
+        "type": "header",
+        "content": "Behaviour"
       },
       {
         "type": "select",
         "id": "frequency",
-        "label": "Show frequency",
+        "label": "Show",
         "default": "session",
         "options": [
           {
             "value": "session",
-            "label": "Once per session"
+            "label": "Once a visit"
           },
           {
             "value": "once",
-            "label": "Once per visitor (remembered forever)"
+            "label": "Once"
           },
           {
             "value": "always",
-            "label": "Every page load"
+            "label": "Every page"
           }
         ]
       },
       {
-        "type": "range",
-        "id": "z_index",
-        "label": "Z-index (stacking order)",
-        "min": 100,
-        "max": 5000,
-        "step": 50,
-        "default": 1000
+        "type": "checkbox",
+        "id": "show_in_builder",
+        "label": "Show in the builder",
+        "default": false
       },
       {
         "type": "header",
@@ -1146,17 +1103,12 @@
       {
         "type": "url",
         "id": "placeholder_url",
-        "label": "Fallback image URL"
-      },
-      {
-        "type": "color",
-        "id": "image_bg",
-        "label": "Image placeholder background"
+        "label": "Image address (if none picked)"
       },
       {
         "type": "range",
         "id": "image_width_pct",
-        "label": "Image column width (desktop)",
+        "label": "Image width",
         "min": 30,
         "max": 70,
         "step": 1,
@@ -1166,7 +1118,7 @@
       {
         "type": "select",
         "id": "image_position",
-        "label": "Image position (desktop)",
+        "label": "Image",
         "default": "left",
         "options": [
           {
@@ -1181,28 +1133,12 @@
       },
       {
         "type": "header",
-        "content": "Modal styling"
-      },
-      {
-        "type": "color",
-        "id": "backdrop_color",
-        "label": "Backdrop color",
-        "default": "rgba(0,0,0,0.55)"
-      },
-      {
-        "type": "color",
-        "id": "modal_bg",
-        "label": "Modal background"
-      },
-      {
-        "type": "color",
-        "id": "modal_text_color",
-        "label": "Default text color"
+        "content": "Layout"
       },
       {
         "type": "range",
         "id": "modal_max_width",
-        "label": "Modal max width",
+        "label": "Width",
         "min": 360,
         "max": 1100,
         "step": 10,
@@ -1212,7 +1148,7 @@
       {
         "type": "range",
         "id": "modal_radius",
-        "label": "Modal corner radius",
+        "label": "Corner radius",
         "min": 0,
         "max": 36,
         "step": 1,
@@ -1222,7 +1158,7 @@
       {
         "type": "range",
         "id": "backdrop_padding",
-        "label": "Backdrop padding",
+        "label": "Space around",
         "min": 0,
         "max": 60,
         "step": 2,
@@ -1230,13 +1166,9 @@
         "default": 16
       },
       {
-        "type": "header",
-        "content": "Content layout"
-      },
-      {
         "type": "select",
         "id": "content_align",
-        "label": "Content alignment",
+        "label": "Text",
         "default": "center",
         "options": [
           {
@@ -1256,7 +1188,7 @@
       {
         "type": "range",
         "id": "content_padding_desktop",
-        "label": "Content padding (desktop)",
+        "label": "Padding",
         "min": 12,
         "max": 80,
         "step": 2,
@@ -1266,7 +1198,7 @@
       {
         "type": "range",
         "id": "content_padding_mobile",
-        "label": "Content padding (mobile)",
+        "label": "Padding on phones",
         "min": 12,
         "max": 60,
         "step": 2,
@@ -1276,7 +1208,7 @@
       {
         "type": "range",
         "id": "content_gap",
-        "label": "Vertical gap between elements",
+        "label": "Gap",
         "min": 4,
         "max": 36,
         "step": 1,
@@ -1285,27 +1217,59 @@
       },
       {
         "type": "header",
-        "content": "Close button (X)"
+        "content": "Style"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "color",
+        "id": "modal_bg",
+        "label": "Background"
+      },
+      {
+        "type": "color",
+        "id": "modal_text_color",
+        "label": "Text"
+      },
+      {
+        "type": "color",
+        "id": "image_bg",
+        "label": "Image background"
+      },
+      {
+        "type": "color",
+        "id": "backdrop_color",
+        "label": "Backdrop",
+        "default": "rgba(0,0,0,0.55)"
+      },
+      {
+        "type": "color",
+        "id": "editor_preview_bg",
+        "label": "Builder backdrop"
       },
       {
         "type": "color",
         "id": "close_color",
-        "label": "Close icon color"
+        "label": "Close icon"
       },
       {
         "type": "color",
         "id": "close_bg",
-        "label": "Close button background"
+        "label": "Close background"
       },
       {
         "type": "color",
         "id": "close_bg_hover",
-        "label": "Close button bg (hover)"
+        "label": "Close hover"
       },
       {
         "type": "range",
         "id": "close_size",
-        "label": "Close button size",
+        "label": "Close size",
         "min": 24,
         "max": 56,
         "step": 1,
@@ -1315,7 +1279,7 @@
       {
         "type": "range",
         "id": "close_offset",
-        "label": "Close button offset",
+        "label": "Close inset",
         "min": 4,
         "max": 32,
         "step": 1,
@@ -1324,12 +1288,16 @@
       },
       {
         "type": "header",
-        "content": "Editor preview"
+        "content": "Advanced"
       },
       {
-        "type": "color",
-        "id": "editor_preview_bg",
-        "label": "Editor backdrop (preview only)"
+        "type": "range",
+        "id": "z_index",
+        "label": "Stacking order",
+        "min": 100,
+        "max": 5000,
+        "step": 50,
+        "default": 1000
       }
     ],
     "blocks": [
@@ -1341,7 +1309,7 @@
           {
             "type": "text",
             "id": "text",
-            "label": "Eyebrow text",
+            "label": "Text",
             "default": "Limited time"
           },
           {
@@ -1352,7 +1320,7 @@
           {
             "type": "range",
             "id": "size",
-            "label": "Font size",
+            "label": "Size",
             "min": 9,
             "max": 18,
             "step": 1,
@@ -1379,13 +1347,13 @@
           {
             "type": "text",
             "id": "text",
-            "label": "Heading text",
+            "label": "Heading",
             "default": "Get 20% off your next order"
           },
           {
             "type": "select",
             "id": "tag",
-            "label": "Heading tag",
+            "label": "Level",
             "default": "h2",
             "options": [
               {
@@ -1410,7 +1378,7 @@
           {
             "type": "range",
             "id": "size_desktop",
-            "label": "Size (desktop)",
+            "label": "Size",
             "min": 18,
             "max": 60,
             "step": 1,
@@ -1420,7 +1388,7 @@
           {
             "type": "range",
             "id": "size_mobile",
-            "label": "Size (mobile)",
+            "label": "Size on phones",
             "min": 16,
             "max": 44,
             "step": 1,
@@ -1437,7 +1405,7 @@
           {
             "type": "richtext",
             "id": "text",
-            "label": "Subheading text",
+            "label": "Text",
             "default": "<p>Sign up and unlock your instant discount.</p>"
           },
           {
@@ -1448,7 +1416,7 @@
           {
             "type": "range",
             "id": "size",
-            "label": "Font size",
+            "label": "Size",
             "min": 11,
             "max": 18,
             "step": 1,
@@ -1459,12 +1427,12 @@
       },
       {
         "type": "form",
-        "name": "Email signup form",
+        "name": "Signup form",
         "limit": 1,
         "settings": [
           {
             "type": "header",
-            "content": "Form fields"
+            "content": "Content"
           },
           {
             "type": "text",
@@ -1475,14 +1443,15 @@
           {
             "type": "checkbox",
             "id": "show_phone",
-            "label": "Show phone field",
+            "label": "Ask for a phone number",
             "default": false
           },
           {
             "type": "text",
             "id": "phone_placeholder",
             "label": "Phone placeholder",
-            "default": "Phone (optional)"
+            "default": "Phone (optional)",
+            "visible_if": "{{ block.settings.show_phone == true }}"
           },
           {
             "type": "text",
@@ -1493,38 +1462,38 @@
           {
             "type": "text",
             "id": "success_text",
-            "label": "Success message",
+            "label": "Thank-you text",
             "default": "Check your inbox — your coupon is on the way!"
           },
           {
             "type": "header",
-            "content": "Input styling"
+            "content": "Field"
           },
           {
             "type": "color",
             "id": "input_bg",
-            "label": "Input background"
+            "label": "Background"
           },
           {
             "type": "color",
             "id": "input_color",
-            "label": "Input text color"
+            "label": "Text"
           },
           {
             "type": "color",
             "id": "input_placeholder_color",
-            "label": "Input placeholder color"
+            "label": "Placeholder"
           },
           {
             "type": "checkbox",
             "id": "use_theme_fields",
-            "label": "Use theme field style",
+            "label": "Theme field style",
             "default": true
           },
           {
             "type": "range",
             "id": "input_radius",
-            "label": "Input corner radius",
+            "label": "Corner radius",
             "min": 0,
             "max": 30,
             "step": 1,
@@ -1535,7 +1504,7 @@
           {
             "type": "range",
             "id": "input_pad_y",
-            "label": "Input padding Y",
+            "label": "Height padding",
             "min": 8,
             "max": 22,
             "step": 1,
@@ -1546,7 +1515,7 @@
           {
             "type": "range",
             "id": "input_size",
-            "label": "Input font size",
+            "label": "Text size",
             "min": 12,
             "max": 18,
             "step": 1,
@@ -1556,33 +1525,33 @@
           },
           {
             "type": "header",
-            "content": "Button styling"
+            "content": "Button"
           },
           {
             "type": "color",
             "id": "btn_bg",
-            "label": "Button background"
+            "label": "Background"
           },
           {
             "type": "color",
             "id": "btn_bg_hover",
-            "label": "Button background (hover)"
+            "label": "Hover background"
           },
           {
             "type": "color",
             "id": "btn_color",
-            "label": "Button text color"
+            "label": "Text"
           },
           {
             "type": "checkbox",
             "id": "use_theme_button",
-            "label": "Use theme button style",
+            "label": "Theme button style",
             "default": true
           },
           {
             "type": "range",
             "id": "btn_radius",
-            "label": "Button corner radius",
+            "label": "Corner radius",
             "min": 0,
             "max": 30,
             "step": 1,
@@ -1593,7 +1562,7 @@
           {
             "type": "range",
             "id": "btn_size",
-            "label": "Button font size",
+            "label": "Text size",
             "min": 11,
             "max": 18,
             "step": 1,
@@ -1604,7 +1573,7 @@
           {
             "type": "range",
             "id": "btn_pad_y",
-            "label": "Button padding Y",
+            "label": "Height padding",
             "min": 8,
             "max": 22,
             "step": 1,
@@ -1614,29 +1583,29 @@
           },
           {
             "type": "header",
-            "content": "Status colors"
+            "content": "Messages"
           },
           {
             "type": "color",
             "id": "success_color",
-            "label": "Success message color"
+            "label": "Thank-you color"
           },
           {
             "type": "color",
             "id": "error_color",
-            "label": "Error message color"
+            "label": "Error color"
           }
         ]
       },
       {
         "type": "dismiss",
-        "name": "Dismiss link",
+        "name": "No-thanks link",
         "limit": 1,
         "settings": [
           {
             "type": "text",
             "id": "label",
-            "label": "Label",
+            "label": "Text",
             "default": "No, thanks!"
           },
           {
@@ -1652,7 +1621,7 @@
           {
             "type": "range",
             "id": "size",
-            "label": "Font size",
+            "label": "Size",
             "min": 11,
             "max": 16,
             "step": 1,

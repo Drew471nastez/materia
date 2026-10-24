@@ -51,31 +51,31 @@
   .cdp-overlay-{{ sid }} {
     position: fixed; inset: 0;
     background: {% render 'scheme-color', color: section.settings.overlay_color, fallback: '#000000' %};
-    opacity: 0; pointer-events: none;
-    transition: opacity .3s ease;
+    opacity: 0; pointer-events: none; visibility: hidden;
+    transition: opacity .3s ease, visibility 0s linear .3s;
     z-index: 2147483646;
   }
   .cdp-{{ sid }}.cdp-open .cdp-overlay-{{ sid }} {
     opacity: {{ section.settings.overlay_opacity | default: 60 | times: 0.01 }};
-    pointer-events: auto;
+    pointer-events: auto; visibility: visible; transition-delay: 0s;
   }
 
   .cdp-card-{{ sid }} {
     position: fixed; left: 50%; top: 50%;
     transform: translate(-50%, -50%) scale(.96);
-    opacity: 0; pointer-events: none;
-    transition: transform .3s ease, opacity .3s ease;
+    opacity: 0; pointer-events: none; visibility: hidden;
+    transition: transform .35s cubic-bezier(.2,.8,.2,1), opacity .3s ease, visibility 0s linear .35s;
     z-index: 2147483647;
     width: min(calc(100vw - {{ mobile_gutter }}px), {{ section.settings.popup_width | default: 900 }}px);
-    max-height: calc(100vh - 24px);
-    overflow: hidden;
+    max-height: calc(var(--sl-vh, 1vh) * 100 - 24px);
+    overflow: hidden auto; overscroll-behavior: contain;
     background: {% render 'scheme-color', color: section.settings.card_bg, fallback: 'var(--color-background)' %};
     color: {% render 'scheme-color', color: section.settings.text_color, fallback: 'var(--color-text)' %};
     border-radius: {{ section.settings.popup_radius | default: 12 }}px;
     box-shadow: 0 12px 40px rgba(0,0,0,.35);
   }
   .cdp-{{ sid }}.cdp-open .cdp-card-{{ sid }} {
-    opacity: 1; pointer-events: auto;
+    opacity: 1; pointer-events: auto; visibility: visible; transition-delay: 0s;
     transform: translate(-50%, -50%) scale(1);
   }
   @media (min-width: 750px) {
@@ -134,7 +134,7 @@
   /* Close button (top-right of card) */
   .cdp-close-{{ sid }} {
     position: absolute; top: 14px; right: 14px;
-    width: 34px; height: 34px;
+    width: 44px; height: 44px; padding: 0;
     border: none; border-radius: 50%;
     background: transparent;
     color: {% render 'scheme-color', color: section.settings.close_color, fallback: 'var(--color-heading)' %};
@@ -144,7 +144,8 @@
     z-index: 2;
     transition: transform .2s ease, background .2s ease;
   }
-  .cdp-close-{{ sid }}:hover { background: color-mix(in srgb, currentColor 10%, transparent); transform: scale(1.05); }
+  .cdp-close-{{ sid }}:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
+  .cdp-close-{{ sid }} svg { width: 18px; height: 18px; }
   .cdp-close-{{ sid }}:focus-visible, .cdp-coupon-{{ sid }}:focus-visible, .cdp-cta-{{ sid }}:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 
   /* Eyebrow */
@@ -172,7 +173,7 @@
   .cdp-coupon-{{ sid }} {
     display: inline-flex; align-items: center; gap: 10px;
     margin: 0 0 {{ section.settings.gap_after_coupon | default: 24 }}px;
-    padding: 12px 24px;
+    min-height: 44px; padding: 12px 24px;
     border: 1px dashed currentColor;
     border-radius: 4px;
     background: transparent;
@@ -225,23 +226,10 @@
     margin: 6px 0 {{ section.settings.gap_after_countdown | default: 24 }}px;
   }
 
-  /* CTA button */
-  .cdp-cta-{{ sid }} {
-    display: inline-block;
-    text-decoration: none;
-    padding: var(--cdp-cta-py, 12px) var(--cdp-cta-px, 36px);
-    border-radius: var(--cdp-cta-r, 4px);
-    border: var(--cdp-cta-bw, 0px) solid var(--btn-primary-border-color, transparent);
-    background: var(--cdp-cta-bg);
-    color: var(--cdp-cta-c);
-    font-weight: var(--btn-font-weight, 700);
-    letter-spacing: .14em;
-    text-transform: uppercase;
-    font-size: var(--cdp-cta-fs, 13px);
-    transition: background-color .25s ease, color .25s ease, transform .15s ease;
-    margin: 0 0 {{ section.settings.gap_after_cta | default: 16 }}px;
-  }
-  .cdp-cta-{{ sid }}:hover { transform: translateY(-1px); background: var(--cdp-cta-bgh); color: var(--cdp-cta-ch); }
+  /* CTA button: paint, type and shape come from the theme button contract
+     (Theme settings > Buttons); this section's own values arrive as --mb-* tokens. */
+  .cdp-cta-{{ sid }} { margin: 0 0 {{ section.settings.gap_after_cta | default: 16 }}px; }
+  .cdp-{{ sid }}[data-cd-ended] .cdp-countdown-{{ sid }} { display: none; }
 
   /* Disclaimer */
   .cdp-disclaimer-{{ sid }} {
@@ -261,21 +249,27 @@
     .cdp-cta-{{ sid }} { margin-bottom: clamp(10px, 3vw, {{ section.settings.gap_after_cta | default: 16 }}px); }
   }
 
-  body.cdp-no-scroll-{{ sid }} { overflow: hidden; }
   @media (prefers-reduced-motion: reduce) {
-    .cdp-card-{{ sid }}, .cdp-overlay-{{ sid }}, .cdp-coupon-{{ sid }}, .cdp-cta-{{ sid }} {
+    .cdp-card-{{ sid }}, .cdp-overlay-{{ sid }}, .cdp-coupon-{{ sid }} {
       transition: none !important;
     }
+    .cdp-card-{{ sid }} { transform: translate(-50%, -50%) !important; }
   }
 {% comment %}{% endcomment %}</style>
 
+{%- capture cdp_config -%}
+  {"design": {{ request.design_mode | json }}, "preview": {{ section.settings.editor_mode | json }}, "hideEnded": {% if section.settings.hide_when_ended == false %}false{% else %}true{% endif %},
+   "trigger": {"mode": {{ open_mode | json }}, "delay": {{ delay_s | json }}, "scroll": {{ section.settings.scroll_pct | default: 50 | json }}, "views": {{ section.settings.page_views | default: 2 | json }} },
+   "frequency": {"mode": {{ after_dismiss | json }}, "days": {{ hide_days | json }} } }
+{%- endcapture -%}
 <section class="cdp-{{ sid }} color-{{ color_scheme }}"
-         data-cdp-section="{{ sid }}"
+         data-cdp-section="{{ sid }}" data-popup-root="{{ sid }}"
+         data-popup-config="{{ cdp_config | strip_newlines | escape }}"
          aria-hidden="true">
   <div class="cdp-overlay-{{ sid }}" aria-hidden="true"></div>
   <div class="cdp-card-{{ sid }} gradient" role="dialog" aria-modal="true"
        aria-labelledby="cdp-title-{{ sid }}" tabindex="-1">
-    <button type="button" class="cdp-close-{{ sid }}" aria-label="{{ 'accessibility.close_popup' | t }}">✕</button>
+    <button type="button" class="cdp-close-{{ sid }}" data-popup-close aria-label="{{ 'accessibility.close_popup' | t }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
 
     <div class="cdp-grid-{{ sid }}{% if section.settings.image_side == 'image-right' %} cdp-image-right{% endif %}">
       {%- if block_image != blank -%}
@@ -342,9 +336,10 @@
         {%- endif -%}
 
         {%- if block_cta != blank and block_cta.settings.label != blank -%}
-          <a class="cdp-cta-{{ sid }}" data-sl-button data-button-role="primary"
-             href="{{ block_cta.settings.link | default: '#' }}"
-             style="--cdp-cta-bg: {% render 'scheme-color', color: block_cta.settings.bg, fallback: 'var(--btn-primary-bg-color)' %}; --cdp-cta-c: {% render 'scheme-color', color: block_cta.settings.text_color, fallback: 'var(--btn-primary-color)' %}; --cdp-cta-bgh: {% render 'scheme-color', color: block_cta.settings.bg_hover, fallback: 'var(--btn-primary-hover-bg-color)' %}; --cdp-cta-ch: {% render 'scheme-color', color: block_cta.settings.text_hover, fallback: 'var(--btn-primary-hover-color)' %}; {% if block_cta.settings.use_theme_button %}--cdp-cta-r: var(--btn-radius, 4px); --cdp-cta-py: var(--btn-padding-y, 12px); --cdp-cta-px: var(--btn-padding-x, 36px); --cdp-cta-fs: var(--btn-font-size, 13px); --cdp-cta-bw: var(--btn-border-width, 0px);{% else %}--cdp-cta-r: {{ block_cta.settings.radius | default: 4 }}px; --cdp-cta-py: {{ block_cta.settings.padding_y | default: 12 }}px; --cdp-cta-px: {{ block_cta.settings.padding_x | default: 36 }}px; --cdp-cta-fs: {{ block_cta.settings.size | default: 13 }}px;{% endif %}"
+          {%- assign cdp_custom = false -%}{%- if block_cta.settings.use_theme_button == false -%}{%- assign cdp_custom = true -%}{%- endif -%}
+          <a class="cdp-cta-{{ sid }} btn-primary" data-theme-button="primary" data-sl-button
+             {% if block_cta.settings.link != blank %}href="{{ block_cta.settings.link }}"{% else %}href="{{ routes.all_products_collection_url }}"{% endif %}
+             style="{%- render 'button-overrides', bg: block_cta.settings.bg, text: block_cta.settings.text_color, hover_bg: block_cta.settings.bg_hover, hover_text: block_cta.settings.text_hover, custom: cdp_custom, radius: block_cta.settings.radius, padding_y: block_cta.settings.padding_y, padding_x: block_cta.settings.padding_x, font_size: block_cta.settings.size -%}"
              {{ block_cta.shopify_attributes }}>{{ block_cta.settings.label }}</a>
         {%- endif -%}
 
@@ -358,189 +353,82 @@
   </div>
 </section>
 
+<script src="{{ 'materia-popups.js' | asset_url }}" defer="defer"></script>
 <script>
 (function(){
-  const SECTION_ID = '{{ sid }}';
-  const I18N_COPIED = {{ 'accessibility.copied' | t | json }};
-  const lsKey = 'cdp_dismissed_' + SECTION_ID;
-  const neverKey = 'cdp_never_' + SECTION_ID;
-  const bodyLock = 'cdp-no-scroll-' + SECTION_ID;
-  const afterDismiss = '{{ after_dismiss }}';
-  const hideDays = {{ hide_days }};
-  const openMode = '{{ open_mode }}';
-  const delayMs = {{ delay_s }} * 1000;
-  const editorModeOn = {% if section.settings.editor_mode %}true{% else %}false{% endif %};
+  var SID = {{ sid | json }};
+  var I18N_COPIED = {{ 'accessibility.copied' | t | json }};
 
-  const LS = {
-    get(k){ try { return localStorage.getItem(k); } catch(_){ return null; } },
-    set(k,v){ try { localStorage.setItem(k, v); } catch(_){} },
-    rm(k){ try { localStorage.removeItem(k); } catch(_){} }
-  };
+  function setup(P){
+    var root = document.querySelector('[data-popup-root="' + SID + '"]');
+    if (!root || root.__cdp) return;
+    root.__cdp = true;
+    var CFG = JSON.parse(root.getAttribute('data-popup-config') || '{}');
+    var card = root.querySelector('.cdp-card-' + SID);
+    var overlay = root.querySelector('.cdp-overlay-' + SID);
+    var codeBtn = root.querySelector('[data-cdp-code]');
+    var cdEl = root.querySelector('[data-cdp-countdown]');
+    var cdStatus = root.querySelector('p[data-cdp-status]');
+    var timer = 0;
 
-  function init() {
-    const root = document.querySelector('.cdp-' + SECTION_ID);
-    if (!root) return;
-    if (root.__cdpInited) return;
-    root.__cdpInited = true;
-
-    const card = root.querySelector('.cdp-card-' + SECTION_ID);
-    const overlay = root.querySelector('.cdp-overlay-' + SECTION_ID);
-    const closeBtn = root.querySelector('.cdp-close-' + SECTION_ID);
-    const codeBtn = root.querySelector('[data-cdp-code]');
-    const cdEl = root.querySelector('[data-cdp-countdown]');
-    const cdStatus = root.querySelector('p[data-cdp-status]');
-    const inDesign = !!(window.Shopify && Shopify.designMode);
-    const forceEditor = editorModeOn && inDesign;
-
-    function isSuppressed(){
-      if (forceEditor) return false;
-      if (LS.get(neverKey) === '1') return true;
-      if (afterDismiss === 'every_visit') return false;
-      const until = parseInt(LS.get(lsKey) || '0', 10);
-      return !!(until && Date.now() < until);
-    }
-    function persistDismiss(){
-      if (forceEditor) return;
-      if (afterDismiss === 'never') LS.set(neverKey, '1');
-      else if (afterDismiss === 'after_days' && hideDays > 0) {
-        LS.set(lsKey, String(Date.now() + hideDays * 24*60*60*1000));
+    // Countdown: counts down to the end date (the visitor's own clock and zone).
+    var targetMs = cdEl ? Date.parse(cdEl.dataset.cdpEnd || '') : NaN;
+    var nums = cdEl ? cdEl.querySelectorAll('[data-cdp-num]') : [];
+    function pad(n){ return n < 10 ? '0' + n : String(n); }
+    function ended(){ return !isNaN(targetMs) && targetMs - Date.now() <= 0; }
+    function tick(){
+      if (!cdEl || isNaN(targetMs)) return false;
+      var diff = targetMs - Date.now();
+      if (diff <= 0) {
+        root.setAttribute('data-cd-ended', '');
+        if (cdStatus) cdStatus.hidden = false;
+        nums.forEach(function(n){ n.textContent = '00'; });
+        return false;
       }
+      var s = Math.floor(diff / 1000);
+      var vals = [Math.floor(s / 86400), Math.floor(s % 86400 / 3600), Math.floor(s % 3600 / 60), s % 60];
+      nums.forEach(function(n, i){ if (vals[i] != null) n.textContent = pad(vals[i]); });
+      return true;
     }
-    function lockBody(){ if (!inDesign) document.body.classList.add(bodyLock); }
-    function unlockBody(){ document.body.classList.remove(bodyLock); }
+    function start(){ stop(); if (tick()) timer = setInterval(function(){ if (!tick()) stop(); }, 1000); }
+    function stop(){ clearInterval(timer); timer = 0; }
+    tick();
 
-    let prevActive = null;
-    function show(){
-      if (isSuppressed()) return;
-      root.classList.add('cdp-open');
-      root.setAttribute('aria-hidden','false');
-      lockBody();
-      prevActive = document.activeElement;
-      if (card && card.focus) try { card.focus({preventScroll: true}); } catch(_){}
-    }
-    function hide(){
-      root.classList.remove('cdp-open');
-      root.setAttribute('aria-hidden','true');
-      unlockBody();
-      if (prevActive && prevActive.focus) try { prevActive.focus({preventScroll: true}); } catch(_){}
-      persistDismiss();
-    }
+    // An offer that has ended is not offered: the popup stays closed on the site.
+    if (CFG.hideEnded && ended() && !CFG.design) return;
 
-    const listeners = [];
-    function on(t, e, f, o){ if(!t) return; t.addEventListener(e,f,o); listeners.push({t,e,f,o}); }
-    on(closeBtn,'click',hide);
-    on(overlay,'click',hide);
-    on(document,'keydown', (e) => { if (e.key === 'Escape' && root.classList.contains('cdp-open')) hide(); });
-
-    // Bulletproof copy
-    function copy(text){
-      return new Promise((resolve, reject) => {
-        if (!text) return reject('empty');
-        const useAsync = navigator.clipboard
-          && typeof navigator.clipboard.writeText === 'function'
-          && (window.isSecureContext !== false);
-        const fallback = () => {
-          try {
-            const ta = document.createElement('textarea');
-            ta.value = text; ta.setAttribute('readonly','');
-            Object.assign(ta.style, { position:'fixed', top:'0', left:'0', width:'2em', height:'2em', padding:'0', border:'none', outline:'none', boxShadow:'none', background:'transparent', opacity:'0' });
-            document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
-            const ok = document.execCommand && document.execCommand('copy');
-            document.body.removeChild(ta);
-            ok ? resolve() : reject('execCommand failed');
-          } catch(err) { reject(err); }
-        };
-        useAsync ? navigator.clipboard.writeText(text).then(resolve).catch(fallback) : fallback();
-      });
-    }
-    if (codeBtn) {
-      const codeTextEl = codeBtn.querySelector('[data-cdp-code-text]');
-      on(codeBtn, 'click', () => {
-        const code = (codeBtn.dataset.cdpCode || '').trim();
-        if (!code) return;
-        const original = codeTextEl ? codeTextEl.textContent : codeBtn.textContent;
-        const done = () => {
-          codeBtn.classList.add('is-copied');
-          if (codeTextEl) codeTextEl.textContent = I18N_COPIED;
-          else codeBtn.textContent = I18N_COPIED;
-          setTimeout(() => {
-            codeBtn.classList.remove('is-copied');
-            if (codeTextEl) codeTextEl.textContent = original;
-            else codeBtn.textContent = original;
-          }, 2200);
-        };
-        copy(code).then(done).catch(done);
-      });
-    }
-
-    // Countdown
-    if (cdEl) {
-      const targetStr = cdEl.dataset.cdpEnd;
-      const numEls = cdEl.querySelectorAll('[data-cdp-num]');
-      const targetMs = targetStr ? Date.parse(targetStr) : NaN;
-
-      function pad(n){ return n < 10 ? '0' + n : '' + n; }
-      function tick(){
-        if (isNaN(targetMs)) {
-          numEls.forEach(n => n.textContent = '00');
-          return;
-        }
-        let diff = targetMs - Date.now();
-        if (diff <= 0) {
-          numEls.forEach(n => n.textContent = '00');
-          if (cdStatus) cdStatus.hidden = false;
-          return false;
-        }
-        const days = Math.floor(diff / 86400000); diff -= days * 86400000;
-        const hours = Math.floor(diff / 3600000); diff -= hours * 3600000;
-        const mins = Math.floor(diff / 60000); diff -= mins * 60000;
-        const secs = Math.floor(diff / 1000);
-        const vals = [days, hours, mins, secs];
-        numEls.forEach((n, i) => n.textContent = pad(vals[i]));
-        return true;
-      }
-      if (tick()) {
-        const timer = setInterval(() => { if (!tick()) clearInterval(timer); }, 1000);
-      }
-    }
-
-    // Manual / external hooks
-    window['CDP_open_' + SECTION_ID] = show;
-    window['CDP_close_' + SECTION_ID] = hide;
-    window['CDP_reset_' + SECTION_ID] = function() {
-      [lsKey, neverKey].forEach(LS.rm);
-    };
-
-    // Initial state
-    if (forceEditor) {
-      root.classList.add('cdp-open');
-      root.setAttribute('aria-hidden','false');
-    } else if (!isSuppressed()) {
-      if (openMode === 'immediate') show();
-      else if (openMode === 'delay') setTimeout(show, delayMs > 0 ? delayMs : 0);
-      else if (openMode === 'exit') {
-        const h = (e) => { if (e.clientY <= 8) { show(); document.removeEventListener('mousemove', h); } };
-        on(document, 'mousemove', h, { passive: true });
-      } else if (openMode === 'manual') {
-        document.querySelectorAll('[data-cdp-trigger="' + SECTION_ID + '"]').forEach(el => {
-          on(el, 'click', (e) => { e.preventDefault(); show(); });
-        });
-      }
-    }
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
-  } else { init(); }
-  window.addEventListener('pageshow', (e) => { if (e.persisted) init(); });
-  document.addEventListener('storelib:section-load', (e) => {
-    if (e.detail && String(e.detail.sectionId) === SECTION_ID) init();
-  });
-  if (window.Shopify && Shopify.designMode) {
-    document.addEventListener('shopify:section:load', (e) => {
-      if (e.detail && e.detail.sectionId === SECTION_ID) init();
+    var api = P.register({
+      id: SID, root: root, dialog: card, backdrop: overlay,
+      design: CFG.design, preview: CFG.preview,
+      trigger: Object.assign({ selector: '[data-cdp-trigger="' + SID + '"]' }, CFG.trigger),
+      frequency: { mode: CFG.frequency.mode === 'every_visit' ? 'always' : CFG.frequency.mode, days: CFG.frequency.days },
+      open: function(){ root.classList.add('cdp-open'); start(); },
+      close: function(){ root.classList.remove('cdp-open'); stop(); }
     });
+
+    if (codeBtn) {
+      var codeText = codeBtn.querySelector('[data-cdp-code-text]');
+      var original = codeText ? codeText.textContent : '';
+      codeBtn.addEventListener('click', function(){
+        var code = (codeBtn.dataset.cdpCode || '').trim();
+        if (!code) return;
+        P.copy(code).catch(function(){}).then(function(){
+          codeBtn.classList.add('is-copied');
+          if (codeText) codeText.textContent = I18N_COPIED;
+          setTimeout(function(){ codeBtn.classList.remove('is-copied'); if (codeText) codeText.textContent = original; }, 2200);
+        });
+      });
+    }
+    window['CDP_open_' + SID] = function(){ api && api.show(); };
+    window['CDP_close_' + SID] = function(){ api && api.hide(); };
+    window['CDP_reset_' + SID] = function(){ api && api.reset(); };
   }
+
+  function boot(){ (window.MateriaPopupsQueue = window.MateriaPopupsQueue || []).push(setup); }
+  boot();
+  function reload(e){ if (e.detail && String(e.detail.sectionId) === SID) boot(); }
+  document.addEventListener('storelib:section-load', reload);
+  document.addEventListener('shopify:section:load', reload);
 })();
 {% comment %}{% endcomment %}</script>
 
@@ -1083,96 +971,126 @@
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
-      },
-      {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
-      },
-      {
-        "type": "header",
         "content": "Trigger"
       },
       {
         "type": "select",
         "id": "open_mode",
-        "label": "When to open",
+        "label": "Opens",
         "default": "delay",
         "options": [
           {
             "value": "immediate",
-            "label": "Immediately"
+            "label": "On page load"
           },
           {
             "value": "delay",
-            "label": "After delay"
+            "label": "After a delay"
+          },
+          {
+            "value": "scroll",
+            "label": "On scroll"
           },
           {
             "value": "exit",
-            "label": "Exit intent (desktop)"
+            "label": "On exit intent"
+          },
+          {
+            "value": "pageviews",
+            "label": "After page views"
           },
           {
             "value": "manual",
-            "label": "Manual (button click)"
+            "label": "From a link"
           }
         ]
       },
       {
         "type": "range",
         "id": "delay_s",
+        "label": "Delay",
         "min": 0,
         "max": 60,
         "step": 1,
         "unit": "s",
-        "label": "Delay (seconds)",
         "default": 5
+      },
+      {
+        "type": "range",
+        "id": "scroll_pct",
+        "label": "Scrolled",
+        "min": 10,
+        "max": 100,
+        "step": 5,
+        "unit": "%",
+        "default": 50,
+        "visible_if": "{{ section.settings.open_mode == 'scroll' }}"
+      },
+      {
+        "type": "range",
+        "id": "page_views",
+        "label": "Page views",
+        "min": 1,
+        "max": 10,
+        "step": 1,
+        "default": 2,
+        "visible_if": "{{ section.settings.open_mode == 'pageviews' }}"
+      },
+      {
+        "type": "header",
+        "content": "Behaviour"
       },
       {
         "type": "select",
         "id": "after_dismiss",
-        "label": "After closing",
+        "label": "Show again",
         "default": "after_days",
         "options": [
           {
             "value": "every_visit",
-            "label": "Show every visit"
+            "label": "Every visit"
           },
           {
             "value": "after_days",
-            "label": "Hide for X days"
+            "label": "After days"
           },
           {
             "value": "never",
-            "label": "Never show again"
+            "label": "Never"
           }
         ]
       },
       {
         "type": "range",
         "id": "hide_days",
-        "min": 0,
+        "label": "Days",
+        "min": 1,
         "max": 30,
         "step": 1,
         "unit": "d",
-        "label": "Don't show again for (days)",
-        "default": 1
+        "default": 1,
+        "visible_if": "{{ section.settings.after_dismiss == 'after_days' }}"
+      },
+      {
+        "type": "checkbox",
+        "id": "hide_when_ended",
+        "label": "Hide when the countdown ends",
+        "default": true
       },
       {
         "type": "checkbox",
         "id": "editor_mode",
-        "label": "Always show in editor",
-        "default": true
+        "label": "Show in the builder",
+        "default": false
       },
       {
         "type": "header",
-        "content": "Popup layout"
+        "content": "Layout"
       },
       {
         "type": "select",
         "id": "image_side",
-        "label": "Image position (desktop)",
+        "label": "Image",
         "default": "image-left",
         "options": [
           {
@@ -1188,62 +1106,68 @@
       {
         "type": "select",
         "id": "mobile_image_position",
-        "label": "Mobile image",
+        "label": "Image on phones",
         "default": "above",
         "options": [
           {
             "value": "above",
-            "label": "Show above content"
+            "label": "Above"
           },
           {
             "value": "hidden",
-            "label": "Hide on mobile"
+            "label": "Hidden"
           }
         ]
       },
       {
         "type": "range",
         "id": "popup_width",
+        "label": "Width",
         "min": 480,
         "max": 1100,
         "step": 10,
         "unit": "px",
-        "label": "Popup max width",
         "default": 900
       },
       {
         "type": "range",
         "id": "popup_radius",
+        "label": "Corner radius",
         "min": 0,
         "max": 32,
         "step": 1,
         "unit": "px",
-        "label": "Popup corner radius",
         "default": 12
       },
       {
         "type": "range",
         "id": "mobile_gutter",
+        "label": "Phone side space",
         "min": 0,
         "max": 80,
         "step": 4,
         "unit": "px",
-        "label": "Mobile side gutter",
         "default": 32
       },
       {
         "type": "header",
-        "content": "Color"
+        "content": "Style"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "color",
         "id": "card_bg",
-        "label": "Card background"
+        "label": "Background"
       },
       {
         "type": "color",
         "id": "text_color",
-        "label": "Default text"
+        "label": "Text"
       },
       {
         "type": "color",
@@ -1253,22 +1177,22 @@
       {
         "type": "color",
         "id": "overlay_color",
-        "label": "Overlay color",
+        "label": "Backdrop",
         "default": "#000000"
       },
       {
         "type": "range",
         "id": "overlay_opacity",
+        "label": "Backdrop opacity",
         "min": 0,
         "max": 90,
         "step": 5,
         "unit": "%",
-        "label": "Overlay opacity",
         "default": 60
       },
       {
         "type": "header",
-        "content": "Countdown cells"
+        "content": "Countdown"
       },
       {
         "type": "color",
@@ -1283,80 +1207,80 @@
       {
         "type": "range",
         "id": "cd_cell_radius",
+        "label": "Cell radius",
         "min": 0,
         "max": 20,
         "step": 1,
         "unit": "px",
-        "label": "Cell corner radius",
         "default": 4
       },
       {
         "type": "range",
         "id": "cd_gap",
+        "label": "Cell gap",
         "min": 0,
         "max": 24,
         "step": 1,
         "unit": "px",
-        "label": "Gap between cells",
         "default": 8
       },
       {
         "type": "color",
         "id": "cd_status_color",
-        "label": "Completed text color"
+        "label": "Ended text"
       },
       {
         "type": "header",
-        "content": "Vertical spacing (desktop)"
+        "content": "Spacing"
       },
       {
         "type": "range",
         "id": "gap_after_eyebrow",
+        "label": "After eyebrow",
         "min": 0,
         "max": 80,
         "step": 2,
         "unit": "px",
-        "label": "Gap after eyebrow",
         "default": 18
       },
       {
         "type": "range",
         "id": "gap_after_headline",
+        "label": "After headline",
         "min": 0,
         "max": 80,
         "step": 2,
         "unit": "px",
-        "label": "Gap after headline",
         "default": 22
       },
       {
         "type": "range",
         "id": "gap_after_coupon",
+        "label": "After code",
         "min": 0,
         "max": 80,
         "step": 2,
         "unit": "px",
-        "label": "Gap after coupon code",
         "default": 24
       },
       {
         "type": "range",
         "id": "gap_after_countdown",
+        "label": "After countdown",
         "min": 0,
         "max": 80,
         "step": 2,
         "unit": "px",
-        "label": "Gap after countdown",
         "default": 24
       },
       {
         "type": "range",
         "id": "gap_after_cta",
+        "label": "After button",
         "min": 0,
         "max": 80,
         "step": 2,
         "unit": "px",
-        "label": "Gap after button",
         "default": 16
       }
     ],
@@ -1369,17 +1293,17 @@
           {
             "type": "text",
             "id": "text",
-            "label": "Eyebrow text",
+            "label": "Text",
             "default": "HURRY! TIME'S RUNNING OUT!"
           },
           {
             "type": "range",
             "id": "size",
+            "label": "Size",
             "min": 10,
             "max": 18,
             "step": 1,
             "unit": "px",
-            "label": "Font size",
             "default": 13
           },
           {
@@ -1403,11 +1327,11 @@
           {
             "type": "range",
             "id": "size",
+            "label": "Size",
             "min": 18,
             "max": 48,
             "step": 1,
             "unit": "px",
-            "label": "Max font size (desktop)",
             "default": 32
           },
           {
@@ -1425,7 +1349,7 @@
           {
             "type": "text",
             "id": "code",
-            "label": "Coupon code",
+            "label": "Code",
             "default": "DISC100"
           },
           {
@@ -1437,94 +1361,102 @@
       },
       {
         "type": "countdown",
-        "name": "Countdown timer",
+        "name": "Countdown",
         "limit": 1,
         "settings": [
           {
             "type": "text",
             "id": "end_datetime",
-            "label": "End date and time",
-            "info": "Format: 2026-12-31T23:59:59",
-            "default": "2026-12-31T23:59:59"
+            "label": "Ends at",
+            "default": "2026-12-31T23:59:59",
+            "placeholder": "2026-12-31T23:59:59"
           },
           {
             "type": "text",
             "id": "labels",
-            "label": "Cell labels",
-            "info": "Separate with |",
-            "default": "DAYS|HOURS|MIN|SEC"
+            "label": "Labels",
+            "default": "DAYS|HOURS|MIN|SEC",
+            "info": "Days|Hours|Min|Sec"
           },
           {
             "type": "text",
             "id": "completed_text",
-            "label": "Completed-state text",
+            "label": "Ended text",
             "default": "Completed"
           }
         ]
       },
       {
         "type": "cta",
-        "name": "CTA button",
+        "name": "Button",
         "limit": 1,
         "settings": [
           {
+            "type": "header",
+            "content": "Content"
+          },
+          {
             "type": "text",
             "id": "label",
-            "label": "Button label",
+            "label": "Label",
             "default": "SHOP NOW"
           },
           {
             "type": "url",
             "id": "link",
-            "label": "Button link"
+            "label": "Link"
+          },
+          {
+            "type": "header",
+            "content": "Style"
           },
           {
             "type": "checkbox",
             "id": "use_theme_button",
-            "label": "Use theme button style",
+            "label": "Theme button style",
             "default": true
           },
           {
             "type": "range",
             "id": "size",
+            "label": "Text size",
             "min": 11,
             "max": 18,
             "step": 1,
             "unit": "px",
-            "label": "Font size",
             "default": 13,
             "visible_if": "{{ block.settings.use_theme_button == false }}"
           },
           {
             "type": "range",
             "id": "padding_x",
+            "label": "Side padding",
             "min": 16,
             "max": 60,
             "step": 2,
             "unit": "px",
-            "label": "Horizontal padding",
             "default": 36,
             "visible_if": "{{ block.settings.use_theme_button == false }}"
           },
           {
             "type": "range",
             "id": "padding_y",
+            "label": "Height padding",
             "min": 8,
             "max": 24,
             "step": 1,
             "unit": "px",
-            "label": "Vertical padding",
             "default": 12,
             "visible_if": "{{ block.settings.use_theme_button == false }}"
           },
           {
             "type": "range",
             "id": "radius",
+            "label": "Corner radius",
             "min": 0,
             "max": 50,
             "step": 1,
             "unit": "px",
-            "label": "Corner radius",
             "default": 4,
             "visible_if": "{{ block.settings.use_theme_button == false }}"
           },
@@ -1541,24 +1473,24 @@
           {
             "type": "color",
             "id": "bg_hover",
-            "label": "Background on hover"
+            "label": "Hover background"
           },
           {
             "type": "color",
             "id": "text_hover",
-            "label": "Text on hover"
+            "label": "Hover text"
           }
         ]
       },
       {
         "type": "disclaimer",
-        "name": "Disclaimer / footnote",
+        "name": "Small print",
         "limit": 1,
         "settings": [
           {
             "type": "textarea",
             "id": "text",
-            "label": "Footnote text",
+            "label": "Text",
             "default": "Final discount, cannot be combined with other offers."
           },
           {
