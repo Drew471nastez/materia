@@ -3703,6 +3703,8 @@ class VariantRadiosBundle extends SwatchInit {
 
   async updateMedia() {
     if (!this.currentVariant) return;
+    // A product without pictures has no media to change.
+    if (!this.productTarget.querySelector(".product__media img")) return;
     if (
       !this.productTarget
         .querySelector(".product__media img")
@@ -3747,28 +3749,22 @@ class VariantRadiosBundle extends SwatchInit {
         productItem.querySelector("iframe")?.classList.add("hidden");
       }
     }
-    if (this.productTarget.querySelector(".product__media img")) {
-      await Motion.animate(
-        this.productTarget.querySelector(".product__media img"),
-        { opacity: [1, 0] },
-        { duration: 0.1, easing: "ease-in" }
-      );
-      this.productTarget
-        .querySelector(".product__media img")
-        .setAttribute(
-          "src",
-          this.currentVariant.featured_media.preview_image.src
-        );
-      await new Promise((resolve) => {
-        this.productTarget.querySelector(".product__media img").onload = () => {
-          resolve();
-        };
-      });
-      Motion.animate(
-        this.productTarget.querySelector(".product__media img"),
-        { opacity: [0, 1] },
-        { duration: 0.1, easing: "ease-in" }
-      );
+    const img = this.productTarget.querySelector(".product__media img");
+    const preview = this.currentVariant.featured_media.preview_image;
+    const next = preview && preview.src;
+    if (img && next) {
+      // Decoded first, then swapped: no blank frame, and no wait for a load
+      // event that never comes for a picture already shown or cached.
+      const url = (s) => { try { return new URL(s, location.href).href; } catch (e) { return s; } };
+      if (url(img.currentSrc || img.src) === url(next)) return;
+      const token = (this._mediaToken = (this._mediaToken || 0) + 1);
+      const loader = new Image();
+      loader.src = next;
+      try { await loader.decode(); } catch (e) {}
+      if (token !== this._mediaToken) return;
+      img.removeAttribute("srcset");
+      img.removeAttribute("sizes");
+      img.src = next;
     }
   }
 
@@ -5648,7 +5644,6 @@ class SwatchFunctions extends SwatchInit {
             btn.classList.remove("hidden");
 
             setTimeout(() => {
-              console.log(btn);
               btn.classList.remove("opacity-0");
             }, 100);
           });
@@ -7117,6 +7112,8 @@ class VariantRadios extends SwatchFunctions {
   }
   async updateMedia() {
     if (!this.currentVariant) return;
+    // A product without pictures has no media to change.
+    if (!this.productTarget.querySelector(".product__media img")) return;
     if (
       !this.productTarget
         .querySelector(".product__media img")
@@ -7161,28 +7158,23 @@ class VariantRadios extends SwatchFunctions {
         productItem.querySelector("iframe")?.classList.add("hidden");
       }
     }
-    if (this.productTarget.querySelector(".product__media img")) {
-      await Motion.animate(
-        this.productTarget.querySelector(".product__media img"),
-        { opacity: [1, 0] },
-        { duration: 0.1, easing: "ease-in" }
-      );
-      this.productTarget
-        .querySelector(".product__media img")
-        .setAttribute(
-          "src",
-          this.currentVariant.featured_media.preview_image.src
-        );
-      await new Promise((resolve) => {
-        this.productTarget.querySelector(".product__media img").onload = () => {
-          resolve();
-        };
-      });
-      Motion.animate(
-        this.productTarget.querySelector(".product__media img"),
-        { opacity: [0, 1] },
-        { duration: 0.1, easing: "ease-in" }
-      );
+    const img = this.productTarget.querySelector(".product__media img");
+    const preview = this.currentVariant.featured_media.preview_image;
+    const next = preview && preview.src;
+    if (img && next) {
+      // The variant's picture is decoded first and then swapped in, so the
+      // card never shows a blank frame (it used to fade out and wait for a
+      // load event that never came for a picture already shown or cached).
+      const url = (s) => { try { return new URL(s, location.href).href; } catch (e) { return s; } };
+      if (url(img.currentSrc || img.src) === url(next)) return;
+      const token = (this._mediaToken = (this._mediaToken || 0) + 1);
+      const loader = new Image();
+      loader.src = next;
+      try { await loader.decode(); } catch (e) {}
+      if (token !== this._mediaToken) return;
+      img.removeAttribute("srcset");
+      img.removeAttribute("sizes");
+      img.src = next;
     }
   }
 }

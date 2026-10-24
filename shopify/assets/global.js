@@ -825,7 +825,9 @@ class SwatchInit extends HTMLElement {
           e.style.setProperty("--swatch--background", optionSwatchValue);
         }
       } else {
-        if (optionSwatchValue == null || optionSwatchValue.length == 0) {
+        // Variant images: the variant's own picture first, then the
+        // option's swatch, then the colour by name.
+        if (image || optionSwatchValue == null || optionSwatchValue.length == 0) {
           if (image) {
             e.classList.add("color__" + color.replace(" ", "-"));
             e.style.backgroundColor = null;
@@ -843,6 +845,18 @@ class SwatchInit extends HTMLElement {
         }
       }
     }
+  }
+  // Theme settings > Variant swatches > Display style, live in the builder.
+  refreshSwatches(type) {
+    this.querySelectorAll(".product__color-swatches--js").forEach((btn) => {
+      if (btn.classList.contains("color_swatches") || btn.classList.contains("variant_images")) {
+        btn.classList.remove("color_swatches", "variant_images");
+        btn.classList.add(type);
+      }
+      btn.dataset.swatchType = type;
+      ["background-color", "background-image", "background-size", "background-repeat", "--swatch--background"].forEach((p) => btn.style.removeProperty(p));
+      this.checkSwatches(btn);
+    });
   }
   checkColor(strColor) {
     var s = new Option().style;
@@ -1275,3 +1289,57 @@ class CopyButton extends HTMLElement {
   }
 }
 customElements.define("copy-button", CopyButton);
+
+/* Theme settings > Variant swatches, live in the builder: Display style
+   redraws every swatch, Maximum swatches shows or folds the extra ones
+   behind "+N" on product cards. */
+(function () {
+  if (window.__materiaSwatchLive) return;
+  window.__materiaSwatchLive = true;
+  function hosts() {
+    var set = new Set();
+    document.querySelectorAll(".product__color-swatches--js").forEach(function (btn) {
+      var host = btn.parentElement;
+      while (host && typeof host.refreshSwatches !== "function") host = host.parentElement;
+      if (host) set.add(host);
+    });
+    return set;
+  }
+  function limit(value) {
+    var max = value === "default" ? Infinity : parseInt(value, 10) || Infinity;
+    document.querySelectorAll("variant-radios.product__color-swatches").forEach(function (group) {
+      var items = group.querySelectorAll(".product__color-swatches--js");
+      var more = group.querySelector(".show_color_swatch");
+      items.forEach(function (btn, i) {
+        var hide = i >= max;
+        btn.classList.toggle("hidden", hide);
+        btn.classList.toggle("opacity-0", hide);
+      });
+      var left = items.length - max;
+      if (left > 0) {
+        if (!more) {
+          more = document.createElement("span");
+          more.className = "show_color_swatch pointer";
+          more.addEventListener("click", function () {
+            more.classList.add("hidden");
+            group.querySelectorAll(".product__color-swatches--js.hidden").forEach(function (btn) {
+              btn.classList.remove("hidden", "opacity-0");
+            });
+          });
+          group.appendChild(more);
+        }
+        more.textContent = " + " + left + " ";
+        more.classList.remove("hidden");
+      } else if (more) {
+        more.remove();
+      }
+    });
+  }
+  document.addEventListener("storelib:settings-change", function (event) {
+    var s = (event.detail && event.detail.settings) || {};
+    if (Object.prototype.hasOwnProperty.call(s, "swatch_item_type")) {
+      hosts().forEach(function (host) { host.refreshSwatches(s.swatch_item_type); });
+    }
+    if (Object.prototype.hasOwnProperty.call(s, "limit_color")) limit(String(s.limit_color));
+  });
+})();
