@@ -123,7 +123,7 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
     assert(await page.$eval('.bc__peek',el=>{const r=el.getBoundingClientRect();return el===document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)}),'preview must paint over next section');
     await page.locator('.bc__btn').click();assert.equal(await page.evaluate(()=>location.hash),'#next');passed++;
     await page.setViewportSize({width:390,height:844});
-    const sheets=read('snippets/cart-drawer-sheets.storelib').match(/<style data-cart-drawer-sheets>([\s\S]*?)<\/style>/)[1];
+    const sheets=read('shopify/assets/cart-drawer.css').match(/\/\* == snippets\/cart-drawer-sheets == \*\/([\s\S]*?)\/\* == end snippets\/cart-drawer-sheets == \*\//)[1];
     await page.setContent('<div id="minicart_wrapper" class="open_drawer"><div class="minicart__wrapper" style="width:390px;height:700px;position:relative"><div id="coupon" class="cart__addon-content is-open"><ul class="cart-discount__codes"><li class="cart-discount__item"><p class="cart-discount-code">DREW</p><button class="cart-discount-remove btn-reset"><svg class="remove-icon"></svg><div class="icon-rotator"></div></button></li></ul></div></div></div>');
     await page.addStyleTag({content:sheets});
     const coupon=await page.$eval('.cart-discount-remove',el=>({width:el.getBoundingClientRect().width,height:el.getBoundingClientRect().height,background:getComputedStyle(el).backgroundColor}));

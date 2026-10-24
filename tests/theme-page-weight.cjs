@@ -10,10 +10,12 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
   // Builder-only pieces stay out of a visitor's page.
   assert.match(layout,/\{%- if request\.design_mode -%\}\s*\{%- section 'cart-drawer-live' -%\}\s*\{%- endif -%\}/);
   assert.match(layout,/\{%- if request\.design_mode -%\}\{% render 'theme-live' %\}\{%- endif -%\}/);passed++;
-  // Cart add-on styles: once per drawer, not once per slot.
+  // Cart add-on styles and timer: once per page, from the cached drawer assets, not once per slot or per cart refresh.
   const addons=read('snippets/cart-drawer-addons.storelib');
-  assert(addons.indexOf("{%- if current_slot == 'styles' -%}")<addons.indexOf('<style data-cda-styles>'));
-  assert.equal((read('snippets/minicart-form-body.storelib').match(/slot: 'styles'/g)||[]).length,1);passed++;
+  assert(!addons.includes('<style') && !addons.includes('<script'));
+  assert(read('shopify/assets/cart-drawer.css').includes('/* == snippets/cart-drawer-addons == */'));
+  assert(read('shopify/assets/cart-drawer.js').includes('window.__cdaUrgencyInterval'));
+  assert.equal((read('snippets/minicart-form-body.storelib').match(/slot: 'styles'/g)||[]).length,0);passed++;
   // Countries: written once by the layout, never by a selector.
   assert(!read('snippets/country-switcher.storelib').includes('available_countries %}'));
   assert.equal((layout.match(/render 'country-options'/g)||[]).length,1);

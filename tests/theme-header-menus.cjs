@@ -31,7 +31,8 @@ const toggleSnippet = read('snippets/toggle-menu.storelib');
 const toggleHtml = stripLiquid(between(toggleSnippet, '<button', '</button>')).replace(/\{\{[^}]*\}\}/g, 'Menu');
 const sticky = read('snippets/header-sticky-controller.storelib');
 const stickyCss = stripLiquid(sticky.match(/<style>([\s\S]*?)<\/style>/)[1]).replace(/\{\{\s*section\.id\s*\}\}/g, 'header');
-const stickyJs = stripLiquid(sticky.match(/<script>([\s\S]*?)<\/script>/)[1]);
+// The controller's inline script, then the part it loads deferred (overlay fade, Back button, phone menu layer).
+const stickyJs = stripLiquid(sticky.match(/<script>([\s\S]*?)<\/script>/)[1]) + '\n' + read('shopify/assets/header-sticky-extras.js');
 const mnb = read('sections/mobile-navigation-bar.storelib');
 const mnbCss = mnb.slice(mnb.indexOf('/* Tap feedback without a grey box'), mnb.indexOf('.mobile-navigation-bar .h-count')).replace(/\{\{\s*section\.id\s*\}\}/g, 'mnb');
 

@@ -14,11 +14,13 @@ const themeParts=[
   slice(theme,'class ProgressBar extends HTMLElement','customElements.define("free-ship-progress-bar", ProgressBar);'),
   slice(theme,'class MiniCartRemoveButton extends HTMLElement','customElements.define("mini-cart-remove-button", MiniCartRemoveButton);'),
 ].join('\n');
-const sheetsCss=snippetPart('snippets/cart-drawer-sheets.storelib','style');
-const sheetsJs=snippetPart('snippets/cart-drawer-sheets.storelib','script');
-const polishCss=snippetPart('snippets/cart-drawer-polish.storelib','style');
-const polishJs=snippetPart('snippets/cart-drawer-polish.storelib','script');
-const presentationCss=snippetPart('snippets/cart-drawer-presentation.storelib','style');
+// The drawer snippets' static CSS and JS live in cached assets, one part per snippet.
+const assetPart=(file,name)=>slice(read(file),`/* == ${name} == */`,`/* == end ${name} == */`);
+const sheetsCss=assetPart('shopify/assets/cart-drawer.css','snippets/cart-drawer-sheets');
+const sheetsJs=assetPart('shopify/assets/cart-drawer.js','snippets/cart-drawer-sheets');
+const polishCss=assetPart('shopify/assets/cart-drawer.css','snippets/cart-drawer-polish');
+const polishJs=assetPart('shopify/assets/cart-drawer.js','snippets/cart-drawer-polish');
+const presentationCss=assetPart('shopify/assets/cart-drawer.css','snippets/cart-drawer-presentation');
 const minicart=read('snippets/minicart.storelib');
 const shippingIcon=slice(minicart,'<span class="cart_shipping__icon" aria-hidden="true">','</span>');
 

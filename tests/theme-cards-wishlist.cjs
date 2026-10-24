@@ -282,7 +282,9 @@ const SPRITE = templateOf(read('snippets/sprite-svg.storelib'));
 const controls = s => renderTemplate(templateOf(read('snippets/theme-controls.storelib')), {settings: s, request: {design_mode: false}}, env);
 const customActions = s => renderTemplate(templateOf(read('snippets/product-card-custom-actions.storelib')), {settings: s}, env);
 const recommendButton = s => renderTemplate(templateOf(read('snippets/cart-recommend-custom-button.storelib')), {settings: s}, env);
-const drawerPolish = s => renderTemplate(templateOf(read('snippets/cart-drawer-polish.storelib')), {settings: s}, env);
+// The drawer polish snippet's CSS and JS are parts of the cached drawer assets.
+const assetPart = (file, name) => { const src = read(file), a = src.indexOf(`/* == ${name} == */`), b = src.indexOf(`/* == end ${name} == */`); assert.ok(a >= 0 && b > a, `${file}: ${name}`); return src.slice(a, b); };
+const drawerPolish = () => `<style>${assetPart('shopify/assets/cart-drawer.css', 'snippets/cart-drawer-polish')}</style><script>${assetPart('shopify/assets/cart-drawer.js', 'snippets/cart-drawer-polish')}</script>`;
 function cardWith(p, flags = {}, s = config) {
   return renderTemplate(cardTemplate, {
     settings: s, request: {locale: {iso_code: 'en'}}, pages: {}, card_product: p, section_id: 'fx', class: '',
