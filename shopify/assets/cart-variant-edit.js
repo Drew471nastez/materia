@@ -11,7 +11,7 @@
       headers:{'Content-Type':'application/json', 'Accept':'application/json', 'X-Requested-With':'XMLHttpRequest'},
       body:JSON.stringify(payload)});
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.status >= 400) throw new Error(data.description || data.message || 'Unable to update the product.');
+    if (!res.ok || data.status >= 400 || data.errors) throw new Error(data.description || data.message || data.errors || 'Unable to update the product.');
     return data;
   };
   function renderSections(cart, sections) {
@@ -25,9 +25,10 @@
     let updated = false;
     for (const [id, html] of Object.entries(sections)) {
       if (!html) continue;
-      const target = document.getElementById(id);
+      const pageCart = document.getElementById('main-cart-items');
+      const target = document.getElementById(id) || (pageCart?.dataset.id === id ? pageCart : null);
       const parsed = new DOMParser().parseFromString(html, 'text/html');
-      const fresh = parsed.getElementById(id);
+      const fresh = parsed.getElementById(target?.id || id);
       if (!target || !fresh) continue;
       // Replace only the contents: preserve the drawer custom element, its state and scroll.
       const scroller = target.closest('cart-notification')?.querySelector('.minicart-scroll');
@@ -78,15 +79,16 @@
         else button.removeAttribute('aria-disabled');
       });
       syncChoices();
-      for (const select of this._selects) select.addEventListener('change', () => { syncChoices(); this.save(); }, {signal:this._events.signal});
+      for (const select of this._selects) select.addEventListener('change', () => { syncChoices(); if (!this.hasAttribute('data-cart-page')) this.save(); }, {signal:this._events.signal});
       this.addEventListener('click', event => {
+        if (event.target.closest('[data-variant-save]')) { this.save(); return; }
         const button = event.target.closest('[data-option-value]');
         if (!button || this._saving) return;
         const select = this._selects[Number(button.dataset.optionIndex)];
         if (!select) return;
         select.value = button.dataset.optionValue;
         syncChoices();
-        this.save();
+        if (!this.hasAttribute('data-cart-page')) this.save();
       }, {signal:this._events.signal});
       this.addEventListener('keydown', event => {
         if (event.key !== 'Escape') return;
@@ -121,16 +123,20 @@
       if (properties && Object.keys(properties).length) body.properties = properties;
       if (this.dataset.sellingPlan) body.selling_plan = this.dataset.sellingPlan;
       const notification = this.closest('cart-notification');
-      const sectionIds = notification?.getSectionsToRender?.().map(s => s.id) || ['minicart-form'];
+      const pageCart = this.closest('#main-cart-items');
+      const sectionIds = pageCart ? [pageCart.dataset.id || 'main-cart-items'] : notification?.getSectionsToRender?.().map(s => s.id) || ['minicart-form'];
       this._saving = true;
+      const saveButton = this.querySelector('[data-variant-save]');
+      if (saveButton) { saveButton.disabled = true; saveButton.classList.add('loading'); }
+      this.setAttribute('aria-busy', 'true');
       this.classList.add('is-loading');
       this.showError('');
       try {
         // Add replacement first; do not delete the original when the replacement is unavailable.
-        await request('/cart/add.js', body);
+        await request(paths.cart_add_url || base + '/add.js', body);
         let cart;
         try {
-          cart = await request('/cart/change.js', {id, quantity:0, sections:sectionIds, sections_url:window.location.pathname});
+          cart = await request(paths.cart_change_url || base + '/change.js', {id, quantity:0, sections:sectionIds, sections_url:window.location.pathname});
         } catch (err) {
           this.showError('New option added, but the previous option could not be removed. Please review your cart.');
           return;
@@ -141,11 +147,16 @@
           if (res.ok) sections = await res.json();
         }
         if (!renderSections(cart, sections)) this.showError('Product updated. Please reopen the cart to see the new option.');
-        else closeEditor(false);
+        else {
+          if (pageCart) document.querySelector('#main-cart-items .cart-item__details a')?.focus({preventScroll:true});
+          else closeEditor(false);
+        }
       } catch (err) {
         this.showError(err.message || 'Unable to update this variant.');
       } finally {
         this._saving = false;
+        if (saveButton) { saveButton.disabled = false; saveButton.classList.remove('loading'); }
+        this.removeAttribute('aria-busy');
         this.classList.remove('is-loading');
       }
     }

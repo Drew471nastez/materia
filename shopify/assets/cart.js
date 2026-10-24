@@ -247,6 +247,7 @@ class CartItems extends HTMLElement {
   }
 
   onChange(event) {
+    if (!event.target.matches('input[name="updates[]"]')) return;
     this.updateQuantity(
       event.target.dataset.index,
       event.target.dataset.key,
@@ -515,7 +516,7 @@ class CartEstimate extends HTMLElement {
   addonsUpdate() {
     const address_country = document.getElementById("address_country");
     const address_province = document.getElementById("address_province");
-    if (address_country && address_province) {
+    if (address_country && address_province && address_country.options.length && typeof window.Shopify?.CountryProvinceSelector === 'function') {
       new Shopify.CountryProvinceSelector(
         "address_country",
         "address_province",
@@ -524,86 +525,65 @@ class CartEstimate extends HTMLElement {
     }
 
     const discount_code = document.querySelector(".discount_code");
-    const code = localStorage.getItem("discount_code");
+    let code;
+    try { code = localStorage.getItem("discount_code"); } catch (_) {}
     if (code && discount_code) {
       document.querySelector(".discount_code").value = code;
     }
   }
   onclick() {
-    var e = {};
-    (e.zip = document.querySelector("#AddressZip").value || ""),
-      (e.country = document.querySelector("#address_country").value || ""),
-      (e.province = document.querySelector("#address_province").value || ""),
-      this.getCartShippingRatesForDestination(e);
+    this.getCartShippingRatesForDestination({
+      zip:this.querySelector('#AddressZip')?.value || '',
+      country:this.querySelector('#address_country')?.value || '',
+      province:this.querySelector('#address_province')?.value || '',
+    });
   }
-  getCartShippingRatesForDestination(event) {
-    fetch(
-      `${window.Shopify.routes.root}cart/shipping_rates.json?shipping_address%5Bzip%5D=${event.zip}&shipping_address%5Bcountry%5D=${event.country}&shipping_address%5Bprovince%5D=${event.province}`
-    )
-      .then((response) => {
-        return response.text();
-      })
-      .then((state) => {
-        const message = document.querySelector(".addon-message");
-        for (var item of document.querySelectorAll(".addon-message p")) {
-          item.remove();
+  async getCartShippingRatesForDestination(address) {
+    if (this.button.disabled) return;
+    const message = this.querySelector('.addon-message');
+    if (!message) return;
+    this.button.disabled = true;
+    this.button.setAttribute('aria-busy', 'true');
+    this.button.classList.add('loading');
+    message.setAttribute('role', 'status');
+    message.setAttribute('aria-live', 'polite');
+    message.replaceChildren();
+    message.classList.remove('error', 'warning', 'success');
+    const line = text => { const p = document.createElement('p'); p.textContent = text; message.appendChild(p); return p; };
+    try {
+      const query = new URLSearchParams({'shipping_address[zip]':address.zip,'shipping_address[country]':address.country,'shipping_address[province]':address.province});
+      const response = await fetch((window.Shopify?.routes?.root || '/') + 'cart/shipping_rates.json?' + query, {credentials:'same-origin', headers:{Accept:'application/json'}});
+      const state = await response.json();
+      if (!response.ok || !Array.isArray(state.shipping_rates)) {
+        const details = state.errors || state;
+        const text = typeof details === 'string' ? details : Object.values(details).flat().join(' ');
+        throw new Error(text || window.cartStrings?.error || 'Unable to estimate shipping.');
+      }
+      if (!state.shipping_rates.length) { message.classList.add('warning'); line(window.cartStrings?.no_shipping || ''); return; }
+      message.classList.add('success');
+      const destination = [address.zip,address.country,address.province].filter(Boolean).join(', ');
+      line((window.cartStrings?.shipping_rate || '{{address}}').replace('{{address}}', destination));
+      for (const rate of state.shipping_rates) {
+        const row = document.createElement('p'), name = document.createElement('span'), price = document.createElement('span');
+        row.className = 'cart-shipping-rate';
+        name.textContent = String(rate.name || '');
+        price.innerHTML = Shopify.formatMoney(rate.price, window.cartStrings?.money_format);
+        row.append(name,price); message.appendChild(row);
+        const days = Array.isArray(rate.delivery_days) ? rate.delivery_days : [];
+        if (message.dataset.showDeliveryDays === 'true' && days.length) {
+          const first = days[0], last = days[days.length-1];
+          const unit = first > 1 ? message.dataset.deliveryDaysOther : message.dataset.deliveryDayOne;
+          const detail = document.createElement('small');
+          detail.textContent = (first === last ? first : first + '–' + last) + ' ' + (unit || '');
+          name.appendChild(document.createElement('br')); name.appendChild(detail);
         }
-        const { showDeliveryDays, deliveryDayOne, deliveryDaysOther } =
-          message.dataset;
-        const parsedState = JSON.parse(state);
-        if (parsedState && parsedState.shipping_rates) {
-          if (parsedState.shipping_rates.length > 0) {
-            message.classList.remove("error", "warning");
-            message.classList.add("success");
-            const p = document.createElement("p");
-            p.innerText = cartStrings?.shipping_rate.replace(
-              "{{address}}",
-              event.zip + ", " + event.country + " " + event.province
-            );
-            message.appendChild(p);
-            parsedState.shipping_rates.map((rate) => {
-              let daysShipping = "";
-              if (rate.delivery_days.length > 0 && showDeliveryDays == "true") {
-                let typeDay = deliveryDayOne;
-                const day = rate.delivery_days[0];
-                const dayAt = rate.delivery_days.at(-1);
-                if (day > 1) typeDay = deliveryDaysOther;
-                if (day === dayAt) {
-                  daysShipping = `(${day} ${typeDay})`;
-                } else {
-                  daysShipping = `(${day} - ${dayAt} ${typeDay})`;
-                }
-              }
-              const rateNode = document.createElement("p");
-              rateNode.innerHTML =
-                rate.name +
-                ": " +
-                Shopify.formatMoney(rate.price, cartStrings?.money_format) +
-                " " +
-                daysShipping;
-              message.appendChild(rateNode);
-            });
-          } else {
-            message.classList.remove("error", "success");
-            message.classList.add("warning");
-            const p = document.createElement("p");
-            p.innerText = cartStrings?.no_shipping;
-            message.appendChild(p);
-          }
-        } else {
-          message.classList.remove("success", "warning");
-          message.classList.add("error");
-          Object.entries(parsedState).map((error) => {
-            const message_error = `${error[1][0]}`;
-            const p = document.createElement("p");
-            p.innerText = message_error;
-            message.appendChild(p);
-          });
-        }
-      })
-      .catch((error) => {
-        throw error;
-      });
+      }
+    } catch (error) {
+      message.classList.remove('success','warning'); message.classList.add('error');
+      line(error.message || window.cartStrings?.error || '');
+    } finally {
+      this.button.disabled = false; this.button.removeAttribute('aria-busy'); this.button.classList.remove('loading');
+    }
   }
 }
 customElements.define("cart-estimate", CartEstimate);
