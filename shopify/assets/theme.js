@@ -2338,7 +2338,7 @@ class LocalizationForm extends HTMLElement {
       input.enterKeyHint = "search";
       field.appendChild(input);
       head.appendChild(field);
-      const norm = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      const norm = (s) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       items.forEach((li) => { li.dataset.search = norm(li.textContent.replace(/\s+/g, " ")); });
       input.addEventListener("input", () => {
         const q = norm(input.value.trim());

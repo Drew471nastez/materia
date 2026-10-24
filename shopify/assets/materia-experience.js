@@ -568,7 +568,7 @@
   const isMobile = () => window.matchMedia(MOBILE).matches;
   const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const canPop = typeof HTMLElement !== 'undefined' && 'showPopover' in HTMLElement.prototype;
-  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
   let pickerSeq = 0, openPicker = null;
   const layer = (el, show) => {
     if (!el || !canPop || !el.hasAttribute('popover')) return;
