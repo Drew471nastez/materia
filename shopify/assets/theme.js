@@ -5444,6 +5444,16 @@ class ButtonSelectOptions extends QuickView {
 customElements.define("select-option", ButtonSelectOptions);
 
 class ButtonWishlist extends HTMLElement {
+  static get observedAttributes() { return ['data-product-id']; }
+
+  attributeChangedCallback() {
+    this.productId = (this.dataset.productId || '').trim();
+    this.hidden = !this.productId;
+    this.setAttribute('aria-disabled', this.productId ? 'false' : 'true');
+    if (!this.productId) this.setAttribute('tabindex', '-1');
+    else if (this.isConnected) this.connectedCallback();
+  }
+
   constructor() {
     super();
     this.productId = this.dataset.productId;
@@ -5466,7 +5476,11 @@ class ButtonWishlist extends HTMLElement {
   }
 
   connectedCallback() {
-    this.productId = this.dataset.productId;
+    this.productId = (this.dataset.productId || '').trim();
+    this.hidden = !this.productId;
+    this.setAttribute('aria-disabled', this.productId ? 'false' : 'true');
+    if (!this.productId) { this.setAttribute('tabindex', '-1'); return; }
+    this.setAttribute('tabindex', '0');
     if (!this.hasAttribute("role")) this.setAttribute("role", "button");
     if (!this.hasAttribute("tabindex")) this.setAttribute("tabindex", "0");
     if (!this.hasAttribute("aria-label") && this.dataset.tooltipAdd) this.setAttribute("aria-label", this.dataset.tooltipAdd);
@@ -5485,7 +5499,7 @@ class ButtonWishlist extends HTMLElement {
 
   onThisClick(event) {
     if (event) { event.preventDefault(); event.stopPropagation(); }
-    this.productId = this.dataset.productId;
+    this.productId = (this.dataset.productId || '').trim();
     if (!this.productId) return;
     const onPage = !!this.closest(".wishlist-page-main");
     if (MateriaWishlist.has(this.productId)) {

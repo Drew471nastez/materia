@@ -103,7 +103,7 @@ function lookup(ctx, expr) {
   if (expr === 'true') return true; if (expr === 'false') return false;
   if (expr === 'nil' || expr === 'null') return null;
   if (expr === 'blank') return BLANK; if (expr === 'empty') return EMPTY;
-  const parts = expr.replace(/\[(\d+)\]/g, '.$1').replace(/\[['"]([^'"]+)['"]\]/g, '.$1').split('.');
+  const parts = expr.replace(/\[(\d+)\]/g, '.$1').replace(/\[['"]([^'"]+)['"]\]/g, '.$1').replace(/\[([A-Za-z_]\w*)\]/g, (_, key) => '.' + ctx[key]).split('.');
   let v = ctx[parts[0]];
   for (const p of parts.slice(1)) {
     if (v == null) return undefined;
@@ -266,6 +266,33 @@ const grid = cards => `<div class="container" style="padding:0 16px;box-sizing:b
     const page = await browser.newPage();
     page.on('pageerror', e => errors.push(e.message));
 
+    /* Cleared pickers and deleted product records never get live actions. */
+    for (const style of ['standard','morden']) for (const p of [null,{}, {title:'Deleted product'}, {id:'',title:'Deleted product'}]) {
+      await page.setContent(card(p,{}, {...config,product_style:style,show_wishlist:true,show_add_cart:true}));
+      assert.equal(await page.locator('button-wishlist,button-quickview,button[name="add"],product-form').count(),0,'missing product id cannot render actionable controls');
+    }
+    const bundleTemplate=templateOf(read('snippets/product-item-bundle.storelib'));
+    await page.setContent(renderTemplate(bundleTemplate,{settings:{...config,show_wishlist:true,show_add_cart:true},card_product:{title:'Deleted bundle product'},section:{settings:{}},request:{locale:{iso_code:'en'}},pages:{}},env));
+    assert.equal(await page.locator('button-wishlist,button[name="add"],product-form-bundle').count(),0);ok('missing product bindings');
+
+    // Real custom element: clearing and restoring a binding on the same node
+    // (as in the editor) must hide/restore its action, without touching storage.
+    await page.setContent('<div class="ti-tabs__panel"><div class="ti-tabs__empty">No products found.</div><button-wishlist data-product-id="old">Heart</button-wishlist><div class="product-item">Stale card</div></div><div id="valid"><button-wishlist data-product-id="real">Heart</button-wishlist></div><button-wishlist id="missing">Heart</button-wishlist>');
+    await page.addStyleTag({content:read('shopify/assets/materia-experience.css')});
+    await page.evaluate(()=>{window.MateriaWishlist={has:()=>false,add(){throw Error('empty binding must never update wishlist')},remove(){}};});
+    const wishlistSource=read('shopify/assets/theme.js');
+    await page.addScriptTag({content:wishlistSource.slice(wishlistSource.indexOf('class ButtonWishlist extends HTMLElement'),wishlistSource.indexOf('customElements.define("button-wishlist", ButtonWishlist);')+'customElements.define("button-wishlist", ButtonWishlist);'.length)});
+    assert.equal(await page.locator('.ti-tabs__panel button-wishlist').isVisible(),false);
+    assert.equal(await page.locator('.ti-tabs__panel .product-item').isVisible(),false);
+    assert.equal(await page.locator('#missing').isVisible(),false);
+    assert.equal(await page.locator('#valid button-wishlist').isVisible(),true);
+    await page.$eval('#valid button-wishlist',el=>{el.dataset.productId='';el.click();});
+    assert.equal(await page.locator('#valid button-wishlist').isVisible(),false);
+    assert.equal(await page.locator('#valid button-wishlist').getAttribute('tabindex'),'-1');
+    await page.$eval('#valid button-wishlist',el=>el.dataset.productId='restored');
+    assert.equal(await page.locator('#valid button-wishlist').isVisible(),true);
+    assert.equal(await page.locator('#valid button-wishlist').getAttribute('tabindex'),'0');ok('empty collection redraw and restored wishlist binding');
+
     /* ── 1. Add to cart: every card style, width and product state ── */
     const states = [
       ['simple', product(1)],
@@ -367,13 +394,13 @@ const grid = cards => `<div class="container" style="padding:0 16px;box-sizing:b
     {
       await page.setViewportSize({width: 1366, height: 900});
       for (const [style, expectBg] of [['solid', 'rgb(51, 51, 51)'], ['outline', 'rgba(0, 0, 0, 0)']]) {
-        const s = {...config, btn_style: style};
+        const s = {...config, product_style: 'standard', btn_style: style};
         await draw(page, grid([card(product(1), {}, s)]), s);
         const st = await page.$eval('button[name="add"]', el => ({a: el.dataset.buttonAppearance, bg: getComputedStyle(el).backgroundColor, radius: getComputedStyle(el).borderTopLeftRadius}));
         assert.equal(st.a, style); assert.equal(st.bg, expectBg); assert.equal(st.radius, '5px');
       }
       // Product cards > custom action colours go in as contract tokens.
-      const s = {...config, enable_custom_card_actions: true, card_atc_bg: '#fefefe', card_atc_color: '#111111'};
+      const s = {...config, product_style:'standard', btn_style:'solid', enable_custom_card_actions: true, card_atc_bg: '#fefefe', card_atc_color: '#111111'};
       const custom = renderTemplate(templateOf(read('snippets/product-card-custom-actions.storelib')), {settings: s}, env);
       await draw(page, custom + grid([card(product(1), {}, s), card(product(3, {soldOut: true}), {}, s)]), s);
       const c = await page.$$eval('button[name="add"]', els => els.map(el => [getComputedStyle(el).backgroundColor, getComputedStyle(el).color]));
@@ -462,9 +489,9 @@ const grid = cards => `<div class="container" style="padding:0 16px;box-sizing:b
       const section = read('sections/collection-tab.storelib');
       const schema = JSON.parse(section.slice(section.indexOf('<schema>') + 8, section.indexOf('</schema>'))).shopify;
       const defaults = Object.fromEntries(schema.settings.filter(x => x.id).map(x => [x.id, x.default]));
-      const colA = {title: 'New in', url: '/collections/a', products_count: 4, products: [1, 2, 3, 4].map(n => product(n, {sale: n === 2}))};
-      const colB = {title: 'Best sellers', url: '/collections/b', products_count: 8, products: [5, 6, 7, 8, 9, 10, 11, 12].map(n => product(n, {variants: n % 2 ? [{title: 'S'}, {title: 'M'}] : null}))};
-      const colC = {title: 'Accessories and small leather goods', url: '/collections/c', products_count: 2, products: [13, 14].map(n => product(n))};
+      const colA = {id:'a',title: 'New in', url: '/collections/a', products_count: 4, products: [1, 2, 3, 4].map(n => product(n, {sale: n === 2}))};
+      const colB = {id:'b',title: 'Best sellers', url: '/collections/b', products_count: 8, products: [5, 6, 7, 8, 9, 10, 11, 12].map(n => product(n, {variants: n % 2 ? [{title: 'S'}, {title: 'M'}] : null}))};
+      const colC = {id:'c',title: 'Accessories and small leather goods', url: '/collections/c', products_count: 2, products: [13, 14].map(n => product(n))};
       const blocks = [['b1', 'a'], ['b2', 'b'], ['b3', 'c'], ['b4', 'a'], ['b5', 'b']].map(([id, c]) => ({id, type: 'collection', settings: {collection: c, collection_title: '', tab_icon: null}, shopify_attributes: ''}));
       const drawTabs = async (settings, width) => {
         const st = {...defaults, show_load_more_button: false, rows: 2, items_to_show: 8, ...settings};
@@ -535,6 +562,18 @@ const grid = cards => `<div class="container" style="padding:0 16px;box-sizing:b
         assert.ok(vis, `${where}: active pill scrolled into view`);
         assert.equal(await page.evaluate(() => scrollY), 0, `${where}: switching never scrolls the page`);
       }
+      // Clear the selected collection, then simulate a deleted collection Drop.
+      // Both redraws must keep the empty message, with no live card actions.
+      blocks[0].settings.collection='';
+      await drawTabs({tab_style:'pill'},375);
+      assert.equal(await page.locator('[role="tabpanel"]').first().locator('.ti-tabs__empty').count(),1);
+      assert.equal(await page.locator('[role="tabpanel"]').first().locator('button-wishlist,product-form,.product-item').count(),0);
+      assert(await page.locator('[role="tabpanel"]').nth(1).locator('.product-item').count()>0,'other collections keep their cards');
+      blocks[0].settings.collection='a';colA.id=null;
+      await drawTabs({tab_style:'pill'},1366);
+      assert.equal(await page.locator('[role="tabpanel"]').first().locator('.ti-tabs__empty').count(),1);
+      assert.equal(await page.locator('[role="tabpanel"]').first().locator('button-wishlist,product-form').count(),0);
+      colA.id='a';ok('cleared and deleted collection rendering');
       // Touch: tap a pill, swipe the pill row; the page itself never scrolls sideways.
       {
         const ctx = await browser.newContext({hasTouch: true, isMobile: true, viewport: {width: 375, height: 800}});
