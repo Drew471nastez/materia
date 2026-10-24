@@ -16,6 +16,14 @@
 // node tests/theme-settings-wiring.cjs --table  also prints where each id is read
 const fs = require('node:fs');
 const path = require('node:path');
+
+// Storelib's Theme settings panel does not apply visible_if: a condition there
+// hides its setting for good (only "{{ false }}" on a retired setting is meant).
+{
+  const raw = fs.readFileSync(path.join(__dirname, '..', 'shopify/config/settings_schema.json'), 'utf8');
+  const bad = [...raw.matchAll(/"visible_if":\s*"([^"]*)"/g)].map(m => m[1]).filter(v => v.trim() !== '{{ false }}');
+  if (bad.length) { console.error('Theme settings must not use visible_if (the builder hides them forever): ' + bad.join(', ')); process.exit(1); }
+}
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 const read = f => fs.readFileSync(path.join(root, f), 'utf8');
