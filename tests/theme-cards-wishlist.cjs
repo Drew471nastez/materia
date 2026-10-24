@@ -496,7 +496,7 @@ const rect = el => { const r = el.getBoundingClientRect(); return {x: r.x, y: r.
       const swatchStub = {...stubs, 'color-swatches': () => '<div class="product__color-swatches flex gap-5"><span class="swatch" style="width:20px;height:20px;background:#000;display:inline-block"></span><span class="swatch" style="width:20px;height:20px;background:#c9c3b5;display:inline-block"></span></div>'};
       const envS = {stubs: swatchStub, files: {}};
       for (const alignment of ['center', 'start']) for (const width of [375, 768, 1366]) {
-        const s = {...config, product_style: 'morden', product_alignment: alignment, show_wishlist: true, show_action_on_mobile: true, show_variant: true, show_short_description: true, enable_custom_card_actions: true, card_atc_bg: '#fefefe', card_atc_color: '#111111'};
+        const s = {...config, card_atc_button: 'auto', product_style: 'morden', product_alignment: alignment, show_wishlist: true, show_action_on_mobile: true, show_variant: true, show_short_description: true, enable_custom_card_actions: true, card_atc_bg: '#fefefe', card_atc_color: '#111111'};
         const where = `modern ${alignment}@${width}`;
         await page.setViewportSize({width, height: 1000});
         const html = ps.map(p => renderTemplate(cardTemplate, {settings: s, request: {locale: {iso_code: 'en'}}, pages: {}, card_product: p, section_id: 'm', class: '', template_enable_action: true, template_enable_add_cart: true, template_enable_price: true, template_enable_product_badges: true, template_enable_product_vendor: true, template_enable_product_short_description: true, template_enable_color_swatches: true, indexFor: 1, scroll_animation: 'none'}, envS));
