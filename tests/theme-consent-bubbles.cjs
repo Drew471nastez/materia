@@ -25,7 +25,8 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
   for(const [g,p] of [['Cart Drawer','cart'],['Wishlist','wishlist']]) {
     const list=group(g);
     assert(list.some(s=>s.id===p+'_bubble_custom'));
-    for(const id of [p+'_bubble_bg',p+'_bubble_color']) assert.equal(list.find(s=>s.id===id).visible_if,`{{ settings.${p}_bubble_custom }}`);
+    // Theme settings do not apply visible_if in Storelib: every setting shows.
+    for(const id of [p+'_bubble_bg',p+'_bubble_color']) assert(list.some(s=>s.id===id)&&!('visible_if' in list.find(s=>s.id===id)),id);
   }
   for(const s of [...cookie,...bubble]) if(s.id&&s.default!==undefined) assert(s.id in values||['enable_cookies','cookie_style','heading_cookies','content_cookies','label_allow','label_refuse','cookie_custom_styling','cookie_bg_color','cookie_text_color','cookie_heading_color','cookie_btn_bg','cookie_btn_text','cookie_btn2_text','cookie_btn_radius'].includes(s.id),'value written for '+s.id);
   assert.equal(values.wishlist_bubble_bg,'#282828','existing wishlist colour kept');passed++;

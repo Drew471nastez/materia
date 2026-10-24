@@ -1,0 +1,195 @@
+<template compat="shopify">
+{%- comment -%}
+  Materia Themes. Readable fields (Theme settings > Forms and fields), written
+  inside the layout's style block. For every colour scheme it works out the
+  field's real background (Background when one is picked, blended over the
+  scheme by its opacity; otherwise the scheme background, a light tint of it
+  for Filled), then picks the field text: the picked Text colour when it
+  reaches 4.5:1 on that background, else the scheme text, the scheme heading,
+  then black or white. The placeholder is the text softened only as far as it
+  still reads at 4.5:1. Luminance is the WCAG one, from the colours' red, green
+  and blue (sRGB to linear by a cubic within 0.2% of the exact curve).
+  theme-button-contract.css (@layer materia-fields) paints every field from
+  these variables; materia-forms.js redoes this in the builder's live preview.
+{%- endcomment -%}
+{%- liquid
+  assign fc_style = settings.field_style | default: 'outline'
+  assign fc_bg_set = false
+  if settings.field_background != blank and settings.field_background.alpha != 0
+    assign fc_bg_set = true
+    assign fc_a = settings.field_background.alpha | times: 1.0
+    if fc_a > 1
+      assign fc_a = fc_a | divided_by: 100.0
+    endif
+    if fc_a > 1
+      assign fc_a = 1
+    endif
+    assign fc_fr = settings.field_background.red | times: 1.0
+    assign fc_fg = settings.field_background.green | times: 1.0
+    assign fc_fb = settings.field_background.blue | times: 1.0
+  endif
+  assign fc_own = ''
+  if settings.field_text != blank and settings.field_text.alpha != 0
+    assign fc_own = settings.field_text.red | append: ',' | append: settings.field_text.green | append: ',' | append: settings.field_text.blue | append: '|'
+  endif
+  assign fc_own_radius = false
+  if settings.storelib_input_radius != blank and settings.storelib_input_radius >= 0
+    assign fc_own_radius = true
+  endif
+-%}
+html:root {
+  --field-style: {{ fc_style }};
+{%- case fc_style -%}
+  {%- when 'underline' %}
+  --field-border-widths: 0 0 max(1px, var(--inputs-border-width, 1px)) 0;
+  --input-padding: 1rem 2px;
+  {%- unless fc_own_radius %}
+  --input-border-radius: 0px;
+  {%- endunless -%}
+  {%- when 'filled' %}
+  --field-border-widths: var(--inputs-border-width, 1px);
+  {%- else %}
+  --field-border-widths: var(--inputs-border-width, 1px);
+{%- endcase %}
+}
+{%- for scheme in settings.color_schemes -%}
+  {%- liquid
+    assign fc_s = scheme.settings
+    assign fc_br = fc_s.background.red | times: 1.0
+    assign fc_bg = fc_s.background.green | times: 1.0
+    assign fc_bb = fc_s.background.blue | times: 1.0
+    if fc_bg_set
+      assign fc_keep = 1 | minus: fc_a
+      assign fc_sr = fc_fr | times: fc_a | plus: 0
+      assign fc_tmp = fc_br | times: fc_keep
+      assign fc_sr = fc_sr | plus: fc_tmp
+      assign fc_sg = fc_fg | times: fc_a
+      assign fc_tmp = fc_bg | times: fc_keep
+      assign fc_sg = fc_sg | plus: fc_tmp
+      assign fc_sb = fc_fb | times: fc_a
+      assign fc_tmp = fc_bb | times: fc_keep
+      assign fc_sb = fc_sb | plus: fc_tmp
+    elsif fc_style == 'filled'
+      assign fc_tmp = fc_s.text_color.red | minus: fc_br | times: 0.06
+      assign fc_sr = fc_br | plus: fc_tmp
+      assign fc_tmp = fc_s.text_color.green | minus: fc_bg | times: 0.06
+      assign fc_sg = fc_bg | plus: fc_tmp
+      assign fc_tmp = fc_s.text_color.blue | minus: fc_bb | times: 0.06
+      assign fc_sb = fc_bb | plus: fc_tmp
+    else
+      assign fc_sr = fc_br
+      assign fc_sg = fc_bg
+      assign fc_sb = fc_bb
+    endif
+
+    comment
+      Luminance of the field background.
+    endcomment
+    assign fc_c = fc_sr | divided_by: 255.0
+    assign fc_lr = fc_c | times: 0.305306011 | plus: 0.682171111 | times: fc_c | plus: 0.012522878 | times: fc_c
+    assign fc_c = fc_sg | divided_by: 255.0
+    assign fc_lg = fc_c | times: 0.305306011 | plus: 0.682171111 | times: fc_c | plus: 0.012522878 | times: fc_c
+    assign fc_c = fc_sb | divided_by: 255.0
+    assign fc_lb = fc_c | times: 0.305306011 | plus: 0.682171111 | times: fc_c | plus: 0.012522878 | times: fc_c
+    assign fc_lr = fc_lr | times: 0.2126
+    assign fc_lg = fc_lg | times: 0.7152
+    assign fc_lb = fc_lb | times: 0.0722
+    assign fc_ls = fc_lr | plus: fc_lg | plus: fc_lb | plus: 0.05
+
+    comment
+      Text: the first candidate at 4.5:1, else whichever of black and white reads better.
+    endcomment
+    assign fc_list = fc_own | append: fc_s.text_color.red | append: ',' | append: fc_s.text_color.green | append: ',' | append: fc_s.text_color.blue | append: '|' | append: fc_s.heading_color.red | append: ',' | append: fc_s.heading_color.green | append: ',' | append: fc_s.heading_color.blue | split: '|'
+    assign fc_pick = ''
+    for fc_item in fc_list
+      if fc_item == blank
+        continue
+      endif
+      assign fc_rgb = fc_item | split: ','
+      assign fc_c = fc_rgb[0] | times: 1.0 | divided_by: 255.0
+      assign fc_lr = fc_c | times: 0.305306011 | plus: 0.682171111 | times: fc_c | plus: 0.012522878 | times: fc_c | times: 0.2126
+      assign fc_c = fc_rgb[1] | times: 1.0 | divided_by: 255.0
+      assign fc_lg = fc_c | times: 0.305306011 | plus: 0.682171111 | times: fc_c | plus: 0.012522878 | times: fc_c | times: 0.7152
+      assign fc_c = fc_rgb[2] | times: 1.0 | divided_by: 255.0
+      assign fc_lb = fc_c | times: 0.305306011 | plus: 0.682171111 | times: fc_c | plus: 0.012522878 | times: fc_c | times: 0.0722
+      assign fc_lt = fc_lr | plus: fc_lg | plus: fc_lb | plus: 0.05
+      if fc_lt > fc_ls
+        assign fc_ratio = fc_lt | divided_by: fc_ls
+      else
+        assign fc_ratio = fc_ls | divided_by: fc_lt
+      endif
+      if fc_ratio >= 4.5
+        assign fc_pick = fc_item
+        break
+      endif
+    endfor
+    if fc_pick == blank
+      comment
+        Black reads better than white when (L + 0.05)^2 > 0.0525.
+      endcomment
+      assign fc_sq = fc_ls | times: fc_ls
+      if fc_sq > 0.0525
+        assign fc_pick = '0,0,0'
+      else
+        assign fc_pick = '255,255,255'
+      endif
+    endif
+    assign fc_rgb = fc_pick | split: ','
+    assign fc_tr = fc_rgb[0] | times: 1.0
+    assign fc_tg = fc_rgb[1] | times: 1.0
+    assign fc_tb = fc_rgb[2] | times: 1.0
+
+    comment
+      Placeholder: the text mixed into the background, as soft as still reads.
+    endcomment
+    assign fc_pr = fc_tr
+    assign fc_pg = fc_tg
+    assign fc_pb = fc_tb
+    assign fc_mixes = '0.62,0.72,0.82,0.9' | split: ','
+    for fc_m in fc_mixes
+      assign fc_w = fc_m | times: 1.0
+      assign fc_k = 1 | minus: fc_w
+      assign fc_tmp = fc_sr | times: fc_k
+      assign fc_xr = fc_tr | times: fc_w | plus: fc_tmp
+      assign fc_tmp = fc_sg | times: fc_k
+      assign fc_xg = fc_tg | times: fc_w | plus: fc_tmp
+      assign fc_tmp = fc_sb | times: fc_k
+      assign fc_xb = fc_tb | times: fc_w | plus: fc_tmp
+      assign fc_c = fc_xr | divided_by: 255.0
+      assign fc_lr = fc_c | times: 0.305306011 | plus: 0.682171111 | times: fc_c | plus: 0.012522878 | times: fc_c | times: 0.2126
+      assign fc_c = fc_xg | divided_by: 255.0
+      assign fc_lg = fc_c | times: 0.305306011 | plus: 0.682171111 | times: fc_c | plus: 0.012522878 | times: fc_c | times: 0.7152
+      assign fc_c = fc_xb | divided_by: 255.0
+      assign fc_lb = fc_c | times: 0.305306011 | plus: 0.682171111 | times: fc_c | plus: 0.012522878 | times: fc_c | times: 0.0722
+      assign fc_lt = fc_lr | plus: fc_lg | plus: fc_lb | plus: 0.05
+      if fc_lt > fc_ls
+        assign fc_ratio = fc_lt | divided_by: fc_ls
+      else
+        assign fc_ratio = fc_ls | divided_by: fc_lt
+      endif
+      if fc_ratio >= 4.5
+        assign fc_pr = fc_xr
+        assign fc_pg = fc_xg
+        assign fc_pb = fc_xb
+        break
+      endif
+    endfor
+  -%}
+{% if forloop.first %}html:root, {% endif %}.color-{{ scheme.id }} {
+  --field-surface: rgb({{ fc_sr | round }}, {{ fc_sg | round }}, {{ fc_sb | round }});
+  --field-text: rgb({{ fc_tr | round }}, {{ fc_tg | round }}, {{ fc_tb | round }});
+  --field-placeholder: rgb({{ fc_pr | round }}, {{ fc_pg | round }}, {{ fc_pb | round }});
+  --field-placeholder-opacity: 1;
+  --input-color: var(--field-text);
+  --input-placeholder-color: var(--field-placeholder);
+  {%- if fc_style == 'filled' and fc_bg_set == false %}
+  --input-bg: var(--field-surface);
+  {%- elsif fc_style == 'underline' and fc_bg_set == false %}
+  --input-bg: transparent;
+  {%- endif %}
+  {%- if fc_style == 'filled' and settings.storelib_input_border == blank %}
+  --input-border-color: transparent;
+  {%- endif %}
+}
+{%- endfor %}
+</template>

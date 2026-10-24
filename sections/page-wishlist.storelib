@@ -67,26 +67,49 @@
   assign section_st = section.settings
   assign section_width = section_st.section_width
   assign scroll_animation = settings.scroll_animation
+  assign color_scheme = section_st.color_scheme.id | default: section_st.color_scheme | default: 'default-color-scheme'
+  assign empty_text = 'templates.wishlist.empty_des' | t
+  if section_st.empty_text != blank
+    assign empty_text = section_st.empty_text
+  endif
+  assign empty_button_label = 'templates.wishlist.redirect' | t
+  if section_st.empty_button_label != blank
+    assign empty_button_label = section_st.empty_button_label
+  endif
+  assign empty_button_url = section_st.empty_button_url | default: routes.all_products_collection_url | default: '/products'
 -%}
 {%- capture style -%}
   --section-pt: {{ section_st.padding_top }}; --section-pb: {{ section_st.padding_bottom }};--col-gap-desktop: 30px;--col-desktop: 4;--col-number: 2;--col-desktop-small: 3;--col-tablet: 3;--col-gap: 15px;
 {%- endcapture -%}
+{%- comment -%}
+  The saved list lives in the visitor's browser (localStorage
+  "materia__wishlist-items", product ids), so the page is drawn empty and
+  assets/wishlist.js asks Storelib for the saved products' cards:
+  /search?q=id:<id> OR id:<id>&section_id=page-wishlist, which answers
+  this same section with search.results, so the cards are the theme's own
+  product cards with the theme settings. In the builder a few products
+  stand in when nothing is saved, so the cards can be styled.
+{%- endcomment -%}
 <div
-  class="section product wishlist-page-section"
+  class="section product wishlist-page-section color-{{ color_scheme }} gradient"
   data-section-type="page-wishlist"
   data-section-id="{{ section.id }}"
+  data-wishlist-page
+  data-render-section="page-wishlist"
   data-view="{{ template.name }}"
+  {%- if settings.show_message_when_remove %} data-removed-message="{{ section_st.removed_message | default: 'Removed from your wishlist' | escape }}"{% endif %}
   style="{{ style | strip | strip_newlines }}"
 >
-  <skeleton-page></skeleton-page>
   <div class="wishlist-page-section-inner">
     <div class="{{ section_width }} wishlist-page-main">
       {%- if search.results != blank -%}
-        {% paginate search.results by 50 %}
-          <div class="wishlist-list-items grid grid-cols gap fadeIn">
-            {%- for product in search.results -%}
+        <div class="wishlist-list-items grid grid-cols gap" data-wishlist-items>
+          {%- for product in search.results limit: 50 -%}
+            {%- if product.id != blank -%}
               <div
-                class="col-6 col-md-4 col-lg-3 product-load wl-product-js product-preload-js wishlist-list"
+                class="col-6 col-md-4 col-lg-3 product-load wl-product-js wishlist-list"
+                data-wishlist-card
+                data-wishlist-id="{{ product.id }}"
                 data-product-handle="{{ product.handle }}"
               >
                 {% render 'product-item',
@@ -97,56 +120,58 @@
                   template_enable_product_vendor: true,
                   template_enable_rate: true,
                   template_enable_add_cart: true,
-                  template_enable_product_short_description: false,
+                  template_enable_product_badges: true,
+                  template_enable_product_short_description: true,
                   template_enable_color_swatches: true,
                   template_enable_remove_in_wishlist_page: true,
                   type: 'gird',
-                  scroll_animation: scroll_animation,
+                  scroll_animation: 'none',
+                  indexFor: forloop.index
+                %}
+              </div>
+            {%- endif -%}
+          {%- endfor -%}
+        </div>
+      {%- else -%}
+        <div class="wishlist-list-items grid grid-cols gap" data-wishlist-items aria-busy="true">
+          {%- if request.design_mode -%}
+            {%- for product in collections.all.products limit: 4 -%}
+              <div class="col-6 col-md-4 col-lg-3 product-load wl-product-js wishlist-list" data-wishlist-card data-wishlist-sample data-wishlist-id="{{ product.id }}" data-product-handle="{{ product.handle }}">
+                {% render 'product-item',
+                  card_product: product,
+                  section_id: section.id,
+                  template_enable_action: true,
+                  template_enable_price: true,
+                  template_enable_product_vendor: true,
+                  template_enable_rate: true,
+                  template_enable_add_cart: true,
+                  template_enable_product_badges: true,
+                  template_enable_product_short_description: true,
+                  template_enable_color_swatches: true,
+                  template_enable_remove_in_wishlist_page: true,
+                  type: 'gird',
+                  scroll_animation: 'none',
                   indexFor: forloop.index
                 %}
               </div>
             {%- endfor -%}
-          </div>
-        {% endpaginate %}
-      {%- else -%}
-        {%- comment -%} Storelib: every product is drawn once and the saved wishlist picks which show. In the builder a few show as a sample. {%- endcomment -%}
-        <div class="wishlist-list-items grid grid-cols gap fadeIn" data-wishlist-local>
-          {%- for product in collections.all.products limit: 250 -%}
-            <div
-              class="col-6 col-md-4 col-lg-3 product-load wl-product-js wishlist-list"
-              data-product-handle="{{ product.handle }}"
-              data-wishlist-id="{{ product.id }}"
-              {% unless request.design_mode and forloop.index <= 4 %}hidden{% endunless %}
-            >
-              {% render 'product-item',
-                card_product: product,
-                section_id: section.id,
-                template_enable_action: true,
-                template_enable_price: true,
-                template_enable_product_vendor: true,
-                template_enable_rate: true,
-                template_enable_add_cart: true,
-                template_enable_product_short_description: false,
-                template_enable_color_swatches: true,
-                template_enable_remove_in_wishlist_page: true,
-                type: 'gird',
-                scroll_animation: scroll_animation,
-                indexFor: forloop.index
-              %}
-            </div>
-          {%- endfor -%}
+          {%- endif -%}
         </div>
-      {% endif %}
-      <div class="wishlist-no-product-js fadeIn hidden text-center empty-hidden-heading">
-        <p class="mb-30">{{ 'templates.wishlist.empty_des' | t }}</p>
+        <div class="wishlist-page__loading" data-wishlist-loading aria-hidden="true">
+          {%- for i in (1..4) -%}<span class="wishlist-page__ghost"></span>{%- endfor -%}
+        </div>
+      {%- endif -%}
+      <div class="wishlist-no-product-js wishlist-page__empty text-center" data-wishlist-empty hidden>
+        <p class="wishlist-page__empty-text">{{ empty_text }}</p>
         <a
-          class="wishlist-no-product-url btn-primary no-underline inline-block"
+          class="wishlist-no-product-url btn-primary no-underline inline-flex"
           data-theme-button="primary" data-sl-button
-          href="{{ routes.all_products_collection_url }}"
+          href="{{ empty_button_url | url }}"
         >
-          {{- 'templates.wishlist.redirect' | t -}}
+          {{- empty_button_label -}}
         </a>
       </div>
+      <p class="wishlist-page__status visually-hidden" role="status" aria-live="polite" data-wishlist-status></p>
     </div>
   </div>
 </div>
@@ -259,6 +284,41 @@
         ],
         "default": "fluid_container",
         "label": "t:sections.all.section_width.label"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "header",
+        "content": "Nothing saved yet"
+      },
+      {
+        "type": "textarea",
+        "id": "empty_text",
+        "label": "Message",
+        "info": "Empty: the theme's own words."
+      },
+      {
+        "type": "text",
+        "id": "empty_button_label",
+        "label": "Button label",
+        "info": "Empty: the theme's own words."
+      },
+      {
+        "type": "url",
+        "id": "empty_button_url",
+        "label": "Button link",
+        "info": "Empty: all products."
+      },
+      {
+        "type": "text",
+        "id": "removed_message",
+        "label": "Message after a remove",
+        "default": "Removed from your wishlist",
+        "info": "Shown when Theme settings > Wishlist > Show a message when removed is on."
       },
       {
         "type": "header",

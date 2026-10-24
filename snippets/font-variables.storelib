@@ -7,15 +7,19 @@
   assign font_family_heading = 'Instrument Sans'
 
   assign theme_st = settings
-  # Typography is two font pickers: body and headings. Pairings and font
-  # sources are retired; a picked font is always the font.
-  assign tp = 'none'
+  # Body and headings each take, in this order: a font from More fonts, the
+  # font pairing's font, then the font picker's font.
+  assign tp = theme_st.typography_preset | default: 'none'
   assign font_body_shopify = theme_st.font_body_system
   assign font_body_google = theme_st.font_body_google
   assign font_body_google_embed = theme_st.font_body_google_embed
   assign font_type_body = 'default_font'
   if font_body_shopify.family != blank
     assign font_type_body = 'shopify'
+  endif
+  # Font source Google Fonts with a name typed in uses that family.
+  if theme_st.font_type_body == 'google' and font_body_google != blank
+    assign font_type_body = 'google'
   endif
 
   assign font_heading_shopify = theme_st.font_heading_system
@@ -25,13 +29,187 @@
   if font_heading_shopify.family != blank
     assign font_type_heading = 'shopify'
   endif
+  if theme_st.font_type_heading == 'google' and font_heading_google != blank
+    assign font_type_heading = 'google'
+  endif
 %}
+
+{%- comment -%}
+  More fonts and the font pairings. Each row of mt_fonts is family, kind
+  (s sans, d display, f serif, m mono, x system sans, y system serif) and the
+  weights the family has, one digit per hundred (4 is 400). The page asks
+  Google Fonts once for every family in use, with only the weights the
+  Typography and Buttons settings use, each snapped to the nearest weight the
+  family has, and display=swap. theme-live reads the same rows (meta below) to
+  load a family picked in the builder at once. Keep the More fonts options in
+  settings_schema to these names.
+{%- endcomment -%}
+{%- liquid
+  assign mt_fonts = 'Inter:s:123456789|Manrope:s:2345678|DM Sans:s:123456789|Plus Jakarta Sans:s:2345678|Outfit:s:123456789|Urbanist:s:123456789|Space Grotesk:s:34567|Sora:s:12345678|Lexend:s:123456789|Work Sans:s:123456789|Figtree:s:3456789|Onest:s:123456789|Geist:s:123456789|Montserrat:s:123456789|Poppins:s:123456789|Raleway:s:123456789|Nunito Sans:s:23456789|Rubik:s:3456789|Karla:s:2345678|Archivo:s:123456789|Barlow:s:123456789|Jost:s:123456789|Albert Sans:s:123456789|Hanken Grotesk:s:123456789|Schibsted Grotesk:s:456789|Instrument Sans:s:4567|IBM Plex Sans:s:1234567|Roboto:s:123456789|Lato:s:13479|Open Sans:s:345678|Quicksand:s:34567|Mulish:s:23456789|Bricolage Grotesque:s:2345678|Syne:d:45678|Unbounded:d:23456789|Bebas Neue:d:4|Oswald:d:234567|Anton:d:4|Archivo Black:d:4|Playfair Display:f:456789|Cormorant Garamond:f:34567|DM Serif Display:f:4|Fraunces:f:123456789|Lora:f:4567|Libre Baskerville:f:4567|EB Garamond:f:45678|Instrument Serif:f:4|Source Serif 4:f:23456789|Bodoni Moda:f:456789|Libre Caslon Text:f:47|Abril Fatface:f:4|Merriweather:f:3456789|Newsreader:f:2345678|Young Serif:f:4|JetBrains Mono:m:12345678|Space Mono:m:47|Geist Mono:m:123456789|Helvetica:x:4|Georgia:y:4'
+  assign mt_pairs = 'modern:Inter:Inter|luxury:Lato:Playfair Display|tech:Inter:Space Grotesk|editorial:Source Serif 4:Playfair Display|minimal:Helvetica:Helvetica|brutalist:Inter:Anton|boutique:Karla:Cormorant Garamond|grotesque:Manrope:Manrope|classic:Georgia:Georgia|bold:DM Sans:Archivo Black|soft:Quicksand:Quicksand|mono:IBM Plex Sans:JetBrains Mono|vintage:Lora:Abril Fatface|magazine:Inter:Bodoni Moda|wellness:Nunito Sans:DM Serif Display|playful:Plus Jakarta Sans:Fraunces|industrial:Roboto:Bebas Neue|refined:Karla:Libre Caslon Text|vivid:Outfit:Outfit'
+
+  assign tp_body = ''
+  assign tp_head = ''
+  assign mt_pair_rows = mt_pairs | split: '|'
+  for row in mt_pair_rows
+    assign cells = row | split: ':'
+    if cells[0] == tp
+      assign tp_body = cells[1]
+      assign tp_head = cells[2]
+    endif
+  endfor
+
+  # A Google font typed in (Font source: Google Fonts) wins over the pairing.
+  assign mt_body = theme_st.font_body_google_family | default: 'none'
+  if mt_body == 'none'
+    assign mt_body = tp_body
+    if font_type_body == 'google'
+      assign mt_body = ''
+    endif
+  endif
+  assign mt_head = theme_st.font_heading_google_family | default: 'none'
+  if mt_head == 'none'
+    assign mt_head = tp_head
+    if font_type_heading == 'google'
+      assign mt_head = ''
+    endif
+  endif
+
+  assign mt_body_kind = ''
+  assign mt_body_has = ''
+  assign mt_head_kind = ''
+  assign mt_head_has = ''
+  assign mt_rows = mt_fonts | split: '|'
+  for row in mt_rows
+    assign cells = row | split: ':'
+    if cells[0] == mt_body
+      assign mt_body_kind = cells[1]
+      assign mt_body_has = cells[2]
+    endif
+    if cells[0] == mt_head
+      assign mt_head_kind = cells[1]
+      assign mt_head_has = cells[2]
+    endif
+  endfor
+  if mt_body_kind == ''
+    assign mt_body = ''
+  endif
+  if mt_head_kind == ''
+    assign mt_head = ''
+  endif
+
+  assign w_body = theme_st.body_font_weight | default: 400 | plus: 0 | divided_by: 100
+  assign w_head = theme_st.heading_font_weight | default: 600 | plus: 0 | divided_by: 100
+  assign w_sub = theme_st.subheading_font_weight | default: 500 | plus: 0 | divided_by: 100
+  assign w_btn = theme_st.btn_font_weight | default: 500 | plus: 0 | divided_by: 100
+  assign want_body = w_body | append: ',7,' | append: w_sub
+  assign want_head = w_head | append: ''
+  if theme_st.button_font == 'body_font'
+    assign want_body = want_body | append: ',' | append: w_btn
+  else
+    assign want_head = want_head | append: ',' | append: w_btn
+  endif
+  if theme_st.menu_font == 'heading_font'
+    assign want_head = want_head | append: ',5'
+  else
+    assign want_body = want_body | append: ',5'
+  endif
+
+  assign mt_query = ''
+  for role in (1..2)
+    if role == 1
+      assign q_name = mt_body
+      assign q_kind = mt_body_kind
+      assign q_has = mt_body_has
+      assign q_want = want_body
+      if mt_head == mt_body
+        assign q_want = q_want | append: ',' | append: want_head
+      endif
+    else
+      assign q_name = mt_head
+      assign q_kind = mt_head_kind
+      assign q_has = mt_head_has
+      assign q_want = want_head
+      if mt_head == mt_body
+        assign q_name = ''
+      endif
+    endif
+    if q_name == '' or q_kind == 'x' or q_kind == 'y'
+      continue
+    endif
+    assign q_avail = q_has | split: ''
+    assign q_wants = q_want | split: ','
+    assign q_got = ''
+    for w in q_wants
+      assign wn = w | plus: 0
+      assign best = ''
+      assign best_gap = 99
+      for d in q_avail
+        assign gap = d | plus: 0 | minus: wn | abs
+        if gap <= best_gap
+          assign best = d
+          assign best_gap = gap
+        endif
+      endfor
+      if q_got == ''
+        assign q_got = best
+      else
+        assign q_got = q_got | append: ',' | append: best
+      endif
+    endfor
+    assign q_weights = q_got | split: ',' | uniq | sort | join: '00;' | append: '00'
+    assign q_family = q_name | replace: ' ', '+'
+    if mt_query != ''
+      assign mt_query = mt_query | append: '&'
+    endif
+    assign mt_query = mt_query | append: 'family=' | append: q_family | append: ':wght@' | append: q_weights
+  endfor
+
+  if mt_body != ''
+    assign font_type_body = 'materia'
+    case mt_body_kind
+      when 'x'
+        assign font_family_body = '"Helvetica Neue", Helvetica, Arial'
+      when 'y'
+        assign font_family_body = 'Georgia, "Times New Roman", Times, serif'
+      when 'f'
+        assign font_family_body = '"' | append: mt_body | append: '", Georgia, "Times New Roman", serif'
+      when 'm'
+        assign font_family_body = '"' | append: mt_body | append: '", ui-monospace, Menlo, Consolas, monospace'
+      else
+        assign font_family_body = '"' | append: mt_body | append: '", system-ui, -apple-system, "Segoe UI", Roboto'
+    endcase
+  endif
+  if mt_head != ''
+    assign font_type_heading = 'materia'
+    case mt_head_kind
+      when 'x'
+        assign font_family_heading = '"Helvetica Neue", Helvetica, Arial'
+      when 'y'
+        assign font_family_heading = 'Georgia, "Times New Roman", Times, serif'
+      when 'f'
+        assign font_family_heading = '"' | append: mt_head | append: '", Georgia, "Times New Roman", serif'
+      when 'm'
+        assign font_family_heading = '"' | append: mt_head | append: '", ui-monospace, Menlo, Consolas, monospace'
+      else
+        assign font_family_heading = '"' | append: mt_head | append: '", system-ui, -apple-system, "Segoe UI", Roboto'
+    endcase
+  endif
+-%}
+{%- if mt_query != '' -%}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?{{ mt_query }}&display=swap" data-materia-fonts>
+{%- endif -%}
+{%- if request.design_mode -%}
+  <meta name="materia-fonts" content="{{ mt_fonts }}" data-pairs="{{ mt_pairs }}">
+{%- endif -%}
 
 {% comment %} Start check setting font {% endcomment %}
 {%- comment -%}
-  A font picked for body or headings (Google or Shopify) is loaded whether or
-  not a pairing is chosen, because a picked font wins over the pairing for its
-  text. The theme's own Instrument Sans loads only when no pairing replaces it.
+  The font picker's font is loaded only for text that More fonts or a pairing
+  does not fill (font_type_* is 'materia' when they do; their stylesheet is
+  above). The theme's own Instrument Sans loads only when nothing replaces it.
 {%- endcomment -%}
 {% if font_type_body == 'default_font' and tp == 'none' %}
   {{
@@ -70,8 +248,13 @@
     }
   {% endstyle %}
 {% elsif font_type_body == 'google' and font_body_google != blank %}
-  {% assign font_family_body = font_body_google %}
-  {{ font_body_google_embed }}
+  {%- assign g_name = font_body_google | strip | remove: '"' | remove: ';' | remove: '<' | remove: '>' | remove: '{' | remove: '}' -%}
+  {%- assign font_family_body = '"' | append: g_name | append: '"' -%}
+  {%- if font_body_google_embed != blank -%}
+    {{ font_body_google_embed }}
+  {%- else -%}
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={{ g_name | replace: ' ', '+' }}&display=swap">
+  {%- endif -%}
 {% elsif font_type_body == 'shopify' and font_body_shopify.family != blank %}
   {% # theme-check-disable AssetPreload %}
   <link rel="preload" as="font" href="{{ font_body_shopify | font_url }}" type="font/woff2" crossorigin>
@@ -119,8 +302,13 @@
     }
   {% endstyle %}
 {% elsif font_type_heading == 'google' and font_heading_google != blank %}
-  {% assign font_family_heading = font_heading_google %}
-  {{ font_body_heading_embed }}
+  {%- assign g_name = font_heading_google | strip | remove: '"' | remove: ';' | remove: '<' | remove: '>' | remove: '{' | remove: '}' -%}
+  {%- assign font_family_heading = '"' | append: g_name | append: '"' -%}
+  {%- if font_body_heading_embed != blank -%}
+    {{ font_body_heading_embed }}
+  {%- else -%}
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={{ g_name | replace: ' ', '+' }}&display=swap">
+  {%- endif -%}
 {% elsif font_type_heading == 'shopify' and font_heading_shopify.family != blank %}
   {% # theme-check-disable AssetPreload %}
   <link rel="preload" as="font" href="{{ font_heading_shopify | font_url }}" type="font/woff2" crossorigin>
@@ -149,6 +337,71 @@
 %}
 {% comment %} End check setting font {% endcomment %}
 
+{%- comment -%}
+  Fallback metrics, so the page does not move when the web font arrives.
+  Text first draws in a local font (Arial, Times New Roman or Courier New)
+  scaled to the web font's width and line metrics; the swap then keeps every
+  line where it was. Each row: family, local font (s, f, m), size-adjust,
+  ascent, descent and line-gap overrides in %, measured from the family's
+  regular weight against the local font (hhea metrics, an English sample).
+  "<Family> Fallback" goes right after the family in --body-font and
+  --heading-font, for whichever source picked it.
+{%- endcomment -%}
+{%- liquid
+  assign mt_metrics = 'Inter:s:107.9:89.8:22.3:0|Manrope:s:102.1:104.5:29.4:0|DM Sans:s:104.5:95:29.7:0|Plus Jakarta Sans:s:103.9:99.9:21.4:0|Outfit:s:98.7:101.3:26.3:0|Urbanist:s:98.9:96:25.3:0|Space Grotesk:s:109.6:89.8:26.6:0|Sora:s:113:85.8:25.7:0|Lexend:s:109.5:91.3:22.8:0|Work Sans:s:112.5:82.7:21.6:0|Figtree:s:100.9:94.1:24.8:0|Onest:s:105.7:91.7:28.8:0|Geist:s:105.3:95.5:28:0|Montserrat:s:112.9:85.8:22.2:0|Poppins:s:111:94.6:31.5:9|Raleway:s:104.1:90.3:22.5:0|Nunito Sans:s:101.7:99.4:34.7:0|Rubik:s:105.1:88.9:23.8:0|Karla:s:102.7:89.3:24.5:0|Archivo:s:98:89.6:21.4:0|Barlow:s:96:104.2:20.8:0|Jost:s:97.5:109.8:38.5:0|Albert Sans:s:104.4:91:23.9:0|Hanken Grotesk:s:100.9:99.1:30:0|Schibsted Grotesk:s:104.9:93.1:24.6:0|Instrument Sans:s:102.3:94.8:24.4:0|IBM Plex Sans:s:101:101.5:27.2:0|Roboto:s:100:92.8:24.4:0|Lato:s:97.1:101.6:21.9:0|Open Sans:s:104.9:101.9:27.9:0|Quicksand:s:104:96.2:24:0|Mulish:s:104.3:96.4:24:0|Bricolage Grotesque:s:105.6:88.1:25.6:0|Syne:s:97.8:94.6:28.1:0|Unbounded:s:133.1:74.8:18.4:0|Bebas Neue:s:75.4:119.3:39.8:0|Oswald:s:81.8:145.8:35.3:0|Anton:s:91.2:129:36.1:0|Archivo Black:s:124.1:70.8:16.9:0|Playfair Display:f:109.2:99.1:23:0|Cormorant Garamond:f:95.4:96.8:30.1:0|DM Serif Display:f:108.6:95.4:30.8:0|Fraunces:f:113.6:86.1:22.4:0|Lora:f:113.2:88.9:24.2:0|Libre Baskerville:f:126.5:76.7:21.3:0|EB Garamond:f:93.8:107.3:31.8:0|Instrument Serif:f:83:119.3:37.4:0|Source Serif 4:f:116.4:89:28.8:0|Bodoni Moda:f:113.1:99.5:35.4:0|Libre Caslon Text:f:116.7:83.1:22.3:0|Abril Fatface:f:111.5:94.9:26.1:0|Merriweather:f:118.3:83.2:23.1:0|Newsreader:f:104.5:70.3:25.4:0|Young Serif:f:122.7:85.2:29.8:0|JetBrains Mono:m:100:102:30:0|Space Mono:m:102:109.8:35.4:0|Geist Mono:m:100:100.5:29.5:0'
+  assign mt_metric_rows = mt_metrics | split: '|'
+  assign fb_faces = ''
+  assign fb_done = ''
+  for role in (1..2)
+    if role == 1
+      assign fb_stack = font_family_body
+    else
+      assign fb_stack = font_family_heading
+    endif
+    assign fb_token = fb_stack | split: ',' | first
+    assign fb_name = fb_token | remove: '"' | remove: "'" | strip
+    assign fb_row = ''
+    for row in mt_metric_rows
+      assign cells = row | split: ':'
+      if cells[0] == fb_name
+        assign fb_row = cells
+      endif
+    endfor
+    if fb_row == ''
+      continue
+    endif
+    assign fb_family = fb_name | append: ' Fallback'
+    assign fb_new = fb_token | append: ', "' | append: fb_family | append: '"'
+    assign fb_stack = fb_stack | replace_first: fb_token, fb_new
+    if role == 1
+      assign font_family_body = fb_stack
+    else
+      assign font_family_heading = fb_stack
+    endif
+    if fb_done contains fb_family
+      continue
+    endif
+    assign fb_done = fb_done | append: '|' | append: fb_family
+    case fb_row[1]
+      when 'f'
+        assign fb_regular = 'local("Times New Roman"), local("TimesNewRomanPSMT"), local("Liberation Serif")'
+        assign fb_bold = 'local("Times New Roman Bold"), local("TimesNewRomanPS-BoldMT"), local("Liberation Serif Bold")'
+      when 'm'
+        assign fb_regular = 'local("Courier New"), local("CourierNewPSMT"), local("Liberation Mono")'
+        assign fb_bold = 'local("Courier New Bold"), local("CourierNewPS-BoldMT"), local("Liberation Mono Bold")'
+      else
+        assign fb_regular = 'local("Arial"), local("ArialMT"), local("Liberation Sans")'
+        assign fb_bold = 'local("Arial Bold"), local("Arial-BoldMT"), local("Liberation Sans Bold")'
+    endcase
+    assign fb_metrics = 'size-adjust:' | append: fb_row[2] | append: '%;ascent-override:' | append: fb_row[3] | append: '%;descent-override:' | append: fb_row[4] | append: '%;line-gap-override:' | append: fb_row[5] | append: '%'
+    assign fb_faces = fb_faces | append: '@font-face{font-family:"' | append: fb_family | append: '";src:' | append: fb_regular | append: ';font-weight:100 549;' | append: fb_metrics | append: '}'
+    assign fb_faces = fb_faces | append: '@font-face{font-family:"' | append: fb_family | append: '";src:' | append: fb_bold | append: ';font-weight:550 1000;' | append: fb_metrics | append: '}'
+  endfor
+-%}
+{%- if fb_faces != '' -%}
+  <style data-materia-font-fallbacks>{{ fb_faces }}</style>
+{%- endif -%}
+
 {% style %}
   :root {
     --body-font: {{ font_family_body }}, sans-serif;
@@ -158,172 +411,5 @@
     --btn-font: {% if font_button_type == 'body_font' %}var(--body-font){% else %}var(--heading-font){% endif %};
   }
 {% endstyle %}
-
-{%- comment -%}
-  Typography preset overrides.
-  When the merchant picks any preset other than "none", load the matching
-  Google Fonts and override --body-font / --heading-font / --menu-font / --btn-font
-  plus heading text-transform and letter-spacing. The body/heading font_picker
-  values further down become inert until preset is set back to "none".
-{%- endcomment -%}
-{%- assign tp = 'none' -%}
-{%- if tp != 'none' and tp != blank -%}
-  {%- case tp -%}
-    {%- when 'modern' -%}
-      {%- assign tp_link  = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap' -%}
-      {%- assign tp_body  = '"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' -%}
-      {%- assign tp_head  = '"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' -%}
-      {%- assign tp_trans = 'unset' -%}
-      {%- assign tp_track = '-0.01em' -%}
-    {%- when 'luxury' -%}
-      {%- assign tp_link  = 'https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&family=Playfair+Display:wght@500;600;700&display=swap' -%}
-      {%- assign tp_body  = '"Lato", system-ui, -apple-system, sans-serif' -%}
-      {%- assign tp_head  = '"Playfair Display", Georgia, "Times New Roman", serif' -%}
-      {%- assign tp_trans = 'unset' -%}
-      {%- assign tp_track = '0.005em' -%}
-    {%- when 'tech' -%}
-      {%- assign tp_link  = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap' -%}
-      {%- assign tp_body  = '"Inter", system-ui, -apple-system, sans-serif' -%}
-      {%- assign tp_head  = '"Space Grotesk", "Inter", system-ui, sans-serif' -%}
-      {%- assign tp_trans = 'unset' -%}
-      {%- assign tp_track = '-0.015em' -%}
-    {%- when 'editorial' -%}
-      {%- assign tp_link  = 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Source+Serif+4:wght@400;500;600&display=swap' -%}
-      {%- assign tp_body  = '"Source Serif 4", Georgia, "Times New Roman", serif' -%}
-      {%- assign tp_head  = '"Playfair Display", Georgia, "Times New Roman", serif' -%}
-      {%- assign tp_trans = 'unset' -%}
-      {%- assign tp_track = '0' -%}
-    {%- when 'minimal' -%}
-      {%- assign tp_link  = '' -%}
-      {%- assign tp_body  = '"Helvetica Neue", Helvetica, Arial, sans-serif' -%}
-      {%- assign tp_head  = '"Helvetica Neue", Helvetica, Arial, sans-serif' -%}
-      {%- assign tp_trans = 'unset' -%}
-      {%- assign tp_track = '-0.02em' -%}
-    {%- when 'brutalist' -%}
-      {%- assign tp_link  = 'https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600&display=swap' -%}
-      {%- assign tp_body  = '"Inter", system-ui, -apple-system, sans-serif' -%}
-      {%- assign tp_head  = '"Anton", Impact, "Arial Narrow Bold", sans-serif' -%}
-      {%- assign tp_trans = 'uppercase' -%}
-      {%- assign tp_track = '0.04em' -%}
-    {%- when 'boutique' -%}
-      {%- assign tp_link  = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Karla:wght@400;500;600&display=swap' -%}
-      {%- assign tp_body  = '"Karla", system-ui, -apple-system, sans-serif' -%}
-      {%- assign tp_head  = '"Cormorant Garamond", Georgia, "Times New Roman", serif' -%}
-      {%- assign tp_trans = 'unset' -%}
-      {%- assign tp_track = '0.01em' -%}
-    {%- when 'grotesque' -%}
-      {%- assign tp_link  = 'https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap' -%}
-      {%- assign tp_body  = '"Manrope", system-ui, -apple-system, sans-serif' -%}
-      {%- assign tp_head  = '"Manrope", system-ui, -apple-system, sans-serif' -%}
-      {%- assign tp_trans = 'unset' -%}
-      {%- assign tp_track = '-0.02em' -%}
-    {%- when 'classic' -%}
-      {%- assign tp_link  = '' -%}
-      {%- assign tp_body  = 'Georgia, "Times New Roman", Times, serif' -%}
-      {%- assign tp_head  = 'Georgia, "Times New Roman", Times, serif' -%}
-      {%- assign tp_trans = 'unset' -%}
-      {%- assign tp_track = '0' -%}
-    {%- when 'bold' -%}
-      {%- assign tp_link  = 'https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:wght@400;500;600;700&display=swap' -%}
-      {%- assign tp_body  = '"DM Sans", system-ui, -apple-system, sans-serif' -%}
-      {%- assign tp_head  = '"Archivo Black", "Arial Black", Impact, sans-serif' -%}
-      {%- assign tp_trans = 'unset' -%}
-      {%- assign tp_track = '-0.02em' -%}
-    {%- when 'soft' -%}
-      {%- assign tp_link  = 'https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap' -%}
-      {%- assign tp_body  = '"Quicksand", system-ui, -apple-system, sans-serif' -%}
-      {%- assign tp_head  = '"Quicksand", system-ui, -apple-system, sans-serif' -%}
-      {%- assign tp_trans = 'unset' -%}
-      {%- assign tp_track = '0' -%}
-    {%- when 'mono' -%}
-      {%- assign tp_link  = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap' -%}
-      {%- assign tp_body  = '"IBM Plex Sans", system-ui, -apple-system, sans-serif' -%}
-      {%- assign tp_head  = '"JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace' -%}
-      {%- assign tp_trans = 'unset' -%}
-      {%- assign tp_track = '-0.01em' -%}
-    {%- when 'vintage' -%}
-      {%- assign tp_link  = 'https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Lora:wght@400;500;600;700&display=swap' -%}
-      {%- assign tp_body  = '"Lora", Georgia, "Times New Roman", serif' -%}
-      {%- assign tp_head  = '"Abril Fatface", Georgia, "Times New Roman", serif' -%}
-      {%- assign tp_trans = 'unset' -%}
-      {%- assign tp_track = '0.005em' -%}
-    {%- when 'magazine' -%}
-      {%- assign tp_link  = 'https://fonts.googleapis.com/css2?family=Bodoni+Moda:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap' -%}
-      {%- assign tp_body  = '"Inter", system-ui, -apple-system, sans-serif' -%}
-      {%- assign tp_head  = '"Bodoni Moda", "Didot", Georgia, serif' -%}
-      {%- assign tp_trans = 'unset' -%}
-      {%- assign tp_track = '0' -%}
-    {%- when 'wellness' -%}
-      {%- assign tp_link  = 'https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Nunito+Sans:wght@400;500;600;700&display=swap' -%}
-      {%- assign tp_body  = '"Nunito Sans", system-ui, -apple-system, sans-serif' -%}
-      {%- assign tp_head  = '"DM Serif Display", Georgia, "Times New Roman", serif' -%}
-      {%- assign tp_trans = 'unset' -%}
-      {%- assign tp_track = '0.01em' -%}
-    {%- when 'playful' -%}
-      {%- assign tp_link  = 'https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap' -%}
-      {%- assign tp_body  = '"Plus Jakarta Sans", system-ui, -apple-system, sans-serif' -%}
-      {%- assign tp_head  = '"Fraunces", Georgia, "Times New Roman", serif' -%}
-      {%- assign tp_trans = 'unset' -%}
-      {%- assign tp_track = '-0.005em' -%}
-    {%- when 'industrial' -%}
-      {%- assign tp_link  = 'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Roboto:wght@400;500;700&display=swap' -%}
-      {%- assign tp_body  = '"Roboto", system-ui, -apple-system, sans-serif' -%}
-      {%- assign tp_head  = '"Bebas Neue", Impact, "Arial Narrow Bold", sans-serif' -%}
-      {%- assign tp_trans = 'uppercase' -%}
-      {%- assign tp_track = '0.02em' -%}
-    {%- when 'refined' -%}
-      {%- assign tp_link  = 'https://fonts.googleapis.com/css2?family=Karla:wght@400;500;600;700&family=Libre+Caslon+Text:ital,wght@0,400;0,700;1,400&display=swap' -%}
-      {%- assign tp_body  = '"Karla", system-ui, -apple-system, sans-serif' -%}
-      {%- assign tp_head  = '"Libre Caslon Text", "Big Caslon", Georgia, serif' -%}
-      {%- assign tp_trans = 'unset' -%}
-      {%- assign tp_track = '0' -%}
-    {%- when 'vivid' -%}
-      {%- assign tp_link  = 'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap' -%}
-      {%- assign tp_body  = '"Outfit", system-ui, -apple-system, sans-serif' -%}
-      {%- assign tp_head  = '"Outfit", system-ui, -apple-system, sans-serif' -%}
-      {%- assign tp_trans = 'unset' -%}
-      {%- assign tp_track = '-0.02em' -%}
-  {%- endcase -%}
-
-  {%- comment -%} The pairing fills the text whose font source is left on the theme font; a font picked below wins for that text. {%- endcomment -%}
-  {%- liquid
-    assign tp_on_body = false
-    assign tp_on_head = false
-    if font_type_body == 'default_font'
-      assign tp_on_body = true
-    endif
-    if font_type_heading == 'default_font'
-      assign tp_on_head = true
-    endif
-  -%}
-
-  {%- comment -%}
-    The pairing's Google Fonts stylesheet blocks the first paint, so it is
-    requested only when the pairing fills body or heading text. display=swap
-    is in every pairing link: text shows at once in the fallback font.
-  {%- endcomment -%}
-  {%- if tp_link != blank and tp_on_body or tp_link != blank and tp_on_head -%}
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="{{ tp_link }}">
-  {%- endif -%}
-  {% style %}
-    :root {
-      {%- if tp_on_body %} --body-font: {{ tp_body }} !important;{% endif %}
-      {%- if tp_on_head %} --heading-font: {{ tp_head }} !important;{% endif %}
-      --menu-font: {% if theme_st.menu_font == 'body_font' %}var(--body-font){% else %}var(--heading-font){% endif %} !important;
-      --btn-font: {% if theme_st.button_font == 'body_font' %}var(--body-font){% else %}var(--heading-font){% endif %} !important;
-    }
-    body { font-family: var(--body-font); }
-    h1, h2, h3, h4, h5, h6,
-    .heading-font, .product-detail__title, .h1, .h2, .h3, .h4, .h5, .h6 {
-      font-family: var(--heading-font);
-      {%- if tp_on_head %}
-      letter-spacing: var(--heading-letter-spacing, {{ tp_track }});
-      text-transform: var(--heading-text-transform, {{ tp_trans }});
-      {%- endif %}
-    }
-  {% endstyle %}
-{%- endif -%}
 
 </template>

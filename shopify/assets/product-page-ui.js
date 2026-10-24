@@ -464,12 +464,48 @@
           openLightbox(item.closest("[data-mt-lightbox]"), item);
         };
       }
+      // Add to wishlist: toggled here when the press changed nothing.
+      var heart = target && target.closest ? target.closest("[data-mt-wishlist]") : null;
+      if (heart) {
+        var wasOn = wishlistHas(heart.dataset.productId);
+        return function () {
+          if (wishlistHas(heart.dataset.productId) !== wasOn) return;
+          wishlistToggle(heart);
+        };
+      }
+      return null;
+    };
+    /* A video's own controls are the browser's: the builder cancelling the
+       click (to select the block) stops them. A press on a gallery video,
+       or on a Product videos card, that changed nothing plays it here. */
+    var videoActionFor = function (target, x, y) {
+      var video = target && target.closest ? target.closest("video") : null;
+      if (video && video.closest("[data-mt-video], .pv-inline, .pv-modal")) {
+        var r = video.getBoundingClientRect();
+        // The control bar: only its play button (bottom left) toggles.
+        if (video.controls && y > r.bottom - 48 && x > r.left + 56) return null;
+        var wasPaused = video.paused;
+        return function () {
+          if (video.paused !== wasPaused) return;
+          if (video.paused) playWithSound(video);
+          else video.pause();
+        };
+      }
+      var card = target && target.closest ? target.closest(".pv-card[data-item]") : null;
+      if (card && !target.closest(".pv-inline")) {
+        var at = Date.now();
+        return function () {
+          var box = card.closest("[id^='PV-']");
+          if (box && box.__pvLast >= at) return;
+          if (typeof card.__pvOpen === "function") card.__pvOpen();
+        };
+      }
       return null;
     };
     window.addEventListener("pointerdown", function (e) {
       press = null;
       if (e.button !== 0 || e.isPrimary === false) return;
-      var run = actionFor(e.target);
+      var run = actionFor(e.target) || videoActionFor(e.target, e.clientX, e.clientY);
       if (run) press = { x: e.clientX, y: e.clientY, run: run };
     }, true);
     window.addEventListener("pointercancel", function () { press = null; }, true);
@@ -583,5 +619,108 @@
     if (document.hidden) document.querySelectorAll("[data-mt-video] .media-video").forEach(pauseMedia);
   });
 
-  window.MateriaProductUi = { openSheet: openSheet, closeSheet: closeSheet, openLightbox: openLightbox, closeLightbox: closeLightbox, scanVideos: scanVideos };
+  // A press in the builder plays with sound; a browser that refuses plays muted.
+  function playWithSound(video) {
+    var p = video.play();
+    if (p && p.catch) p.catch(function () {
+      video.muted = true;
+      var q = video.play();
+      if (q && q.catch) q.catch(function () {});
+    });
+  }
+
+  /* ---------------------------------------------------------------------
+     5. Add to wishlist in the Buy buttons block (<button-wishlist
+        data-mt-wishlist>). The theme's wishlist (theme.js MateriaWishlist
+        and its <button-wishlist>) saves the product and fires
+        materia:wishlist-change, which the header count follows. When it is
+        not on the page this keeps the same list (materia__wishlist-items)
+        and fires the same event. Every Add to wishlist button shows the
+        saved state: pressed, the filled heart and its label.
+     ------------------------------------------------------------------- */
+  var WISHLIST_KEY = "materia__wishlist-items";
+  var wishlistMemory = null;
+  function wishlistItems() {
+    if (window.MateriaWishlist && window.MateriaWishlist.read) return window.MateriaWishlist.read();
+    try {
+      var raw = window.localStorage.getItem(WISHLIST_KEY);
+      if (raw === null) return wishlistMemory ? wishlistMemory.slice() : [];
+      var list = JSON.parse(raw);
+      return Array.isArray(list) ? list.map(String) : [];
+    } catch (e) {
+      return wishlistMemory ? wishlistMemory.slice() : [];
+    }
+  }
+  function wishlistHas(id) {
+    return wishlistItems().indexOf(String(id)) !== -1;
+  }
+  function paintWishlist(root) {
+    var items = wishlistItems();
+    (root && root.querySelectorAll ? root : document).querySelectorAll("[data-mt-wishlist]").forEach(function (button) {
+      var on = items.indexOf(String(button.dataset.productId)) !== -1;
+      button.classList.toggle("active", on);
+      button.setAttribute("aria-pressed", on ? "true" : "false");
+      var label = button.querySelector(".pdp-wishlist__label");
+      var text = on ? button.dataset.tooltipRemove : button.dataset.tooltipAdd;
+      if (label && text && label.textContent !== text) label.textContent = text;
+    });
+  }
+  function wishlistToggle(button) {
+    var id = String(button.dataset.productId || "");
+    if (!id) return;
+    var adding = !wishlistHas(id);
+    if (window.MateriaWishlist && window.MateriaWishlist.toggle) {
+      window.MateriaWishlist.toggle(id); // saves, syncs every heart and fires the event
+    } else {
+      var items = wishlistItems().filter(function (x) { return x !== id; });
+      if (adding) items.push(id);
+      wishlistMemory = items.slice();
+      try { window.localStorage.setItem(WISHLIST_KEY, JSON.stringify(items)); } catch (e) {}
+      try {
+        document.dispatchEvent(new CustomEvent("materia:wishlist-change", { detail: { items: items.slice(), count: items.length, id: id, added: adding } }));
+      } catch (e) {}
+    }
+    if (adding) {
+      button.classList.remove("is-toggled");
+      void button.offsetWidth;
+      button.classList.add("is-toggled");
+    }
+    paintWishlist();
+  }
+  // Without the theme's <button-wishlist> element the press is handled here.
+  function wishlistOwnsPress() {
+    return !(window.customElements && window.customElements.get("button-wishlist"));
+  }
+  document.addEventListener("click", function (e) {
+    var button = e.target && e.target.closest ? e.target.closest("[data-mt-wishlist]") : null;
+    if (!button) return;
+    e.preventDefault();
+    if (wishlistOwnsPress()) return wishlistToggle(button);
+    // An older theme wishlist saves without telling anyone: say it changed.
+    setTimeout(function () {
+      if (!window.MateriaWishlist) {
+        var items = wishlistItems();
+        try {
+          document.dispatchEvent(new CustomEvent("materia:wishlist-change", { detail: { items: items, count: items.length, id: String(button.dataset.productId), added: items.indexOf(String(button.dataset.productId)) !== -1 } }));
+        } catch (err) {}
+      }
+      paintWishlist();
+    }, 0);
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    var button = e.target && e.target.closest ? e.target.closest("[data-mt-wishlist]") : null;
+    if (!button || button !== e.target || !wishlistOwnsPress()) return;
+    e.preventDefault();
+    wishlistToggle(button);
+  });
+  document.addEventListener("materia:wishlist-change", function () { paintWishlist(); });
+  window.addEventListener("storage", function (e) { if (e.key === WISHLIST_KEY || e.key === null) paintWishlist(); });
+  window.addEventListener("pageshow", function () { paintWishlist(); });
+  document.addEventListener("storelib:section-load", function (e) { paintWishlist(e.target); });
+  document.addEventListener("shopify:section:load", function (e) { paintWishlist(e.target); });
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", function () { paintWishlist(); });
+  else paintWishlist();
+
+  window.MateriaProductUi = { openSheet: openSheet, closeSheet: closeSheet, openLightbox: openLightbox, closeLightbox: closeLightbox, scanVideos: scanVideos, paintWishlist: paintWishlist };
 })();

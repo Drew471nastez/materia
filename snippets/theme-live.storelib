@@ -64,6 +64,19 @@
     storelib_button_hover_border: "{{ live_hover_border }}",
     menu_font: "{{ settings.menu_font | default: 'body_font' }}",
     button_font: "{{ settings.button_font | default: 'heading_font' }}",
+    font_body_system: {family: {{ settings.font_body_system.family | default: '' | json }}, fallback_families: {{ settings.font_body_system.fallback_families | default: '' | json }}},
+    font_heading_system: {family: {{ settings.font_heading_system.family | default: '' | json }}, fallback_families: {{ settings.font_heading_system.fallback_families | default: '' | json }}},
+    font_body_google_family: "{{ settings.font_body_google_family | default: 'none' }}",
+    font_heading_google_family: "{{ settings.font_heading_google_family | default: 'none' }}",
+    typography_preset: "{{ settings.typography_preset | default: 'none' }}",
+    font_type_body: "{{ settings.font_type_body }}",
+    font_type_heading: "{{ settings.font_type_heading }}",
+    font_body_google: {{ settings.font_body_google | default: '' | json }},
+    font_heading_google: {{ settings.font_heading_google | default: '' | json }},
+    body_font_weight: {{ settings.body_font_weight | default: 400 | json }},
+    heading_font_weight: {{ settings.heading_font_weight | default: 600 | json }},
+    subheading_font_weight: {{ settings.subheading_font_weight | default: 500 | json }},
+    btn_font_weight: {{ settings.btn_font_weight | default: '500' | json }},
     bubble_bg: "{{ settings.bubble_bg }}",
     bubble_text: "{{ settings.bubble_text }}",
     cart_bubble_custom: {{ settings.cart_bubble_custom | default: false | json }},
@@ -164,6 +177,119 @@
     var fallbacks = value.fallback_families || value.fallbacks || '';
     return family ? '"' + String(family).replace(/"/g, '\\"') + '"' + (fallbacks ? ', ' + fallbacks : '') : '';
   }
+  /* More fonts, the pairings and the font picker, resolved as font-variables
+     does (More fonts, then a typed Google font, then the pairing, then the
+     picker), from the same rows it prints in <meta name="materia-fonts">.
+     A family from those rows is requested from Google Fonts at once, with
+     the weights the settings use, so the canvas draws it without a reload. */
+  var FONT_KEYS = ['font_body_system', 'font_heading_system', 'font_body_google_family', 'font_heading_google_family', 'typography_preset', 'font_type_body', 'font_type_heading', 'font_body_google', 'font_heading_google', 'body_font_weight', 'heading_font_weight', 'subheading_font_weight', 'btn_font_weight', 'menu_font', 'button_font'];
+  var FONT_ROWS = {};
+  var FONT_PAIRS = {};
+  var STACKS = {
+    s: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    d: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    f: 'Georgia, "Times New Roman", serif',
+    m: 'ui-monospace, Menlo, Consolas, monospace',
+    x: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+    y: 'Georgia, "Times New Roman", Times, serif'
+  };
+  (function readFontRows() {
+    var meta = document.querySelector('meta[name="materia-fonts"]');
+    if (!meta) return;
+    String(meta.getAttribute('content') || '').split('|').forEach(function (row) {
+      var cells = row.split(':');
+      if (cells[0] && cells[1]) FONT_ROWS[cells[0]] = {name: cells[0], kind: cells[1], has: cells[2] || '4'};
+    });
+    String(meta.getAttribute('data-pairs') || '').split('|').forEach(function (row) {
+      var cells = row.split(':');
+      if (cells[0] && cells[1] && cells[2]) FONT_PAIRS[cells[0]] = {body: cells[1], heading: cells[2]};
+    });
+  })();
+  function rowFont(name) {
+    var row = FONT_ROWS[name];
+    if (!row) return null;
+    if (row.kind === 'x' || row.kind === 'y') return {css: STACKS[row.kind], row: null};
+    return {css: '"' + row.name + '", ' + STACKS[row.kind], row: row};
+  }
+  function pickerFont(value) {
+    if (!value) return null;
+    var name = typeof value === 'string' ? '' : (value.family || value.name || '');
+    if (typeof value === 'string') {
+      /* A handle (lora_n4) names a family: find it among the rows. */
+      var handle = value.replace(/_[nio][1-9]$/, '');
+      for (var key in FONT_ROWS) if (key.toLowerCase().replace(/ /g, '_') === handle) { var found = rowFont(key); found.picker = true; return found; }
+      return /^[a-z0-9_]+_[nio][1-9]$/.test(value) ? null : {css: fontFamily(value), row: null, picker: true};
+    }
+    if (!name) return null;
+    return {css: fontFamily(value), row: FONT_ROWS[name] && FONT_ROWS[name].kind !== 'x' && FONT_ROWS[name].kind !== 'y' ? FONT_ROWS[name] : null, picker: true};
+  }
+  function roleFont(role) {
+    var more = state['font_' + role + '_google_family'];
+    if (more && more !== 'none' && FONT_ROWS[more]) return rowFont(more);
+    var typed = state['font_' + role + '_google'];
+    if (state['font_type_' + role] === 'google' && typed) {
+      typed = String(typed).replace(/["';<>{}]/g, '').trim();
+      return {css: '"' + typed + '"', row: FONT_ROWS[typed] || {name: typed, kind: 's', has: '', typed: true}};
+    }
+    var pair = FONT_PAIRS[state.typography_preset];
+    if (pair && FONT_ROWS[pair[role]]) return rowFont(pair[role]);
+    return pickerFont(state['font_' + role + '_system']);
+  }
+  function hundreds(value, fallback) {
+    var n = Math.round(Number(value) / 100);
+    return isFinite(n) && n > 0 ? n : fallback;
+  }
+  function snapWeights(row, wants) {
+    var has = String(row.has || '4').split('').map(Number);
+    var got = [];
+    wants.forEach(function (w) {
+      var best = has[0];
+      /* A tie goes to the heavier weight, as in font-variables. */
+      has.forEach(function (d) { if (Math.abs(d - w) <= Math.abs(best - w)) best = d; });
+      if (got.indexOf(best) < 0) got.push(best);
+    });
+    return got.sort(function (a, b) { return a - b; }).map(function (d) { return d + '00'; }).join(';');
+  }
+  function fontQuery(body, heading) {
+    var wBody = [hundreds(state.body_font_weight, 4), 7, hundreds(state.subheading_font_weight, 5)];
+    var wHead = [hundreds(state.heading_font_weight, 6)];
+    (state.button_font === 'body_font' ? wBody : wHead).push(hundreds(state.btn_font_weight, 5));
+    (state.menu_font === 'heading_font' ? wHead : wBody).push(5);
+    var parts = [];
+    var same = body && heading && body.row && heading.row && body.row.name === heading.row.name;
+    [[body, same ? wBody.concat(wHead) : wBody], [same ? null : heading, wHead]].forEach(function (pair) {
+      var font = pair[0];
+      if (!font || !font.row) return;
+      var family = 'family=' + font.row.name.replace(/ /g, '+');
+      parts.push(font.row.typed ? family : family + ':wght@' + snapWeights(font.row, pair[1]));
+    });
+    return parts.join('&');
+  }
+  function loadFonts(query) {
+    if (!query) return;
+    var href = 'https://fonts.googleapis.com/css2?' + query + '&display=swap';
+    var links = document.querySelectorAll('link[data-materia-fonts]');
+    for (var i = 0; i < links.length; i++) if (links[i].getAttribute('href') === href) return;
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = href;
+    link.setAttribute('data-materia-fonts', '');
+    document.head.appendChild(link);
+  }
+  /* A picker handle not among the rows keeps the font on the page until the
+     builder redraws, unless what is on the page came from More fonts or a
+     pairing that is no longer chosen: then the page's own font comes back. */
+  var fontFromRows = {body: false, heading: false};
+  function applyFonts() {
+    var body = roleFont('body');
+    var heading = roleFont('heading');
+    [['body', body, '--body-font'], ['heading', heading, '--heading-font']].forEach(function (item) {
+      if (item[1]) set(item[2], item[1].css);
+      else if (fontFromRows[item[0]]) set(item[2], '');
+      fontFromRows[item[0]] = !!(item[1] && !item[1].picker);
+    });
+    loadFonts(fontQuery(body, heading));
+  }
   /* "r, g, b" of a hex colour, for the theme's rgba(var(--color-*-rgb), a) rules. */
   function rgb(value) {
     var text = colour(value).replace('#', '');
@@ -259,11 +385,11 @@
     for (k in s) if (Object.prototype.hasOwnProperty.call(s, k) && Object.prototype.hasOwnProperty.call(state, k)) state[k] = s[k];
 
     /* Type */
-    if (has(s, 'font_body_system')) set('--body-font', fontFamily(s.font_body_system));
-    if (has(s, 'font_heading_system')) set('--heading-font', fontFamily(s.font_heading_system));
+    if (FONT_KEYS.some(function (key) { return has(s, key); })) applyFonts();
+    if (has(s, 'theme_font_priority')) root.setAttribute('data-font-priority', yes(s.theme_font_priority) ? 'on' : 'off');
     if (has(s, 'body_font_size')) set('--body-font-size', px(s.body_font_size));
     if (has(s, 'body_line_height')) set('--body-line-height', String(s.body_line_height));
-    if (has(s, 'body_font_weight')) set('--body-weight', String(s.body_font_weight));
+    if (has(s, 'body_font_weight')) { set('--body-weight', String(s.body_font_weight)); set('--medium-font-weight', String(s.body_font_weight)); }
     if (has(s, 'heading_font_scale')) set('--heading-font-scale', String(Number(s.heading_font_scale) / 100));
     if (has(s, 'heading_line_height')) set('--heading-line-height', String(s.heading_line_height));
     if (has(s, 'heading_font_weight')) set('--heading-weight', String(s.heading_font_weight));

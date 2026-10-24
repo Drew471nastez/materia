@@ -415,18 +415,115 @@ class MultiContent extends SlideSection {
   }
 }
 customElements.define("multi-content", MultiContent);
+/* ── Wishlist store ──────────────────────────────────────────────────
+   One list of saved product ids in localStorage ("materia__wishlist-items",
+   the key Storelib keeps in step with the website's own wishlist). Every
+   heart, the header count and the wishlist page read it through here.
+   - read() never throws: a private window, blocked storage or a corrupt
+     value read as an empty list (kept in memory for this page).
+   - every change fires `materia:wishlist-change` on document with
+     { items, count, id, added }, which the header bubble listens for.
+   - another tab (storage event) and a page restored from the back/forward
+     cache (pageshow) bring every heart back in step. */
+var MateriaWishlist = window.MateriaWishlist || (function () {
+  var KEY = "materia__wishlist-items";
+  var memory = null;
+  function clean(list) {
+    var out = [];
+    (Array.isArray(list) ? list : []).forEach(function (id) {
+      if (id === null || id === undefined) return;
+      id = String(id).trim();
+      if (id && out.indexOf(id) === -1) out.push(id);
+    });
+    return out;
+  }
+  function read() {
+    try {
+      var raw = window.localStorage.getItem(KEY);
+      if (raw === null) return memory ? memory.slice() : [];
+      return clean(JSON.parse(raw));
+    } catch (e) {
+      return memory ? memory.slice() : [];
+    }
+  }
+  function emit(items, extra) {
+    var detail = { items: items.slice(), count: items.length };
+    for (var k in extra || {}) detail[k] = extra[k];
+    try {
+      document.dispatchEvent(new CustomEvent("materia:wishlist-change", { detail: detail }));
+    } catch (e) {}
+  }
+  function write(list, extra) {
+    var items = clean(list);
+    memory = items.slice();
+    try { window.localStorage.setItem(KEY, JSON.stringify(items)); } catch (e) {}
+    sync();
+    emit(items, extra);
+    return items;
+  }
+  function has(id) { return read().indexOf(String(id)) !== -1; }
+  function add(id) {
+    id = String(id);
+    var items = read();
+    if (items.indexOf(id) === -1) items.push(id);
+    return write(items, { id: id, added: true });
+  }
+  function remove(id) {
+    id = String(id);
+    return write(read().filter(function (x) { return x !== id; }), { id: id, added: false });
+  }
+  function toggle(id) {
+    if (has(id)) { remove(id); return false; }
+    add(id);
+    return true;
+  }
+  function count() {
+    var n = read().length;
+    document.querySelectorAll(".wishlist-count").forEach(function (node) {
+      if (node.textContent.trim() !== String(n)) node.textContent = n;
+    });
+  }
+  /* Every heart on the page shows the saved state: .active, aria-pressed
+     and the tooltip text. */
+  function sync(root) {
+    var items = read();
+    (root || document).querySelectorAll("button-wishlist[data-product-id]").forEach(function (button) {
+      var on = items.indexOf(String(button.dataset.productId)) !== -1;
+      button.classList.toggle("active", on);
+      if (!button.hasAttribute("data-wishlist-remove")) button.setAttribute("aria-pressed", on ? "true" : "false");
+      var tip = button.querySelector(".tooltip-content");
+      if (tip) {
+        var text = on
+          ? button.dataset.action === "go_to_page" ? button.dataset.tooltipRedirect : button.dataset.tooltipRemove
+          : button.dataset.tooltipAdd;
+        if (text) tip.textContent = text;
+      }
+    });
+    count();
+  }
+  window.addEventListener("storage", function (event) {
+    if (event.key !== KEY && event.key !== null) return;
+    memory = null;
+    var items = read();
+    sync();
+    emit(items, { source: "storage" });
+  });
+  window.addEventListener("pageshow", function (event) {
+    sync();
+    if (event.persisted) emit(read(), { source: "pageshow" });
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") sync();
+  });
+  document.addEventListener("storelib:section-load", function (event) { sync(event.target && event.target.querySelectorAll ? event.target : document); });
+  document.addEventListener("shopify:section:load", function () { sync(); });
+  return { key: KEY, read: read, write: write, has: has, add: add, remove: remove, toggle: toggle, sync: sync, count: count };
+})();
+window.MateriaWishlist = MateriaWishlist;
 var wishlistHeader = (function () {
   return {
-    init: function () {
-      this.handleCount();
-    },
-    handleCount: function () {
-      const wishlist = document.querySelectorAll(".wishlist-count");
-      const items = JSON.parse(localStorage.getItem("materia__wishlist-items"));
-      wishlist.forEach((item) => {
-        item.innerText = items !== null && items.length != 0 ? items.length : 0;
-      });
-    },
+    init: function () { MateriaWishlist.count(); },
+    handleCount: function () { MateriaWishlist.count(); },
   };
 })();
 try { wishlistHeader.init(); } catch (e) { console.error("[theme] wishlist init", e); }
@@ -1419,31 +1516,24 @@ var BlsSearchShopify = (function () {
       }
     },
 
-    // The header bar as it is now: sticky, scrolled, hidden or below the
-    // announcement bar. The popup takes its place exactly.
+    // The popup opens at the top of the screen, full width, and its bar
+    // covers everything down to the bottom of the header as it is now:
+    // announcement and top bars included. Scrolled past them (or with the
+    // header hidden while scrolling, when it comes back pinned at the top)
+    // the bar is the header's own height.
     placePopup: function (f) {
       const header =
         document.querySelector(".section-header header.header") ||
         document.querySelector("header.header") ||
         document.querySelector("header");
-      const vw = html.clientWidth || window.innerWidth;
-      let top = 0, left = 0, width = vw, height = 0, radius = "0px";
+      const vh = window.innerHeight || 800;
+      let height = 0;
       if (header) {
         const r = header.getBoundingClientRect();
-        height = Math.round(r.height);
-        if (r.width > 0) { left = Math.round(r.left); width = Math.round(r.width); }
-        // Out of view (hidden while scrolling): the header comes back pinned
-        // at the top of the screen, so the popup opens there.
-        if (r.bottom > 0 && r.top < window.innerHeight) top = Math.max(0, Math.round(r.top));
-        if (header.classList.contains("is-pill")) radius = getComputedStyle(header).borderRadius || "0px";
+        height = r.bottom > 0 && r.top < vh ? r.bottom : r.height;
       }
-      if (!height) height = 72;
-      const s = f.style;
-      s.setProperty("--sh-top", top + "px");
-      s.setProperty("--sh-left", left + "px");
-      s.setProperty("--sh-width", width + "px");
-      s.setProperty("--sh-height", height + "px");
-      s.setProperty("--sh-radius", radius);
+      height = Math.round(Math.min(Math.max(height || 72, 64), Math.max(120, vh * 0.4)));
+      f.style.setProperty("--sh-height", height + "px");
     },
 
     setToggles: function (open) {
@@ -1548,6 +1638,11 @@ var BlsSearchShopify = (function () {
       const form = input && input.form;
       if (!f || !input || !form || input._blsSearchWired) return;
       input._blsSearchWired = true;
+      // What the panel shows before anything is typed (the suggested
+      // collection): shown again under "No results" and when the field is
+      // cleared.
+      const target = f.querySelector("[data-predictive-search]");
+      this._suggestMarkup = target ? target.innerHTML : "";
       form.addEventListener("submit", (e) => {
         if (!this.getQuery().length) e.preventDefault();
       });
@@ -1694,11 +1789,21 @@ var BlsSearchShopify = (function () {
       const predictive = document.querySelector("#search-form #predictive-search");
       if (!target || !predictive) return;
       target.innerHTML = resultsMarkup;
+      // Nothing matched: "No results for ..." where the results go, with the
+      // trending searches and the suggested collection kept under it.
+      const empty = target.querySelector("[data-search-empty]");
+      if (empty && this._suggestMarkup) target.insertAdjacentHTML("beforeend", this._suggestMarkup);
       predictive.classList.add("results");
+      predictive.classList.toggle("is-empty", !!empty);
+      const status = predictive.querySelector(".predictive-search-status");
+      if (status) {
+        status.removeAttribute("aria-hidden");
+        status.textContent = empty ? empty.textContent.trim() : "";
+      }
       const notSuggest = document.querySelector("#search-form .search-not-sugges");
       if (notSuggest) notSuggest.classList.remove("search-hidden");
       const quick_search = document.querySelector("#search-form #quick-search");
-      if (quick_search) quick_search.classList.add("hidden");
+      if (quick_search) quick_search.classList.toggle("hidden", !empty);
       this.setLiveRegionResults();
       if (typeof BlsLazyloadImg !== "undefined") {
         try { BlsLazyloadImg.init(target); } catch (e) {}
@@ -1718,7 +1823,13 @@ var BlsSearchShopify = (function () {
       this.setLiveRegionResults();
       if (clearSearchTerm) {
         if (input) input.value = "";
-        if (predictive) predictive.classList.remove("results");
+        if (predictive) {
+          predictive.classList.remove("results", "is-empty");
+          const target = predictive.querySelector("[data-predictive-search]");
+          if (target && typeof this._suggestMarkup === "string") target.innerHTML = this._suggestMarkup;
+          const status = predictive.querySelector(".predictive-search-status");
+          if (status) status.textContent = "";
+        }
         const notSuggest = document.querySelector("#search-form .search-not-sugges");
         if (notSuggest) notSuggest.classList.add("search-hidden");
         const quick_search = document.querySelector("#search-form #quick-search");
@@ -2216,6 +2327,8 @@ class LocalizationForm extends HTMLElement {
       const label = list.dataset.searchLabel || "Search";
       const field = document.createElement("label");
       field.className = "loc-sheet-search";
+      // The pill is the field: the theme's field layer leaves [data-sheet-search] inputs bare.
+      field.setAttribute("data-sheet-search", "");
       field.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
       const input = document.createElement("input");
       input.type = "search";
@@ -2383,7 +2496,10 @@ class LocalizationForm extends HTMLElement {
       const c = parse(getComputedStyle(el).backgroundColor);
       if (c && c.a > 0.85) { bg = c; break; }
     }
-    if (!bg) bg = parse(getComputedStyle(document.body).backgroundColor) || { r: 255, g: 255, b: 255, a: 1 };
+    if (!bg) {
+      const page = parse(getComputedStyle(document.body).backgroundColor);
+      bg = page && page.a > 0.85 ? page : { r: 255, g: 255, b: 255, a: 1 };
+    }
     let fg = parse(getComputedStyle(this.elements.button || this).color) || { r: 17, g: 17, b: 17, a: 1 };
     if (contrast(bg, fg) < 4.5) fg = lum(bg) > 0.35 ? { r: 17, g: 17, b: 17 } : { r: 255, g: 255, b: 255 };
     const css = (c) => `rgb(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)})`;
@@ -5131,25 +5247,9 @@ class MiniCartWishlistAction extends HTMLElement {
       (event) => {
         event.preventDefault();
         const target = event.currentTarget;
-        const localListProductIds = localStorage.getItem(
-          "materia__wishlist-items"
-        );
-        let listProductIds = [];
-        let productId = target.dataset.productId;
-        if (localListProductIds) {
-          const parseLocalListProductIds = JSON.parse(localListProductIds);
-          let isProductIdContained =
-            parseLocalListProductIds.includes(productId);
-          if (!isProductIdContained) {
-            listProductIds.push(...parseLocalListProductIds, productId);
-          } else {
-            listProductIds.push(...parseLocalListProductIds);
-          }
-        } else {
-          listProductIds.push(productId);
-        }
-        const stringifyListProductIds = JSON.stringify(listProductIds);
-        localStorage.setItem("materia__wishlist-items", stringifyListProductIds);
+        /* Saved through the one wishlist store: the header count and every
+           heart on the page update with it. */
+        if (target.dataset.productId) MateriaWishlist.add(target.dataset.productId);
         this.eventRemove(target);
       }
     );
@@ -5356,109 +5456,59 @@ class ButtonWishlist extends HTMLElement {
   }
 
   init() {
-    this.initializeWishlistStatus();
     this.addEventListener("click", this.onThisClick.bind(this));
-  }
-
-  initializeWishlistStatus() {
-    const localListProductIds = localStorage.getItem("materia__wishlist-items");
-    if (!localListProductIds) return;
-    const parseLocalListProductIds = JSON.parse(localListProductIds);
-    const isProductIdContained = parseLocalListProductIds.includes(
-      this.productId
-    );
-    if (isProductIdContained) {
-      this.classList.add("active");
-      if (this.tooltipDiv) {
-        if (this.action === "remove") {
-          this.tooltipDiv.textContent = this.removeTooltip;
-        } else {
-          this.tooltipDiv.textContent = this.redirectTooltip;
-        }
-      }
-    }
-  }
-
-  actionWhenClicked(allThisProductIds, isAdd) {
-    allThisProductIds.forEach((_this) => {
-      if (isAdd === true) {
-        _this.classList.add("active");
-        const tooltipDiv = _this.querySelector(".tooltip-content");
-        if (tooltipDiv) {
-          if (this.action === "remove") {
-            tooltipDiv.textContent = this.removeTooltip;
-          } else {
-            tooltipDiv.textContent = this.redirectTooltip;
-          }
-        }
-      } else {
-        const tooltipDiv = _this.querySelector(".tooltip-content");
-        if (tooltipDiv) {
-          tooltipDiv.textContent = this.addTooltip;
-        }
-        _this.classList.remove("active");
-      }
+    /* A custom element is not a button: Enter and Space press it. */
+    this.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      this.click();
     });
   }
 
-  onThisClick() {
-    const localListProductIds = localStorage.getItem("materia__wishlist-items");
-    const allThisProductIds = document.querySelectorAll(
-      `button-wishlist[data-product-id="${this.productId}"]`
-    );
-    let listProductIds = [];
+  connectedCallback() {
+    this.productId = this.dataset.productId;
+    if (!this.hasAttribute("role")) this.setAttribute("role", "button");
+    if (!this.hasAttribute("tabindex")) this.setAttribute("tabindex", "0");
+    if (!this.hasAttribute("aria-label") && this.dataset.tooltipAdd) this.setAttribute("aria-label", this.dataset.tooltipAdd);
+    const on = MateriaWishlist.has(this.productId);
+    this.classList.toggle("active", on);
+    if (!this.hasAttribute("data-wishlist-remove")) this.setAttribute("aria-pressed", on ? "true" : "false");
+    if (this.tooltipDiv) this.tooltipDiv.textContent = on ? (this.action === "remove" ? this.removeTooltip : this.redirectTooltip) : this.addTooltip;
+  }
+
+  wishlistUrl() {
+    const routes = window.routes || {};
+    if (routes.wishlist_url) return routes.wishlist_url;
+    const root = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || "/";
+    return `${root}wishlist`;
+  }
+
+  onThisClick(event) {
+    if (event) { event.preventDefault(); event.stopPropagation(); }
+    this.productId = this.dataset.productId;
     if (!this.productId) return;
-    if (localListProductIds && allThisProductIds.length > 0) {
-      // wishlist localstorage exists
-      const parseLocalListProductIds = JSON.parse(localListProductIds);
-      let isProductIdContained = parseLocalListProductIds.includes(
-        this.productId
-      );
-      if (!isProductIdContained) {
-        // case item is not in wishlist
-        listProductIds.push(...parseLocalListProductIds, this.productId);
-        this.actionWhenClicked(allThisProductIds, true);
-      } else {
-        // case item is in wishlist
-        if (this.action) {
-          if (this.action === "remove") {
-            const indexOfProductId = parseLocalListProductIds.indexOf(
-              this.productId
-            );
-            parseLocalListProductIds.splice(indexOfProductId, 1);
-            listProductIds.push(...parseLocalListProductIds);
-            if (this.closest(".wishlist-page-main")) {
-              this.closest(".wishlist-list").remove();
-              const product = document.querySelectorAll(
-                `.wishlist-page-section .wishlist-list:not([hidden]) .product-item__action button-wishlist`
-              );
-              if (product.length < 1) {
-                document
-                  .querySelector(".wishlist-no-product-js")
-                  .classList.remove("hidden");
-              }
-            } else {
-              this.actionWhenClicked(allThisProductIds, false);
-            }
-          } else {
-            listProductIds.push(...parseLocalListProductIds);
-            window.location.href = `${window.shopUrl}${window.Shopify.routes.root}wishlist`;
-          }
-        } else {
-          listProductIds.push(...parseLocalListProductIds);
-        }
+    const onPage = !!this.closest(".wishlist-page-main");
+    if (MateriaWishlist.has(this.productId)) {
+      /* The product page's heart can open the wishlist instead
+         (Theme settings > Wishlist); card hearts and the wishlist page's
+         remove button always take the product out. */
+      if (this.action === "go_to_page" && !onPage) {
+        window.location.href = this.wishlistUrl();
+        return;
       }
+      MateriaWishlist.remove(this.productId);
     } else {
-      // wishlist localstorage not exists ==> create new local storage
-      listProductIds.push(this.productId);
-      this.actionWhenClicked(allThisProductIds, true);
+      MateriaWishlist.add(this.productId);
+      this.classList.remove("is-toggled");
+      void this.offsetWidth;
+      this.classList.add("is-toggled");
     }
-    const stringifyListProductIds = JSON.stringify(listProductIds);
-    localStorage.setItem("materia__wishlist-items", stringifyListProductIds);
-    wishlistHeader.init();
   }
 }
 customElements.define("button-wishlist", ButtonWishlist);
+document.addEventListener("animationend", (event) => {
+  if (event.target && event.target.matches && event.target.matches("button-wishlist.is-toggled")) event.target.classList.remove("is-toggled");
+});
 
 class ButtonCompare extends HTMLElement {
   constructor() {
@@ -8848,20 +8898,28 @@ class SlideWithThumbs extends HTMLElement {
     this.thumbnailSlide = null;
     this.init();
   }
+  /* The product gallery first, its thumbnails in a later task: building
+     both sliders at once was one long task (~400ms) on the product page. */
   init() {
     const nothumb = this.dataset?.nothumb;
-    if (!nothumb) {
-      this.initThumbnail();
-      if (window.Shopify && window.Shopify.designMode) {
-        document.addEventListener("shopify:section:load", () =>
-          this.initThumbnail()
-        );
-      }
-    }
-
     this.initSlide();
     this.pauseMedia();
     this.playMedia();
+    if (nothumb || !this.querySelector(".thumbnail-slide")) return;
+    const later = window.requestIdleCallback
+      ? (fn) => window.requestIdleCallback(fn, { timeout: 250 })
+      : (fn) => setTimeout(fn, 0);
+    later(() => this.connectThumbs());
+  }
+
+  connectThumbs() {
+    if (!this.isConnected || this.thumbnailSlide) return;
+    this.initThumbnail();
+    const main = this.globalSlide;
+    if (!main || main.destroyed || !this.thumbnailSlide || !main.thumbs) return;
+    main.params.thumbs = Object.assign({}, main.params.thumbs, { swiper: this.thumbnailSlide });
+    main.thumbs.init();
+    main.thumbs.update(true);
   }
 
   initSlide() {
@@ -9051,7 +9109,7 @@ class SlideWithThumbs extends HTMLElement {
   }
 
   updateThumbSlide() {
-    this.thumbnailSlide.update();
+    this.thumbnailSlide?.update();
   }
 
   appendSlide(item) {

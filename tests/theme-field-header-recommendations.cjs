@@ -15,7 +15,9 @@ const part=(file,tag)=>read(file).match(new RegExp('<'+tag+'[^>]*>([\\s\\S]*?)</
   await page.addScriptTag({content:live});
   const apply=async settings=>{await page.evaluate(settings=>document.dispatchEvent(new CustomEvent('storelib:settings-change',{detail:{settings,live:true}})),settings);await page.waitForTimeout(40);};
   await apply({field_text:'#5588aa'});
-  for(const selector of ['#entry','textarea','select','.mt-select-wrap__chev'])assert.equal(await css(selector,'color'),'rgb(85, 136, 170)');
+  for(const selector of ['#entry','textarea','.mt-select-wrap__chev'])assert.equal(await css(selector,'color'),'rgb(85, 136, 170)');
+  // A picker's own text colour (--mt-select-text, variant picker settings) stays its own.
+  assert.equal(await css('select','color'),'rgb(255, 0, 0)');
   assert.equal(await page.$eval('#entry',el=>getComputedStyle(el,'::placeholder').color),'rgb(85, 136, 170)');
   assert.equal(await css('label','color'),'rgb(238, 238, 238)','field override does not recolor labels against their section background');checks++;
   await page.addStyleTag({content:':root { --field-text-override:#ff00ff; }'});

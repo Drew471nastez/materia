@@ -52,16 +52,29 @@
   };
   const yes = value => value === true || value === 'true';
   const LEGACY = { full: 'bottom_bar', 'card-left': 'bottom_left', 'card-right': 'bottom_right', top: 'top_bar' };
+  /* The builder's canvas: Liquid's request.design_mode, or the editor flags. */
+  const inBuilder = el => el.dataset.design === 'true' || Boolean(window.Shopify && window.Shopify.designMode) || document.documentElement.classList.contains('shopify-design-mode');
+  /* Open cart drawer, search, phone menu or another drawer: the banner steps
+     behind it and comes back when it closes. */
+  const COVER_HTML = ['open-drawer', 'open-minicart', 'open-search', 'nav-open', 'open-sidebar', 'open-popup'];
+  const COVERS = '#minicart_wrapper.open_drawer, .mcp-backdrop.open, .loc-sheet-backdrop.open, cart-drawer[open], .drawer.active, menu-drawer[open], details[open] > .menu-drawer, [data-storelib-drawer][open]';
+  const covered = () => {
+    const html = document.documentElement;
+    if (COVER_HTML.some(name => html.classList.contains(name) || document.body?.classList.contains(name))) return true;
+    try { return Boolean(document.querySelector(COVERS)); } catch (_) { return false; }
+  };
+  const pageAllowed = (pages, page) => pages === 'home' ? page === 'home' : pages === 'not_cart' ? page !== 'cart' : true;
 
   class CookieConsent extends HTMLElement {
     connectedCallback() {
       if (this._ready) return;
       this._ready = true;
       this.panel = this.querySelector('[data-consent-panel]');
-      this.design = this.dataset.design === 'true';
+      this.design = inBuilder(this);
       this.closeWanted = !this.querySelector('[data-consent="close"]')?.hidden;
       this.onKey = this.onKey.bind(this);
       this.place = this.place.bind(this);
+      this.syncCover = this.syncCover.bind(this);
       this.addEventListener('click', event => {
         const action = event.target.closest?.('[data-consent]')?.dataset.consent;
         if (action === 'accept') this.choose(true);
@@ -81,6 +94,29 @@
       clearTimeout(this.timer);
       document.removeEventListener('keydown', this.onKey, true);
       window.removeEventListener('resize', this.place);
+      this.watchCover(false);
+    }
+
+    /* Hide while a drawer, search or menu is open; back when it closes. */
+    syncCover() {
+      const on = this.isOpen && covered();
+      if (on === this.hasAttribute('data-covered')) return;
+      this.toggleAttribute('data-covered', on);
+      if (on && this.contains(document.activeElement)) {
+        try { document.activeElement.blur(); } catch (_) {}
+      }
+    }
+    watchCover(on) {
+      if (!on) { this.coverWatch?.disconnect(); this.coverWatch = null; this.removeAttribute('data-covered'); return; }
+      if (this.coverWatch) return;
+      let frame = 0;
+      this.coverWatch = new MutationObserver(() => {
+        if (frame) return;
+        frame = requestAnimationFrame(() => { frame = 0; this.syncCover(); });
+      });
+      this.coverWatch.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+      if (document.body) this.coverWatch.observe(document.body, { attributes: true, attributeFilter: ['class', 'open'], subtree: true });
+      this.syncCover();
     }
 
     get modal() { return this.dataset.position === 'modal'; }
@@ -101,7 +137,9 @@
 
     show(force) {
       if (this.isOpen) return;
-      if (!force && this.design && this.dataset.preview !== 'true') return;
+      // In the builder it shows only with "Show in the builder" on, even when asked to open.
+      if (this.design && this.dataset.preview !== 'true') return;
+      if (!force && this.design && this.dataset.pageOk === 'false') return;
       clearTimeout(this.timer);
       clearTimeout(this.hideTimer);
       this.isOpen = true;
@@ -111,11 +149,12 @@
       this.place();
       window.addEventListener('resize', this.place, { passive: true });
       document.addEventListener('keydown', this.onKey, true);
+      this.watchCover(true);
       // One frame hidden-to-shown, so the entrance runs from its start.
       void this.offsetWidth;
       requestAnimationFrame(() => {
         this.setAttribute('data-open', '');
-        if (this.modal) this.firstButton()?.focus({ preventScroll: true });
+        if (this.modal && !this.hasAttribute('data-covered')) this.firstButton()?.focus({ preventScroll: true });
       });
     }
 
@@ -125,6 +164,7 @@
       this.removeAttribute('data-open');
       document.removeEventListener('keydown', this.onKey, true);
       window.removeEventListener('resize', this.place);
+      this.watchCover(false);
       const hadFocus = this.contains(document.activeElement);
       const done = () => { if (!this.isOpen) this.hidden = true; };
       if (this.dataset.animation === 'none' || reduced()) done();
@@ -154,7 +194,8 @@
     }
 
     onKey(event) {
-      if (!this.isOpen) return;
+      // Behind an open drawer or menu, keys belong to that drawer.
+      if (!this.isOpen || this.hasAttribute('data-covered')) return;
       if (event.key === 'Escape') {
         if (this.required) { event.preventDefault(); return; }
         if (this.modal || this.contains(document.activeElement)) { event.preventDefault(); this.dismiss(); }
@@ -181,16 +222,18 @@
     startPreview() {
       try { this.state = JSON.parse(document.querySelector('script[data-consent-settings]')?.textContent || '{}'); } catch (_) { this.state = {}; }
       if ('cookie_show_close' in this.state) this.closeWanted = yes(this.state.cookie_show_close);
-      if (this.dataset.preview === 'true' && this.dataset.enabled === 'true') this.show();
+      if (this.state.cookie_pages && this.dataset.page) this.dataset.pageOk = String(pageAllowed(this.state.cookie_pages, this.dataset.page));
+      if (this.dataset.preview === 'true' && this.dataset.enabled === 'true' && this.dataset.pageOk !== 'false') this.show();
       document.addEventListener('storelib:settings-change', event => {
         const changed = event.detail?.settings || event.detail || {};
         const keys = Object.keys(changed).filter(key => /^(enable_cookies|cookie_|heading_cookies|content_cookies|label_allow|label_refuse)/.test(key));
         if (!keys.length) return;
         keys.forEach(key => { this.state[key] = changed[key]; });
         this.applyPreview(changed);
+        if ('cookie_pages' in changed && this.dataset.page) this.dataset.pageOk = String(pageAllowed(String(changed.cookie_pages || 'all'), this.dataset.page));
         const on = yes(this.state.enable_cookies) && yes(this.state.cookie_show_in_builder);
         this.dataset.preview = String(on);
-        if (on) { if (this.isOpen) this.syncRole(); else this.show(); }
+        if (on && this.dataset.pageOk !== 'false') { if (this.isOpen) this.syncRole(); else this.show(); }
         else this.hide();
       });
     }
@@ -238,6 +281,19 @@
         if (id) this.classList.add('color-' + id);
       }
       if (Object.keys(s).some(key => /^cookie_(custom_styling|bg_color|text_color|heading_color|btn_bg|btn_text|btn2_text|btn_radius)$/.test(key))) this.paintCustom();
+      if (Object.keys(s).some(key => /^cookie_(custom_text_sizes|heading_size|text_size|button_text_size)$/.test(key))) this.paintSizes();
+    }
+
+    /* Custom text sizes: used only while the toggle is on. */
+    paintSizes() {
+      const s = this.state;
+      const on = yes(s.cookie_custom_text_sizes);
+      this.dataset.textSizes = on ? 'custom' : 'theme';
+      const px = value => (value === '' || value == null || !isFinite(Number(value))) ? '' : Number(value) + 'px';
+      [['--cookie-heading-size', s.cookie_heading_size], ['--cookie-text-size', s.cookie_text_size], ['--cookie-btn-size', s.cookie_button_text_size]].forEach(([name, value]) => {
+        const v = on ? px(value) : '';
+        if (v) this.style.setProperty(name, v); else this.style.removeProperty(name);
+      });
     }
 
     paintCustom() {

@@ -9,10 +9,13 @@
    costs no layout of the panel's content; until this file loads the
    browser's own [popover] rule keeps them out of view (no unstyled flash).
 
-   Popup: the panel covers the header bar exactly. theme.js measures the
-   header as it opens and sets --sh-top, --sh-left, --sh-width, --sh-height
-   and --sh-radius on #search-form; the field sits where the header was and
-   the trending and results panel opens below it.
+   Popup: the panel starts at the top of the screen, full width, and its bar
+   covers the announcement and top bars and the header. theme.js measures
+   the bottom of the header as it opens and sets --sh-height on
+   #search-form; the field sits in that bar and the trending and results
+   open below it. The panel itself is always opaque and slides down from
+   the top, so nothing shows through it; the Open and close animation
+   setting moves its content.
    Drawer: a full height sheet from the side with its own scroll.
    Only opacity and transform (and filter for the Blur animation) move.
    ========================================================================== */
@@ -74,37 +77,47 @@
   background: transparent;
 }
 
-/* ---- Popup: in the header's place ---- */
+/* ---- Popup: from the top of the screen, over the header and the bars above it ---- */
 #search-form.search-overlay--popup {
-  top: var(--sh-top, 0px);
-  left: var(--sh-left, 0px);
-  right: auto;
+  top: 0;
+  left: 0;
+  right: 0;
   bottom: auto;
-  width: var(--sh-width, 100%);
+  width: auto;
   height: auto;
   min-height: var(--sh-height, 72px);
-  max-height: calc(100vh - var(--sh-top, 0px));
-  max-height: calc(100dvh - var(--sh-top, 0px));
+  max-height: 100vh;
+  max-height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: var(--sh-radius, 0px);
+  border-radius: 0;
   box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.28);
-  transform-origin: 50% 0;
-  opacity: 0;
+  transform: translateY(-100%);
 }
 #search-form.search-overlay--popup.open {
+  transform: none;
+}
+/* The content inside: the creator's Open and close animation. */
+#search-form.search-overlay--popup > * {
+  opacity: 0;
+  transform-origin: 50% 0;
+  transition: opacity var(--search-dur) var(--search-ease),
+    transform var(--search-dur) var(--search-ease),
+    filter var(--search-dur) var(--search-ease);
+}
+#search-form.search-overlay--popup.open > * {
   opacity: 1;
   transform: none;
   filter: none;
 }
-#search-form.search-overlay--popup.search__popup-anim--slide-down:not(.open) {
+#search-form.search-overlay--popup.search__popup-anim--slide-down:not(.open) > * {
   transform: translateY(-12px);
 }
-#search-form.search-overlay--popup.search__popup-anim--zoom:not(.open) {
+#search-form.search-overlay--popup.search__popup-anim--zoom:not(.open) > * {
   transform: scale(0.97);
 }
-#search-form.search-overlay--popup.search__popup-anim--blur:not(.open) {
+#search-form.search-overlay--popup.search__popup-anim--blur:not(.open) > * {
   filter: blur(8px);
 }
 /* The rendered popup content is one column: the bar, then whatever is below
@@ -167,30 +180,92 @@
   box-shadow: none;
   border-radius: 0;
 }
-#search-form.search-overlay--popup #quick-search {
+#search-form.search-overlay--popup :is(#quick-search, .search-empty) {
   max-width: 598px;
   padding: 4px 58px 20px 0;
 }
 @media screen and (max-width: 1199.98px) {
-  #search-form.search-overlay--popup #quick-search { max-width: 529px; }
+  #search-form.search-overlay--popup :is(#quick-search, .search-empty) { max-width: 529px; }
 }
 @media screen and (max-width: 991.98px) {
-  #search-form.search-overlay--popup #quick-search { max-width: 483px; }
+  #search-form.search-overlay--popup :is(#quick-search, .search-empty) { max-width: 483px; }
 }
 @media screen and (max-width: 767.98px) {
-  #search-form.search-overlay--popup #quick-search { max-width: none; padding-right: 0; }
+  #search-form.search-overlay--popup :is(#quick-search, .search-empty) { max-width: none; padding-right: 0; }
 }
 #search-form.search-overlay--popup #predictive-search:has(.search-list-item) {
   padding-bottom: 24px;
 }
-#search-form.search-overlay--popup #predictive-search:not(:has(.search-list-item)):not(.loading) {
+#search-form.search-overlay--popup #predictive-search:not(:has(.search-list-item)) {
   display: none;
 }
-#search-form.search-overlay--popup .search__loading-state {
-  padding-bottom: 20px;
+
+/* ---- Loading: what is on screen stays, dimmed, with the spinner in the
+   field. No skeleton swapped in and out, so the panel never collapses and
+   grows again between two queries. ---- */
+#search-form.search-overlay #predictive-search.loading > [data-predictive-search],
+#search-form.search-overlay #quick-search:not(.hidden):has(+ #predictive-search.loading) {
+  display: block !important;
+}
+#search-form.search-overlay #predictive-search.loading + .search__loading-state,
+#search-form.search-overlay .search__loading-state {
+  display: none !important;
+}
+#search-form.search-overlay #predictive-search > [data-predictive-search],
+#search-form.search-overlay #quick-search {
+  transition: opacity 180ms ease;
+}
+#search-form.search-overlay #predictive-search > [data-predictive-search] > .search-list-item {
+  transition: opacity 180ms ease;
+}
+#search-form.search-overlay #predictive-search.loading > [data-predictive-search],
+#search-form.search-overlay #predictive-search.loading.is-empty .search-list-item,
+#search-form.search-overlay #quick-search:has(+ #predictive-search.loading) {
+  opacity: 0.55;
+}
+
+/* ---- No results: the message first, then trending and the suggested
+   collection, as they were before typing. The results box steps aside
+   (display: contents) so the three line up in that order. ---- */
+#search-form.search-overlay :is(.fluid_container, .container, .search-modal__content):has(> #predictive-search.is-empty) {
+  display: flex;
+  flex-direction: column;
+}
+#search-form.search-overlay .search__type-popup-bar {
+  order: -2;
+}
+#search-form.search-overlay #predictive-search.is-empty,
+#search-form.search-overlay #predictive-search.is-empty > [data-predictive-search] {
+  display: contents !important;
+}
+#search-form.search-overlay #predictive-search.is-empty .search-list-item {
+  order: 1;
+  width: 100%;
+  margin: 0 auto;
+  padding-bottom: 24px;
+}
+#search-form.search-overlay #predictive-search.is-empty .search-list-item:has(> .search-empty) {
+  order: -1;
+  padding-bottom: 0;
+}
+#search-form.search-overlay--popup #predictive-search.is-empty .search-list-item {
+  max-width: 960px;
+}
+#search-form.search-overlay--drawer #predictive-search.is-empty .search-list-item {
+  padding-inline: 3rem;
+}
+#search-form.search-overlay .search-empty {
+  margin: 0 auto;
+  padding: 4px 0 20px;
+  color: var(--color-heading);
+  overflow-wrap: anywhere;
+  animation: search-results-in 200ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+#search-form.search-overlay--drawer .search-empty {
+  padding: 0 0 24px;
 }
 /* Results that arrive fade in below the bar instead of popping. */
-#search-form.search-overlay #predictive-search.results .predictive-search > * {
+#search-form.search-overlay #predictive-search.results [data-predictive-search] > * {
   animation: search-results-in 200ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 @keyframes search-results-in {
@@ -252,29 +327,43 @@
     --search-dur: 1ms;
     transition-duration: 1ms;
   }
-  #search-form.search-overlay:not(.open) {
+  #search-form.search-overlay:not(.open),
+  #search-form.search-overlay--popup:not(.open) > * {
     transform: none;
     filter: none;
   }
-  #search-form.search-overlay #predictive-search.results .predictive-search > * {
+  #search-form.search-overlay #predictive-search.results [data-predictive-search] > * {
     animation: none;
   }
 }
 
 /* ---- Results inside the panels ---- */
+/* The cards are the theme's own product card (Theme settings > Product
+   cards: style, image ratio, vendor, badges, hover); on a phone they line
+   up as a list, the picture at the start and the details beside it. */
 @media screen and (max-width: 767.98px) {
-  .header_search .product-item__wrapper {
+  .header_search .product-item__wrapper,
+  #search-form .product-item > .product-item__wrapper.product-grid {
     display: flex;
+    flex-direction: row;
+    align-items: center;
     gap: 15px;
+    height: auto;
     --product-item__price-top: 3px;
     --col-width: 8rem;
   }
-  .header_search .product-item__information {
+  .header_search .product-item__information,
+  #search-form .product-item > .product-item__wrapper > .product-item__information {
+    flex: 1 1 auto;
+    min-width: 0;
     margin-top: 0;
     text-align: start;
+    align-items: flex-start;
     align-self: center;
   }
-  .header_search .product-item__inner {
+  .header_search .product-item__inner,
+  #search-form .product-item > .product-item__wrapper > .product-item__inner {
+    flex: 0 0 7rem;
     width: 7rem;
   }
   .header_search .product-item:not(:last-child) {

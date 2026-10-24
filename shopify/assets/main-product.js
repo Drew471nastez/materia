@@ -294,29 +294,33 @@ customElements.define("sold-product", SoldProduct);
   // Examples:
   //   "Add to cart Sale price\n$40.00 USD" -> "Add to cart $40.00"
   //   "Buy it now"                          -> "Buy Now $40.00"
+  // The first price in the text, with its currency sign on either side
+  // ("R$ 137,77", "$40.00", "40,00 €"), without a trailing currency code.
   const cleanPrice = (text) => {
     if (!text) return "";
-    // Take everything that looks like a price (currency symbol + digits/decimals).
-    const m = text.match(/[$€£¥₹₽][\s]*[\d.,]+(\s*[A-Z]{0,3})?/);
-    if (m) return m[0].replace(/\s+[A-Z]{2,3}$/, "").trim();
-    return text.trim();
+    const flat = text.replace(/\s+/g, " ").trim();
+    const m = flat.match(/(?:[^\s\d.,]{1,3}\s?)?\d[\d.,]*(?:\s?[^\s\d.,A-Za-z]{1,3})?/);
+    return m ? m[0].trim() : flat;
   };
 
-  const baseAtcLabel = (wrapper) => {
-    const custom = wrapper.dataset.atcText;
+  // The block's own text, else the label the button was drawn with.
+  const baseLabel = (btn, custom, fallback) => {
     if (custom && custom.trim()) return custom.trim();
-    return "Add to Cart";
+    if (!btn.dataset.baseLabel) {
+      const node = btn.querySelector("[data-btn-label], .btn-label") || btn;
+      btn.dataset.baseLabel = (node.textContent || "").trim() || fallback;
+    }
+    return btn.dataset.baseLabel;
   };
-  const baseBuyLabel = (wrapper) => {
-    const custom = wrapper.dataset.buyText;
-    if (custom && custom.trim()) return custom.trim();
-    return "Buy Now";
-  };
+  const baseAtcLabel = (wrapper, btn) => baseLabel(btn, wrapper.dataset.atcText, "Add to cart");
+  const baseBuyLabel = (wrapper, btn) => baseLabel(btn, wrapper.dataset.buyText, "Buy now");
 
+  // Writes the label only: the button's icon and loading spinner stay.
   const writeButton = (btn, label) => {
     if (!btn) return;
-    if (btn.textContent.trim() === label.trim()) return;
-    btn.textContent = label;
+    const target = btn.querySelector("[data-btn-label], .btn-label") || btn;
+    if (target.textContent.trim() === label.trim()) return;
+    target.textContent = label;
   };
 
   const updateLabels = (wrapper) => {
@@ -342,14 +346,15 @@ customElements.define("sold-product", SoldProduct);
     );
 
     // ----- ATC button -----
-    if (atcBtn) {
-      let label = baseAtcLabel(wrapper);
+    // A sold out or unavailable variant keeps the label the theme wrote.
+    if (atcBtn && !atcBtn.disabled) {
+      let label = baseAtcLabel(wrapper, atcBtn);
       if (wantATCprice && priceText) label = label + " " + priceText;
       if (customText || wantATCprice) writeButton(atcBtn, label);
     }
     // ----- Buy Now button -----
     if (buyBtn && !buyBtn.classList.contains("shopify-payment-button__button--branded")) {
-      let label = baseBuyLabel(wrapper);
+      let label = baseBuyLabel(wrapper, buyBtn);
       if (wantBuyPrice && priceText) label = label + " " + priceText;
       if (customText || wantBuyPrice) writeButton(buyBtn, label);
     }
@@ -436,9 +441,10 @@ customElements.define("sold-product", SoldProduct);
         if (!btn) return;
         // Skip Shop Pay / Apple Pay / Google Pay branded buttons.
         if (btn.classList.contains("shopify-payment-button__button--branded")) return;
-        const text = (btn.textContent || "").trim();
+        const target = btn.querySelector("[data-btn-label], .btn-label") || btn;
+        const text = (target.textContent || "").trim();
         if (text && REPLACE_RX.test(text)) {
-          btn.textContent = TARGET;
+          target.textContent = TARGET;
         }
       });
   };

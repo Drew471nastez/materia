@@ -64,7 +64,9 @@ checks++;
 }
 checks++;
 {
-  for (const file of ['snippets/main-product-body.storelib', 'snippets/product-single-layout.storelib']) {
+  // Both sections draw their blocks from one shared snippet.
+  for (const file of ['snippets/main-product-body.storelib', 'snippets/product-single-layout.storelib']) assert(read(file).includes("{%- include 'product-info-blocks' -%}"), `${file} draws the shared product information blocks`);
+  for (const file of ['snippets/product-info-blocks.storelib']) {
     const text = read(file);
     for (const t of OLD) assert(!text.includes(`when '${t}'`), `${file} still renders ${t}`);
     for (const t of ['bundle', 'quantity_offer']) assert(text.includes(`{%- when '${t}' -%}`) && text.includes(`kind: '${t}'`), `${file} renders ${t}`);
