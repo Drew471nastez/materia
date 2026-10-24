@@ -29,32 +29,176 @@
   <li id="a11y-refresh-page-message">{{ 'accessibility.refresh_page' | t }}</li>
   <li id="a11y-new-window-message">{{ 'accessibility.link_messages.new_window' | t }}</li>
 </ul>
-{%- if theme_st.enable_cookies != blank -%}
-  {%- capture cookie_vars -%}{%- if theme_st.cookie_custom_styling -%}--cookie-bg:{{ theme_st.cookie_bg_color }};--cookie-text:{{ theme_st.cookie_text_color }};--cookie-heading:{{ theme_st.cookie_heading_color }};--cookie-btn-bg:{{ theme_st.cookie_btn_bg }};--cookie-btn-text:{{ theme_st.cookie_btn_text }};--cookie-btn2-text:{{ theme_st.cookie_btn2_text }};--cookie-btn-radius:{{ theme_st.cookie_btn_radius | default: 12 }}px;{%- endif -%}{%- endcapture -%}
-  <cookie-bar id="cookie" class="cookie-bar hidden" data-cookie-style="{{ theme_st.cookie_style | default: 'bar-center' }}" style="{{ cookie_vars }}">
-    <div class="cookie-bar__inner">
-      <div class="cookie-bar__copy">
-        {% if theme_st.heading_cookies != blank %}
-          <span class="cookie-bar__heading">{{ theme_st.heading_cookies }}</span>
-        {% endif %}
-        {% if theme_st.content_cookies != blank %}
-          <span class="cookie-bar__message">{{ theme_st.content_cookies }}</span>
-        {% endif %}
+{%- comment -%}
+  Cookies and consent (Theme settings > Cookies & consent). Markup here, the
+  look in cookie-consent.css, the behaviour in cookie-consent.js. Buttons are
+  theme buttons (data-theme-button), so Theme settings > Buttons applies; the
+  custom colours only override them when "Use custom colours" is on. In the
+  builder it is drawn only for "Show in the builder", and follows changes live.
+{%- endcomment -%}
+{%- liquid
+  assign ck_design = false
+  if request.design_mode
+    assign ck_design = true
+  endif
+  assign ck_page = template | split: '.' | first
+  assign ck_page_ok = true
+  case theme_st.cookie_pages
+    when 'home'
+      if ck_page != 'index'
+        assign ck_page_ok = false
+      endif
+    when 'not_cart'
+      if ck_page == 'cart' or request.path contains '/checkout' or request.path contains '/cart'
+        assign ck_page_ok = false
+      endif
+  endcase
+  assign ck_render = false
+  if ck_design
+    assign ck_render = true
+  elsif theme_st.enable_cookies != blank and ck_page_ok
+    assign ck_render = true
+  endif
+-%}
+{%- if ck_render -%}
+  {%- liquid
+    assign ck_position = theme_st.cookie_position | default: 'bottom_center'
+    assign ck_look = theme_st.cookie_style | default: 'bar-center'
+    comment
+      Earlier looks also set a position; read them as Standard at that position.
+    endcomment
+    case ck_look
+      when 'full'
+        if ck_position == 'bottom_center'
+          assign ck_position = 'bottom_bar'
+        endif
+        assign ck_look = 'bar-center'
+      when 'card-left'
+        if ck_position == 'bottom_center'
+          assign ck_position = 'bottom_left'
+        endif
+        assign ck_look = 'bar-center'
+      when 'card-right'
+        if ck_position == 'bottom_center'
+          assign ck_position = 'bottom_right'
+        endif
+        assign ck_look = 'bar-center'
+      when 'top'
+        if ck_position == 'bottom_center'
+          assign ck_position = 'top_bar'
+        endif
+        assign ck_look = 'bar-center'
+    endcase
+    assign ck_scheme = theme_st.cookie_color_scheme
+    assign ck_scheme_id = ck_scheme.id | default: ck_scheme
+    assign ck_modal = false
+    if ck_position == 'modal'
+      assign ck_modal = true
+    endif
+    assign ck_allow = theme_st.label_allow | default: 'Accept'
+    assign ck_refuse = theme_st.label_refuse | default: 'Decline'
+    assign ck_custom = false
+    if theme_st.cookie_custom_styling
+      assign ck_custom = true
+    endif
+  -%}
+  {%- capture cookie_vars -%}
+    {%- if ck_custom -%}
+      {%- if theme_st.cookie_bg_color != blank and theme_st.cookie_bg_color.alpha != 0 -%}--cookie-bg:{{ theme_st.cookie_bg_color }};{%- endif -%}
+      {%- if theme_st.cookie_text_color != blank and theme_st.cookie_text_color.alpha != 0 -%}--cookie-text:{{ theme_st.cookie_text_color }};{%- endif -%}
+      {%- if theme_st.cookie_heading_color != blank and theme_st.cookie_heading_color.alpha != 0 -%}--cookie-heading:{{ theme_st.cookie_heading_color }};{%- endif -%}
+    {%- endif -%}
+  {%- endcapture -%}
+  {{ 'cookie-consent.css' | asset_url | stylesheet_tag }}
+  <cookie-consent
+    class="cookie-consent{% if ck_scheme_id != blank %} color-{{ ck_scheme_id }}{% endif %}"
+    hidden
+    data-enabled="{% if theme_st.enable_cookies != blank %}true{% else %}false{% endif %}"
+    data-page-ok="{{ ck_page_ok }}"
+    data-design="{{ ck_design }}"
+    data-preview="{% if ck_design and theme_st.cookie_show_in_builder %}true{% else %}false{% endif %}"
+    data-position="{{ ck_position }}"
+    data-look="{{ ck_look }}"
+    data-animation="{{ theme_st.cookie_animation | default: 'slide' }}"
+    data-mobile="{{ theme_st.cookie_mobile_layout | default: 'sheet' }}"
+    data-backdrop="{% if theme_st.cookie_modal_backdrop == false %}false{% else %}true{% endif %}"
+    data-require="{% if theme_st.cookie_require_choice %}true{% else %}false{% endif %}"
+    data-above-nav="{% if theme_st.cookie_above_mobile_nav == false %}false{% else %}true{% endif %}"
+    data-delay="{{ theme_st.cookie_delay | default: 0 }}"
+    data-expiry="{{ theme_st.cookie_expiry_days | default: 180 }}"
+    data-frequency="{{ theme_st.cookie_frequency | default: 'every_page' }}"
+    style="{{ cookie_vars }}"
+  >
+    <div class="cookie-consent__backdrop" data-consent-backdrop></div>
+    <div
+      class="cookie-consent__panel"
+      {% if ck_modal %}role="dialog" aria-modal="true"{% else %}role="region"{% endif %}
+      aria-labelledby="CookieConsentHeading"
+      aria-describedby="CookieConsentMessage"
+      tabindex="-1"
+      data-consent-panel
+    >
+      <div class="cookie-consent__copy">
+        <h2 class="cookie-consent__heading" id="CookieConsentHeading" data-consent-heading{% if theme_st.heading_cookies == blank %} hidden{% endif %}>{{ theme_st.heading_cookies | default: 'Cookies' }}</h2>
+        <div class="cookie-consent__message rte" id="CookieConsentMessage">
+          <div data-consent-message>{{ theme_st.content_cookies }}</div>
+          <a
+            class="cookie-consent__link"
+            data-consent-link
+            href="{{ theme_st.cookie_link_url | default: '#' }}"
+            {% if theme_st.cookie_link_url == blank or theme_st.cookie_link_label == blank %}hidden{% endif %}
+          >{{ theme_st.cookie_link_label }}</a>
+        </div>
       </div>
-      <div class="cookie-bar__actions">
-        {% if theme_st.label_refuse != blank %}
-          <button type="button" class="cookie-bar__btn cookie-bar__btn--ghost cookie-dismiss" id="cookie-refuse">
-            {{ theme_st.label_refuse }}
-          </button>
-        {% endif %}
-        {%- if theme_st.label_allow != blank -%}
-          <button type="button" class="cookie-bar__btn cookie-bar__btn--solid cookie-dismiss" id="cookie-dismiss">
-            {{ theme_st.label_allow }}
-          </button>
-        {%- endif -%}
+      <div class="cookie-consent__actions">
+        <button
+          type="button"
+          class="cookie-consent__btn btn-outline"
+          data-theme-button="secondary"
+          data-sl-button
+          data-consent="decline"
+          {% if theme_st.cookie_show_decline == false %}hidden{% endif %}
+          {% if ck_custom %}style="{%- render 'button-overrides', text: theme_st.cookie_btn2_text, custom: true, radius: theme_st.cookie_btn_radius -%}"{% endif %}
+        >{{ ck_refuse }}</button>
+        <button
+          type="button"
+          class="cookie-consent__btn btn-primary"
+          data-theme-button="primary"
+          data-sl-button
+          data-consent="accept"
+          {% if ck_custom %}style="{%- render 'button-overrides', bg: theme_st.cookie_btn_bg, text: theme_st.cookie_btn_text, custom: true, radius: theme_st.cookie_btn_radius -%}"{% endif %}
+        >{{ ck_allow }}</button>
       </div>
+      <button
+        type="button"
+        class="cookie-consent__close"
+        data-consent="close"
+        aria-label="{{ 'accessibility.close' | t }}"
+        {% if theme_st.cookie_show_close != true or ck_modal and theme_st.cookie_require_choice %}hidden{% endif %}
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" focusable="false"><path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
     </div>
-  </cookie-bar>
+  </cookie-consent>
+  {%- if ck_design -%}
+    {%- comment -%} Builder only: the values the live preview starts from. {%- endcomment -%}
+    <script type="application/json" data-consent-settings>{
+      "enable_cookies": {{ theme_st.enable_cookies | json }},
+      "cookie_show_in_builder": {{ theme_st.cookie_show_in_builder | json }},
+      "cookie_style": {{ theme_st.cookie_style | default: 'bar-center' | json }},
+      "cookie_position": {{ theme_st.cookie_position | default: 'bottom_center' | json }},
+      "cookie_show_close": {{ theme_st.cookie_show_close | json }},
+      "cookie_custom_styling": {{ ck_custom | json }},
+      "cookie_bg_color": {{ theme_st.cookie_bg_color | json }},
+      "cookie_text_color": {{ theme_st.cookie_text_color | json }},
+      "cookie_heading_color": {{ theme_st.cookie_heading_color | json }},
+      "cookie_btn_bg": {{ theme_st.cookie_btn_bg | json }},
+      "cookie_btn_text": {{ theme_st.cookie_btn_text | json }},
+      "cookie_btn2_text": {{ theme_st.cookie_btn2_text | json }},
+      "cookie_btn_radius": {{ theme_st.cookie_btn_radius | default: 12 | json }}
+    }</script>
+  {%- endif -%}
+  <script src="{{ 'cookie-consent.js' | asset_url }}" defer="defer"></script>
 {%- endif -%}
 <script>
   

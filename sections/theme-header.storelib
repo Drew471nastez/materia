@@ -233,11 +233,184 @@
 {%- capture style -%}
 --section-pt: 0;
 --section-pb: 0;
---count-bubble-bg: {{ settings.cart_bubble_bg | default: 'var(--color-primary)' }};
---count-bubble-color: {{ settings.cart_bubble_color | default: '#ffffff' }};
---count-bubble-wishlist-bg: {{ settings.wishlist_bubble_bg | default: 'var(--color-primary)' }};
---count-bubble-wishlist-color: {{ settings.wishlist_bubble_color | default: '#ffffff' }};
 {%- endcapture -%}
+{%- comment -%}
+  Count bubbles (cart and wishlist), one default in Theme settings > Count
+  bubble. Cart Drawer and Wishlist each turn on "Custom bubble style" for
+  their own colours; an empty or transparent one follows the default. The
+  values go on :root so the sticky header and the mobile navigation bar read
+  the same. An unset colour is left out so each bubble falls back to its own
+  scheme's primary colour where it is drawn.
+{%- endcomment -%}
+{%- liquid
+  assign cb_bg = ''
+  if settings.bubble_bg != blank and settings.bubble_bg.alpha != 0
+    assign cb_bg = settings.bubble_bg
+  endif
+  assign cb_text = ''
+  if settings.bubble_text != blank and settings.bubble_text.alpha != 0
+    assign cb_text = settings.bubble_text
+  endif
+  assign cb_cart_bg = cb_bg
+  assign cb_cart_text = cb_text
+  if settings.cart_bubble_custom
+    if settings.cart_bubble_bg != blank and settings.cart_bubble_bg.alpha != 0
+      assign cb_cart_bg = settings.cart_bubble_bg
+    endif
+    if settings.cart_bubble_color != blank and settings.cart_bubble_color.alpha != 0
+      assign cb_cart_text = settings.cart_bubble_color
+    endif
+  endif
+  assign cb_wish_bg = cb_bg
+  assign cb_wish_text = cb_text
+  if settings.wishlist_bubble_custom
+    if settings.wishlist_bubble_bg != blank and settings.wishlist_bubble_bg.alpha != 0
+      assign cb_wish_bg = settings.wishlist_bubble_bg
+    endif
+    if settings.wishlist_bubble_color != blank and settings.wishlist_bubble_color.alpha != 0
+      assign cb_wish_text = settings.wishlist_bubble_color
+    endif
+  endif
+  assign cb_border_color = ''
+  if settings.bubble_border_color != blank and settings.bubble_border_color.alpha != 0
+    assign cb_border_color = settings.bubble_border_color
+  endif
+  case settings.bubble_shape
+    when 'square'
+      assign cb_radius = '0px'
+    when 'rounded'
+      assign cb_radius = '5px'
+    else
+      assign cb_radius = '999px'
+  endcase
+  case settings.bubble_animation
+    when 'none'
+      assign cb_anim = 'none'
+    when 'bounce'
+      assign cb_anim = 'mt-count-bounce'
+    else
+      assign cb_anim = 'mt-count-pop'
+  endcase
+-%}
+<style data-count-bubble>
+  :root {
+    {%- if cb_cart_bg != blank %}--count-bubble-bg: {{ cb_cart_bg }};{% endif -%}
+    {%- if cb_cart_text != blank %}--count-bubble-color: {{ cb_cart_text }};{% endif -%}
+    {%- comment -%} The wishlist never borrows the cart's own colour (the stylesheets fall back from one to the other). {%- endcomment -%}
+    {%- if cb_wish_bg != blank %}--count-bubble-wishlist-bg: {{ cb_wish_bg }};{% elsif cb_cart_bg != blank %}--count-bubble-wishlist-bg: var(--color-primary);{% endif -%}
+    {%- if cb_wish_text != blank %}--count-bubble-wishlist-color: {{ cb_wish_text }};{% elsif cb_cart_text != blank %}--count-bubble-wishlist-color: var(--color-white, #fff);{% endif -%}
+    {%- if cb_border_color != blank %}--count-bubble-border-color: {{ cb_border_color }};{% endif %}
+    --count-bubble-size: {{ settings.bubble_size | default: 18 }}px;
+    --count-bubble-font-size: {{ settings.bubble_font_size | default: 10 }}px;
+    --count-bubble-font-weight: {{ settings.bubble_font_weight | default: 600 }};
+    --count-bubble-radius: {{ cb_radius }};
+    --count-bubble-border-width: {{ settings.bubble_border_width | default: 0 }}px;
+    --count-bubble-offset-x: {{ settings.bubble_offset_x | default: 0 }}px;
+    --count-bubble-offset-y: {{ settings.bubble_offset_y | default: 0 }}px;
+    --count-bubble-animation: {{ cb_anim }};
+  }
+  html body .h-count:not(.header-action-text .h-count),
+  html body .wishlist-count-header {
+    min-width: var(--count-bubble-size, 18px);
+    height: var(--count-bubble-size, 18px);
+    padding: 0 calc(var(--count-bubble-size, 18px) / 4.5) !important;
+    font-size: var(--count-bubble-font-size, 10px) !important;
+    font-weight: var(--count-bubble-font-weight, 600) !important;
+    border-radius: var(--count-bubble-radius, 999px) !important;
+    border: var(--count-bubble-border-width, 0px) solid var(--count-bubble-border-color, var(--color-background, #fff));
+    translate: var(--count-bubble-offset-x, 0px) var(--count-bubble-offset-y, 0px);
+  }
+  html body .h-count.is-count-bump:not(.header-action-text .h-count) {
+    animation: var(--count-bubble-animation, mt-count-pop) 0.45s cubic-bezier(0.3, 0.7, 0.4, 1.3);
+  }
+  @keyframes mt-count-pop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.35); }
+    100% { transform: scale(1); }
+  }
+  @keyframes mt-count-bounce {
+    0%, 100% { transform: translateY(0); }
+    30% { transform: translateY(-5px); }
+    55% { transform: translateY(0); }
+    75% { transform: translateY(-2px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html body .h-count.is-count-bump { animation: none !important; }
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function () {
+    /* Count bubbles stay current: the wishlist from its saved list (this tab,
+       another tab, or after any wishlist button), the cart from cart events.
+       A changed number gets the bubble's animation. Runs once per page. */
+    if (window.__materiaCountBubbles) return;
+    window.__materiaCountBubbles = true;
+    var KEY = 'materia__wishlist-items';
+    function wishlistCount() {
+      try {
+        var items = JSON.parse(localStorage.getItem(KEY) || '[]');
+        return Array.isArray(items) ? items.length : 0;
+      } catch (e) { return null; }
+    }
+    function write(selector, value) {
+      if (value == null) return;
+      var nodes = document.querySelectorAll(selector);
+      for (var i = 0; i < nodes.length; i++) {
+        if (nodes[i].textContent.trim() !== String(value)) nodes[i].textContent = value;
+      }
+    }
+    function syncWishlist() { write('.wishlist-count', wishlistCount()); }
+    function bump(node) {
+      if (!node || !node.classList || !node.classList.contains('h-count')) return;
+      node.classList.remove('is-count-bump');
+      void node.offsetWidth;
+      node.classList.add('is-count-bump');
+    }
+    var seen = new WeakMap();
+    var observer = new MutationObserver(function (records) {
+      for (var r = 0; r < records.length; r++) {
+        var target = records[r].target;
+        var node = (target.nodeType === 1 ? target : target.parentElement);
+        node = node && node.closest('.h-count');
+        if (!node) continue;
+        var now = node.textContent.trim();
+        if (seen.get(node) !== now) bump(node);
+        seen.set(node, now);
+      }
+    });
+    /* Only the bubbles are watched; a redrawn header brings new ones. */
+    function watch() {
+      var nodes = document.querySelectorAll('.h-count');
+      for (var i = 0; i < nodes.length; i++) {
+        if (seen.has(nodes[i])) continue;
+        seen.set(nodes[i], nodes[i].textContent.trim());
+        observer.observe(nodes[i], { childList: true, characterData: true, subtree: true });
+      }
+    }
+    document.addEventListener('storelib:section-load', function () { watch(); syncWishlist(); });
+    document.addEventListener('shopify:section:load', function () { watch(); syncWishlist(); });
+    document.addEventListener('animationend', function (event) {
+      if (event.target.classList && event.target.classList.contains('is-count-bump')) event.target.classList.remove('is-count-bump');
+    });
+    window.addEventListener('storage', function (event) { if (event.key === KEY || event.key === null) syncWishlist(); });
+    document.addEventListener('materia:wishlist-change', syncWishlist);
+    /* The theme's wishlist buttons save, then the count is read once after the click. */
+    document.addEventListener('click', function (event) {
+      if (event.target.closest && event.target.closest('button-wishlist, minicart-wishlist-action, .minicart__wishlist, [data-wishlist], .wishlist-page-main')) setTimeout(syncWishlist, 0);
+    });
+    window.addEventListener('pageshow', syncWishlist);
+    function onCart(event) {
+      var data = event.detail && (event.detail.data || event.detail.cart || event.detail);
+      var count = data && data.item_count;
+      if (typeof count === 'number') write('.cart-count.h-count', count > 100 ? '~' : count);
+    }
+    document.addEventListener('cart:refresh', onCart);
+    document.addEventListener('cart:updated', onCart);
+    function start() { watch(); syncWishlist(); }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true }); else start();
+    window.addEventListener('load', syncWishlist, { once: true });
+  })();
+{% comment %}{% endcomment %}</script>
 {%- liquid
   comment
     One source of truth for the pill corner radius, driven by the
