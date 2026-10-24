@@ -32,7 +32,7 @@ Theme settings in the builder show the theme's own groups and then Storelib's Ho
 
 In the builder, a change is drawn in the canvas without reloading the page. A script of the theme's hears it:
 
-- `storelib:settings-change`: fired on `document`, detail `{ settings, live }`: the ids and new values of the settings that changed, on every value while a slider or colour is dragged (`live: true`) and once more on release. The canvas applies the change without reloading the page; a script that read a setting once can read it again here.
+- `storelib:settings-change`: fired on `document`, detail `{ settings, live }`: the ids and new values of the settings that changed, on every value while a slider or colour is dragged (`live: true`) and once more on release. A section's own setting is said the same way with `section`, the section's id, in the detail (`{ settings, live, section }`), so a section's script can apply a value itself in the next frame. The canvas applies the change without reloading the page; a script that read a setting once can read it again here.
 - `storelib:section-load`: fired on the section's own element and bubbles to `document`, detail `{ sectionId }`: the section was drawn again in place after a change. A script that sets a section up once (a slider, a menu, a drawer) sets it up again for that section here.
 
 ## Adding a section
