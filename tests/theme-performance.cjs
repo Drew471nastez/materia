@@ -111,7 +111,9 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
     assert.equal(await nav.locator('#same').evaluate(el=>el.hasAttribute('data-nav-pending')),false);passed++;
     assert.equal(await nav.$eval('.icon-load',el=>getComputedStyle(el).display),'none');
     await nav.evaluate(()=>{document.querySelector('button').classList.add('loading');document.documentElement.classList.add('open-minicart');});
-    assert.equal(await nav.$eval('.icon-load',el=>getComputedStyle(el).display),'none','cart opening must not leave an icon on the purchase button');passed++;
+    assert.notEqual(await nav.$eval('.icon-load',el=>getComputedStyle(el).display),'none','an open cart must not suppress a new pending request');
+    await nav.evaluate(()=>document.querySelector('button').classList.remove('loading'));
+    assert.equal(await nav.$eval('.icon-load',el=>getComputedStyle(el).display),'none','completed request must not leave a spinner');passed++;
     await nav.close();
     console.log(`${passed} recommendation, swipe, header and navigation checks passed`);
   } finally {await browser.close();}
