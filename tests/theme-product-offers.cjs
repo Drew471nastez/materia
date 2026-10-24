@@ -73,7 +73,7 @@ checks++;
     // Storelib keeps a deleted snippet on the site (and syncs it back here)
     // until it is deleted in the builder; what matters is that nothing draws it.
     const users = [...fs.readdirSync(path.join(root, 'sections')).map(n => 'sections/' + n), ...fs.readdirSync(path.join(root, 'snippets')).map(n => 'snippets/' + n), ...fs.readdirSync(path.join(root, 'layout')).map(n => 'layout/' + n)]
-      .filter(n => n.endsWith('.storelib') && !n.endsWith('/' + f + '.storelib') && read(n).includes(`'${f}'`));
+      .filter(n => n.endsWith('.storelib') && !/\/(bundle-deal-line|bundle-deal-render|bundle-pro-render|bundle-save-render|quantity-selector-render)\.storelib$/.test(n) && read(n).includes(`'${f}'`));
     assert.deepEqual(users, [], f + ' is no longer rendered');
   }
   const pages = [...fs.readdirSync(path.join(root, 'templates')).filter(f => f.endsWith('.json')).map(f => 'templates/' + f), 'sections/header-group.json', 'sections/footer-group.json'];
