@@ -5521,7 +5521,9 @@ class ButtonWishlist extends HTMLElement {
 }
 customElements.define("button-wishlist", ButtonWishlist);
 document.addEventListener("animationend", (event) => {
-  if (event.target && event.target.matches && event.target.matches("button-wishlist.is-toggled")) event.target.classList.remove("is-toggled");
+  // The card plays the pop on the heart inside the button.
+  const button = event.target && event.target.closest && event.target.closest("button-wishlist.is-toggled");
+  if (button) button.classList.remove("is-toggled");
 });
 
 class ButtonCompare extends HTMLElement {
