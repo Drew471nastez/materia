@@ -224,11 +224,14 @@ class SlideSection extends HTMLElement {
   constructor() {
     super();
     this.globalSlide = null;
-    this.init();
+    // A slideshow parsed outside the page (a builder redraw, a template)
+    // starts once it is in the page and has a size.
+    if (!this.classList.contains("slideshow") || this.isConnected) this.init();
   }
 
   init() {
-    if (this.classList.contains('slideshow') || this.classList.contains('swiper-cart-upsell')) { this.initSlide(); return; }
+    if (this.classList.contains('slideshow')) { this.initSlideshow(); return; }
+    if (this.classList.contains('swiper-cart-upsell')) { this.initSlide(); return; }
     if (document.body.classList.contains("index")) {
       let pos = window.pageYOffset;
       if (pos > 0 || document.body.classList.contains("swiper-lazy")) {
@@ -245,7 +248,48 @@ class SlideSection extends HTMLElement {
     }
   }
 
+  // Slide effects by schema value. The creative presets keep the slide being
+  // left fully opaque and held behind (translateZ -1); only the slide coming
+  // in moves or fades over it, so the section background never shows through.
+  static effectOptions(effect) {
+    const creative = {
+      creative: {
+        prev: { shadow: false, translate: ["-20%", 0, -1] },
+        next: { translate: ["100%", 0, 0] },
+      },
+      fade_scale: {
+        prev: { shadow: false, opacity: 1, scale: 1, translate: [0, 0, -1] },
+        next: { shadow: false, opacity: 0, scale: 0.94, translate: [0, 0, 0] },
+      },
+      slide_push: {
+        prev: { shadow: false, opacity: 1, translate: ["-22%", 0, -1] },
+        next: { shadow: false, translate: ["100%", 0, 0] },
+      },
+      stack_up: {
+        prev: { shadow: false, opacity: 1, scale: 1, translate: [0, 0, -1] },
+        next: { shadow: false, opacity: 0, scale: 0.94, translate: [0, "18%", 0] },
+      },
+      slide_over: {
+        prev: { shadow: false, opacity: 1, translate: [0, 0, -1] },
+        next: { shadow: false, translate: ["100%", 0, 0] },
+      },
+      zoom_reveal: {
+        prev: { shadow: false, opacity: 1, scale: 1, translate: [0, 0, -1] },
+        next: { shadow: false, opacity: 0, scale: 1.12, translate: [0, 0, 0] },
+      },
+    };
+    if (creative[effect]) return { effect: "creative", options: { creativeEffect: creative[effect] } };
+    if (effect === "coverflow") return { effect, options: { coverflowEffect: { rotate: 30, stretch: 0, depth: 120, modifier: 1, slideShadows: false } } };
+    if (effect === "cube") return { effect, options: { cubeEffect: { shadow: false, slideShadows: false, shadowOffset: 20, shadowScale: 0.94 } } };
+    if (effect === "flip") return { effect, options: { flipEffect: { slideShadows: false, limitRotation: true } } };
+    // Fade without cross-fade: the slide coming in fades over the one it
+    // replaces, so the two are never both half transparent.
+    if (effect === "fade") return { effect, options: { fadeEffect: { crossFade: false } } };
+    return { effect: effect || "slide", options: {} };
+  }
+
   initSlide() {
+    if (this.classList.contains("slideshow")) { this.initSlideshow(); return; }
     if (this.globalSlide && !this.globalSlide.destroyed) return;
     const _this = this;
     var autoplaying = _this?.dataset.autoplay === "true";
@@ -260,9 +304,8 @@ class SlideSection extends HTMLElement {
       ? _this?.dataset.autoplaySpeed * 1000
       : 3000;
     var speed = _this?.dataset.speed ? _this?.dataset.speed : 400;
-    // Topbar and slideshow: under reduced motion nothing turns by itself and a
-    // change is a cut.
-    const reducedTopbarMotion = (_this.classList.contains("topbar-slider") || _this.classList.contains("slideshow")) &&
+    // Topbar: under reduced motion nothing turns by itself and a change is a cut.
+    const reducedTopbarMotion = _this.classList.contains("topbar-slider") &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reducedTopbarMotion) {
       autoplaying = false;
@@ -299,95 +342,17 @@ class SlideSection extends HTMLElement {
     if (direction == "vertical") {
       _this.style.maxHeight = _this.offsetHeight + "px";
     }
-    const effectOpts = {};
-    // The 3 modern transitions (fade_scale / slide_push / stack_up) are all built on
-    // Swiper EffectCreative. We map the schema value to a creativeEffect config and
-    // then normalize the effect NAME to 'creative' so Swiper loads the right module.
-    // ZERO-BLEED RULE for every preset: the OUTGOING slide must stay FULLY OPAQUE
-    // (held beneath via translateZ -1) and only the INCOMING slide may fade in over
-    // it. If both slides are semi-transparent mid-transition the section background
-    // ghosts through the slideshow — that is the "background shows through" bug.
-    const creativePresets = {
-      // Soft modern dissolve: incoming fades + settles up from .94 OVER the held,
-      // fully-opaque outgoing slide. No background ghosting by construction.
-      fade_scale: {
-        prev: { shadow: false, opacity: 1, scale: 1, translate: [0, 0, -1] },
-        next: { shadow: false, opacity: 0, scale: 0.94, translate: [0, 0, 0] },
-      },
-      // Parallax push: outgoing eases left (fully opaque) while the incoming slide
-      // sweeps in from the right edge, always covering the frame.
-      slide_push: {
-        prev: { shadow: false, opacity: 1, translate: ["-22%", 0, -1] },
-        next: { shadow: false, translate: ["100%", 0, 0] },
-      },
-      // Stack up: outgoing holds in place underneath; incoming rises from below
-      // with a soft fade + scale and stacks over it.
-      stack_up: {
-        prev: { shadow: false, opacity: 1, scale: 1, translate: [0, 0, -1] },
-        next: { shadow: false, opacity: 0, scale: 0.94, translate: [0, "18%", 0] },
-      },
-      // Slide over: outgoing holds perfectly still; incoming covers it from the
-      // right like a sheet. The cleanest possible move — nothing ever uncovered.
-      slide_over: {
-        prev: { shadow: false, opacity: 1, translate: [0, 0, -1] },
-        next: { shadow: false, translate: ["100%", 0, 0] },
-      },
-      // Zoom reveal: incoming starts slightly zoomed-in + transparent and settles
-      // into place over the held outgoing slide. Cinematic, zero bleed.
-      zoom_reveal: {
-        prev: { shadow: false, opacity: 1, scale: 1, translate: [0, 0, -1] },
-        next: { shadow: false, opacity: 0, scale: 1.12, translate: [0, 0, 0] },
-      },
-    };
-    let effectName = effect;
-    if (creativePresets[effect]) {
-      effectName = "creative";
-      effectOpts.creativeEffect = creativePresets[effect];
-    } else if (effect === "coverflow") {
-      effectOpts.coverflowEffect = {
-        rotate: 30,
-        stretch: 0,
-        depth: 120,
-        modifier: 1,
-        slideShadows: false,
-      };
-    } else if (effect === "creative") {
-      effectOpts.creativeEffect = {
-        prev: { shadow: false, translate: ["-20%", 0, -1] },
-        next: { translate: ["100%", 0, 0] },
-      };
-    } else if (effect === "cube") {
-      effectOpts.cubeEffect = {
-        shadow: false,
-        slideShadows: false,
-        shadowOffset: 20,
-        shadowScale: 0.94,
-      };
-    } else if (effect === "flip") {
-      effectOpts.flipEffect = { slideShadows: false, limitRotation: true };
-    }
-    // Fade without cross-fade: the incoming slide fades in over the one it
-    // replaces (going back, the outgoing one fades off the slide beneath), so
-    // the two are never both half transparent over the section background.
-    if (effectName === "fade") {
-      effectOpts.fadeEffect = { crossFade: false };
-    }
+    const fx = SlideSection.effectOptions(effect);
     this.globalSlide = new Swiper(_this, {
       slidesPerView: autoItem ? "auto" : itemMobile,
       spaceBetween: spacing >= 15 ? 15 : spacing,
       autoplay: autoplaying,
       direction: direction,
       loop: loop,
-      effect: effectName,
-      ...effectOpts,
+      effect: fx.effect,
+      ...fx.options,
       autoHeight: autoHeight,
       speed: speed,
-      // Let Swiper own the drag; vertical page scrolling keeps its native feel.
-      ...(_this.classList.contains('slideshow') ? {
-        threshold: 8, touchAngle: 35, resistanceRatio: .65,
-        longSwipesRatio: .25, longSwipesMs: 250,
-        followFinger: true, touchStartPreventDefault: false,
-      } : {}),
       watchSlidesProgress: true,
       watchSlidesVisibility: true,
       grabCursor: true,
@@ -427,17 +392,6 @@ class SlideSection extends HTMLElement {
       on: {
         init: function (e) {
           var sec__tiktok = _this.closest(".sec__tiktok-video");
-          if (_this.classList.contains("slideshow")) {
-            const motionElement = _this.querySelectorAll(
-              `.swiper-slide.swiper-slide-active  motion-element.effect_fadeinup`
-            );
-            setTimeout(() => {
-              motionElement &&
-                motionElement.forEach((item) => {
-                  item.refreshAnimation();
-                });
-            }, 350);
-          }
           var slide_visibles = _this.querySelectorAll(
             ".swiper-slide:not(.swiper-slide-visible) motion-element:not([data-image]),motion-element.swiper-slide:not(.swiper-slide-visible)"
           );
@@ -483,81 +437,11 @@ class SlideSection extends HTMLElement {
               }
             }
           }
-          var video = _this.querySelector("video.slideshow");
-          if (video) {
-            const handleIntersection = (entries, observer) => {
-              if (!entries[0].isIntersecting) return;
-              observer.unobserve(_this);
-              const videos = _this.querySelectorAll("video");
-              videos.forEach((video) => {
-                const dataSrc = video.dataset.src;
-                if (dataSrc) {
-                  video.src = dataSrc;
-                  video.removeAttribute("data-src");
-                }
-              });
-            };
-            new IntersectionObserver(handleIntersection.bind(_this), {
-              rootMargin: "0px 0px 200px 0px",
-            }).observe(_this);
-          }
         },
-        slideChangeTransitionStart: function (swiper) {
-          // Drive the glitch-free entrance image-effects (fade_in / reveal_up). We add
-          // a stable `is-entering` state class for the duration of the slide change so
-          // the CSS uses an INTERRUPTIBLE transition (not a restartable keyframe).
-          // Rapid arrow clicks therefore re-ease smoothly instead of snapping.
-          if (!_this.classList.contains("slideshow")) return;
-          if (_this.classList.contains('is-dragging')) return;
-          // The slide arriving by arrow, dot or autoplay plays its picture
-          // entrance (fade_in / reveal_up) once; the others rest.
-          const arriving = swiper && swiper.slides ? swiper.slides[swiper.activeIndex] : null;
-          if (swiper && swiper.slides) swiper.slides.forEach((slide) => { if (slide !== arriving) slide.removeAttribute("data-fx-enter"); });
-          if (arriving && !arriving.hasAttribute("data-fx-enter")) arriving.setAttribute("data-fx-enter", "");
-          _this.classList.add("is-entering");
-          clearTimeout(_this._enterTimer);
-          // Fallback removal in case TransitionEnd is skipped on a fast interrupt.
-          _this._enterTimer = setTimeout(function () {
-            _this.classList.remove("is-entering");
-          }, (swiper && swiper.params && swiper.params.speed ? swiper.params.speed : speed) + 60);
-        },
-        slideChangeTransitionEnd: function () {
-          if (!_this.classList.contains("slideshow")) return;
-          clearTimeout(_this._enterTimer);
-          _this.classList.remove("is-entering");
-        },
-        realIndexChange: function (swiper) {
-          if (_this?.dataset.autoplay) {
-            var slide_visibles = _this.querySelectorAll(
-              ".swiper-slide motion-element:not([data-image])"
-            );
-            slide_visibles?.forEach((slide) => {
-              if (!slide.hasAttribute("hold")) {
-                slide?.setAttribute("hold", true);
-              }
-            });
-          } else {
-            var slide_visibles = _this.querySelectorAll(
-              ".swiper-slide motion-element:not([data-image])"
-            );
-            slide_visibles?.forEach((slide) => {
-              if (!slide.hasAttribute("hold")) {
-                slide?.setAttribute("hold", true);
-              }
-            });
-          }
-
-          setTimeout(() => {
-            if (_this.classList.contains("slideshow") && !_this.classList.contains('is-dragging')) {
-              const motionElement = _this.querySelectorAll(
-                `.swiper-slide.swiper-slide-active  motion-element.effect_fadeinup, .swiper-slide.swiper-slide-active  motion-element.motion-image`
-              );
-              motionElement &&
-                motionElement.forEach((item) => {
-                  item.refreshAnimation();
-                });
-            }
-          }, 50);
+        realIndexChange: function () {
+          _this.querySelectorAll(".swiper-slide motion-element:not([data-image])").forEach((slide) => {
+            if (!slide.hasAttribute("hold")) slide.setAttribute("hold", true);
+          });
         },
         slideChange: function () {
           const index_currentSlide = this.realIndex + 1;
@@ -582,24 +466,241 @@ class SlideSection extends HTMLElement {
     });
   }
 
+  // ───────── Slideshow (sections/slideshow) ─────────
+  // Each slide's words carry their state on the slide, as data-content:
+  //   rest  - shown as they are, no entrance;
+  //   enter - the entrance plays, once (it becomes rest when it is done);
+  //   none  - hidden.
+  // The first slide rests on landing. A slide reached by an arrow, a dot, the
+  // keyboard or autoplay enters. Slides seen while a finger or the mouse drags
+  // rest, so nothing hides and replays under the finger. A slide keeps its
+  // state while it is still in view, and every slide but the active one is
+  // cleared once the slider settles. One slide: no loop, arrows, dots, drag or
+  // autoplay; it looks exactly like the first slide of many.
+  initSlideshow() {
+    if (this.globalSlide && !this.globalSlide.destroyed) return;
+    const el = this;
+    const d = el.dataset;
+    const slideEls = el.querySelectorAll(":scope > .swiper-wrapper > .swiper-slide");
+    if (!slideEls.length || typeof Swiper !== "function") return;
+    const single = slideEls.length < 2;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const effect = d.effect || "slide";
+    const speed = reduce ? 0 : Number(d.speed) || 700;
+    const fx = SlideSection.effectOptions(effect);
+    const actions = el.querySelector(":scope > .swiper-actions");
+    const pagination = el.querySelector(":scope > .swiper-pagination");
+    const autoplay = !single && !reduce && d.autoplay === "true";
+    // Fade-type effects jumping across several slides (a dot click) would
+    // flick through the ones between; those are hidden for that change.
+    const skipBetween = ["fade", "fade_scale", "stack_up", "zoom_reveal"].includes(effect);
+    el.classList.toggle("is-single", single);
+    this._dragging = false;
+    this._touching = false;
+    this._pause = new Set(["offscreen"]);
+
+    const swiper = this.globalSlide = new Swiper(el, {
+      slidesPerView: 1,
+      spaceBetween: Number(d.spacing) || 0,
+      speed,
+      loop: !single && d.loop !== "false",
+      effect: fx.effect,
+      ...fx.options,
+      watchSlidesProgress: true,
+      allowTouchMove: !single,
+      grabCursor: !single,
+      // The finger leads; vertical page scrolling keeps its native feel.
+      threshold: 8,
+      touchAngle: 35,
+      resistanceRatio: 0.65,
+      longSwipesRatio: 0.25,
+      longSwipesMs: 250,
+      followFinger: true,
+      // Swiper's default: a mouse drag never starts a native picture drag or
+      // a text selection. Touch scrolling is still the page's (touch-action).
+      touchStartPreventDefault: true,
+      navigation: !single && actions
+        ? { nextEl: actions.querySelector(".swiper-button-next"), prevEl: actions.querySelector(".swiper-button-prev") }
+        : { enabled: false },
+      pagination: !single && pagination
+        ? { el: pagination, clickable: true, type: "bullets" }
+        : { enabled: false },
+      autoplay: autoplay
+        ? { delay: (Number(d.autoplaySpeed) || 5) * 1000, disableOnInteraction: false, pauseOnMouseEnter: false }
+        : false,
+      on: {
+        init: (sw) => {
+          const active = sw.slides[sw.activeIndex];
+          if (active) active.setAttribute("data-content", "rest");
+          this._shownSlide = active;
+        },
+        touchStart: () => {
+          this._touching = true;
+          this.pauseSlideshow("touch", true);
+        },
+        sliderFirstMove: (sw) => {
+          this._dragging = true;
+          el.classList.add("is-dragging", "is-moving");
+          sw.slides.forEach((slide) => {
+            if (!slide.hasAttribute("data-content")) slide.setAttribute("data-content", "rest");
+          });
+        },
+        touchEnd: (sw) => {
+          this._touching = false;
+          this.pauseSlideshow("touch", false);
+          clearTimeout(this._settleTimer);
+          // A drag let go where it started has no transition to end.
+          if (this._dragging) this._settleTimer = setTimeout(() => this.settleSlideshow(), sw.params.speed + 120);
+        },
+        slideChangeTransitionStart: (sw) => {
+          const incoming = sw.slides[sw.activeIndex];
+          const outgoing = this._shownSlide;
+          if (sw.params.speed > 0) el.classList.add("is-moving");
+          if (incoming && !incoming.hasAttribute("data-content")) {
+            incoming.setAttribute("data-content", this._dragging ? "rest" : "enter");
+          }
+          if (skipBetween && !this._dragging && outgoing && incoming && outgoing !== incoming) {
+            const from = sw.slides.indexOf(outgoing);
+            const to = sw.activeIndex;
+            if (from > -1) {
+              sw.slides.forEach((slide, i) => {
+                if (i > Math.min(from, to) && i < Math.max(from, to) && !slide.hasAttribute("data-content")) slide.setAttribute("data-skip", "");
+              });
+            }
+          }
+          this._shownSlide = incoming;
+        },
+        transitionEnd: () => this.settleSlideshow(),
+      },
+    });
+    swiper.__materiaSwipe = true;
+    this.pauseSlideshow();
+
+    if (!this._wired) {
+      this._wired = true;
+      // An entrance that has finished rests, so nothing can replay it.
+      el.addEventListener("animationend", (e) => {
+        const slide = e.target.closest && e.target.closest(".swiper-slide");
+        if (!slide || slide.getAttribute("data-content") !== "enter" || typeof slide.getAnimations !== "function") return;
+        const running = slide.getAnimations({ subtree: true }).some((a) => {
+          const end = a.effect && a.effect.getComputedTiming ? a.effect.getComputedTiming().endTime : 0;
+          return a.playState === "running" && end !== Infinity;
+        });
+        if (!running) slide.setAttribute("data-content", "rest");
+      });
+      el.addEventListener("keydown", (e) => {
+        const sw = this.globalSlide;
+        if (!sw || sw.destroyed || el.classList.contains("is-single") || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+        if (e.target.closest && e.target.closest("input, textarea, select, [contenteditable]")) return;
+        if (e.key === "ArrowLeft") { e.preventDefault(); sw.slidePrev(); }
+        else if (e.key === "ArrowRight") { e.preventDefault(); sw.slideNext(); }
+      });
+      el.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") this.pauseSlideshow("hover", true); });
+      el.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") this.pauseSlideshow("hover", false); });
+      el.addEventListener("focusin", (e) => { if (e.target.matches && e.target.matches(":focus-visible")) this.pauseSlideshow("focus", true); });
+      el.addEventListener("focusout", (e) => { if (!el.contains(e.relatedTarget)) this.pauseSlideshow("focus", false); });
+    }
+    if (autoplay) {
+      this._onVisibility = () => this.pauseSlideshow("hidden", document.hidden);
+      document.addEventListener("visibilitychange", this._onVisibility);
+      this._onVisibility();
+      if ("IntersectionObserver" in window) {
+        this._viewObserver = new IntersectionObserver((entries) => {
+          this.pauseSlideshow("offscreen", !entries[entries.length - 1].isIntersecting);
+        }, { threshold: 0.25 });
+        this._viewObserver.observe(el);
+      } else {
+        this.pauseSlideshow("offscreen", false);
+      }
+    }
+    this.loadSlideshowVideos();
+  }
+
+  // Autoplay runs only with no reason to wait: hover, touch, keyboard focus,
+  // off screen, a hidden tab or a slide picked in the builder.
+  pauseSlideshow(reason, on) {
+    const sw = this.globalSlide;
+    if (reason) on ? this._pause.add(reason) : this._pause.delete(reason);
+    if (!sw || sw.destroyed || !sw.autoplay || !sw.params.autoplay || !sw.params.autoplay.enabled) return;
+    if (this._pause.size) { if (sw.autoplay.running) sw.autoplay.stop(); }
+    else if (!sw.autoplay.running) sw.autoplay.start();
+  }
+
+  settleSlideshow() {
+    const sw = this.globalSlide;
+    if (!sw || sw.destroyed || sw.animating || this._touching) return;
+    clearTimeout(this._settleTimer);
+    this._dragging = false;
+    this.classList.remove("is-dragging", "is-moving");
+    const active = sw.slides[sw.activeIndex];
+    sw.slides.forEach((slide) => {
+      slide.removeAttribute("data-skip");
+      if (slide !== active) slide.removeAttribute("data-content");
+    });
+    if (active && !active.hasAttribute("data-content")) active.setAttribute("data-content", "rest");
+    this._shownSlide = active;
+  }
+
+  // The builder: a picked slide block is shown and autoplay waits for it.
+  selectSlide(slide, selected) {
+    const sw = this.globalSlide;
+    this.pauseSlideshow("selected", selected);
+    if (!selected || !slide || !sw || sw.destroyed) return;
+    if (sw.params.loop) sw.slideToLoop(Number(slide.getAttribute("data-swiper-slide-index")) || 0);
+    else if (sw.slides.indexOf(slide) > -1) sw.slideTo(sw.slides.indexOf(slide));
+  }
+
+  // The builder redraws a section in place: a slider whose slides changed
+  // under it starts again on the new ones.
+  refreshSlideshow() {
+    const sw = this.globalSlide;
+    const slides = [...this.querySelectorAll(":scope > .swiper-wrapper > .swiper-slide")];
+    const stale = !sw || sw.destroyed || !this.classList.contains("swiper-initialized") ||
+      slides.length !== sw.slides.length || slides.some((slide) => !sw.slides.includes(slide));
+    if (!stale) return;
+    this.stopSlideshow();
+    this.initSlideshow();
+  }
+
+  stopSlideshow() {
+    clearTimeout(this._settleTimer);
+    this._viewObserver?.disconnect();
+    this._viewObserver = null;
+    if (this._onVisibility) document.removeEventListener("visibilitychange", this._onVisibility);
+    this._onVisibility = null;
+    if (this.globalSlide && !this.globalSlide.destroyed) this.globalSlide.destroy(true, true);
+    this.classList.remove("is-dragging", "is-moving", "is-single");
+    this.querySelectorAll(":scope > .swiper-wrapper > .swiper-slide").forEach((slide) => {
+      slide.removeAttribute("data-content");
+      slide.removeAttribute("data-skip");
+    });
+  }
+
+  loadSlideshowVideos() {
+    if (this._videoObserver || !this.querySelector("video.slideshow[data-src]")) return;
+    const load = () => this.querySelectorAll("video[data-src]").forEach((video) => {
+      video.src = video.dataset.src;
+      video.removeAttribute("data-src");
+    });
+    if (!("IntersectionObserver" in window)) { load(); return; }
+    this._videoObserver = new IntersectionObserver((entries, observer) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      load();
+    }, { rootMargin: "0px 0px 200px 0px" });
+    this._videoObserver.observe(this);
+  }
+
   // A slideshow redrawn by the builder is a new element; the old one stops its
   // Swiper (autoplay timer, listeners) here. Moved, not removed: it starts again.
   disconnectedCallback() {
     if (!this.classList.contains("slideshow")) return;
-    clearTimeout(this._enterTimer);
-    if (typeof this._stopInView === "function") this._stopInView();
-    this._stopInView = null;
-    if (this.globalSlide && !this.globalSlide.destroyed) {
-      this.globalSlide.destroy(true, true);
-      this._restart = true;
-    }
-    this.classList.remove("is-entering", "is-dragging");
+    this.stopSlideshow();
   }
 
   connectedCallback() {
-    if (!this._restart) return;
-    this._restart = false;
-    this.initSlide();
+    if (!this.classList.contains("slideshow")) return;
+    if (!this.globalSlide || this.globalSlide.destroyed) this.initSlideshow();
   }
 
   initSecTiktok(sec) {
@@ -611,6 +712,20 @@ class SlideSection extends HTMLElement {
   }
 }
 customElements.define("slide-section", SlideSection);
+// Builder events reach the slideshow they belong to.
+["shopify:block:select", "shopify:block:deselect"].forEach((type) => {
+  document.addEventListener(type, (event) => {
+    const target = event.target;
+    const slider = target && target.closest ? target.closest("slide-section.slideshow") : null;
+    if (slider && typeof slider.selectSlide === "function") slider.selectSlide(target.closest(".swiper-slide"), type === "shopify:block:select");
+  });
+});
+document.addEventListener("storelib:section-load", (event) => {
+  const root = event.target;
+  if (!root || root.nodeType !== 1) return;
+  const sliders = root.matches("slide-section.slideshow") ? [root] : root.querySelectorAll("slide-section.slideshow");
+  sliders.forEach((slider) => typeof slider.refreshSlideshow === "function" && slider.refreshSlideshow());
+});
 
 class PopupBase extends HTMLElement {
   constructor() {

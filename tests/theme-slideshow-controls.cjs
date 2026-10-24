@@ -21,6 +21,11 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
   assert.equal(new Set(ids).size,ids.length);
   for(const id of ['show_arrow','btn_custom_enable','btn_radius_override','btn_text_transform_override','btn_first_bg','btn_second_bg','arrow_visibility','arrow_show_mobile','arrow_shape','arrow_style','arrow_size','arrow_bg','arrow_icon_color','arrow_border_color','arrow_hover_bg','arrow_hover_icon_color'])assert(ids.includes(id),id);
   for(const id of ['arrow_visibility','arrow_style'])assert(schema.settings.find(s=>s.id===id).options.length<=3,'two-option selects draw as buttons');
+  // Custom is a clear override: its colours have their own defaults and only
+  // reach the arrows in custom mode; labels stay short.
+  for(const id of ['arrow_bg','arrow_icon_color','arrow_border_color','arrow_hover_bg','arrow_hover_icon_color'])assert.match(schema.settings.find(s=>s.id===id).default,/^#[0-9a-f]{6}$/,id);
+  for(const s of schema.settings.filter(s=>/^arrow_/.test(s.id||'')))assert(s.label.length<=24,s.id+' label is short');
+  assert(/\{%- if ss_arrow_custom %\}[\s\S]*--ss-arrow-size[\s\S]*--ss-arrow-hover-icon[\s\S]*\{%- endif %\}/.test(markup));
   const stepsMarkup=steps.slice(0,steps.indexOf('<schema>'));
   assert.match(stepsMarkup,/<a class="iws__btn btn-primary[^"]*" data-sl-button data-theme-button="primary" data-button-role="primary"/);
   assert(!/\.iws__btn(:hover)? \{[^}]*(background-color|transition|transform)/.test(stepsMarkup),'steps button paint and motion come from the contract');
@@ -32,9 +37,9 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
     const errors=[];page.on('pageerror',e=>errors.push(e.message));
     const vars=':root{--body-font:Arial;--btn-font:Arial;--color-background:#ffffff;--color-heading:#123456;--color-text:#223344;--btn-primary-bg-color:#3c3c3c;--btn-primary-color:#ffffff;--btn-primary-border-color:#3c3c3c;--btn-primary-hover-bg-color:#de5b5b;--btn-primary-hover-color:#fafafa;--btn-primary-hover-border-color:#de5b5b;--btn-secondary-bg-color:#eeeeee;--btn-secondary-color:#222222;--btn-secondary-border-color:#222222;--btn-secondary-hover-bg-color:#008800;--btn-secondary-hover-color:#ffffff;--btn-anim-duration:0ms;--btn-anim-ease:ease;--btn-radius:5px;--btn-padding-x:26px;--btn-padding-y:14px;--btn-font-size:16px;--btn-font-weight:600;--btn-letter-spacing:0px;--btn-text-transform:none;--btn-border-width:0px;--icon-btn-size:44px}';
     const slideButtons=(extra='')=>`<div class="sec__content"><motion-element class="sec__content-btn flex"><a data-button-unlinked aria-label="Shop now" class="inline-flex no-underline btn-primary" data-sl-button data-theme-button="primary" data-button-role="primary" data-button-outline="false" data-button-local-appearance="theme" data-button-appearance="solid" id="s1">Shop now</a><a href="/collections/all" class="inline-flex no-underline btn-secondary" data-sl-button data-theme-button="secondary" data-button-role="secondary" data-button-outline="false" data-button-local-appearance="theme" data-button-appearance="outline" id="s2">See all</a>${extra}</motion-element></div>`;
-    const arrows=(cls='')=>`<div class="swiper-actions flex block-md content-center gap-10 mb-30 mb-md-0 original-style${cls}" data-arrow-style="theme"><button type="button" class="swiper-arrow swiper-arrow--prev original-style swiper-button-prev inline-flex content-center" data-ss-arrow aria-label="Previous slide"><svg width="12" height="12" viewBox="0 0 12 12"></svg></button><button type="button" class="swiper-arrow swiper-arrow--next original-style swiper-button-next inline-flex content-center" data-ss-arrow aria-label="Next slide"><svg width="12" height="12" viewBox="0 0 12 12"></svg></button></div>`;
-    const fixture=async({body='data-btn-style="solid" data-btn-secondary-style="outline" data-btn-hover="slide" data-sl-btn-hover="none"',style='',actions=''}={})=>{
-      await page.setContent(`<style>${vars}body{margin:0}.slideshow{position:relative;height:420px}${style}</style><body ${body}><div id="ss" class="slideshow"><slide-section id="swiper-ss" class="swiper slideshow"><div class="swiper-wrapper"><div class="swiper-slide swiper-slide-active" data-slide-id="b1">${slideButtons()}</div></div>${arrows(actions)}</slide-section></div><div id="shopify-section-steps"><div class="iws__content" style="display:flex;flex-direction:column"><a class="iws__btn btn-primary inline-flex no-underline" data-sl-button data-theme-button="primary" data-button-role="primary" data-button-appearance="solid" style="" href="#" id="st">Shop the range</a></div></div><p id="away" style="height:200px">away</p></body>`);
+    const arrows=(cls='',arrowStyle='theme')=>`<div class="swiper-actions flex block-md content-center gap-10 mb-30 mb-md-0 original-style${cls}" data-arrow-style="${arrowStyle}"><button type="button" class="swiper-arrow swiper-arrow--prev original-style swiper-button-prev inline-flex content-center" data-ss-arrow aria-label="Previous slide"><svg width="12" height="12" viewBox="0 0 12 12"></svg></button><button type="button" class="swiper-arrow swiper-arrow--next original-style swiper-button-next inline-flex content-center" data-ss-arrow aria-label="Next slide"><svg width="12" height="12" viewBox="0 0 12 12"></svg></button></div>`;
+    const fixture=async({body='data-btn-style="solid" data-btn-secondary-style="outline" data-btn-hover="slide" data-sl-btn-hover="none"',style='',actions='',arrowStyle='theme'}={})=>{
+      await page.setContent(`<style>${vars}body{margin:0}.slideshow{position:relative;height:420px}${style}</style><body ${body}><div id="ss" class="slideshow"><slide-section id="swiper-ss" class="swiper slideshow"><div class="swiper-wrapper"><div class="swiper-slide swiper-slide-active" data-slide-id="b1">${slideButtons()}</div></div>${arrows(actions,arrowStyle)}</slide-section></div><div id="shopify-section-steps"><div class="iws__content" style="display:flex;flex-direction:column"><a class="iws__btn btn-primary inline-flex no-underline" data-sl-button data-theme-button="primary" data-button-role="primary" data-button-appearance="solid" style="" href="#" id="st">Shop the range</a></div></div><p id="away" style="height:200px">away</p></body>`);
       for(const f of ['swiper-bundle.min.css','critical.css','theme.css','slideshow.css','theme-button-contract.css'])await page.addStyleTag({content:read('shopify/assets/'+f)});
       await page.addScriptTag({content:read('shopify/assets/materia-experience.js')});
       await page.mouse.move(5,890);
@@ -97,7 +102,7 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
     await away();passed++;
 
     // 5. Explicit section and slide options still override, on top of the theme's hover.
-    await fixture({body:'data-btn-style="solid" data-btn-secondary-style="outline" data-btn-hover="slide" data-sl-btn-hover="none"',style:
+    await fixture({arrowStyle:'custom',body:'data-btn-style="solid" data-btn-secondary-style="outline" data-btn-hover="slide" data-sl-btn-hover="none"',style:
       '#ss .sec__content [data-button-role]{--mb-radius:2px;--mb-padding-y:9px;--mb-padding-x:40px;--btn-text-transform:uppercase}'+ // btn_custom_enable
       '#ss [data-slide-id="b1"] [data-theme-button="primary"]{--mb-bg:#c0beca;--mb-hover-bg:#004400}'+ // enable_custom_colors
       '#ss .swiper-actions{--ss-arrow-radius:999px;--ss-arrow-size:60px;--ss-arrow-bg:#111111;--ss-arrow-icon:#eeeeee;--ss-arrow-border:#ff0000;--ss-arrow-hover-bg:#ffcc00;--ss-arrow-hover-icon:#000000}'});
@@ -110,13 +115,23 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
     assert.equal(await page.$eval('#s1',el=>new DOMMatrix(getComputedStyle(el,'::before').transform).m11),1,'custom colours keep the theme hover effect');
     await away();passed++;
 
-    // 6. Custom arrows: colours, size, shape and hover from the section tokens.
+    // 6. Custom arrows: colours, size, shape and hover from the section
+    // tokens, and a plain colour change on hover whatever the theme's hover
+    // effect is (no sweep, scale, lift, glow or reversed colours).
     const arrow='.swiper-button-next';
     assert.equal(await css(arrow,'width'),'60px');assert.equal(await css(arrow,'borderTopLeftRadius'),'999px');
     assert.equal(await css(arrow,'backgroundColor'),'rgb(17, 17, 17)');assert.equal(await css(arrow,'color'),'rgb(238, 238, 238)');assert.equal(await css(arrow,'borderTopColor'),'rgb(255, 0, 0)');
-    await page.hover('#swiper-ss');await page.hover(arrow);await page.waitForTimeout(40);
-    assert.equal(await css(arrow,'color'),'rgb(0, 0, 0)');assert.equal(await css(arrow,'backgroundColor','::before'),'rgb(255, 204, 0)');
-    assert.equal(await page.$eval(arrow,el=>new DOMMatrix(getComputedStyle(el,'::before').transform).m11),1,'arrow follows the slide effect');
+    for(const hover of ['slide','scale','lift','glow','reverse','fade']){
+      await setBody({'data-btn-hover':hover});
+      await away();await page.hover('#swiper-ss');await page.hover(arrow);await page.waitForTimeout(40);
+      assert.equal(await css(arrow,'color'),'rgb(0, 0, 0)',hover+' custom hover icon');
+      assert.equal(await css(arrow,'backgroundColor'),'rgb(255, 204, 0)',hover+' custom hover background');
+      assert.equal(await css(arrow,'borderTopColor'),'rgb(255, 204, 0)',hover+' custom hover border');
+      assert.equal(await css(arrow,'display','::before'),'none',hover+' no theme sweep');
+      assert.equal(await css(arrow,'scale'),'none',hover+' no theme scale');assert.equal(await css(arrow,'translate'),'none',hover+' no theme lift');
+      assert.equal(await css(arrow,'boxShadow'),'none',hover+' no theme glow');
+    }
+    await setBody({'data-btn-hover':'slide'});
     await away();passed++;
 
     // 7. Theme arrows: scheme colours, icon button size, button radius, theme hover and timing.
