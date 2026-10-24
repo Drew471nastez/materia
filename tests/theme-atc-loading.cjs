@@ -17,7 +17,7 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
    });
    assert.equal(state.icon,'hidden');assert.notEqual(state.spinner,'none');assert.equal(state.opacity,'1');
    assert(Math.abs(state.x)<.5&&Math.abs(state.y)<.5,'spinner stays centred, independent of the hidden icon');
-   assert.equal(state.w,original.w);assert.equal(state.h,original.h);assert.equal(state.animation,'spin');assert.equal(state.label,'visible','label remains available to assistive technology');checks++;
+   assert.equal(state.w,original.w);assert.equal(state.h,original.h);assert.equal(state.animation,'materia-busy-spin');assert.equal(state.label,'visible','label remains available to assistive technology');checks++;
    await page.$eval('#'+id+' button',el=>el.classList.remove('loading'));
    assert.equal(await page.$eval('#'+id+' .btn-icon, #'+id+' .icon-cart',el=>getComputedStyle(el).visibility),'visible','icon returns after success or failure');checks++;
   }

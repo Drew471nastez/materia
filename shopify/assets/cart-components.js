@@ -32,6 +32,7 @@ function materiaPatchDrawerCart(target, incoming) {
   if (!oldItems || !newItems) return false;
   const oldRows = new Map(Array.from(oldItems.children).filter(el => el.id).map(el => [el.id, el]));
   const wanted = [];
+  const entering = [];
   for (const freshRow of Array.from(newItems.children)) {
     let stableRow = freshRow.id && oldRows.get(freshRow.id);
     if (stableRow) {
@@ -44,7 +45,7 @@ function materiaPatchDrawerCart(target, incoming) {
       const currentQty = stableRow.querySelector('input[name="updates[]"]');
       const nextQty = freshRow.querySelector('input[name="updates[]"]');
       if (currentQty && nextQty) {
-        currentQty.value = nextQty.value;
+        if (!currentQty.hasAttribute('data-materia-desired-quantity')) currentQty.value = nextQty.value;
         const editor = stableRow.querySelector('cart-item-variant-switch');
         if (editor) editor.dataset.quantity = nextQty.value;
         currentQty.defaultValue = nextQty.defaultValue;
@@ -56,7 +57,9 @@ function materiaPatchDrawerCart(target, incoming) {
       wanted.push(stableRow);
       oldRows.delete(freshRow.id);
     } else {
-      wanted.push(freshRow.cloneNode(true));
+      const row = freshRow.cloneNode(true);
+      wanted.push(row);
+      entering.push(row);
     }
   }
   // Move reused nodes rather than destroying/recreating them; no image flashes.
@@ -65,6 +68,12 @@ function materiaPatchDrawerCart(target, incoming) {
     if (oldItems.children[i] !== row) oldItems.insertBefore(row, oldItems.children[i] || null);
   }
   while (oldItems.children.length > wanted.length) oldItems.lastElementChild.remove();
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    entering.forEach(row => row.animate?.([
+      {opacity:0,transform:'translateY(4px)'},
+      {opacity:1,transform:'translateY(0)'},
+    ], {duration:180,easing:'ease-out'}));
+  }
   // Cart subtotal/discounts can change; payment icons and messages do not need a rebuild.
   for (const sel of ['[data-cart-subtotal-price]', '[data-discounts-list]', '.cart-discount__codes']) {
     const fresh = incoming.querySelectorAll(sel);
@@ -240,13 +249,16 @@ class CartNotification extends HTMLElement {
       0
     );
     this.onBodyClick = this.handleBodyClick.bind(this);
-    this.debouncedOnChange = debounce((event) => {
-      this.onChange(event);
-    }, 300);
     this.notification.addEventListener(
       "change",
-      this.debouncedOnChange.bind(this), {signal}
+      event => this.onChange(event), {signal}
     );
+    this.addEventListener('click', event => {
+      if (this._quantityRunning && event.target.closest('.btn-checkout,[name="checkout"]')) { event.preventDefault(); event.stopImmediatePropagation(); }
+    }, {capture:true,signal});
+    this.addEventListener('submit', event => {
+      if (this._quantityRunning) { event.preventDefault(); event.stopImmediatePropagation(); }
+    }, {capture:true,signal});
     this.cartAction();
     this.addonsUpdate();
   }
@@ -603,6 +615,45 @@ class CartNotification extends HTMLElement {
   }
 
   updateQuantity(id, quantity, currentQuantity, _this, name) {
+    quantity = Number(quantity);
+    if (!Number.isInteger(quantity) || quantity < 0) return Promise.resolve(false);
+    this._quantityQueue ||= new Map();
+    this._quantityQueue.set(String(id), [id,quantity,currentQuantity,_this,name]);
+    const input = this.querySelector(`input[name="updates[]"][data-id="${CSS.escape(String(id))}"]`);
+    if (input && quantity > 0) {
+      input.setAttribute('data-materia-desired-quantity', String(quantity));
+      input.setAttribute('aria-busy','true');
+    }
+    if (this._quantityRunning) return this._quantityDrain;
+    this._quantityRunning = true;
+    this.setAttribute('aria-busy','true');
+    this._quantityDrain = this.drainQuantityUpdates();
+    return this._quantityDrain;
+  }
+
+  async drainQuantityUpdates() {
+    try {
+      while (this._quantityQueue.size && this.isConnected) {
+        const [key,args] = this._quantityQueue.entries().next().value;
+        this._quantityQueue.delete(key);
+        await this.performQuantityUpdate(...args);
+        if (!this._quantityQueue.has(key)) {
+          const input = this.querySelector(`input[name="updates[]"][data-id="${CSS.escape(key)}"]`);
+          if (input) {
+            input.removeAttribute('data-materia-desired-quantity');
+            input.removeAttribute('aria-busy');
+            if (input.dataset.value != null) input.value = input.dataset.value;
+          }
+        }
+      }
+    } finally {
+      this._quantityQueue.clear();
+      this._quantityRunning = false;
+      this.removeAttribute('aria-busy');
+    }
+  }
+
+  performQuantityUpdate(id, quantity, currentQuantity, _this, name) {
     quantity = quantity ? quantity : 0;
     const body = JSON.stringify({
       id,
@@ -626,7 +677,6 @@ class CartNotification extends HTMLElement {
     if (cart_item && Number(quantity) === 0) cart_item.classList.add("loading");
     const cartRecommend = document.querySelector(".cart-recommend");
     // Keep open recommendations mounted while quantity changes.
-    const cart_free_ship = document.querySelector("free-ship-progress-bar");
     // Tag the whole cart-items element as "refreshing" so the fade /
     // spinner overlay covers the full list and stays visible across
     // the HTML swap — no flicker, smooth cross-fade.
@@ -643,21 +693,12 @@ class CartNotification extends HTMLElement {
     }, 8000);
     /* Stash on the element so .finally can clear it on success. */
     this.__cartWatchdog = _watchdog;
-    // Minimum fade display time so fast fetches still feel intentional
-    // rather than causing a single-frame flash on +/- quantity clicks.
-    const skeletonStart = Date.now();
-    const MIN_SKELETON_MS = 0;
-    const waitMinSkeleton = () => {
-      const elapsed = Date.now() - skeletonStart;
-      const delay = Math.max(0, MIN_SKELETON_MS - elapsed);
-      return new Promise((resolve) => setTimeout(resolve, delay));
-    };
-    fetch(`${routes?.cart_change_url}`, { ...fetchConfig(), ...{ body } })
+    return fetch(`${routes?.cart_change_url}`, { ...fetchConfig(), ...{ body } })
       .then((response) => {
+        if (response.ok === false) throw new Error(`Cart update failed: HTTP ${response.status}`);
         return response.text();
       })
       .then(async (state) => {
-        await waitMinSkeleton();
         /* Defensive JSON parse — Shopify can return an HTML error page
            (e.g. throttled, server hiccup, invalid session). Without
            this try/catch the parse throws, the rest of the flow
@@ -672,11 +713,11 @@ class CartNotification extends HTMLElement {
             "[cart] /cart/change returned non-JSON; aborting refresh",
             state ? state.slice(0, 200) : state
           );
-          return;
+          return false;
         }
         if (parsedState.errors) {
           this.updateMessageErrors(id, parsedState.errors, _this);
-          return;
+          return false;
         }
 
         /* === ISOLATED CLEANUP BLOCKS ============================
@@ -735,13 +776,6 @@ class CartNotification extends HTMLElement {
           }
         } catch (_) {}
 
-        // Header total (duplicate from original code)
-        try {
-          if (document.querySelector("header-total-price")) {
-            document.querySelector("header-total-price").updateTotal(parsedState);
-          }
-        } catch (_) {}
-
         // Free-shipping progress follows the new subtotal even when no section HTML is returned.
         try {
           const bar = document.querySelector("free-ship-progress-bar");
@@ -796,9 +830,6 @@ class CartNotification extends HTMLElement {
                     }
                   });
                 // Stable keyed rows preserve their paint layer and scroll position.
-                if (cart_free_ship) {
-                  cart_free_ship.init(parsedState.items_subtotal_price);
-                }
               } catch (perSectionErr) {
                 console.warn("[cart] section render failed for", section.id, perSectionErr);
               }
@@ -810,10 +841,12 @@ class CartNotification extends HTMLElement {
 
         try { this.cartAction(); } catch (_) {}
         try { if (typeof window.cdaTick === "function") window.cdaTick(); } catch (_) {}
+        return parsedState.item_count != null;
       })
       .catch((e) => {
         console.error('[cart] Quantity update failed:', e);
         this.updateMessageErrors(id, window.cartStrings?.error || e.message, _this);
+        return false;
       })
       .finally(() => {
         /* CRITICAL — clear the .cart-refreshing class FIRST so the
@@ -875,7 +908,7 @@ class CartNotification extends HTMLElement {
        doesn't blow up the whole drawer flow. */
     if (target && target.dataset) {
       const val = target.dataset.value;
-      if (val !== undefined) target.value = val;
+      if (val !== undefined) target.value = target.dataset.materiaDesiredQuantity ?? val;
     }
     const lineItemError = document.getElementById(
       `CartDrawer-LineItemError-${line}`

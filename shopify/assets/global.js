@@ -228,7 +228,7 @@ class SlideSection extends HTMLElement {
   }
 
   init() {
-    if (this.classList.contains('slideshow')) { this.initSlide(); return; }
+    if (this.classList.contains('slideshow') || this.classList.contains('swiper-cart-upsell')) { this.initSlide(); return; }
     if (document.body.classList.contains("index")) {
       let pos = window.pageYOffset;
       if (pos > 0 || document.body.classList.contains("swiper-lazy")) {

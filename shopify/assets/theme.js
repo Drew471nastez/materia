@@ -4607,8 +4607,8 @@ class ButtonSubmitBundle extends HTMLElement {
       );
 
       if (elementToReplace) {
-        elementToReplace.innerHTML =
-          html.querySelector("#minicart-form").innerHTML;
+        const incoming = html.querySelector("#minicart-form");
+        if (incoming && !window.materiaPatchDrawerCart?.(elementToReplace,incoming)) elementToReplace.innerHTML = incoming.innerHTML;
       }
     });
 
@@ -4855,8 +4855,8 @@ if (!customElements.get("product-form-quick-edit")) {
                   parsedState.sections[section.id],
                   "text/html"
                 );
-                elementToReplace.innerHTML =
-                  html.querySelector("#minicart-form").innerHTML;
+                const incoming = html.querySelector("#minicart-form");
+                if (incoming && !window.materiaPatchDrawerCart?.(elementToReplace,incoming)) elementToReplace.innerHTML = incoming.innerHTML;
               });
               if (this.cart && typeof this.cart.cartAction === "function") {
                 this.cart.cartAction();
@@ -7967,8 +7967,8 @@ if (!customElements.get("product-form")) {
                     "text/html"
                   );
                   if (elementToReplace) {
-                    elementToReplace.innerHTML =
-                      html.querySelector("#minicart-form").innerHTML;
+                    const incoming = html.querySelector("#minicart-form");
+                    if (incoming && !window.materiaPatchDrawerCart?.(elementToReplace,incoming)) elementToReplace.innerHTML = incoming.innerHTML;
                   }
                 });
                 this.cart.cartAction();
