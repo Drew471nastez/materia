@@ -32,6 +32,9 @@ const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
   assert.equal(await page.$eval('[data-card-style-live]',el=>el.textContent),'');
   await update({enable_custom_card_actions:true,card_atc_button:'auto'});
   assert.equal(await button.getAttribute('data-button-appearance'),'outline');
+  await page.$eval('.product-item',el=>{el.classList.remove('morden');el.classList.add('style-as-morden');});
+  await update({card_atc_button:'auto'});
+  assert.equal(await button.getAttribute('data-button-appearance'),'outline','current Modern markup follows the style default');
   assert.equal(await button.evaluate(el=>getComputedStyle(el).getPropertyValue('--mb-bg').trim()),'#aabbcc','picker values survive disabling');
   for (const color of ['transparent','rgba(0,0,0,0)','#12345600']) {
    await update({card_atc_bg:color});

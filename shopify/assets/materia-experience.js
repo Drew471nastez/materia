@@ -229,7 +229,7 @@
       const cardSettings = window.materiaCardSettings;
       if (cardSettings && button.closest('.product-item') && button.matches('button[name="add"], .product__add-cart, .product-item__button-submit')) {
         let choice = cardSettings.enable_custom_card_actions === true ? cardSettings.card_atc_button || 'auto' : 'primary';
-        if (choice === 'auto') choice = button.closest('.product-item')?.classList.contains('morden') ? 'outline' : 'primary';
+        if (choice === 'auto') choice = button.closest('.product-item')?.matches('.morden, .style-as-morden') ? 'outline' : 'primary';
         attr(button, 'data-theme-button', choice === 'primary' ? 'primary' : 'secondary');
         attr(button, 'data-button-role', choice === 'primary' ? 'primary' : 'secondary');
         attr(button, 'data-button-local-appearance', choice === 'outline' ? 'outline' : 'theme');
