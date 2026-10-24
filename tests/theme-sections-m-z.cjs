@@ -32,12 +32,6 @@ const snippetsDir = path.join(root, 'snippets');
 // file -> { 'block_type:id' or 'section:id': reason } for visible settings that
 // are not read on purpose.
 const ALLOW = {
-  'main-product.storelib': {
-    'upsell_pro:source': 'The upsell block shows the products picked under Manual products either way (snippets/upsell-pro, shared with featured-product); its info says so.',
-  },
-  'testimon4.storelib': {
-    'section:button_height': 'The button is on the theme button contract, whose line height is Theme settings > Buttons; its info says so.',
-  },
   'theme-header.storelib': {
     'menu_badges:hot': 'Read as badges_st[label] in snippets/horizontal-menu, label being a menu block\'s Badge label value.',
     'menu_badges:new': 'Read as badges_st[label] in snippets/horizontal-menu.',

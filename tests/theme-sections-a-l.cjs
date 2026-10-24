@@ -29,11 +29,7 @@ const read = f => fs.readFileSync(path.join(root, f), 'utf8');
 const FILES = fs.readdirSync(path.join(root, 'sections')).filter(f => /^[a-l][\w-]*\.storelib$/.test(f)).sort();
 
 // file -> { 'block/id' or 'section/id': reason }
-const ALLOW = {
-  'featured-product.storelib': {
-    'upsell_pro/source': 'The upsell list shows the picked products only; the shared upsell snippet adds no recommendations on Storelib, and the info text says so.',
-  },
-};
+const ALLOW = {};
 // Storelib-format sections: the engine applies its own `animation` select.
 const ENGINE_IDS = new Set(['animation']);
 

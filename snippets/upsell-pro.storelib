@@ -67,6 +67,53 @@
   if handles_str != ''
     assign has_any = true
   endif
+
+  comment
+    Auto: after the manual products, fill up to the maximum with products
+    recommended for this one: the shop's recommendations when Storelib draws
+    this through /recommendations/products, else the product's first
+    collection, else all products. Never the product itself, a manual pick
+    twice, or (with Hide unavailable) a product that cannot be bought.
+  endcomment
+  assign auto_pick = ','
+  if s.source == 'auto'
+    assign auto_needed = max | minus: handles.size
+    if auto_needed > 0
+      assign auto_source = collections.all.products
+      if current_product.collections.first.products.size > 0
+        assign auto_source = current_product.collections.first.products
+      endif
+      if recommendations.performed and recommendations.products_count > 0
+        assign auto_source = recommendations.products
+      endif
+      assign auto_count = 0
+      assign picked_str = ',' | append: handles_str
+      for ap in auto_source
+        if auto_count >= auto_needed
+          break
+        endif
+        assign ap_ok = true
+        if ap.handle == blank or ap.id == current_product.id or ap.handle == current_product.handle
+          assign ap_ok = false
+        endif
+        if hide_unavailable and ap.available == false
+          assign ap_ok = false
+        endif
+        assign ap_key = ',' | append: ap.handle | append: ','
+        if picked_str contains ap_key
+          assign ap_ok = false
+        endif
+        if ap_ok
+          assign picked_str = picked_str | append: ap.handle | append: ','
+          assign auto_pick = auto_pick | append: ap.handle | append: ','
+          assign auto_count = auto_count | plus: 1
+        endif
+      endfor
+      if auto_count > 0
+        assign has_any = true
+      endif
+    endif
+  endif
 -%}
 
 {%- if has_any -%}
@@ -265,6 +312,14 @@
       {%- assign p = s.manual_product_6 -%}
       {%- render 'upsell-pro-card', p: p, s: s, is_first: false, cur_id: cur_id, hide_current: hide_current, hide_unavailable: hide_unavailable -%}
       {%- assign rendered = rendered | plus: 1 -%}
+    {%- endif -%}
+    {%- if auto_pick != ',' -%}
+      {%- for p in auto_source -%}
+        {%- assign ap_key = ',' | append: p.handle | append: ',' -%}
+        {%- if auto_pick contains ap_key -%}
+          {%- render 'upsell-pro-card', p: p, s: s, is_first: false, cur_id: cur_id, hide_current: true, hide_unavailable: hide_unavailable -%}
+        {%- endif -%}
+      {%- endfor -%}
     {%- endif -%}
   </div>
 </div>
