@@ -834,22 +834,39 @@ eventCollectionShopify.init();
         }
         this.placeSidebar();
       };
+      // One measure per frame at most, after the scroll or size change it
+      // follows.
       let frame = 0;
-      const onScroll = () => {
+      const schedule = () => {
         if (frame) return;
         frame = requestAnimationFrame(() => {
           frame = 0;
           this.placeSidebar();
         });
       };
+      const onScroll = schedule;
+      const onResize = schedule;
       wide.addEventListener('change', onWidth);
       window.addEventListener('scroll', onScroll, { passive: true });
-      window.addEventListener('resize', onScroll, { passive: true });
+      window.addEventListener('resize', onResize, { passive: true });
+      // A group opening or closing, a filter redrawing the list or the grid,
+      // or a late picture changes the heights the pin depends on.
+      let sizes = null;
+      if (typeof ResizeObserver === 'function') {
+        sizes = new ResizeObserver(schedule);
+        const panel = this.filterPanel;
+        if (panel) sizes.observe(panel);
+        const results = this.querySelector('.facets__results');
+        if (results) sizes.observe(results);
+      }
+      this._schedulePlace = schedule;
       this._layoutWatch = () => {
         wide.removeEventListener('change', onWidth);
         window.removeEventListener('scroll', onScroll);
-        window.removeEventListener('resize', onScroll);
+        window.removeEventListener('resize', onResize);
+        if (sizes) sizes.disconnect();
         if (frame) cancelAnimationFrame(frame);
+        this._schedulePlace = null;
       };
       this.placeSidebar();
     }
@@ -859,17 +876,9 @@ eventCollectionShopify.init();
       this._layoutWatch = null;
     }
 
-    /* The sidebar sticks just under whatever header is pinned at the top of
-       the window (none, or a sticky header that shows and hides). */
-    placeSidebar() {
-      const panel = this.filterPanel;
-      if (!panel || !panel.matches('.facets-panel--vertical') || !this.panelInline) {
-        if (this._stickyTop != null) {
-          this.style.removeProperty('--facets-sticky-top');
-          this._stickyTop = null;
-        }
-        return;
-      }
+    /* The height of whatever header is pinned at the top of the window
+       (none, or a sticky header that shows and hides). */
+    headerBottom() {
       let top = 0;
       document.querySelectorAll('.shopify-section-group-header-group, sticky-header, header-sticky').forEach((el) => {
         const position = getComputedStyle(el).position;
@@ -877,11 +886,75 @@ eventCollectionShopify.init();
         const box = el.getBoundingClientRect();
         if (box.height > 0 && box.top <= 1 && box.bottom > top) top = box.bottom;
       });
-      top = Math.max(0, Math.min(Math.round(top), Math.round(window.innerHeight / 2)));
-      if (top !== this._stickyTop) {
-        this._stickyTop = top;
-        this.style.setProperty('--facets-sticky-top', `${top}px`);
+      return Math.max(0, Math.min(Math.round(top), Math.round(window.innerHeight / 2)));
+    }
+
+    setPin(panel, mode, values = {}) {
+      if (!mode) {
+        if (panel.hasAttribute('data-facets-pin')) {
+          panel.removeAttribute('data-facets-pin');
+          ['--facets-pin-top', '--facets-pin-bottom', '--facets-pin-offset'].forEach((name) => panel.style.removeProperty(name));
+        }
+        return;
       }
+      Object.keys(values).forEach((name) => {
+        const now = parseFloat(panel.style.getPropertyValue(name));
+        if (Number.isNaN(now) || Math.abs(now - values[name]) >= 0.5) panel.style.setProperty(name, `${values[name]}px`);
+      });
+      if (panel.getAttribute('data-facets-pin') !== mode) panel.setAttribute('data-facets-pin', mode);
+    }
+
+    /* The sidebar on a computer, without a scrollbar of its own. Shorter
+       than the window (under the header), it sticks under the header.
+       Taller, it is pinned by the scroll direction. Going down
+       (data-facets-pin="down") its bottom is held 24px above the window's
+       bottom (sticky top = window - gap - height); going up ("up") its top
+       is held 24px under the header (sticky bottom = window - header - gap -
+       height). Between the two it moves with the page. Its natural place in
+       the column (--facets-pin-offset: margin-top going down, margin-bottom
+       going up, as sticky positioning needs room on the side it is pushed
+       to) follows where it is drawn, so a change of direction never leaves
+       it behind for a frame and nothing jumps; the browser itself moves it
+       with the page on the compositor. */
+    placeSidebar() {
+      const panel = this.filterPanel;
+      if (!panel || !panel.matches('.facets-panel--vertical') || !this.panelInline) {
+        if (this._stickyTop != null) {
+          this.style.removeProperty('--facets-sticky-top');
+          this._stickyTop = null;
+        }
+        if (panel) this.setPin(panel, null);
+        this._lastY = null;
+        return;
+      }
+      const header = this.headerBottom();
+      if (header !== this._stickyTop) {
+        this._stickyTop = header;
+        this.style.setProperty('--facets-sticky-top', `${header}px`);
+      }
+      const GAP = 24;
+      const y = window.scrollY;
+      const dir = this._lastY == null ? 0 : Math.sign(y - this._lastY);
+      this._lastY = y;
+      const view = window.innerHeight;
+      const height = panel.offsetHeight;
+      const topGap = header + GAP;
+      const results = this.querySelector('.facets__results');
+      const room = Math.max(0, (results ? results.offsetHeight : 0) - height);
+      if (height + topGap + GAP <= view || room <= 0) {
+        this.setPin(panel, null);
+        return;
+      }
+      const current = panel.getAttribute('data-facets-pin');
+      const mode = dir > 0 ? 'down' : dir < 0 ? 'up' : current || 'down';
+      const column = panel.parentElement.getBoundingClientRect().top;
+      const drawn = Math.min(Math.max(0, panel.getBoundingClientRect().top - column), room);
+      const offset = Math.round((mode === 'down' ? drawn : room - drawn) * 100) / 100;
+      this.setPin(panel, mode, {
+        '--facets-pin-top': Math.round(view - GAP - height),
+        '--facets-pin-bottom': Math.round(view - topGap - height),
+        '--facets-pin-offset': offset,
+      });
     }
 
     /* The open drawer keeps focus inside it: Tab from the last control goes
@@ -1283,6 +1356,16 @@ eventCollectionShopify.init();
       root.placeSidebar();
     });
   });
+
+  // The builder draws a section again in place, or a filter redraws the
+  // list: the sidebar is measured and anchored again.
+  const replace = () => {
+    document.querySelectorAll('facets-root').forEach((root) => {
+      if (typeof root._schedulePlace === 'function') root._schedulePlace();
+    });
+  };
+  ['storelib:section-load', 'shopify:section:load', 'facets:updated'].forEach((name) => document.addEventListener(name, replace));
+  window.addEventListener('load', replace);
 
   window.addEventListener('popstate', () => {
     document.querySelectorAll('facets-root').forEach((root) => {

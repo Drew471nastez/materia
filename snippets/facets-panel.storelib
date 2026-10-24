@@ -76,6 +76,7 @@
           assign pv_in = 0
           assign pv_out = 0
           assign pv_max = 0
+          assign pv_min = -1
           assign pv_names = '|'
           assign pv_vals = '|'
           assign pv_tags = '|'
@@ -102,6 +103,10 @@
             endif
             if pv_p.price > pv_max
               assign pv_max = pv_p.price
+            endif
+            assign pv_low = pv_p.price_min | default: pv_p.price
+            if pv_min < 0 or pv_low < pv_min
+              assign pv_min = pv_low
             endif
             for opt in pv_opts
               assign pv_first = opt.values.first
@@ -162,6 +167,10 @@
             assign pv_group_list = pv_groups | split: ','
           endif
           assign pv_range = pv_max | divided_by: 100.0 | ceil
+          assign pv_floor = 0
+          if pv_min > 0
+            assign pv_floor = pv_min | divided_by: 100
+          endif
         -%}
         {%- for pv_group in pv_group_list -%}
           {%- liquid
@@ -219,7 +228,7 @@
                       <span class="facets-price__name">{{ section_st.price_min_label | default: 'From' }}</span>
                       <span class="facets-price__box">
                         <span class="facets-price__currency" aria-hidden="true">{{ cart.currency.symbol }}</span>
-                        <input class="facets-price__input" type="number" name="filter.v.price.gte" inputmode="decimal" min="0" max="{{ pv_range }}" step="any" placeholder="0" data-facets-key="price-min">
+                        <input class="facets-price__input" type="number" name="filter.v.price.gte" inputmode="decimal" min="0" max="{{ pv_range }}" step="any" placeholder="{{ pv_floor }}" data-facets-key="price-min">
                       </span>
                     </label>
                     <label class="facets-price__field">
@@ -351,13 +360,44 @@
             {%- if filter.type == 'price_range' -%}
               {%- liquid
                 assign range_max = filter.range_max | divided_by: 100.0 | ceil
+                comment
+                  The lowest price shown as the From hint: the filter's own
+                  range_min when the platform gives one, else the lowest
+                  price among the products listed.
+                endcomment
+                assign range_low = -1
+                if filter.range_min != blank
+                  assign range_low = filter.range_min
+                else
+                  for p in results.products limit: 50
+                    assign p_low = p.price_min | default: p.price
+                    if range_low < 0 or p_low < range_low
+                      assign range_low = p_low
+                    endif
+                  endfor
+                endif
+                assign range_min = 0
+                if range_low > 0
+                  assign range_min = range_low | divided_by: 100
+                endif
                 assign min_shown = ''
                 assign max_shown = ''
+                comment
+                  A whole amount shows as 100, not 100.0; cents as 99.5.
+                endcomment
                 if filter.min_value.value != null
-                  assign min_shown = filter.min_value.value | divided_by: 100.0
+                  assign min_shown = filter.min_value.value | divided_by: 100
+                  assign min_back = min_shown | times: 100
+                  if min_back != filter.min_value.value
+                    assign min_shown = filter.min_value.value | divided_by: 100.0
+                  endif
                 endif
                 if filter.max_value.value != null
-                  assign max_shown = filter.max_value.value | divided_by: 100.0
+                  assign max_shown = filter.max_value.value | divided_by: 100
+                  assign max_back = max_shown | times: 100
+                  if max_back != filter.max_value.value
+                    assign max_shown = filter.max_value.value | divided_by: 100.0
+                  endif
                 endif
               -%}
               <form class="facets-price" action="{{ base_url }}" method="get" data-facets-price>
@@ -375,7 +415,7 @@
                         min="0"
                         max="{{ range_max }}"
                         step="any"
-                        placeholder="0"
+                        placeholder="{{ range_min }}"
                         value="{{ min_shown }}"
                         data-facets-key="price-min"
                       >

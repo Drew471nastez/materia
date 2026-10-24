@@ -31,14 +31,38 @@
     assign use_fallback_sort = true
     assign sort_by = results.sort_by | default: 'relevance'
   endif
+  comment
+    Toolbar button style: theme (Theme settings > Buttons for Filter, a
+    field for Sort by), outline, minimal (text with its icon) or pill.
+  endcomment
+  assign tb_style = section_st.toolbar_button_style | default: 'theme'
   assign fallback_sorts = 'relevance,price-ascending,price-descending,title-ascending,title-descending,created-descending' | split: ','
+  comment
+    filter_query: the filters that are on, so a Sort by link keeps them
+    without the script too (with it, collection.js reads the address).
+  endcomment
   assign active_count = 0
+  assign filter_query = ''
   for filter in results.filters
     assign active_count = active_count | plus: filter.active_values.size
     if filter.type == 'price_range'
       if filter.min_value.value != null or filter.max_value.value != null
         assign active_count = active_count | plus: 1
       endif
+      if filter.min_value.value != null
+        assign fq_amount = filter.min_value.value | divided_by: 100.0
+        assign filter_query = filter_query | append: '&' | append: filter.min_value.param_name | append: '=' | append: fq_amount
+      endif
+      if filter.max_value.value != null
+        assign fq_amount = filter.max_value.value | divided_by: 100.0
+        assign filter_query = filter_query | append: '&' | append: filter.max_value.param_name | append: '=' | append: fq_amount
+      endif
+    else
+      for value in filter.active_values
+        assign fq_param = value.param_name | default: filter.param_name
+        assign fq_value = value.value | url_encode
+        assign filter_query = filter_query | append: '&' | append: fq_param | append: '=' | append: fq_value
+      endfor
     endif
   endfor
   assign sort_label = 'products.facets.sort_by_label' | t
@@ -66,13 +90,13 @@
   endif
 -%}
 {%- if part != 'active' -%}
-<div class="facets-toolbar facets-toolbar--{{ filter_layout }}">
+<div class="facets-toolbar facets-toolbar--{{ filter_layout }}" data-toolbar-style="{{ tb_style }}">
   {%- if enable_filtering -%}
     <button
       type="button"
-      class="facets-toolbar__filter btn btn-secondary"
+      {% if tb_style == 'theme' %}class="facets-toolbar__filter btn btn-secondary"
       data-theme-button="secondary"
-      data-button-role="secondary"
+      data-button-role="secondary"{% else %}class="facets-toolbar__filter facets-tbtn facets-tbtn--{{ tb_style }}"{% endif %}
       popovertarget="FacetPanel-{{ section_id }}"
       aria-controls="FacetPanel-{{ section_id }}"
       aria-expanded="false"
@@ -95,7 +119,7 @@
       <div class="facets-sort">
         <button
           type="button"
-          class="facets-sort__trigger input-style"
+          class="facets-sort__trigger{% if tb_style == 'theme' %} input-style{% else %} facets-tbtn facets-tbtn--{{ tb_style }}{% endif %}"
           popovertarget="FacetSort-{{ section_id }}"
           aria-controls="FacetSort-{{ section_id }}"
           aria-expanded="false"
@@ -134,7 +158,7 @@
                   <li>
                     <a
                       class="facets-sort__option"
-                      href="{{ base_url }}?{% if terms_url != blank %}q={{ terms_url }}&{% endif %}sort_by={{ value }}"
+                      href="{{ base_url }}?{% if terms_url != blank %}q={{ terms_url }}&{% endif %}sort_by={{ value }}{{ filter_query | escape }}"
                       data-facets-sort="{{ value }}"
                       data-facets-key="sort-{{ value }}"
                       {% if value == sort_by %}aria-current="true"{% endif %}
@@ -147,7 +171,7 @@
                 <li>
                   <a
                     class="facets-sort__option"
-                    href="{{ base_url }}?{% if terms_url != blank %}q={{ terms_url }}&{% endif %}sort_by={{ option.value | escape }}"
+                    href="{{ base_url }}?{% if terms_url != blank %}q={{ terms_url }}&{% endif %}sort_by={{ option.value | escape }}{{ filter_query | escape }}"
                     data-facets-sort="{{ option.value | escape }}"
                     data-facets-key="sort-{{ option.value | escape }}"
                     {% if option.value == sort_by %}aria-current="true"{% endif %}

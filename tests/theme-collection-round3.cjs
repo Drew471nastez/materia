@@ -14,7 +14,8 @@
       still without a sideways jump, keeps focus inside (Tab, Shift+Tab),
       closes on Escape with focus back on Filter, fits 375px with its own
       scroll and the safe areas, stops moving under reduced motion; the
-      computer sidebar sticks under a sticky header and scrolls on its own.
+      computer sidebar sticks under a sticky header (round 4: with no scrollbar of
+      its own).
    4. Filter is a theme button: data-theme-button, .btn-secondary, and its
       size, corners and colours follow Theme settings > Buttons; it opens
       the drawer every time.
@@ -257,11 +258,13 @@ const headingState = p => p.evaluate(() => {
       const desk = await browser.newContext({viewport: {width: 1366, height: 700}});
       const d = await desk.newPage();
       const many = [...FULL, ...FULL.map(x => ({...x, id: x.id + 10, handle: x.handle + 'b'})), ...FULL.map(x => ({...x, id: x.id + 20, handle: x.handle + 'c'}))];
-      await serve(d, '<div class="shopify-section-group-header-group" style="position:sticky;top:0;z-index:9;height:80px;background:#fff">Header</div>' + renderCollection({products: many}));
-      await d.evaluate(() => window.scrollTo(0, 900)); await d.waitForTimeout(250);
-      const side = await d.$eval('[data-facets-panel]', el => ({top: el.getBoundingClientRect().top, max: parseFloat(getComputedStyle(el).maxHeight), scroll: getComputedStyle(el).overflowY, contain: getComputedStyle(el).overscrollBehaviorY}));
+      // Round 4: no scrollbar of its own (a tall sidebar is pinned to the
+      // window's edges instead, tests/theme-collection-round4.cjs).
+      await serve(d, '<div class="shopify-section-group-header-group" style="position:sticky;top:0;z-index:9;height:80px;background:#fff">Header</div>' + renderCollection({products: many, extra: {default_filter: 'close_all'}}));
+      await d.evaluate(() => window.scrollTo(0, 900)); await d.waitForTimeout(400);
+      const side = await d.$eval('[data-facets-panel]', el => ({top: el.getBoundingClientRect().top, max: getComputedStyle(el).maxHeight, scroll: getComputedStyle(el).overflowY}));
       assert.ok(Math.abs(side.top - 104) <= 1, 'sticks 24px under the 80px header: ' + side.top);
-      assert.ok(side.max <= 700 - 80 - 48 + 1 && side.scroll === 'auto' && side.contain === 'contain', 'scrolls on its own inside the window');
+      assert.ok(side.max === 'none' && side.scroll === 'visible', 'no inner scrollbar');
       await desk.close();
     });
 
