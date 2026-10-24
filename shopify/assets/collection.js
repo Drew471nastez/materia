@@ -1126,3 +1126,45 @@ eventCollectionShopify.init();
     });
   });
 })();
+
+/* Materia: the Sort by sheet on phones follows the finger like the theme's
+   other bottom sheets (shared materiaSheetDrag in materia-experience.js):
+   pull it down from its grabber or title, or from the list at its top. */
+(() => {
+  if (window.__materiaFacetsSortDrag) return;
+  const bind = () => {
+    if (window.__materiaFacetsSortDrag || typeof window.materiaSheetDrag !== 'function') return;
+    window.__materiaFacetsSortDrag = true;
+    const phone = () => window.matchMedia('(max-width: 749.98px)').matches;
+    window.materiaSheetDrag({
+      root: document,
+      sheet: (target) => {
+        const sheet = target.closest && target.closest('[data-facets-sort-panel]');
+        return sheet && phone() && sheet.matches(':popover-open') ? sheet : null;
+      },
+      handle: (target) => !!(target.closest && target.closest('.facets-sheet__head') && !target.closest('.facets-sheet__close')),
+      blocked: (target) => !!(target.closest && target.closest('.facets-sheet__close')),
+      progress: (sheet, p, dragging) => {
+        if (dragging || p > 0) sheet.style.setProperty('--sheet-pull', p.toFixed(3));
+        else sheet.style.removeProperty('--sheet-pull');
+      },
+      dismiss: (sheet) => {
+        // Already off screen: close without the slide out, then reset.
+        sheet.classList.add('is-drag-closed');
+        sheet.hidePopover();
+        sheet.style.removeProperty('--sheet-pull');
+      },
+    });
+    document.addEventListener(
+      'beforetoggle',
+      (event) => {
+        if (event.newState === 'open' && event.target.hasAttribute && event.target.hasAttribute('data-facets-sort-panel')) {
+          event.target.classList.remove('is-drag-closed');
+        }
+      },
+      true
+    );
+  };
+  bind();
+  if (!window.__materiaFacetsSortDrag) document.addEventListener('DOMContentLoaded', bind, { once: true });
+})();
