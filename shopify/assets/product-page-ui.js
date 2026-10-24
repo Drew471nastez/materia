@@ -255,6 +255,67 @@
     if (t.tagName === "DIALOG" && t.classList.contains("mt-sheet")) closeSheet(t);
   });
 
+  /* Tab and Shift+Tab go round the open sheet: a modal dialog alone lets
+     focus leave for the browser's own bar after the last control. */
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Tab") return;
+    var open = document.querySelectorAll("dialog.mt-sheet[open]");
+    var dialog = open[open.length - 1];
+    if (!dialog) return;
+    var items = Array.prototype.filter.call(
+      dialog.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'),
+      function (el) { return el.offsetWidth || el.offsetHeight || el.getClientRects().length; }
+    );
+    if (!items.length) return;
+    var first = items[0], last = items[items.length - 1];
+    var active = document.activeElement;
+    if (!dialog.contains(active)) { e.preventDefault(); first.focus(); return; }
+    if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+  });
+
+  /* Tabs inside a sheet (Size Chart Popup: Sizes / How to measure):
+     [data-mt-tabs] holding [data-mt-tab] buttons whose aria-controls name
+     their panels. Arrow keys, Home and End move between them. */
+  function selectTab(tab, focus) {
+    var list = tab && tab.closest("[data-mt-tabs]");
+    if (!list) return;
+    list.querySelectorAll("[data-mt-tab]").forEach(function (t) {
+      var on = t === tab;
+      t.classList.toggle("is-active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+      t.tabIndex = on ? 0 : -1;
+      var panel = document.getElementById(t.getAttribute("aria-controls"));
+      if (panel) {
+        panel.hidden = !on;
+        panel.classList.toggle("is-active", on);
+      }
+    });
+    if (focus) tab.focus();
+  }
+  document.addEventListener("click", function (e) {
+    var tab = e.target && e.target.closest ? e.target.closest("[data-mt-tab]") : null;
+    if (!tab) return;
+    e.preventDefault();
+    lastHandled = now();
+    selectTab(tab);
+  });
+  document.addEventListener("keydown", function (e) {
+    var tab = e.target && e.target.closest ? e.target.closest("[data-mt-tab]") : null;
+    if (!tab) return;
+    var tabs = Array.prototype.slice.call(tab.closest("[data-mt-tabs]").querySelectorAll("[data-mt-tab]"));
+    var i = tabs.indexOf(tab);
+    var rtl = getComputedStyle(tab).direction === "rtl";
+    var next = null;
+    if (e.key === "ArrowRight") next = tabs[(i + (rtl ? -1 : 1) + tabs.length) % tabs.length];
+    else if (e.key === "ArrowLeft") next = tabs[(i + (rtl ? 1 : -1) + tabs.length) % tabs.length];
+    else if (e.key === "Home") next = tabs[0];
+    else if (e.key === "End") next = tabs[tabs.length - 1];
+    if (!next) return;
+    e.preventDefault();
+    selectTab(next, true);
+  });
+
   /* ---------------------------------------------------------------------
      3. Lightbox for product media: [data-mt-lightbox] marks a gallery whose
         pictures open full screen. Native scroll snap does the swipe, so it
@@ -456,6 +517,12 @@
           setAcc(details, !wasOpen);
         };
       }
+      var tabBtn = target && target.closest ? target.closest("[data-mt-tab]") : null;
+      if (tabBtn) {
+        return function () {
+          if (tabBtn.getAttribute("aria-selected") !== "true") selectTab(tabBtn);
+        };
+      }
       var opener = target && target.closest ? target.closest("[data-mt-sheet-open]") : null;
       if (opener) {
         return function () {
@@ -540,6 +607,33 @@
         run();
       }, 200);
     }, true);
+  } else {
+    /* Live site: a tap on a paused gallery video plays it. A phone's own
+       controls only show themselves on the first tap, which read as the
+       video not playing at all. A mouse click the controls already
+       answered (the video changed) is left alone, so nothing runs twice. */
+    var livePress = null;
+    window.addEventListener("pointerdown", function (e) {
+      livePress = null;
+      if (e.button !== 0 || e.isPrimary === false) return;
+      var video = e.target && e.target.closest ? e.target.closest("video") : null;
+      if (!video || !video.closest("[data-mt-video]")) return;
+      var r = video.getBoundingClientRect();
+      if (video.controls && e.clientY > r.bottom - 48) return; // the control bar is the browser's
+      livePress = { x: e.clientX, y: e.clientY, video: video, wasPaused: video.paused, touch: e.pointerType !== "mouse" };
+    }, true);
+    window.addEventListener("pointercancel", function () { livePress = null; }, true);
+    window.addEventListener("pointerup", function (e) {
+      var p = livePress;
+      livePress = null;
+      if (!p || Math.abs(e.clientX - p.x) > 6 || Math.abs(e.clientY - p.y) > 6) return;
+      setTimeout(function () {
+        var v = p.video;
+        if (!v.isConnected || v.paused !== p.wasPaused) return; // the browser answered
+        if (v.paused) playWithSound(v);
+        else if (!p.touch || !v.controls) v.pause(); // a phone's controls carry their own pause
+      }, 300);
+    }, true);
   }
 
   /* ---------------------------------------------------------------------
@@ -581,11 +675,23 @@
   function pauseGalleryMedia(root) {
     root.querySelectorAll("video.media-video, iframe.media-video").forEach(pauseMedia);
   }
+  /* A gallery video's own controls (play, the timeline, sound, full screen)
+     can stop answering in Chrome once its slide has been moved into view
+     by the slider: nothing plays, nothing scrubs, on the live site and in
+     the builder alike. Turning the controls off and on again draws them
+     afresh, so they are re-armed each time the video comes into view. */
+  function rearmControls(el) {
+    if (el.tagName !== "VIDEO" || !el.hasAttribute("controls")) return;
+    el.controls = false;
+    void el.offsetWidth;
+    el.controls = true;
+  }
   var observer = null;
   function onIntersect(entries) {
     entries.forEach(function (entry) {
       var el = entry.target;
       var visible = entry.isIntersecting && entry.intersectionRatio >= 0.6;
+      if (visible && !el._mtVisible) rearmControls(el);
       el._mtVisible = visible;
       var gallery = el.closest("[data-mt-video]");
       var autoplay = gallery && gallery.getAttribute("data-mt-video") === "autoplay";

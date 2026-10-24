@@ -49,12 +49,17 @@ const render=(name,ctx)=>h.renderTemplate(h.templateOf(read('snippets/'+name+'.s
   assert(render('product-size-chart-content',{product:productRef,pages}).includes('Product chart'));checks++;
   assert(!render('size-guide-sheet',{product:{metafields:{}},block:{id:'guide',settings:{}},section:{id:'main'}}).includes('<dialog'));checks++;
   const popup=render('size-chart-popup-import',{product:{metafields:{custom:{size_chart:chart}}},block:{id:'popup',settings:{enable_size_popup:true}}});
-  await page.setContent(popup);
-  await page.locator('.scp__trigger').click();await page.waitForTimeout(40);
-  assert(await page.evaluate(()=>document.documentElement.classList.contains('scp-lock')));
-  await page.evaluate(()=>{document.getElementById('SC-popup').remove();document.dispatchEvent(new CustomEvent('storelib:section-load'));});
-  assert.equal(await page.locator('#SCDialog-popup').count(),0);
-  assert.equal(await page.evaluate(()=>document.documentElement.classList.contains('scp-lock')),false);checks++;
+  /* The popup is a <dialog> sheet opened by product-page-ui.js and kept in
+     place, so a redraw that removes the block removes its dialog and lock. */
+  {const sheet=await browser.newPage();
+  await sheet.setContent(popup);
+  await sheet.addScriptTag({content:read('shopify/assets/product-page-ui.js')});
+  await sheet.locator('.scp__trigger').click();await sheet.waitForTimeout(40);
+  assert(await sheet.evaluate(()=>document.getElementById('SCDialog-popup').open&&document.documentElement.classList.contains('mt-lock')));
+  await sheet.evaluate(()=>{document.getElementById('SC-popup').remove();document.dispatchEvent(new CustomEvent('storelib:section-load'));});
+  assert.equal(await sheet.locator('#SCDialog-popup').count(),0);
+  assert.equal(await sheet.evaluate(()=>document.documentElement.classList.contains('mt-lock')),false);checks++;
+  await sheet.close();}
   await page.setContent('<button data-mt-sheet-open aria-controls="test-sheet">Open</button><section id="product"><dialog class="mt-sheet" id="test-sheet"><div class="mt-sheet__panel">Size guide</div></dialog></section>');
   await page.addScriptTag({content:read('shopify/assets/product-page-ui.js')});
   await page.locator('button').click();await page.waitForTimeout(40);

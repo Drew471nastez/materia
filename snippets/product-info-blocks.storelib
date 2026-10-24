@@ -499,35 +499,71 @@
             {%- when 'short_description' -%}
               {%- comment -%}
                 Short description: the block's own text when filled in, else the
-                product's short_description metafield, else the start of the
-                product description.
+                product's short_description field, else the start of the
+                product's Storelib description, cut at a word near Length
+                (characters) and ended with an ellipsis. Paragraphs and line
+                breaks become spaces, so words never run together. When the
+                whole description fits it counts as the description, and a
+                later Product description block does not repeat it; a cut
+                excerpt does not, so the full text can still follow.
               {%- endcomment -%}
               {%- liquid
                 assign sd_len = block_st.excerpt_length | default: 150 | plus: 0
+                if sd_len < 20
+                  assign sd_len = 20
+                endif
                 assign sd_html = ''
+                assign sd_source = ''
                 assign sd_custom = block_st.custom_text | strip_html | strip
                 if sd_custom != blank
                   assign sd_html = block_st.custom_text
                 elsif product.metafields.custom.short_description != blank
-                  assign sd_html = product.metafields.custom.short_description | strip_html | truncate: sd_len
+                  assign sd_source = product.metafields.custom.short_description.value | default: product.metafields.custom.short_description
                 elsif product.description != blank and pib_drawn contains 'description,'
                   comment
                     An earlier block shows the whole description: no second copy.
                   endcomment
                   assign sd_skipped = true
                 elsif product.description != blank
-                  assign sd_html = product.description | strip_html | strip | truncate: sd_len
-                  assign pib_drawn = pib_drawn | append: 'description,'
+                  assign sd_source = product.description
+                  assign sd_from_desc = true
                 endif
+                if sd_source != blank
+                  assign sd_text = sd_source | replace: '</p>', ' </p>' | replace: '<br', ' <br' | replace: '</li>', ' </li>' | replace: '</h', ' </h' | replace: '</div>', ' </div>' | strip_html | strip_newlines | replace: '&nbsp;', ' ' | strip
+                  if sd_text.size > sd_len
+                    assign sd_cut = sd_text | truncate: sd_len, ''
+                    assign sd_words = sd_cut | split: ' '
+                    if sd_words.size > 1
+                      assign sd_cut = ''
+                      for sd_word in sd_words
+                        unless forloop.last
+                          assign sd_cut = sd_cut | append: sd_word | append: ' '
+                        endunless
+                      endfor
+                    endif
+                    assign sd_html = sd_cut | strip | append: '…'
+                  else
+                    assign sd_html = sd_text
+                    if sd_from_desc
+                      assign pib_drawn = pib_drawn | append: 'description,'
+                    endif
+                  endif
+                endif
+                assign sd_from_desc = false
               -%}
-              {%- if sd_skipped -%}{%- if request.design_mode -%}<p class="pib-note" {{ block.shopify_attributes }}>Hidden: an earlier block already shows the product description. Add your own text to show this block.</p>{%- endif -%}{%- assign sd_skipped = false -%}{%- endif -%}
-              {%- if sd_html != blank -%}
+              {%- if sd_skipped -%}
+                {%- if request.design_mode -%}<p class="pib-note" {{ block.shopify_attributes }}>Hidden: an earlier block already shows the product description. Add your own text to show this block.</p>{%- endif -%}
+                {%- assign sd_skipped = false -%}
+              {%- elsif sd_html != blank -%}
                 <div
                   {{ block.shopify_attributes }}
                   class="product_detail-des rte mb-22{% if enable_skeleton_loading %} skeleton-loading{% endif %}"
+                  data-product-short-description
                 >
-                  {{ sd_html }}
+                  {%- if sd_custom != blank -%}{{ sd_html }}{%- else -%}<p>{{ sd_html }}</p>{%- endif -%}
                 </div>
+              {%- elsif request.design_mode -%}
+                <p class="pib-note" {{ block.shopify_attributes }}>Short description: this product has no description yet. Add one to the product in Storelib, or write your own text here.</p>
               {%- endif -%}
             {%- when 'model_size' -%}
               {%- if product.metafields.custom.model_size -%}
@@ -546,6 +582,14 @@
                     </div>
                   {% endif %}
                   <div class="model-information">
+                    {%- liquid
+                      assign ms_value = product.metafields.custom.model_size.value | default: product.metafields.custom.model_size
+                      assign ms_plain = true
+                      if ms_value.model_is_wearing != blank or ms_value.model_height != blank or ms_value.model_weight != blank or ms_value.model_shoulder_width != blank or ms_value.model_three_round_measurements != blank
+                        assign ms_plain = false
+                      endif
+                    -%}
+                    {%- if ms_plain -%}<p class="model-text m-0">{{ ms_value | strip_html | escape }}</p>{%- endif -%}
                     {% if product.metafields.custom.model_size.value.model_is_wearing != blank %}
                       <div class="model-size">
                         <span class="model-title">{{ 'products.product.model_size_title.model_size' | t }}</span>
@@ -598,6 +642,8 @@
                     </div>
                   </div>
                 </div>
+              {%- elsif request.design_mode -%}
+                <p class="pib-note" {{ block.shopify_attributes }}>Model size: shows the product's model_size field (for example "Model is 185 cm and wears M"). This product has none yet.</p>
               {% endif %}
             {%- when 'pickup_avaiability' -%}
               <div
@@ -713,13 +759,19 @@
               {% comment %} Text {% endcomment %}
               {% if block_st.heading != blank or block_st.content != blank %}
                 <div class="mb-25" {{ block.shopify_attributes }}>
+                  {%- if block_st.heading != blank -%}
                   <h3 class="product-detail__text-heading mt-0 h5 heading-letter-spacing{% if enable_skeleton_loading %} skeleton-loading{% endif %}">
                     {{- block_st.heading -}}
                   </h3>
+                  {%- endif -%}
+                  {%- if block_st.content != blank -%}
                   <div class="product-detail__text-content rich__text-m0">
                     {{- block_st.content -}}
                   </div>
+                  {%- endif -%}
                 </div>
+              {%- elsif request.design_mode -%}
+                <p class="pib-note" {{ block.shopify_attributes }}>Text: add a heading or text in this block.</p>
               {% endif %}
             {%- when 'product_grouped' -%}
               {% comment %} Product grouped {% endcomment %}
@@ -743,6 +795,8 @@
 {% comment %}{% endcomment %}                  </script>
                 </product-group>
                 {% if enable_skeleton_loading %}</div>{% endif %}
+              {%- elsif request.design_mode -%}
+                <p class="pib-note" {{ block.shopify_attributes }}>Product group: shows the products listed in this product's product_grouped field. This product has none yet.</p>
               {% endif %}
             {%- when 'description' -%}
               {% comment %} Description {% endcomment %}
@@ -775,12 +829,16 @@
               {%- endif -%}
             {%- when 'custom_liquid' -%}
               {% comment %} Custom liquid {% endcomment %}
+              {%- if block_st.custom_liquid != blank -%}
               <div
                 class="product-detail__custom-liquid{% if enable_skeleton_loading %} skeleton-loading{% endif %}"
                 {{ block.shopify_attributes }}
               >
                 {{ block_st.custom_liquid }}
               </div>
+              {%- elsif request.design_mode -%}
+                <p class="pib-note" {{ block.shopify_attributes }}>Custom code: paste your own HTML in this block.</p>
+              {%- endif -%}
             {%- when 'more_colors' -%}
               {% comment %} More color {% endcomment %}
               {% if product.metafields.custom.more_colors != blank %}
@@ -816,6 +874,8 @@
                     {%- endfor -%}
                   </div>
                 </div>
+              {%- elsif request.design_mode -%}
+                <p class="pib-note" {{ block.shopify_attributes }}>More colours: shows the products listed in this product's more_colors field. This product has none yet.</p>
               {% endif %}
             {%- when '@app' -%}
               {% render block %}
@@ -940,6 +1000,8 @@
 
 <div class="pv-overlay" data-overlay> <div class="pv-modal" data-modal> <button class="pv-close" type="button" data-close aria-label="{{ 'accessibility.close' | t }}"> <svg viewBox="0 0 24 24"><path d="M18.3 5.7 12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7 4.3 4.3 10.6 10.6 16.9 4.3z" fill="#111"/></svg> </button> </div> </div> {% endif %} </div> <script> (function(){ var root = document.getElementById('PV-{{ block.id }}'); if(!root) return; var POPUP = {{ s.enable_popup | json }}; var AUTOPLAY = {{ s.autoplay | json }}; function yt(u){ var m=(u||'').match(/(?:youtu\.be\/|v=|embed\/)([A-Za-z0-9_-]{6,})/i); return m?m[1]:null; } function vim(u){ var m=(u||'').match(/vimeo\.com\/(?:video\/)?(\d+)/i); return m?m[1]:null; } function buildIframe(url, auto){ var id = yt(url), src=null; if(id){ src = 'https://www.youtube.com/embed/'+id+'?autoplay='+(auto?1:0)+'&mute='+(auto?1:0)+'&rel=0&playsinline=1'; } if(!src){ var vid = vim(url); if(vid){ src = 'https://player.vimeo.com/video/'+vid+'?autoplay='+(auto?1:0)+'&muted='+(auto?1:0)+'&title=0&byline=0&portrait=0'; } } if(!src) return null; var ifr = document.createElement('iframe'); ifr.src = src; ifr.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'; ifr.referrerPolicy = 'strict-origin-when-cross-origin'; ifr.setAttribute('allowfullscreen',''); ifr.style.display='block'; ifr.style.width='100%'; ifr.style.height='100%'; return ifr; } function getOverlay(){ return document.querySelector('body > .pv-overlay[data-overlay]') || root.querySelector('.pv-overlay[data-overlay]'); } function getModal(overlay){ return overlay ? overlay.querySelector('[data-modal]') : null; } function bindOverlayOnce(overlay){ if(!overlay || overlay.dataset.bound) return; overlay.addEventListener('click', function(e){ if(e.target === overlay) closePopup(); }); var closeBtn = overlay.querySelector('[data-close]'); closeBtn && closeBtn.addEventListener('click', closePopup); document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closePopup(); }); overlay.dataset.bound = '1'; } function openPopupWith(node, aspect){ var overlay = getOverlay(); if(!overlay) return; var modal = getModal(overlay); if(!modal) return; if(overlay.parentElement !== document.body){ document.body.appendChild(overlay); } bindOverlayOnce(overlay); Array.from(modal.children).forEach(function(ch){ if(ch.matches && ch.matches('[data-close]')) return; if(ch.tagName === 'IFRAME'){ try{ ch.src = ch.src; }catch(e){} } if(ch.tagName === 'VIDEO'){ try{ ch.pause(); }catch(e){} } ch.remove(); }); modal.style.aspectRatio = aspect ? String(aspect) : '16 / 9'; modal.appendChild(node); overlay.classList.add('is-open'); document.documentElement.classList.add('no-scroll'); } function closePopup(){ var overlay = getOverlay(); if(!overlay) return; var modal = getModal(overlay); if(!modal) return; function cleanup(){ Array.from(modal.children).forEach(function(ch){ if(ch.matches && ch.matches('[data-close]')) return; if(ch.tagName === 'IFRAME'){ try{ ch.src = ch.src; }catch(e){} } if(ch.tagName === 'VIDEO'){ try{ ch.pause(); }catch(e){} } ch.remove(); }); document.documentElement.classList.remove('no-scroll'); } overlay.classList.remove('is-open'); var done = false; var tidy = function(){ if(done) return; done = true; cleanup(); }; overlay.addEventListener('transitionend', function(e){ if(e.target === overlay && (e.propertyName === 'opacity' || e.propertyName === 'visibility')) tidy(); }, { once:true }); setTimeout(tidy, 320); } function destroyInline(card){ var container = card.querySelector('.pv-inline'); if(!container) return; var media = container.querySelector('video,iframe'); if(media && media.tagName === 'VIDEO'){ try{ media.pause(); }catch(e){} } container.remove(); var play = card.querySelector('.pv-play'); var thumb = card.querySelector('.pv-thumb'); if(play){ play.classList.remove('is-hidden'); } if(thumb){ thumb.style.visibility = ''; } } function playInline(card){ if(card.querySelector('.pv-inline')) return; var aspect = card.getAttribute('data-aspect') || '16 / 9'; var thumb = card.querySelector('.pv-thumb'); var play = card.querySelector('.pv-play'); if(thumb) thumb.style.visibility = 'hidden'; var holder = document.createElement('div'); holder.className = 'pv-inline'; holder.style.aspectRatio = aspect; var tpl = card.querySelector('template[data-hosted]'); if(tpl){ var frag = document.createElement('div'); frag.innerHTML = tpl.innerHTML.trim(); var vid = frag.querySelector('video'); if(vid){ vid.autoplay = AUTOPLAY; if(AUTOPLAY){ vid.muted = true; } vid.playsInline = true; vid.controls = true; vid.style.display='block'; vid.style.width='100%'; vid.style.height='100%'; holder.appendChild(vid); card.appendChild(holder); function sync(){ if(!vid.paused && !vid.ended){ if(play) play.classList.add('is-hidden'); } else { if(play) play.classList.remove('is-hidden'); } } vid.addEventListener('play', sync); vid.addEventListener('pause', sync); vid.addEventListener('ended', sync); vid.addEventListener('click', function(){ if(vid.paused) vid.play(); else vid.pause(); }); sync(); return; } } var url = card.querySelector('[data-hit]').getAttribute('data-url'); var ifr = buildIframe(url, AUTOPLAY); if(ifr){ holder.appendChild(ifr); card.appendChild(holder); if(play) play.classList.add('is-hidden'); } } function handleCardOpen(card){ root.__pvLast = Date.now(); var aspect = card.getAttribute('data-aspect') || '16 / 9'; if(POPUP){ var tpl = card.querySelector('template[data-hosted]'); if(tpl){ var wrap = document.createElement('div'); wrap.innerHTML = tpl.innerHTML.trim(); var vid = wrap.querySelector('video'); if(vid){ vid.autoplay = AUTOPLAY; if(AUTOPLAY){ vid.muted = true; } vid.playsInline = true; vid.controls = true; vid.style.display='block'; vid.style.width='100%'; vid.style.height='100%'; openPopupWith(vid, aspect); return; } } var hit = card.querySelector('[data-hit]'); var url = hit && hit.getAttribute('data-url'); var ifr = url ? buildIframe(url, AUTOPLAY) : null; if(ifr){ openPopupWith(ifr, aspect); } } else { var inline = card.querySelector('.pv-inline'); if(inline){ var video = inline.querySelector('video'); if(video){ if(video.paused) video.play(); else video.pause(); return; } destroyInline(card); return; } playInline(card); } } var wrap = root.querySelector('[data-wrap]'); var row = root.querySelector('[data-row]'); var slider = root.querySelector('[data-slider]'); if(row){ row.querySelectorAll('[data-item]').forEach(function(card){ card.__pvOpen = function(){ handleCardOpen(card); }; var hit = card.querySelector('[data-hit]'); if(hit){ hit.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); handleCardOpen(card); }, {passive:false}); hit.addEventListener('keydown', function(e){ if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); handleCardOpen(card); } }); } card.addEventListener('click', function(e){ if(e.target.closest('.pv-inline')) return; handleCardOpen(card); }); }); function updateSliderLimits(){ if(!slider) return; var max = Math.max(0, row.scrollWidth - row.clientWidth); slider.max = String(max); slider.value = String(row.scrollLeft); } function onRowScroll(){ if(!slider) return; slider.value = String(row.scrollLeft); } function onSliderInput(){ var val = parseFloat(slider.value || '0'); row.scrollTo({ left: val, behavior: 'smooth' }); } row.addEventListener('scroll', onRowScroll, {passive:true}); slider && slider.addEventListener('input', onSliderInput); var ro; if('ResizeObserver' in window){ ro = new ResizeObserver(function(){ updateSliderLimits(); }); ro.observe(row); } window.addEventListener('resize', updateSliderLimits); updateSliderLimits(); var isDown=false, startX=0, startScroll=0; row.addEventListener('mousedown', function(e){ isDown=true; startX=e.pageX; startScroll=row.scrollLeft; row.style.cursor='grabbing'; }); window.addEventListener('mousemove', function(e){ if(!isDown) return; var dx=e.pageX-startX; row.scrollLeft=startScroll-dx; }); window.addEventListener('mouseup', function(){ if(!isDown) return; isDown=false; row.style.cursor=''; }); row.addEventListener('touchstart', function(e){ if(!e.touches||!e.touches[0]) return; isDown=true; startX=e.touches[0].pageX; startScroll=row.scrollLeft; }, {passive:true}); row.addEventListener('touchmove', function(e){ if(!isDown||!e.touches||!e.touches[0]) return; var dx=e.touches[0].pageX-startX; row.scrollLeft=startScroll-dx; }, {passive:true}); row.addEventListener('touchend', function(){ isDown=false; }, {passive:true}); row.addEventListener('touchcancel',function(){ isDown=false; }, {passive:true}); } })(); </script>
 
+{%- elsif request.design_mode -%}
+  <p class="pib-note" {{ block.shopify_attributes }}>Product videos: turn on a video in this block and upload it or paste a YouTube or Vimeo link.</p>
 {%- endif -%}
 
 {%- when 'lod_rating_badge' -%}
@@ -1234,6 +1296,9 @@
 {%- if s.p5 != blank -%}{%- assign selected_products = selected_products | append: 'p5,' -%}{%- endif -%}
 {%- assign selected_products = selected_products | split: ',' | compact -%}
 
+{%- if selected_products.size == 0 and request.design_mode -%}
+  <p class="pib-note" {{ block.shopify_attributes }}>Pair With Upsell: pick up to five products in this block to show them with an Add button.</p>
+{%- endif -%}
 {%- if selected_products.size > 0 -%}
 <style>
   #PairWith-{{ block.id }}{
@@ -2940,15 +3005,35 @@ Pick the source:
 {%- endif -%}
 
 {%- assign pd_plain = pd_source | strip_html | strip -%}
-{%- if pd_plain != '' -%}
+{%- if pd_plain == '' and request.design_mode and pd_custom == blank -%}
+  {%- unless product != blank and product.description != blank -%}
+    <p class="pib-note" {{ block.shopify_attributes }}>Product description: this product has no description yet. Add one to the product in Storelib, or turn on Use custom description.</p>
+  {%- endunless -%}
+{%- endif -%}
+{%- if pd_plain != '' or pd_source contains '<img' -%}
+  {%- comment -%}
+    Colour: the block's own, else the scheme's text colour. Type: Theme
+    settings > Typography unless Use theme text style is off (blocks saved
+    before the switch existed keep their own sizes).
+  {%- endcomment -%}
+  {%- capture pd_color -%}{%- render 'scheme-color', color: bs.text_color, fallback: 'var(--color-text)' -%}{%- endcapture -%}
+  {%- assign pd_theme_text = true -%}
+  {%- if bs.use_theme_text == false -%}{%- assign pd_theme_text = false -%}{%- endif -%}
+  {%- if bs.use_theme_text == nil and bs.font_size_d != blank -%}{%- assign pd_theme_text = false -%}{%- endif -%}
   <div id="ProductDescription-{{ block.id }}"
        class="pd-block"
        {{ block.shopify_attributes }}
        style="
-         --pd-color: {{ bs.text_color | default: 'var(--color-text)' }} !important;
+         --pd-color: {{ pd_color }};
+         {%- if pd_theme_text %}
+         --pd-fs-d: var(--body-font-size, 16px);
+         --pd-fs-m: var(--body-font-size, 15px);
+         --pd-lh-v: var(--body-line-height, 1.6);
+         {%- else %}
          --pd-fs-d: {{ bs.font_size_d | default: 16 }}px;
          --pd-fs-m: {{ bs.font_size_m | default: 15 }}px;
-         --pd-lh: {{ bs.line_height | default: 150 }};
+         --pd-lh-v: calc({{ bs.line_height | default: 150 }} / 100);
+         {%- endif %}
          --pd-pl-d: {{ bs.pl_d | default: 0 }}px;
          --pd-pr-d: {{ bs.pr_d | default: 0 }}px;
          --pd-pt-d: {{ bs.pt_d | default: 0 }}px;
@@ -2976,7 +3061,7 @@ Pick the source:
         color: var(--pd-color);
         text-align: start;                           /* left aligned */
         font-size: var(--pd-fs-d);
-        line-height: calc(var(--pd-lh) / 100);      /* 110–240% → 1.10–2.40 */
+        line-height: var(--pd-lh-v);
         margin: 0;
       }
       @media (max-width: 768px){

@@ -1,11 +1,76 @@
 <template compat="shopify">
-{%- comment -%} Product-specific HTML or page-reference chart. Shared by the
-  variant picker guide and chart popup. Missing data produces no fake chart. {%- endcomment -%}
+{%- comment -%} Product-specific size chart, shared by the variant picker guide
+  and the Size Chart Popup. First found: the size chart set on the product in
+  Storelib (product.metafields.storelib.size_chart: name, unit, columns, rows,
+  rows_cm, rows_in, notes, image), drawn as a table with a cm / in switch
+  when both are given; then HTML or a page named in custom.size_chart.
+  Missing data produces no fake chart. {%- endcomment -%}
 {%- liquid
+  assign slc = product.metafields.storelib.size_chart.value
+  assign slc_cols = slc.columns
+  assign slc_rows = slc.rows
+  assign slc_cm = slc.rows_cm
+  assign slc_in = slc.rows_in
+  if slc_rows == blank
+    assign slc_rows = slc_cm | default: slc_in
+  endif
+  assign slc_both = false
+  if slc_cm != blank and slc_in != blank
+    assign slc_both = true
+  endif
   assign chart = product.metafields.custom.size_chart.value | default: product.metafields.custom.size_chart
   assign chart_page = pages[chart]
 -%}
-{%- if chart.content != blank -%}
+{%- if slc_rows != blank or slc.image != blank -%}
+  <div class="mt-size-chart{% if slc_both %} mt-size-chart--units{% endif %}" data-mt-size-chart>
+    {%- if slc.name != blank -%}<p class="mt-size-chart__name"><strong>{{ slc.name | escape }}</strong></p>{%- endif -%}
+    {%- if slc_both -%}
+      {%- assign slc_uid = product.id | append: '-' | append: slc_cols.size -%}
+      <div class="mt-size-chart__units" role="radiogroup" aria-label="Units">
+        <label><input type="radio" name="mt-size-unit-{{ slc_uid }}" value="cm" checked> cm</label>
+        <label><input type="radio" name="mt-size-unit-{{ slc_uid }}" value="in"> in</label>
+      </div>
+      {%- assign slc_sets = 'cm,in' | split: ',' -%}
+    {%- else -%}
+      {%- assign slc_sets = 'one' | split: ',' -%}
+    {%- endif -%}
+    {%- for slc_set in slc_sets -%}
+      {%- case slc_set -%}
+        {%- when 'cm' -%}{%- assign slc_list = slc_cm -%}
+        {%- when 'in' -%}{%- assign slc_list = slc_in -%}
+        {%- else -%}{%- assign slc_list = slc_rows -%}
+      {%- endcase -%}
+      {%- if slc_list != blank -%}
+      <table class="mt-size-chart__table" data-unit="{{ slc_set }}">
+        {%- if slc_cols != blank -%}
+          <thead><tr>{%- for col in slc_cols -%}<th scope="col">{{ col | escape }}{% if forloop.index > 1 and slc_set == 'one' and slc.unit != blank %} ({{ slc.unit | escape }}){% elsif forloop.index > 1 and slc_set != 'one' %} ({{ slc_set }}){% endif %}</th>{%- endfor -%}</tr></thead>
+        {%- endif -%}
+        <tbody>
+          {%- for row in slc_list -%}
+            {%- assign cells = row | join: '|' | split: '|' -%}
+            <tr>{%- for cell in cells -%}{%- if forloop.first -%}<th scope="row">{{ cell | strip | escape }}</th>{%- else -%}<td>{{ cell | strip | escape }}</td>{%- endif -%}{%- endfor -%}</tr>
+          {%- endfor -%}
+        </tbody>
+      </table>
+      {%- endif -%}
+    {%- endfor -%}
+    {%- if slc.notes != blank -%}<p class="mt-size-chart__notes">{{ slc.notes | escape | newline_to_br }}</p>{%- endif -%}
+    {%- if slc.image != blank -%}
+      <img class="mt-size-chart__image" src="{{ slc.image | image_url: width: 1200 }}" alt="{{ slc.name | default: 'Size chart' | escape }}" loading="lazy" decoding="async"{% if slc.image.width %} width="{{ slc.image.width }}" height="{{ slc.image.height }}"{% endif %}>
+    {%- endif -%}
+  </div>
+  {%- if slc_both -%}
+  <style>
+    .mt-size-chart__units { display: inline-flex; gap: 4px; margin: 0 0 12px; padding: 3px; border: 1px solid var(--color-border); border-radius: 999px; }
+    .mt-size-chart__units label { position: relative; display: inline-grid; place-items: center; min-width: 52px; min-height: 36px; padding: 0 12px; border-radius: 999px; cursor: pointer; font-weight: 500; }
+    .mt-size-chart__units input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+    .mt-size-chart__units label:has(input:checked) { background: var(--color-heading); color: var(--color-background); }
+    .mt-size-chart__units label:has(input:focus-visible) { outline: 2px solid var(--color-heading); outline-offset: 2px; }
+    .mt-size-chart--units:has(input[value="cm"]:checked) .mt-size-chart__table[data-unit="in"],
+    .mt-size-chart--units:has(input[value="in"]:checked) .mt-size-chart__table[data-unit="cm"] { display: none; }
+  {% comment %}{% endcomment %}</style>
+  {%- endif -%}
+{%- elsif chart.content != blank -%}
   {{- chart.content -}}
 {%- elsif chart_page.content != blank -%}
   {{- chart_page.content -}}

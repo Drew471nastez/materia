@@ -124,6 +124,11 @@ function filt(ctx, v, f) {
     case 'strip_html': return String(v ?? '').replace(/<[^>]*>/g, '');
     case 'replace': return String(v ?? '').split(a[0]).join(a[1]);
     case 'split': return String(v ?? '').split(a[0]);
+    case 'join': return (Array.isArray(v) ? v : v == null ? [] : [v]).join(a[0] ?? ' ');
+    case 'remove': return String(v ?? '').split(a[0]).join('');
+    case 'downcase': return String(v ?? '').toLowerCase();
+    case 'truncate': { const s = String(v ?? ''), n = Number(a[0] ?? 50), e = a[1] ?? '...'; return s.length <= n ? s : s.slice(0, Math.max(0, n - e.length)) + e; }
+    case 'truncatewords': { const w = String(v ?? '').split(/\s+/).filter(Boolean), n = Number(a[0] ?? 15), e = a[1] ?? '...'; return w.length <= n ? w.join(' ') : w.slice(0, n).join(' ') + e; }
     case 'append': return String(v ?? '') + (a[0] ?? '');
     case 'prepend': return (a[0] ?? '') + String(v ?? '');
     case 'plus': return Number(v || 0) + Number(a[0] || 0);
@@ -223,7 +228,7 @@ const stubs = {
   'color-swatches': () => '',
   'review': () => '',
   'theme-type': () => '',
-  'scheme-color': a => (isBlank(a.color) ? a.fallback : a.color) ?? '',
+  'scheme-color': a => (isBlank(a.color) || ['transparent', 'rgba(0,0,0,0)', 'rgba(0, 0, 0, 0)', '#00000000'].includes(String(a.color)) ? a.fallback : a.color) ?? '',
 };
 const env = {stubs, files: {}};
 const cardTemplate = templateOf(read('snippets/product-item.storelib'));
