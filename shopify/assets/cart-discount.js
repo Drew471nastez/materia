@@ -208,16 +208,14 @@ class MinicartDiscount extends HTMLElement {
         this.#handleDiscountError();
         return;
       }
-      if (
-        data.discount_codes.find(
-          (/** @type {{ code: string; applicable: boolean; }} */ discount) => {
-            return (
-              discount.code === discountCodeValue &&
-              discount.applicable === false
-            );
-          }
-        )
-      ) {
+      // Applied only when the cart lists the code as applicable; a code the
+      // cart ignored (unknown, expired, not met) is an error, not a success.
+      const wanted = discountCodeValue.toLowerCase();
+      const applied = Array.isArray(data?.discount_codes) && data.discount_codes.find(
+        (/** @type {{ code: string; applicable: boolean; }} */ discount) =>
+          String(discount.code || "").toLowerCase() === wanted
+      );
+      if (!applied || applied.applicable === false) {
         this.#handleDiscountError();
         return;
       }

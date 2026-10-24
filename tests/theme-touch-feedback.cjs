@@ -15,7 +15,8 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
   const up=()=>touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
   await down();await page.waitForTimeout(30);
   assert(await page.locator('#shop').evaluate(el=>el.hasAttribute('data-nav-pressed')),'touch-down gives immediate feedback');
-  assert.notEqual(await page.$eval('#shop',el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)');
+  assert.equal(await page.$eval('#shop',el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)','no grey box behind a pressed tab');
+  assert.notEqual(await page.$eval('#shop',el=>getComputedStyle(el).transform),'none','pressed tab answers with a slight scale');
   await up();await page.waitForTimeout(30);
   assert.equal(await page.evaluate(()=>clicks),1,'first tap activates once without a second tap');
   assert.equal(await page.evaluate(()=>clickedTarget),'shop','SVG touches reach the action, not its decorative children');

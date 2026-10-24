@@ -1,3 +1,174 @@
+/* Materia: one drag-to-dismiss for every bottom sheet (cart note, estimate,
+   coupon, gift wrap, variant edit, country picker). The sheet follows the
+   finger 1:1 (transform written once per frame, no transition while held);
+   a flick or a long pull closes it at the release speed, anything else
+   springs back. The backdrop fades with the pull.
+   materiaSheetDrag({root, sheet(target), handle(target, sheet), blocked(target),
+   scroller(sheet, target), progress(sheet, p, dragging), dismiss(sheet),
+   onStart(sheet), onEnd(sheet)}) */
+(() => {
+  if (typeof window.materiaSheetDrag === 'function') return;
+  const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function materiaSheetDrag(opts) {
+    const root = opts.root || document;
+    let drag = null, pending = null;
+    const write = (sheet, y) => { sheet.style.transform = 'translate3d(0,' + y.toFixed(1) + 'px,0)'; };
+    const clear = sheet => { sheet.style.removeProperty('transform'); sheet.style.removeProperty('transition'); };
+    const paint = () => {
+      if (!drag) return;
+      drag.frame = 0;
+      write(drag.sheet, drag.dy);
+      opts.progress?.(drag.sheet, Math.max(0, drag.dy) / drag.h, true);
+    };
+    const settleTo = (sheet, y, ms, ease, done) => {
+      sheet._materiaSettle?.();
+      let finished = false, timer = 0;
+      const finish = () => {
+        if (finished) return;
+        finished = true; clearTimeout(timer);
+        sheet.removeEventListener('transitionend', onEnd);
+        sheet._materiaSettle = null;
+        done?.();
+      };
+      const onEnd = event => { if (event.target === sheet && event.propertyName === 'transform') finish(); };
+      sheet._materiaSettle = () => { finished = true; clearTimeout(timer); sheet.removeEventListener('transitionend', onEnd); sheet._materiaSettle = null; };
+      if (!ms) { write(sheet, y); finish(); return; }
+      sheet.getBoundingClientRect();
+      sheet.style.transition = 'transform ' + ms + 'ms ' + ease;
+      write(sheet, y);
+      sheet.addEventListener('transitionend', onEnd);
+      timer = setTimeout(finish, ms + 80);
+    };
+    const start = (sheet, y, id, kind) => {
+      sheet._materiaSettle?.();
+      drag = {sheet, startY: y, dy: 0, h: Math.max(1, sheet.getBoundingClientRect().height), samples: [{y, t: performance.now()}], frame: 0, id, kind};
+      sheet.style.transition = 'none';
+      sheet.classList.add('is-dragging');
+      opts.onStart?.(sheet);
+    };
+    const move = y => {
+      if (!drag) return;
+      const raw = y - drag.startY;
+      // Down is 1:1 with the finger; up stretches a little and stops.
+      drag.dy = raw >= 0 ? raw : -Math.min(24, Math.sqrt(-raw) * 2.2);
+      const now = performance.now();
+      drag.samples.push({y, t: now});
+      while (drag.samples.length > 2 && now - drag.samples[0].t > 100) drag.samples.shift();
+      if (!drag.frame) drag.frame = requestAnimationFrame(paint);
+    };
+    const end = cancelled => {
+      const d = drag;
+      if (!d) return;
+      drag = null;
+      if (d.frame) cancelAnimationFrame(d.frame);
+      write(d.sheet, d.dy);
+      const first = d.samples[0], last = d.samples[d.samples.length - 1];
+      const resting = performance.now() - last.t > 120;
+      const velocity = resting ? 0 : (last.y - first.y) / Math.max(1, last.t - first.t);
+      const dismiss = !cancelled && (d.dy > Math.min(140, d.h * 0.32) || (velocity > 0.45 && d.dy > 12));
+      d.sheet.classList.remove('is-dragging');
+      opts.onEnd?.(d.sheet, dismiss);
+      const still = reduced();
+      if (dismiss) {
+        const distance = d.h + 32 - d.dy;
+        const ms = still ? 0 : Math.round(Math.max(150, Math.min(320, distance / Math.max(velocity, 1.2))));
+        opts.progress?.(d.sheet, 1, false, ms);
+        settleTo(d.sheet, d.h + 32, ms, 'cubic-bezier(.25,.8,.35,1)', () => {
+          opts.dismiss(d.sheet);
+          requestAnimationFrame(() => { if (!drag || drag.sheet !== d.sheet) clear(d.sheet); });
+        });
+      } else {
+        const ms = still ? 0 : 440;
+        opts.progress?.(d.sheet, 0, false, ms);
+        settleTo(d.sheet, 0, ms, 'cubic-bezier(.2,1.25,.4,1)', () => clear(d.sheet));
+      }
+    };
+    const scrolledToTop = (sheet, target) => {
+      const scroller = opts.scroller?.(sheet, target) || sheet;
+      return !scroller || scroller.scrollTop <= 0;
+    };
+    // Mouse and pen: from the handle only.
+    root.addEventListener('pointerdown', event => {
+      if (drag || event.pointerType === 'touch' || event.button !== 0) return;
+      const sheet = opts.sheet(event.target);
+      if (!sheet || !opts.handle(event.target, sheet) || opts.blocked?.(event.target)) return;
+      event.preventDefault();
+      start(sheet, event.clientY, event.pointerId, 'pointer');
+      try { event.target.setPointerCapture(event.pointerId); } catch (_) {}
+    });
+    root.addEventListener('pointermove', event => { if (drag?.kind === 'pointer' && drag.id === event.pointerId) move(event.clientY); }, {passive: true});
+    root.addEventListener('pointerup', event => { if (drag?.kind === 'pointer' && drag.id === event.pointerId) end(false); });
+    root.addEventListener('pointercancel', event => { if (drag?.kind === 'pointer' && drag.id === event.pointerId) end(true); });
+    // Touch: the handle drags at once; the body drags once it is pulled down
+    // from the top of its scroll. Only the sheet listens non-passively, and
+    // only while a finger is on it.
+    function touchMove(event) {
+      const touch = event.touches[0];
+      if (!touch) return;
+      if (drag?.kind === 'touch') { if (event.cancelable) event.preventDefault(); move(touch.clientY); return; }
+      if (!pending) return;
+      const dx = touch.clientX - pending.x, dy = touch.clientY - pending.y;
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+      if (pending.handle || (dy > 0 && Math.abs(dy) > Math.abs(dx) && scrolledToTop(pending.sheet, pending.target))) {
+        start(pending.sheet, pending.y, null, 'touch');
+        if (event.cancelable) event.preventDefault();
+        move(touch.clientY);
+      }
+      pending = null;
+    }
+    function touchEnd(event) {
+      const sheet = event.currentTarget;
+      pending = null;
+      sheet.removeEventListener('touchmove', touchMove);
+      sheet.removeEventListener('touchend', touchEnd);
+      sheet.removeEventListener('touchcancel', touchEnd);
+      if (drag?.kind === 'touch' && !event.touches.length) end(event.type === 'touchcancel');
+    }
+    root.addEventListener('touchstart', event => {
+      if (drag || event.touches.length !== 1) return;
+      const sheet = opts.sheet(event.target);
+      if (!sheet || opts.blocked?.(event.target)) return;
+      const touch = event.touches[0];
+      pending = {sheet, target: event.target, x: touch.clientX, y: touch.clientY, handle: opts.handle(event.target, sheet)};
+      sheet.addEventListener('touchmove', touchMove, {passive: false});
+      sheet.addEventListener('touchend', touchEnd);
+      sheet.addEventListener('touchcancel', touchEnd);
+    }, {passive: true});
+    document.addEventListener('keydown', event => { if (event.key === 'Escape' && drag) end(true); }, true);
+    return {get dragging() { return !!drag; }, cancel: () => end(true)};
+  }
+  window.materiaSheetDrag = materiaSheetDrag;
+
+  /* The cart drawer's sheets, also the ones a cart update draws again. */
+  const SHEET = '#minicart_wrapper .cart__addon-content.is-open';
+  const wrapperOf = sheet => sheet.closest('.minicart__wrapper');
+  materiaSheetDrag({
+    root: document,
+    sheet: target => target.closest?.(SHEET) || null,
+    handle: target => !!target.closest?.('[data-sheet-grab], .cart-sheet__grab, .addon-title'),
+    blocked: target => !!target.closest?.('input, textarea, select, .cart-item__variant-choices, .mcp'),
+    scroller: (sheet, target) => {
+      for (let el = target; el && el !== sheet; el = el.parentElement) if (el.scrollHeight > el.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(el).overflowY)) return el;
+      return sheet;
+    },
+    onStart: sheet => { document.activeElement?.blur?.(); wrapperOf(sheet)?.classList.add('is-sheet-dragging'); },
+    onEnd: sheet => wrapperOf(sheet)?.classList.remove('is-sheet-dragging'),
+    progress: (sheet, p, dragging) => {
+      const wrapper = wrapperOf(sheet);
+      if (!wrapper) return;
+      if (dragging || p > 0) wrapper.style.setProperty('--cart-sheet-progress', p.toFixed(3));
+      else wrapper.style.removeProperty('--cart-sheet-progress');
+    },
+    dismiss: sheet => {
+      const cart = sheet.closest('cart-notification');
+      sheet.classList.remove('is-open');
+      const opener = cart?.querySelector('.mini_cart_addon_btn[data-open="' + sheet.id + '"]');
+      opener?.classList.remove('open');
+      opener?.setAttribute('aria-expanded', 'false');
+      setTimeout(() => wrapperOf(sheet)?.style.removeProperty('--cart-sheet-progress'), 420);
+    },
+  });
+})();
 /* Materia: event delegation survives cart re-rendering and theme-editor section replacement. */
 (() => {
   if (window.__materiaExperienceReady) return;
@@ -523,7 +694,7 @@
         panel.classList.toggle('is-dropdown', !sheet);
         panel.classList.remove('is-open', 'is-dragging');
         panel.style.removeProperty('--mcp-drag');
-        ['left', 'top', 'bottom', 'width', 'maxHeight', 'height'].forEach(p => { panel.style[p] = ''; });
+        ['left', 'top', 'bottom', 'width', 'maxHeight', 'height', 'transform', 'transition'].forEach(p => { panel.style[p] = ''; });
         input.value = seed || '';
         panel.dataset.nav = seed ? 'key' : 'none';
         filter();
@@ -631,57 +802,20 @@
       if (index > -1 && index !== active) setActive(index, false);
     });
 
-    // Drag to close, from the handle or from the list once it is at the top.
-    let startY = 0, lastY = 0, lastT = 0, velocity = 0, dy = 0, tracking = false, dragging = false;
-    const setDrag = y => {
-      dy = y;
-      panel.style.setProperty('--mcp-drag', y + 'px');
-      backdrop.style.opacity = String(Math.max(0, 1 - y / (panel.offsetHeight || 1)));
-    };
-    const begin = (y, fromHead) => {
-      if (!api.isOpen || !panel.classList.contains('is-sheet')) return;
-      tracking = true; dragging = fromHead; startY = lastY = y; lastT = performance.now(); velocity = 0; dy = 0;
-      if (dragging) panel.classList.add('is-dragging');
-    };
-    const move = (y, event) => {
-      if (!tracking) return;
-      if (!dragging) {
-        if (y - startY > 4 && list.scrollTop <= 0) { dragging = true; startY = y; panel.classList.add('is-dragging'); }
-        else if (Math.abs(y - startY) > 4) { tracking = false; return; }
-        else return;
-      }
-      const now = performance.now();
-      velocity = (y - lastY) / Math.max(1, now - lastT);
-      lastY = y; lastT = now;
-      const d = y - startY;
-      setDrag(d > 0 ? d : d / 4);
-      if (event && event.cancelable) event.preventDefault();
-    };
-    const finish = () => {
-      if (!tracking) return;
-      tracking = false;
-      if (!dragging) return;
-      dragging = false;
-      panel.classList.remove('is-dragging');
-      if (dy > panel.offsetHeight * 0.3 || velocity > 0.5) api.close(true);
-      else { setDrag(0); backdrop.style.removeProperty('opacity'); }
-    };
-    panel.addEventListener('touchstart', event => {
-      if (event.touches.length !== 1 || event.target.closest('input')) return;
-      begin(event.touches[0].clientY, !!event.target.closest('.mcp-head'));
-    }, {passive: true});
-    panel.addEventListener('touchmove', event => move(event.touches[0].clientY, event), {passive: false});
-    panel.addEventListener('touchend', finish);
-    panel.addEventListener('touchcancel', finish);
-    const head = panel.querySelector('.mcp-head');
-    head.addEventListener('pointerdown', event => {
-      if (event.pointerType === 'touch' || event.target.closest('input')) return;
-      begin(event.clientY, true);
-      try { head.setPointerCapture(event.pointerId); } catch (e) {}
+    // Drag to close, from the handle or from the list once it is at the top:
+    // the shared sheet drag, as the cart drawer's sheets.
+    window.materiaSheetDrag?.({
+      root: panel,
+      sheet: () => (api.isOpen && panel.classList.contains('is-sheet') ? panel : null),
+      handle: target => !!target.closest?.('.mcp-head') && !target.closest('input'),
+      blocked: target => !!target.closest?.('input'),
+      scroller: () => list,
+      progress: (sheet, p, dragging) => {
+        if (dragging) { backdrop.style.transition = 'none'; backdrop.style.opacity = String(Math.max(0, 1 - p)); }
+        else { backdrop.style.removeProperty('transition'); if (p === 0) backdrop.style.removeProperty('opacity'); }
+      },
+      dismiss: () => api.close(true),
     });
-    head.addEventListener('pointermove', event => { if (event.pointerType !== 'touch') move(event.clientY, event); });
-    head.addEventListener('pointerup', event => { if (event.pointerType !== 'touch') finish(); });
-    head.addEventListener('pointercancel', event => { if (event.pointerType !== 'touch') finish(); });
 
     pickers.set(wrap, api);
     sync();

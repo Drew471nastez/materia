@@ -1,8 +1,80 @@
+/* Materia: money, number tweens and the free-shipping bar. Totals change in
+   place: the text counts to its new value and the bar scales, nothing remounts. */
+const materiaReduced = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+function materiaParseMoney(text) {
+  const match = String(text || '').replace(/ /g, ' ').match(/\d[\d.,'\s]*/);
+  if (!match) return null;
+  const raw = match[0].trim().replace(/[\s']/g, '');
+  const decimal = raw.match(/[.,](\d{1,2})$/);
+  const whole = decimal ? raw.slice(0, -decimal[0].length) : raw;
+  const cents = Number(whole.replace(/[.,]/g, '') || 0) * 100 + (decimal ? Number(decimal[1].padEnd(2, '0')) : 0);
+  return Number.isFinite(cents) ? cents : null;
+}
+function materiaFormatMoney(cents, like) {
+  cents = Math.round(Number(cents) || 0);
+  const format = window.cartStrings?.money_format || window.themeGlobalVariables?.settings?.money_format;
+  if (typeof window.Shopify?.formatMoney === 'function') {
+    try { const value = window.Shopify.formatMoney(cents, format); if (value && !/NaN|undefined/.test(value)) return value; } catch (_) {}
+  }
+  // The server's own text is the template: same symbol, separators and spacing.
+  const sample = String(like || document.querySelector('free-ship-progress-bar[data-money-sample]')?.dataset.moneySample || '').trim();
+  const found = sample.match(/\d[\d.,'\s]*\d|\d/);
+  const amount = Math.abs(cents) / 100;
+  if (!found) return amount.toFixed(2);
+  const digits = found[0];
+  const dec = digits.match(/([.,])(\d{2})$/);
+  const group = (digits.slice(0, dec ? -3 : undefined).match(/[.,'\s]/) || [''])[0];
+  const [whole, fraction] = amount.toFixed(2).split('.');
+  const body = whole.replace(/\B(?=(\d{3})+(?!\d))/g, group) + (dec ? dec[1] + fraction : '');
+  return sample.slice(0, found.index) + body + sample.slice(found.index + digits.length);
+}
+function materiaTweenMoney(el, toCents, finalHTML) {
+  if (!el) return;
+  if (el._materiaTarget === toCents && (finalHTML == null || el._materiaFinal === finalHTML)) return;
+  cancelAnimationFrame(el._materiaFrame);
+  const template = el.textContent.trim();
+  const from = el._materiaCents ?? materiaParseMoney(template);
+  el._materiaTarget = toCents; el._materiaFinal = finalHTML;
+  const done = () => {
+    el._materiaCents = toCents; el._materiaTarget = null;
+    if (finalHTML != null) { if (el.innerHTML !== finalHTML) el.innerHTML = finalHTML; }
+    else el.textContent = materiaFormatMoney(toCents, template);
+  };
+  if (from == null || from === toCents || materiaReduced()) { done(); return; }
+  const start = performance.now(), duration = 240;
+  const step = now => {
+    const t = Math.min(1, (now - start) / duration), eased = 1 - Math.pow(1 - t, 3);
+    if (t >= 1) return done();
+    const value = Math.round(from + (toCents - from) * eased);
+    el._materiaCents = value;
+    el.textContent = materiaFormatMoney(value, template);
+    el._materiaFrame = requestAnimationFrame(step);
+  };
+  el._materiaFrame = requestAnimationFrame(step);
+}
+// Bars scale (transform) instead of resizing; ProgressBar keeps its width maths.
+function materiaSyncShippingBar(bar) {
+  const fill = bar?.querySelector?.('.cart_shipping__fill, .percent_shipping_bar');
+  if (!fill) return;
+  const width = parseFloat(fill.style.width);
+  if (Number.isFinite(width)) fill.style.setProperty('--fs-progress', String(Math.max(0, Math.min(100, width)) / 100));
+}
+customElements.whenDefined('free-ship-progress-bar').then(() => {
+  const Bar = customElements.get('free-ship-progress-bar');
+  if (!Bar || Bar.prototype.__materiaScaled) return;
+  const original = Bar.prototype.setProgressBar;
+  Bar.prototype.setProgressBar = function (progress) {
+    original.call(this, progress);
+    materiaSyncShippingBar(this);
+  };
+  Bar.prototype.__materiaScaled = true;
+  document.querySelectorAll('free-ship-progress-bar').forEach(materiaSyncShippingBar);
+});
 
 /* Server-confirmed removal only: pending requests keep their row and icon.
    Keep animation work local and honour reduced motion; never delay a failure. */
 async function materiaAnimateCartRemoval(row) {
-  if (!row?.isConnected || !row.animate || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!row?.isConnected || !row.animate || materiaReduced()) return;
   const style = getComputedStyle(row);
   row.classList.add('materia-row-exit');
   row.style.minHeight = '0';
@@ -13,26 +85,46 @@ async function materiaAnimateCartRemoval(row) {
   ], {duration:220,easing:'cubic-bezier(.22,.61,.36,1)',fill:'forwards'});
   await animation.finished.catch(() => {});
 }
+// A new line (added from recommendations or a variant change) opens into place.
+function materiaAnimateRowIn(row) {
+  if (!row?.isConnected || !row.animate || materiaReduced()) return;
+  const height = row.getBoundingClientRect().height;
+  if (!height) return;
+  const style = getComputedStyle(row);
+  row.classList.add('materia-row-enter');
+  row.style.overflow = 'hidden';
+  const animation = row.animate([
+    {height:'0px',opacity:0,transform:'translateY(-4px)',marginBottom:'0px',paddingBottom:'0px'},
+    {height:height+'px',opacity:1,transform:'none',marginBottom:style.marginBottom,paddingBottom:style.paddingBottom},
+  ], {duration:260,easing:'cubic-bezier(.22,1,.36,1)'});
+  const clean = () => { row.classList.remove('materia-row-enter'); row.style.overflow = ''; };
+  animation.onfinish = clean; animation.oncancel = clean;
+}
 
 function materiaUpdateCartValue(target, source) {
-  if (!target || !source || target.innerHTML === source.innerHTML) return;
-  target.innerHTML = source.innerHTML;
-  if (target.matches('[data-cart-subtotal-price]') && target.animate && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    target.animate([{opacity:.65},{opacity:1}], {duration:180,easing:'ease-out'});
+  if (!target || !source) return;
+  if (target.matches('[data-cart-subtotal-price]')) {
+    const cents = materiaParseMoney(source.textContent);
+    if (cents != null && target._materiaFinal !== source.innerHTML) { materiaTweenMoney(target, cents, source.innerHTML); return; }
+    if (target._materiaTarget != null) return;
   }
+  if (target.innerHTML === source.innerHTML) return;
+  target.innerHTML = source.innerHTML;
 }
 
 /* Materia: stable cart reconciliation. The previous full innerHTML replacement
-   destroyed recommendations, quantity controls and images on every +/- tap. */
-function materiaPatchDrawerCart(target, incoming) {
+   destroyed recommendations, quantity controls and images on every +/- tap.
+   options.keep: line keys whose quantity the shopper changed after this
+   response was requested; their number stays as typed. */
+function materiaPatchDrawerCart(target, incoming, options = {}) {
   if (!target || !incoming) return false;
   const oldItems = target.querySelector('#minicart .minicart-body .items');
   const newItems = incoming.querySelector('#minicart .minicart-body .items');
   // Empty/filled state changed: allow the existing full rebuild path.
   if (!oldItems || !newItems) return false;
+  const keep = options.keep || new Set();
   const oldRows = new Map(Array.from(oldItems.children).filter(el => el.id).map(el => [el.id, el]));
-  const wanted = [];
-  const entering = [];
+  const wanted = [], added = [];
   for (const freshRow of Array.from(newItems.children)) {
     let stableRow = freshRow.id && oldRows.get(freshRow.id);
     if (stableRow) {
@@ -45,9 +137,10 @@ function materiaPatchDrawerCart(target, incoming) {
       const currentQty = stableRow.querySelector('input[name="updates[]"]');
       const nextQty = freshRow.querySelector('input[name="updates[]"]');
       if (currentQty && nextQty) {
-        if (!currentQty.hasAttribute('data-materia-desired-quantity')) currentQty.value = nextQty.value;
-        const editor = stableRow.querySelector('cart-item-variant-switch');
-        if (editor) editor.dataset.quantity = nextQty.value;
+        const pending = keep.has(currentQty.dataset.id);
+        if (!pending) currentQty.value = nextQty.value;
+        const editor = stableRow.querySelector('cart-item-variant-switch') || document.querySelector(`cart-item-variant-switch[data-line-key="${CSS.escape(currentQty.dataset.id || '')}"]`);
+        if (editor && !pending) editor.dataset.quantity = nextQty.value;
         currentQty.defaultValue = nextQty.defaultValue;
         for (const {name,value} of Array.from(nextQty.attributes)) {
           if (name.startsWith('data-') || name === 'max' || name === 'min') currentQty.setAttribute(name,value);
@@ -58,8 +151,7 @@ function materiaPatchDrawerCart(target, incoming) {
       oldRows.delete(freshRow.id);
     } else {
       const row = freshRow.cloneNode(true);
-      wanted.push(row);
-      entering.push(row);
+      wanted.push(row); added.push(row);
     }
   }
   // Move reused nodes rather than destroying/recreating them; no image flashes.
@@ -68,26 +160,26 @@ function materiaPatchDrawerCart(target, incoming) {
     if (oldItems.children[i] !== row) oldItems.insertBefore(row, oldItems.children[i] || null);
   }
   while (oldItems.children.length > wanted.length) oldItems.lastElementChild.remove();
-  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    entering.forEach(row => row.animate?.([
-      {opacity:0,transform:'translateY(4px)'},
-      {opacity:1,transform:'translateY(0)'},
-    ], {duration:180,easing:'ease-out'}));
-  }
+  if (options.animate !== false) added.forEach(materiaAnimateRowIn);
   // Cart subtotal/discounts can change; payment icons and messages do not need a rebuild.
   for (const sel of ['[data-cart-subtotal-price]', '[data-discounts-list]', '.cart-discount__codes']) {
     const fresh = incoming.querySelectorAll(sel);
-    target.querySelectorAll(sel).forEach((dst,index) => materiaUpdateCartValue(dst,fresh[index]));
+    target.querySelectorAll(sel).forEach((dst,index) => {
+      if (options.skipSubtotal && dst.matches('[data-cart-subtotal-price]')) return;
+      materiaUpdateCartValue(dst,fresh[index]);
+    });
   }
   // Recalculate savings text when installed without remounting the panel.
   const savingsOld = target.querySelector('.cda-savings');
   const savingsNew = incoming.querySelector('.cda-savings');
   if (savingsOld && savingsNew && savingsOld.innerHTML !== savingsNew.innerHTML) savingsOld.innerHTML = savingsNew.innerHTML;
-  // Only replace recommendation markup if the lead product actually changed.
+  // Recommendations follow the new lead product without going blank: the
+  // mounted list stays until the new one has arrived.
   const recOld = target.querySelector('minicart-recommendations');
   const recNew = incoming.querySelector('minicart-recommendations');
   if (recOld && recNew && recOld.dataset.url !== recNew.dataset.url) {
-    recOld.replaceWith(recNew.cloneNode(true));
+    if (typeof recOld.refresh === 'function') recOld.refresh(recNew.dataset.url);
+    else recOld.replaceWith(recNew.cloneNode(true));
   }
   return true;
 }
@@ -249,16 +341,24 @@ class CartNotification extends HTMLElement {
       0
     );
     this.onBodyClick = this.handleBodyClick.bind(this);
-    this.notification.addEventListener(
-      "change",
-      event => this.onChange(event), {signal}
-    );
-    this.addEventListener('click', event => {
-      if (this._quantityRunning && event.target.closest('.btn-checkout,[name="checkout"]')) { event.preventDefault(); event.stopImmediatePropagation(); }
-    }, {capture:true,signal});
-    this.addEventListener('submit', event => {
-      if (this._quantityRunning) { event.preventDefault(); event.stopImmediatePropagation(); }
-    }, {capture:true,signal});
+    this.notification.addEventListener("change", (event) => this.onChange(event), {signal});
+    this.notification.addEventListener("input", (event) => this.onQuantityInput(event), {signal});
+    // Checkout waits until every quantity change has reached the cart.
+    this.addEventListener("click", (event) => {
+      if ((this._qtyBusy || this._qtyTimer || this._desired?.size) && event.target.closest(".btn-checkout,[name=\"checkout\"]")) {
+        event.preventDefault(); event.stopImmediatePropagation();
+        const go = event.target.closest(".btn-checkout,[name=\"checkout\"]");
+        this._afterQuantities = () => go.click();
+        if (this._qtyTimer) { clearTimeout(this._qtyTimer); this._qtyTimer = 0; this.pumpQuantities(); }
+      }
+    }, {capture: true, signal});
+    this.notification.addEventListener("submit", (event) => {
+      const form = event.target.closest?.("minicart-recommendations form, .cart-recommend form");
+      if (!form || !this.contains(form)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.addFromRecommendation(form);
+    }, {signal, capture: true});
     this.cartAction();
     this.addonsUpdate();
   }
@@ -277,6 +377,9 @@ class CartNotification extends HTMLElement {
   }
 
   cartAction() {
+    // Another script (discount, gift wrap, editor) may have drawn new totals:
+    // the next optimistic paint reads them again.
+    if (!this._desired?.size) { this._confirmedSubtotal = null; this._confirmedOrder = null; }
     this.actionEvents?.abort();
     this.actionEvents = new AbortController();
     document.dispatchEvent(new CustomEvent('materia:cart-drawer-updated'));
@@ -604,300 +707,321 @@ class CartNotification extends HTMLElement {
   }
 
   onChange(event) {
-    if (event.target.getAttribute("name") == "updates[]")
-      this.updateQuantity(
-        event.target.dataset.id,
-        event.target.value,
-        event.target.dataset.value,
-        event.target,
-        document.activeElement.getAttribute("name")
-      );
+    const input = event.target;
+    if (input?.getAttribute?.("name") !== "updates[]" || !input.dataset.id) return;
+    // +/- (the theme's synthetic change) coalesces fast taps; a typed number
+    // is sent when the field is left or Enter is pressed.
+    this.setLineQuantity(input.dataset.id, input.value, {delay: event.isTrusted ? 0 : 260, input});
   }
 
-  updateQuantity(id, quantity, currentQuantity, _this, name) {
-    quantity = Number(quantity);
-    if (!Number.isInteger(quantity) || quantity < 0) return Promise.resolve(false);
-    this._quantityQueue ||= new Map();
-    this._quantityQueue.set(String(id), [id,quantity,currentQuantity,_this,name]);
-    const input = this.querySelector(`input[name="updates[]"][data-id="${CSS.escape(String(id))}"]`);
-    if (input && quantity > 0) {
-      input.setAttribute('data-materia-desired-quantity', String(quantity));
-      input.setAttribute('aria-busy','true');
+  onQuantityInput(event) {
+    const input = event.target;
+    if (input?.getAttribute?.("name") !== "updates[]" || !input.dataset.id || input.value === "") return;
+    this.setLineQuantity(input.dataset.id, input.value, {delay: 650, input});
+  }
+
+  /* One cart request at a time; the newest number for each line wins.
+     The number on screen changes at once, totals follow optimistically, and
+     a response never writes over a line the shopper changed meanwhile. */
+  setLineQuantity(key, quantity, {delay = 0, input} = {}) {
+    if (!key) return;
+    this._desired = this._desired || new Map();
+    this._removing = this._removing || new Set();
+    const qty = Math.max(0, parseInt(quantity, 10) || 0);
+    // A second tap on a line already being removed does nothing.
+    if (this._removing.has(String(key))) return;
+    this._desired.set(String(key), qty);
+    const field = input || this.querySelector(`input[name="updates[]"][data-id="${CSS.escape(String(key))}"]`);
+    if (field && String(field.value) !== String(qty) && document.activeElement !== field) field.value = qty;
+    this.clearLineError(key);
+    this.paintOptimistic();
+    this.ensureCartState();
+    clearTimeout(this._qtyTimer);
+    this._qtyTimer = 0;
+    if (delay > 0) this._qtyTimer = setTimeout(() => { this._qtyTimer = 0; this.pumpQuantities(); }, delay);
+    else this.pumpQuantities();
+  }
+
+  updateQuantity(id, quantity) {
+    this.setLineQuantity(id, quantity || 0, {delay: 0});
+  }
+
+  serverQuantity(key) {
+    const input = this.querySelector(`input[name="updates[]"][data-id="${CSS.escape(String(key))}"]`);
+    const value = parseInt(input?.dataset.value ?? input?.defaultValue, 10);
+    if (Number.isFinite(value)) return value;
+    return this._cart?.items?.find(item => item.key === key)?.quantity ?? null;
+  }
+
+  ensureCartState(force = false) {
+    if ((this._cart && !force) || this._cartLoading) return this._cartLoading;
+    const base = String(window.routes?.cart_url || "/cart").replace(/\/$/, "");
+    this._cartLoading = fetch(base + ".js", {credentials: "same-origin", headers: {Accept: "application/json"}})
+      .then(response => response.ok ? response.json() : null)
+      .then(cart => {
+        if (!cart || !Array.isArray(cart.items) || this._qtyBusy) return;
+        this._cart = cart;
+        this._confirmedCount = cart.item_count;
+        if (!this._desired?.size && cart.items_subtotal_price != undefined) {
+          this._confirmedOrder = Number(cart.items_subtotal_price);
+          const bar = document.querySelector("free-ship-progress-bar");
+          if (bar) this._paintedOrder = bar.dataset.order;
+          try { document.querySelector("header-total-price")?.updateTotal?.(cart); } catch (_) {}
+        }
+        this.paintOptimistic();
+      })
+      .catch(() => {})
+      .finally(() => { this._cartLoading = null; });
+    return this._cartLoading;
+  }
+
+  optimisticDelta() {
+    let cents = 0, count = 0, known = true;
+    for (const [key, qty] of this._desired || []) {
+      const server = this.serverQuantity(key);
+      if (server == null) { known = false; continue; }
+      count += qty - server;
+      const item = this._cart?.items?.find(line => line.key === key);
+      if (!item) { if (qty !== server) known = false; continue; }
+      cents += (qty - server) * Number(item.final_price ?? item.price ?? 0);
     }
-    if (this._quantityRunning) return this._quantityDrain;
-    this._quantityRunning = true;
-    this.setAttribute('aria-busy','true');
-    this._quantityDrain = this.drainQuantityUpdates();
-    return this._quantityDrain;
+    return {cents, count, known};
   }
 
-  async drainQuantityUpdates() {
-    try {
-      while (this._quantityQueue.size && this.isConnected) {
-        const [key,args] = this._quantityQueue.entries().next().value;
-        this._quantityQueue.delete(key);
-        await this.performQuantityUpdate(...args);
-        if (!this._quantityQueue.has(key)) {
-          const input = this.querySelector(`input[name="updates[]"][data-id="${CSS.escape(key)}"]`);
-          if (input) {
-            input.removeAttribute('data-materia-desired-quantity');
-            input.removeAttribute('aria-busy');
-            if (input.dataset.value != null) input.value = input.dataset.value;
-          }
+  paintOptimistic() {
+    const delta = this.optimisticDelta();
+    const subtotal = this.querySelector("[data-cart-subtotal-price]");
+    if (subtotal) {
+      // A drawer redrawn by another script brings a new subtotal: read it again.
+      if (!this._confirmedSubtotal || this._confirmedSubtotal.el !== subtotal) {
+        // Mid-count, the value it is counting to is the confirmed one.
+        this._confirmedSubtotal = {el: subtotal, cents: subtotal._materiaTarget ?? materiaParseMoney(subtotal._materiaFinal ?? subtotal.textContent), html: subtotal._materiaFinal ?? subtotal.innerHTML};
+      }
+      const base = this._confirmedSubtotal;
+      if (base.cents != null && delta.known) {
+        if (delta.cents === 0) materiaTweenMoney(subtotal, base.cents, base.html);
+        else materiaTweenMoney(subtotal, Math.max(0, base.cents + delta.cents));
+      } else if (base.cents != null) {
+        // Prices of the changed lines are not known yet: show the confirmed
+        // total rather than keep an older one.
+        materiaTweenMoney(subtotal, base.cents, base.html);
+      }
+    }
+    const bar = document.querySelector("free-ship-progress-bar");
+    if (bar && typeof bar.init === "function") {
+      const shown = bar.dataset.order;
+      // Redrawn by someone else since we painted it: its amount is the base.
+      if (shown != null && (this._confirmedOrder == null || (this._paintedOrder != null && shown !== String(this._paintedOrder)))) this._confirmedOrder = Number(shown) || 0;
+      if (this._confirmedOrder != null) {
+        // Unknown line prices: the confirmed amount, never a guess.
+        const order = Math.max(0, Math.round(this._confirmedOrder + (delta.known ? delta.cents : 0)));
+        if (String(this._paintedOrder) !== String(order) || !bar.__materiaPainted) {
+          this._paintedOrder = order;
+          bar.__materiaPainted = true;
+          try { bar.init(order); } catch (_) {}
         }
       }
-    } finally {
-      this._quantityQueue.clear();
-      this._quantityRunning = false;
-      this.removeAttribute('aria-busy');
     }
+    const inputs = [...this.querySelectorAll('input[name="updates[]"]')];
+    const base = inputs.length ? inputs.reduce((sum, input) => sum + (parseInt(input.dataset.value, 10) || 0), 0) : this._confirmedCount;
+    if (base != null) this.writeCount(Math.max(0, base + delta.count));
   }
 
-  performQuantityUpdate(id, quantity, currentQuantity, _this, name) {
-    quantity = quantity ? quantity : 0;
+  writeCount(count) {
+    document.querySelectorAll(".cart-count").forEach((el) => {
+      const text = el.classList.contains("cart-count-drawer") ? `(${count})` : String(count > 100 ? "~" : count);
+      if (el.textContent.trim() !== text) el.textContent = text;
+    });
+  }
+
+  async pumpQuantities() {
+    if (this._qtyBusy || this._qtyTimer || !this._desired?.size) return;
+    const [key, quantity] = this._desired.entries().next().value;
+    this._qtyBusy = true;
+    if (Number(quantity) === 0) this._removing.add(String(key));
+    try {
+      await this.sendQuantity(key, quantity);
+    } finally {
+      this._qtyBusy = false;
+      this._removing.delete(String(key));
+    }
+    if (this._desired.size && !this._qtyTimer) this.pumpQuantities();
+    else if (!this._desired.size && !this._qtyTimer && this._afterQuantities) { const go = this._afterQuantities; this._afterQuantities = null; go(); }
+  }
+
+  async sendQuantity(id, quantity) {
     const body = JSON.stringify({
       id,
       quantity,
       sections: this.getSectionsToRender().map((section) => section.id),
       sections_url: window.location.pathname,
     });
-    const selector = `mini-cart-remove-button[data-index="${id}"]`;
-    const cart_select = `minicart-wishlist-action[data-index="${id}"]`;
-
-    const minicart_wishlist_action = this.querySelector(cart_select);
-    if (minicart_wishlist_action) {
-      minicart_wishlist_action.classList.add("loading");
-    }
-    /* Defensive null-check — when the cart is in a transient state
-       (mid-refresh, last-item delete race, or empty cart re-paint) the
-       remove-button for `id` may not be in the DOM. Guarding avoids a
-       hard TypeError that bricks the drawer. */
-    const cart_item = this.querySelector(selector);
+    const removeButton = this.querySelector(`mini-cart-remove-button[data-index="${CSS.escape(String(id))}"]`);
     // Only a removal shows the remove button's spinner; +/- leaves its icon alone.
-    if (cart_item && Number(quantity) === 0) cart_item.classList.add("loading");
-    const cartRecommend = document.querySelector(".cart-recommend");
-    // Keep open recommendations mounted while quantity changes.
-    // Tag the whole cart-items element as "refreshing" so the fade /
-    // spinner overlay covers the full list and stays visible across
-    // the HTML swap — no flicker, smooth cross-fade.
-    this.classList.add("cart-refreshing");
-    /* Watchdog — absolute last line of defense. If the fetch hangs,
-       gets aborted, or any cleanup path fails to remove the
-       cart-refreshing class within 8s, this force-clears it so the
-       drawer never gets stuck un-clickable. Without this, a rogue
-       request can leave .pointer-events:none on the cart-items
-       element until page reload — which is exactly the "I have to
-       refresh the page" pattern shoppers report. */
-    const _watchdog = setTimeout(() => {
-      try { this.classList.remove("cart-refreshing"); } catch (_) {}
-    }, 8000);
-    /* Stash on the element so .finally can clear it on success. */
-    this.__cartWatchdog = _watchdog;
-    return fetch(`${routes?.cart_change_url}`, { ...fetchConfig(), ...{ body } })
-      .then((response) => {
-        if (response.ok === false) throw new Error(`Cart update failed: HTTP ${response.status}`);
-        return response.text();
-      })
-      .then(async (state) => {
-        /* Defensive JSON parse — Shopify can return an HTML error page
-           (e.g. throttled, server hiccup, invalid session). Without
-           this try/catch the parse throws, the rest of the flow
-           silently aborts, and the user sees the loading state stuck
-           forever. Now we degrade gracefully — log the body to the
-           console for debugging, then let .finally clean up the UI. */
-        let parsedState;
-        try {
-          parsedState = JSON.parse(state);
-        } catch (parseErr) {
-          console.warn(
-            "[cart] /cart/change returned non-JSON; aborting refresh",
-            state ? state.slice(0, 200) : state
-          );
-          return false;
+    if (removeButton && Number(quantity) === 0) removeButton.classList.add("loading");
+    const config = typeof fetchConfig === "function" ? fetchConfig() : {method: "POST", headers: {"Content-Type": "application/json", Accept: "application/json"}};
+    let parsedState = null;
+    try {
+      const response = await fetch(`${window.routes?.cart_change_url || "/cart/change.js"}`, {...config, body});
+      const text = await response.text();
+      try { parsedState = JSON.parse(text); } catch (_) {
+        console.warn("[cart] /cart/change returned non-JSON", text ? text.slice(0, 200) : text);
+      }
+      if (!parsedState || parsedState.errors || parsedState.status >= 400 || parsedState.item_count == undefined) {
+        const message = parsedState?.errors || parsedState?.description || parsedState?.message || window.cartStrings?.error || "Update failed";
+        this.rejectQuantity(id, quantity, typeof message === "string" ? message : window.cartStrings?.error || "Update failed");
+        return;
+      }
+      if (this._desired.get(String(id)) === quantity) this._desired.delete(String(id));
+      await this.applyCartState(parsedState, {removed: Number(quantity) === 0 ? id : null});
+    } catch (error) {
+      console.error("[cart] Quantity update failed:", error);
+      this.rejectQuantity(id, quantity, window.cartStrings?.error || error.message);
+    } finally {
+      removeButton?.classList.remove("loading");
+    }
+  }
+
+  rejectQuantity(id, quantity, message) {
+    if (this._desired.get(String(id)) === quantity) this._desired.delete(String(id));
+    const input = this.querySelector(`input[name="updates[]"][data-id="${CSS.escape(String(id))}"]`);
+    if (input && !this._desired.has(String(id))) {
+      const server = this.serverQuantity(id);
+      if (server != null) input.value = server;
+    }
+    this.updateMessageErrors(id, message, input);
+    this.paintOptimistic();
+  }
+
+  clearLineError(line) {
+    const text = document.getElementById(`CartDrawer-LineItemError-${line}`)?.querySelector(".cart-item__error-text");
+    if (text && text.textContent) text.textContent = "";
+  }
+
+  /* Draws a confirmed cart: rows patched in place, a removed row collapses,
+     a new row opens, totals count to their values. Used by quantity changes,
+     recommendations and the variant editor. */
+  async applyCartState(parsedState, {removed = null} = {}) {
+    if (Array.isArray(parsedState.items)) this._cart = parsedState;
+    else this.ensureCartState(true);
+    this._confirmedCount = parsedState.item_count ?? this._confirmedCount;
+    if (parsedState.items_subtotal_price != undefined) {
+      this._confirmedOrder = Number(parsedState.items_subtotal_price);
+      const bar = document.querySelector("free-ship-progress-bar");
+      if (bar) this._paintedOrder = bar.dataset.order;
+    }
+    try {
+      const header = document.querySelector("header-total-price");
+      if (header && typeof header.updateTotal === "function") header.updateTotal(parsedState);
+    } catch (_) {}
+    // PDP quantity badge sync (when this product is currently open)
+    try {
+      const label = document.querySelector(".quantity__label");
+      if (label && Array.isArray(parsedState.items)) {
+        const item = parsedState.items.find(line => String(line.variant_id) == label.getAttribute("data-pro-id"));
+        const count = document.querySelector(".quantity-cart");
+        if (count) count.textContent = item ? item.quantity : 0;
+        label.classList.toggle("hidden", !item);
+      }
+    } catch (_) {}
+    try {
+      if (parsedState.item_count == 0) {
+        this.cartCountDown?.querySelector("countdown-timer")?.remove();
+        this.cartUpsellBeside?.classList.remove("is-open");
+      }
+    } catch (_) {}
+    const keep = new Set(this._desired?.keys() || []);
+    for (const section of this.getSectionsToRender()) {
+      try {
+        const elementToReplace = document.getElementById(section.id);
+        const sectionHTML = parsedState.sections && parsedState.sections[section.id];
+        if (!elementToReplace || !sectionHTML) continue;
+        const html = new DOMParser().parseFromString(sectionHTML, "text/html");
+        const minicartForm = html.querySelector("#minicart-form");
+        if (!minicartForm) continue;
+        // Totals first: they count to the new value while a removed row collapses.
+        const freshSubtotal = minicartForm.querySelector("[data-cart-subtotal-price]");
+        const liveSubtotal = elementToReplace.querySelector("[data-cart-subtotal-price]");
+        if (freshSubtotal && liveSubtotal) this._confirmedSubtotal = {el: liveSubtotal, cents: materiaParseMoney(freshSubtotal.textContent), html: freshSubtotal.innerHTML};
+        // The confirmed quantities are the base the optimistic totals add to.
+        elementToReplace.querySelectorAll('input[name="updates[]"]').forEach(input => {
+          const fresh = minicartForm.querySelector(`input[name="updates[]"][data-id="${CSS.escape(input.dataset.id || "")}"]`);
+          input.dataset.value = fresh ? (fresh.dataset.value ?? fresh.value) : "0";
+        });
+        this.paintOptimistic();
+        const row = removed != null && elementToReplace.querySelector("#" + CSS.escape("minicart__product-" + removed));
+        if (row && !minicartForm.querySelector("#" + CSS.escape(row.id))) await materiaAnimateCartRemoval(row);
+        if (!elementToReplace.isConnected) continue;
+        const scroller = this.querySelector(".minicart-scroll");
+        const scrollTop = scroller?.scrollTop;
+        if (!materiaPatchDrawerCart(elementToReplace, minicartForm, {keep, skipSubtotal: true})) {
+          elementToReplace.innerHTML = minicartForm.innerHTML;
+          this._confirmedSubtotal = null;
         }
-        if (parsedState.errors) {
-          this.updateMessageErrors(id, parsedState.errors, _this);
-          return false;
-        }
-
-        /* === ISOLATED CLEANUP BLOCKS ============================
-           Each step below is wrapped in its own try/catch so a single
-           failure (broken addon, removed DOM node, stale cache) can
-           NEVER prevent the section-render that follows from running.
-           Previously a throw in ANY of these short blocks killed the
-           whole .then and the cart-drawer never re-rendered after a
-           delete, leaving the deleted item visible until page reload.
-           ====================================================== */
-
-        // Count + header total
-        try {
-          if (parsedState.item_count != undefined) {
-            document.querySelectorAll(".cart-count").forEach((el) => {
-              if (el.classList.contains("cart-count-drawer")) {
-                el.innerHTML = `(${parsedState.item_count})`;
-              } else {
-                el.innerHTML =
-                  parsedState.item_count > 100 ? "~" : parsedState.item_count;
-              }
-            });
-            if (document.querySelector("header-total-price")) {
-              document
-                .querySelector("header-total-price")
-                .updateTotal(parsedState);
-            }
+        if (scroller && scroller.isConnected && scrollTop != null && Math.abs(scroller.scrollTop - scrollTop) > 1) scroller.scrollTop = scrollTop;
+        elementToReplace.querySelectorAll("img.bls-loading-image").forEach((img) => {
+          if (img.complete && img.naturalWidth > 0) {
+            img.closest("motion-element")?.classList.remove("bls-loading-image");
+            img.classList.remove("bls-loading-image");
           }
-        } catch (_) {}
+        });
+      } catch (perSectionErr) {
+        console.warn("[cart] section render failed for", section.id, perSectionErr);
+      }
+    }
+    this.paintOptimistic();
+    try { this.cartAction(); } catch (_) {}
+    try { if (typeof window.cdaTick === "function") window.cdaTick(); } catch (_) {}
+    try { if (typeof BlsLazyloadImg !== "undefined" && BlsLazyloadImg?.init) BlsLazyloadImg.init(this); } catch (_) {}
+    try {
+      const cartRecommend = this.querySelector(".cart-recommend");
+      if (cartRecommend && !cartRecommend.classList.contains("hidden-recommend") && cartRecommend.querySelector(".swiper-slide, .cart-upsell-item")) {
+        requestAnimationFrame(() => { if (cartRecommend.isConnected) cartRecommend.classList.add("open"); });
+      }
+    } catch (_) {}
+  }
 
-        // PDP quantity badge sync (when this product is currently open)
-        try {
-          if (document.querySelector(".quantity__label")) {
-            const items = parsedState.items || [];
-            const pro_id = document
-              .querySelector(".quantity__label")
-              .getAttribute("data-pro-id");
-            var variant_id, variant_quantity;
-            items.forEach(function (item) {
-              variant_id = item.variant_id;
-              if (variant_id == pro_id) {
-                const cartCountEl = document.querySelector(".quantity-cart");
-                const labelEl = document.querySelector(".quantity__label");
-                if (cartCountEl) cartCountEl.innerHTML = item.quantity;
-                if (labelEl) labelEl.classList.remove("hidden");
-                variant_quantity = pro_id;
-                return;
-              }
-            });
-            if (!variant_quantity) {
-              const cartCountEl = document.querySelector(".quantity-cart");
-              const labelEl = document.querySelector(".quantity__label");
-              if (cartCountEl) cartCountEl.innerHTML = 0;
-              if (labelEl) labelEl.classList.add("hidden");
-            }
-          }
-        } catch (_) {}
-
-        // Free-shipping progress follows the new subtotal even when no section HTML is returned.
-        try {
-          const bar = document.querySelector("free-ship-progress-bar");
-          if (bar && parsedState.items_subtotal_price != undefined) bar.init(parsedState.items_subtotal_price);
-        } catch (_) {}
-
-        // Countdown timer removal on empty cart
-        try {
-          if (parsedState.item_count == 0 && this.cartCountDown) {
-            const timerEl = this.cartCountDown.querySelector("countdown-timer");
-            if (timerEl) timerEl.remove();
-          }
-        } catch (_) {}
-
-        // Upsell-beside close on empty cart
-        try {
-          if (parsedState.item_count == 0 && this.cartUpsellBeside) {
-            if (this.cartUpsellBeside.classList.contains("is-open")) {
-              this.cartUpsellBeside.classList.remove("is-open");
-            }
-          }
-        } catch (_) {}
-
-        /* === SECTION RENDER ================================
-           This is what visually removes the deleted line from the
-           cart drawer. Wrapped in its own try/catch and the forEach
-           callback is itself defensive — every step has a null guard.
-           ================================================ */
-        try {
-          if (!parsedState.error && parsedState.item_count != undefined) {
-            for (const section of this.getSectionsToRender()) {
-              try {
-                const elementToReplace = document.getElementById(section.id);
-                if (!elementToReplace) continue;
-                const sectionHTML = parsedState.sections && parsedState.sections[section.id];
-                if (!sectionHTML) continue;
-                const html = new DOMParser().parseFromString(sectionHTML, "text/html");
-                const minicartForm = html.querySelector("#minicart-form");
-                if (!minicartForm) continue;
-                const row = Number(quantity) === 0 && cart_item?.closest('.cart-item');
-                if (row?.id && !minicartForm.querySelector('#' + CSS.escape(row.id))) await materiaAnimateCartRemoval(row);
-                if (!elementToReplace.isConnected) continue;
-                if (!materiaPatchDrawerCart(elementToReplace, minicartForm)) elementToReplace.innerHTML = minicartForm.innerHTML;
-                // Instantly un-gray already-cached thumbnails so there's no
-                // flash between skeleton → new content on qty updates.
-                elementToReplace
-                  .querySelectorAll("img.bls-loading-image")
-                  .forEach((img) => {
-                    if (img.complete && img.naturalWidth > 0) {
-                      img.closest("motion-element")?.classList.remove("bls-loading-image");
-                      img.classList.remove("bls-loading-image");
-                    }
-                  });
-                // Stable keyed rows preserve their paint layer and scroll position.
-              } catch (perSectionErr) {
-                console.warn("[cart] section render failed for", section.id, perSectionErr);
-              }
-            }
-          }
-        } catch (renderErr) {
-          console.warn("[cart] section render block threw", renderErr);
-        }
-
-        try { this.cartAction(); } catch (_) {}
-        try { if (typeof window.cdaTick === "function") window.cdaTick(); } catch (_) {}
-        return parsedState.item_count != null;
-      })
-      .catch((e) => {
-        console.error('[cart] Quantity update failed:', e);
-        this.updateMessageErrors(id, window.cartStrings?.error || e.message, _this);
-        return false;
-      })
-      .finally(() => {
-        /* CRITICAL — clear the .cart-refreshing class FIRST so the
-           drawer becomes interactive again no matter what happens
-           later. The CSS sets `pointer-events: none` on this class;
-           if any subsequent line throws and the class stays set, the
-           user can't click anything in the drawer until they reload
-           the page. We also remove it synchronously here (instead of
-           waiting for two rAFs) so even a frozen rAF callback can't
-           strand the drawer.
-
-           Each remaining cleanup step is wrapped in try/catch so a
-           throw in one (e.g. BlsLazyloadImg.init() on a stale DOM,
-           or addons re-init) can't bubble and skip the rest. */
-        try { this.classList.remove("cart-refreshing"); } catch (_) {}
-        try { if (this.__cartWatchdog) { clearTimeout(this.__cartWatchdog); this.__cartWatchdog = null; } } catch (_) {}
-        try {
-          if (typeof BlsLazyloadImg !== "undefined" && BlsLazyloadImg && BlsLazyloadImg.init) {
-            BlsLazyloadImg.init(this);
-          }
-        } catch (_) {}
-        try { if (cart_item) cart_item.classList.remove("loading"); } catch (_) {}
-        try {
-          if (minicart_wishlist_action) {
-            minicart_wishlist_action.classList.remove("loading");
-          }
-        } catch (_) {}
-        try {
-          const cartRecommend = document.querySelector(".cart-recommend");
-          if (
-            cartRecommend &&
-            !cartRecommend.classList.contains("hidden-recommend")
-          ) {
-            if (cartRecommend.classList.contains("cart-recommend-custom")) {
-              const cartUpsellItem =
-                document.querySelectorAll(".cart-upsell-item");
-              const cartUpsellSlide = document.querySelectorAll(
-                ".swiper-cart-upsell .swiper-slide"
-              );
-              if (cartUpsellItem.length > 0) {
-                requestAnimationFrame(() => { if (cartRecommend.isConnected) cartRecommend.classList.add('open'); });
-              } else if (cartUpsellSlide.length === 0) {
-                cartRecommend.classList.remove("block");
-                cartRecommend.classList.add("hidden");
-              }
-            } else {
-              requestAnimationFrame(() => { if (cartRecommend.isConnected) cartRecommend.classList.add('open'); });
-            }
-          }
-        } catch (_) {}
+  /* "You may also like" inside the drawer: add in place, the new line opens
+     and nothing else is redrawn. */
+  async addFromRecommendation(form) {
+    const button = form.querySelector('[type="submit"]');
+    if (button?.getAttribute("aria-disabled") === "true" || form.dataset.adding === "true") return;
+    const data = new FormData(form);
+    const id = data.get("id");
+    if (!id) return;
+    form.dataset.adding = "true";
+    button?.classList.add("loading");
+    button?.setAttribute("aria-busy", "true");
+    const sections = this.getSectionsToRender().map((section) => section.id);
+    try {
+      // Serialised with quantity changes.
+      while (this._qtyBusy) await new Promise(resolve => setTimeout(resolve, 60));
+      this._qtyBusy = true;
+      const response = await fetch(`${window.routes?.cart_add_url || "/cart/add.js"}`, {
+        method: "POST", credentials: "same-origin",
+        headers: {"Content-Type": "application/json", Accept: "application/json", "X-Requested-With": "XMLHttpRequest"},
+        body: JSON.stringify({id, quantity: Math.max(1, parseInt(data.get("quantity"), 10) || 1), sections, sections_url: window.location.pathname}),
       });
+      const added = await response.json().catch(() => null);
+      if (!response.ok || !added || added.status >= 400 || added.errors) throw new Error(added?.description || added?.message || window.cartStrings?.error || "Unable to add");
+      const quantityAdded = Number(added.quantity) || 1;
+      const state = {sections: added.sections || null, item_count: (this._cart?.item_count ?? 0) + quantityAdded};
+      this._qtyBusy = false;
+      await this.applyCartState(state);
+      // Counts and the free-shipping bar settle from the cart itself.
+      this.ensureCartState(true);
+      document.dispatchEvent(new CustomEvent("cart:refresh", {detail: {source: "drawer-recommendation"}}));
+    } catch (error) {
+      this._qtyBusy = false;
+      const message = error.message || window.cartStrings?.error;
+      if (typeof showToast === "function" && message) showToast(message, 3000, "modal-error");
+    } finally {
+      this._qtyBusy = false;
+      delete form.dataset.adding;
+      button?.classList.remove("loading");
+      button?.removeAttribute("aria-busy");
+      if (this._desired?.size) this.pumpQuantities();
+    }
   }
 
   updateMessageErrors(line, message, target) {
@@ -955,6 +1079,8 @@ class CartNotification extends HTMLElement {
       // Initialize only the drawer's images after its entrance starts; leave
       // the rest of the storefront untouched.
       requestAnimationFrame(() => window.BlsLazyloadImg?.init?.(this));
+      // Unit prices for the optimistic totals, read once the drawer is open.
+      if (typeof this.ensureCartState === "function") setTimeout(() => this.ensureCartState(), 120);
     } else {
       this.notification.querySelector("a").click();
     }
@@ -1086,7 +1212,10 @@ class BaseFetcher extends HTMLElement {
     if (content?.querySelector('.swiper-slide, .cart-upsell-item')) {
       const target = this.querySelector(targetSelector);
       if (target) {
+        if (target.innerHTML === content.innerHTML) { this.hidden = false; return; }
+        const had = !!target.querySelector('.swiper-slide, .cart-upsell-item');
         target.innerHTML = content.innerHTML;
+        if (had && target.animate && !materiaReduced()) target.animate([{opacity: .35}, {opacity: 1}], {duration: 220, easing: 'ease-out'});
         this.hidden = false;
         this.classList.remove('hidden', 'no-js-hidden');
         this.classList.add('open');
@@ -1119,6 +1248,13 @@ class CartUpsell extends BaseFetcher {
   
   init() {
     this.connectedCallback();
+  }
+
+  // A new lead product: keep the current list on screen until the new one is in.
+  refresh(url) {
+    if (!url || url === this.dataset.url) return;
+    this.dataset.url = url;
+    this.fetchAndUpdate(url, ".swiper-wrapper", ".swiper-wrapper");
   }
   
   connectedCallback() {

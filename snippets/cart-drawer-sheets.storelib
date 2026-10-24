@@ -228,8 +228,38 @@
   #minicart_wrapper.open_drawer .drawer-bottom > :is(.viewcart, .btn-checkout, .materia-continue-shopping) { grid-column: 1 / -1; }
 }
 
-/* Free-shipping bar: the width eases to each new subtotal. */
-#minicart_wrapper.open_drawer .cart_shipping__fill { transition: width .45s cubic-bezier(.32, .72, 0, 1); }
+/* Free-shipping bar: the fill is full width and slides (transform only, no
+   layout) to each new subtotal; --fs-progress is 0..1. The icon is a parcel,
+   a check in a circle once free shipping is reached. */
+#minicart_wrapper.open_drawer .cart_shipping--modern .cart_shipping__track { isolation: isolate; }
+#minicart_wrapper.open_drawer .cart_shipping--modern .cart_shipping__fill {
+  width: 100% !important; transform: translate3d(calc((var(--fs-progress, 0) - 1) * 100%), 0, 0);
+  transition: transform .55s cubic-bezier(.22, 1, .36, 1), background-color .3s ease !important; will-change: transform;
+}
+[dir="rtl"] #minicart_wrapper.open_drawer .cart_shipping--modern .cart_shipping__fill { transform: translate3d(calc((1 - var(--fs-progress, 0)) * 100%), 0, 0); }
+#minicart_wrapper.open_drawer .cart_shipping--modern .cart_shipping__icon { position: relative; flex: 0 0 32px; width: 32px; height: 32px; }
+#minicart_wrapper.open_drawer .cart_shipping__glyph { position: absolute; inset: 0; margin: auto; width: 18px; height: 18px; transition: opacity .25s ease, transform .35s cubic-bezier(.22, 1, .36, 1); }
+#minicart_wrapper.open_drawer .cart_shipping__glyph--done { opacity: 0; transform: scale(.6); }
+#minicart_wrapper.open_drawer .cart_shipping_free .cart_shipping__glyph--parcel { opacity: 0; transform: scale(.6); }
+#minicart_wrapper.open_drawer .cart_shipping_free .cart_shipping__glyph--done { opacity: 1; transform: none; }
+
+/* Rows: a new line opens into place; quantity controls keep 44px targets. */
+#minicart_wrapper.open_drawer .cart-item.materia-row-enter { pointer-events: none; }
+#minicart_wrapper.open_drawer .cart-item quantity-input .quantity__button { min-width: 40px; min-height: 44px; touch-action: manipulation; }
+#minicart_wrapper.open_drawer .cart-item quantity-input .quantity__button.disabled { opacity: .45; }
+#minicart_wrapper.open_drawer .cart-item quantity-input input[name="updates[]"] { font-variant-numeric: tabular-nums; }
+#minicart_wrapper.open_drawer [data-cart-subtotal-price] { font-variant-numeric: tabular-nums; }
+
+/* Variant editor sheet (the pencil): the line's options in a bottom sheet. */
+#minicart_wrapper.open_drawer .cart-variant-sheet .cart-variant-sheet__title { display: flex; align-items: center; min-height: 28px; margin: 0 0 14px; font-size: 16px; line-height: 1.3; }
+#minicart_wrapper.open_drawer .cart-variant-sheet .cart-item__variant-picker { margin: 0; padding: 0; border-top: 0; gap: 16px; }
+#minicart_wrapper.open_drawer .cart-variant-sheet .cart-item__variant-field > span { font-size: 13px; font-weight: 500; color: var(--color-heading); }
+#minicart_wrapper.open_drawer .cart-variant-sheet .cart-item__variant-choice { min-width: 48px; }
+#minicart_wrapper.open_drawer .cart-variant-sheet .cart-item__variant-choice[aria-disabled="true"] { opacity: .45; text-decoration: line-through; }
+#minicart_wrapper.open_drawer .cart-variant-sheet .cart-item__variant-error:not([hidden]) {
+  display: block; margin: 0; padding: 10px 12px; border-radius: 8px; font-size: 13px;
+  color: #b42318; background: color-mix(in srgb, #b42318 8%, var(--color-background, #fff));
+}
 #minicart_wrapper.open_drawer .free-shipping-message .price { white-space: nowrap; }
 
 /* Opening and closing the drawer: it moves in the same frame as the click,
@@ -262,18 +292,17 @@ html.materia-drawer-restoring .overlayminicart::after { transition: none !import
   #minicart_wrapper.open_drawer .minicart__wrapper .cart__addon-content,
   #minicart_wrapper.open_drawer .minicart__wrapper .cart__addon-content.is-open,
   #minicart_wrapper.open_drawer .minicart__wrapper > .cart-drawer-sheet-scrim,
-  #minicart_wrapper.open_drawer .cart_shipping__fill { transition: none !important; }
+  #minicart_wrapper.open_drawer .cart_shipping__fill,
+  #minicart_wrapper.open_drawer .cart_shipping__glyph { transition: none !important; }
 }
 </style>
 <script>
 (() => {
   if (window.__materiaCartSheetsV2) return;
   window.__materiaCartSheetsV2 = true;
-  const SHEET = '#minicart_wrapper .cart__addon-content.is-open';
-  const HANDLE = '[data-sheet-grab], .addon-title';
-  let drag = null;
-  let pending = null;
-  const wrapperOf = sheet => sheet.closest('.minicart__wrapper');
+  // Dragging a sheet down to close it is materiaSheetDrag in materia-experience.js,
+  // shared with the country picker and the variant editor.
+  const dragging = () => !!document.querySelector('#minicart_wrapper .cart__addon-content.is-dragging');
 
   function closeSheet(sheet) {
     const cart = sheet.closest('cart-notification');
@@ -283,91 +312,6 @@ html.materia-drawer-restoring .overlayminicart::after { transition: none !import
     opener?.setAttribute('aria-expanded', 'false');
     if (sheet.contains(document.activeElement)) opener?.focus({preventScroll: true});
   }
-  function paint() {
-    if (!drag) return;
-    drag.frame = 0;
-    drag.sheet.style.setProperty('--sheet-drag', drag.dy.toFixed(1) + 'px');
-    wrapperOf(drag.sheet)?.style.setProperty('--cart-sheet-progress', (Math.max(0, drag.dy) / drag.height).toFixed(3));
-  }
-  function start(sheet, y, pointerId) {
-    document.activeElement?.blur?.();
-    drag = {sheet, startY: y, dy: 0, height: Math.max(1, sheet.getBoundingClientRect().height), samples: [{y, t: performance.now()}], frame: 0, pointerId};
-    sheet.classList.add('is-dragging');
-    wrapperOf(sheet)?.classList.add('is-sheet-dragging');
-  }
-  function move(y) {
-    if (!drag) return;
-    const raw = y - drag.startY;
-    // Down follows the finger 1:1; up stretches a little and stops.
-    drag.dy = raw >= 0 ? raw : -Math.min(20, Math.sqrt(-raw) * 2);
-    const now = performance.now();
-    drag.samples.push({y, t: now});
-    while (drag.samples.length > 2 && now - drag.samples[0].t > 90) drag.samples.shift();
-    if (!drag.frame) drag.frame = requestAnimationFrame(paint);
-  }
-  function end(cancelled) {
-    if (!drag) return;
-    const d = drag;
-    drag = null;
-    if (d.frame) cancelAnimationFrame(d.frame);
-    const first = d.samples[0], last = d.samples[d.samples.length - 1];
-    const velocity = (last.y - first.y) / Math.max(1, last.t - first.t);
-    const dismiss = !cancelled && (d.dy > Math.min(120, d.height * 0.3) || (velocity > 0.5 && d.dy > 16));
-    const wrapper = wrapperOf(d.sheet);
-    // One style change: the transition runs from where the finger let go.
-    d.sheet.classList.remove('is-dragging');
-    wrapper?.classList.remove('is-sheet-dragging');
-    d.sheet.style.removeProperty('--sheet-drag');
-    wrapper?.style.removeProperty('--cart-sheet-progress');
-    if (dismiss) closeSheet(d.sheet);
-  }
-
-  // Handle and title: pointer events cover mouse, pen and touch.
-  document.addEventListener('pointerdown', event => {
-    if (drag || (event.pointerType === 'mouse' && event.button !== 0)) return;
-    const handle = event.target.closest?.(SHEET + ' :is(' + HANDLE + ')');
-    if (!handle) return;
-    event.preventDefault();
-    start(handle.closest('.cart__addon-content'), event.clientY, event.pointerId);
-    try { handle.setPointerCapture(event.pointerId); } catch (_) {}
-  });
-  document.addEventListener('pointermove', event => { if (drag && drag.pointerId === event.pointerId) move(event.clientY); }, {passive: true});
-  document.addEventListener('pointerup', event => { if (drag && drag.pointerId === event.pointerId) end(false); });
-  document.addEventListener('pointercancel', event => { if (drag && drag.pointerId === event.pointerId) end(true); });
-
-  // Sheet body on touch: pulling down from the top of its scroll closes it.
-  function touchMove(event) {
-    const touch = event.touches[0];
-    if (!touch) return;
-    if (drag && drag.touch) { event.preventDefault(); move(touch.clientY); return; }
-    if (!pending) return;
-    const dx = touch.clientX - pending.x, dy = touch.clientY - pending.y;
-    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-    if (dy > 0 && Math.abs(dy) > Math.abs(dx) && pending.sheet.scrollTop <= 0) {
-      start(pending.sheet, pending.y, null);
-      drag.touch = true;
-      event.preventDefault();
-      move(touch.clientY);
-    }
-    pending = null;
-  }
-  function touchEnd(event) {
-    pending = null;
-    const sheet = event.currentTarget;
-    sheet.removeEventListener('touchmove', touchMove);
-    sheet.removeEventListener('touchend', touchEnd);
-    sheet.removeEventListener('touchcancel', touchEnd);
-    if (drag && drag.touch) end(event.type === 'touchcancel');
-  }
-  document.addEventListener('touchstart', event => {
-    if (drag || event.touches.length !== 1) return;
-    const sheet = event.target.closest?.(SHEET);
-    if (!sheet || event.target.closest(HANDLE) || event.target.closest('textarea, select')) return;
-    pending = {sheet, x: event.touches[0].clientX, y: event.touches[0].clientY};
-    sheet.addEventListener('touchmove', touchMove, {passive: false});
-    sheet.addEventListener('touchend', touchEnd);
-    sheet.addEventListener('touchcancel', touchEnd);
-  }, {passive: true});
 
   // Opening, cancelling and saving are handled here for every drawer render,
   // including bodies swapped in after a cart change. Capture phase, so the
@@ -543,7 +487,7 @@ html.materia-drawer-restoring .overlayminicart::after { transition: none !import
     if (cart?.classList.contains('open') && typeof cart.close === 'function') cart.close();
   });
   document.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || drag) return;
+    if (event.key !== 'Escape' || dragging()) return;
     const cart = document.getElementById('minicart_wrapper');
     if (!cart?.classList.contains('open') || cart.querySelector('.cart__addon-content.is-open, cart-item-variant-switch:not([hidden])')) return;
     if (typeof cart.close === 'function') cart.close();
@@ -592,8 +536,6 @@ html body #minicart_wrapper.minicart :is(.quantity-input, .minicart__actions, .m
   new MutationObserver(records => { if (records.some(r => [...r.addedNodes].some(n => n.nodeType === 1 && (n.id === 'minicart_wrapper' || (n.tagName === 'STYLE' && n.id !== 'materia-cart-ink'))))) queueInk(); })
     .observe(document.body || document.documentElement, {subtree: true, childList: true});
 
-  // A sheet that loses its open state mid-drag (re-render, Escape) never stays stuck.
-  document.addEventListener('keydown', event => { if (event.key === 'Escape' && drag) end(true); }, true);
 })();
 </script>
 </template>

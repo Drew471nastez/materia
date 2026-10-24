@@ -14,12 +14,8 @@
      stopImmediatePropagation when we own the delete so the custom-
      element handler can't double-fire and double-decrement the cart.
 
-   Why we still defer to the custom element for wishlist-mode clicks:
-   - When `show_message_when_remove` is enabled in settings, the trash
-     button gets `.action-add-wishlist` and the first click shows a
-     "remove and save to wishlist?" confirmation panel instead of
-     deleting. If the product isn't yet in the wishlist we let the
-     custom-element handler take over by NOT stopping propagation.
+   A remove click always removes: no "save to wishlist first?" step, even
+   when the old show_message_when_remove setting is on.
 */
 "use-strict";
 
@@ -29,19 +25,6 @@
       document.querySelector("cart-notification") ||
       document.querySelector("cart-drawer")
     );
-  }
-  function isInWishlist(productHandle) {
-    try {
-      const raw = localStorage.getItem("materia__wishlist-items");
-      if (!raw) return false;
-      const list = JSON.parse(raw);
-      return Array.isArray(list) && list.indexOf(productHandle) !== -1;
-    } catch (_) {
-      // Corrupt storage — clear so the wishlist flow self-heals on the
-      // next interaction.
-      try { localStorage.removeItem("materia__wishlist-items"); } catch (_) {}
-      return false;
-    }
   }
   function fallbackDelete(lineKey) {
     return fetch("/cart/change.js", {
@@ -81,17 +64,8 @@
          dumps the shopper onto /cart. */
       event.preventDefault();
 
-      /* Wishlist-confirmation mode: first click on a not-yet-wishlisted
-         product should show the confirmation panel, not delete. Let
-         the custom-element handler take over by returning WITHOUT
-         calling stopImmediatePropagation. */
-      const wishlistMode = trash.classList.contains("action-add-wishlist");
-      if (wishlistMode && !isInWishlist(trash.dataset.productHandle)) {
-        return;
-      }
-
-      /* This is a real delete. Take over: stop the custom-element
-         handler from also firing so we don't double-decrement. */
+      /* Take over: stop the custom-element handler from also firing (it
+         would open the wishlist prompt or decrement twice). */
       event.stopImmediatePropagation();
 
       const lineKey = trash.dataset.index;

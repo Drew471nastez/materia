@@ -132,7 +132,8 @@ const shell=body=>`<!doctype html><html lang="fr"><head><meta name="viewport" co
     const head=await phone.$eval('.mcp-head',el=>{const r=el.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+8}});
     await phone.mouse.move(head.x,head.y);await phone.mouse.down();
     for(let i=1;i<=10;i++){await phone.mouse.move(head.x,head.y+i*40);}
-    assert(await phone.$eval('.mcp-panel',el=>el.classList.contains('is-dragging')&&parseFloat(el.style.getPropertyValue('--mcp-drag'))>300));
+    await phone.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>r())));
+    assert(await phone.$eval('.mcp-panel',el=>el.classList.contains('is-dragging')&&new DOMMatrix(getComputedStyle(el).transform).m42>300&&getComputedStyle(el).transitionDuration==='0s'),'the sheet follows the pointer with no transition');
     await phone.mouse.up();
     await phone.waitForTimeout(450);
     assert.equal(await phone.$eval('.mcp-trigger',el=>el.getAttribute('aria-expanded')),'false');

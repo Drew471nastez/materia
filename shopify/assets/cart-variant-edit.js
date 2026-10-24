@@ -16,6 +16,12 @@
   };
   function renderSections(cart, sections) {
     if (!sections) return false;
+    const drawer = document.querySelector('cart-notification');
+    if (drawer && typeof drawer.applyCartState === 'function' && sections['minicart-form']) {
+      drawer.applyCartState({...cart, sections});
+      document.dispatchEvent(new CustomEvent('cart:refresh', {detail:{source:'variant-edit'}}));
+      return true;
+    }
     let updated = false;
     for (const [id, html] of Object.entries(sections)) {
       if (!html) continue;
@@ -59,9 +65,17 @@
         const value = current['option' + (index + 1)];
         if ([...select.options].some(option => option.value === String(value))) select.value = value;
       });
+      // Current options are pressed; a choice with no variant in stock for the
+      // other options picked reads as unavailable before it is tapped.
       const syncChoices = () => this.querySelectorAll('[data-option-value]').forEach(button => {
-        const select = this._selects[Number(button.dataset.optionIndex)];
+        const index = Number(button.dataset.optionIndex);
+        const select = this._selects[index];
         button.setAttribute('aria-pressed', String(select?.value === button.dataset.optionValue));
+        const picked = this._selects.map(el => el.value);
+        picked[index] = button.dataset.optionValue;
+        const match = this._variants.find(v => picked.every((value, i) => String(v['option' + (i + 1)]) === String(value)));
+        if (this._variants.length && (!match || !match.available)) button.setAttribute('aria-disabled', 'true');
+        else button.removeAttribute('aria-disabled');
       });
       syncChoices();
       for (const select of this._selects) select.addEventListener('change', () => { syncChoices(); this.save(); }, {signal:this._events.signal});
@@ -77,10 +91,7 @@
       this.addEventListener('keydown', event => {
         if (event.key !== 'Escape') return;
         event.stopPropagation();
-        togglePicker(this, false);
-        const button = this.closest('.cart-item')?.querySelector('.cart-item__variant-edit');
-        button?.setAttribute('aria-expanded', 'false');
-        button?.focus({preventScroll:true});
+        closeEditor();
       }, {signal:this._events.signal});
       });
     }
@@ -130,6 +141,7 @@
           if (res.ok) sections = await res.json();
         }
         if (!renderSections(cart, sections)) this.showError('Product updated. Please reopen the cart to see the new option.');
+        else closeEditor(false);
       } catch (err) {
         this.showError(err.message || 'Unable to update this variant.');
       } finally {
@@ -139,36 +151,108 @@
     }
   }
   if (!customElements.get('cart-item-variant-switch')) customElements.define('cart-item-variant-switch', CartVariantEditor);
+  /* The pencil opens the line's options in a bottom sheet, like the drawer's
+     note and coupon sheets (same scrim, drag to close, Escape). The editor
+     element moves into the sheet while it is open and back to its line after. */
+  let current = null; // {picker, placeholder, button, sheet}
+  const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function sheetFor(cart) {
+    const wrapper = cart.querySelector('.minicart__wrapper') || cart;
+    let sheet = wrapper.querySelector(':scope > .cart-variant-sheet');
+    if (sheet) return sheet;
+    sheet = document.createElement('div');
+    sheet.className = 'cart__addon-content cart-variant-sheet';
+    sheet.id = 'cart-variant-sheet';
+    sheet.setAttribute('role', 'dialog');
+    sheet.setAttribute('aria-modal', 'true');
+    sheet.setAttribute('aria-labelledby', 'cart-variant-sheet-title');
+    sheet.tabIndex = -1;
+    const grab = document.createElement('div');
+    grab.className = 'cart-sheet__grab';
+    grab.setAttribute('data-sheet-grab', '');
+    grab.setAttribute('aria-hidden', 'true');
+    const title = document.createElement('div');
+    title.className = 'addon-title cart-variant-sheet__title';
+    const label = document.createElement('span');
+    label.id = 'cart-variant-sheet-title';
+    title.append(label);
+    const body = document.createElement('div');
+    body.className = 'cart-variant-sheet__body';
+    const actions = document.createElement('div');
+    actions.className = 'addon-actions';
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'btn-cancel btn-outline w-full';
+    close.textContent = cart.querySelector('.cart__addon-content .btn-cancel')?.textContent.trim() || 'Close';
+    actions.append(close);
+    sheet.append(grab, title, body, actions);
+    wrapper.append(sheet);
+    // Every way a sheet closes (scrim, drag, Cancel, Escape) removes is-open.
+    new MutationObserver(() => { if (!sheet.classList.contains('is-open')) settle(sheet); })
+      .observe(sheet, {attributes: true, attributeFilter: ['class']});
+    return sheet;
+  }
+  function restore(state) {
+    if (!state) return;
+    const {picker, placeholder} = state;
+    if (placeholder?.isConnected) placeholder.replaceWith(picker);
+    else { picker.remove(); placeholder?.remove(); }
+    picker.hidden = true;
+  }
+  function settle(sheet) {
+    const state = current;
+    if (!state || state.sheet !== sheet) return;
+    current = null;
+    state.button?.setAttribute('aria-expanded', 'false');
+    if (state.focus !== false && sheet.contains(document.activeElement) && state.button?.isConnected) state.button.focus({preventScroll: true});
+    clearTimeout(sheet._restoreTimer);
+    // After the slide down, the editor goes back into its line.
+    sheet._restoreTimer = setTimeout(() => { if (current?.picker !== state.picker) restore(state); }, reduced() ? 0 : 340);
+  }
+  function closeEditor(focus = true) {
+    if (!current) return;
+    current.focus = focus;
+    current.sheet.classList.remove('is-open');
+  }
+  function openEditor(button) {
+    const row = button.closest('.cart-item');
+    const picker = row?.querySelector('cart-item-variant-switch') || document.getElementById(button.getAttribute('aria-controls') || '');
+    const cart = button.closest('cart-notification');
+    if (!picker || !cart) return;
+    if (current?.picker === picker) { closeEditor(); return; }
+    const sheet = sheetFor(cart);
+    if (current) { const previous = current; current = null; previous.button?.setAttribute('aria-expanded', 'false'); restore(previous); }
+    clearTimeout(sheet._restoreTimer);
+    // Another open drawer sheet gives way to this one.
+    cart.querySelectorAll('.cart__addon-content.is-open').forEach(open => {
+      if (open === sheet) return;
+      open.classList.remove('is-open');
+      const opener = cart.querySelector('.mini_cart_addon_btn[data-open="' + open.id + '"]');
+      opener?.classList.remove('open'); opener?.setAttribute('aria-expanded', 'false');
+    });
+    const body = sheet.querySelector('.cart-variant-sheet__body');
+    body.querySelectorAll('cart-item-variant-switch').forEach(old => old.remove());
+    const placeholder = document.createComment('cart-variant-editor');
+    picker.replaceWith(placeholder);
+    picker.hidden = false;
+    body.append(picker);
+    sheet.querySelector('#cart-variant-sheet-title').textContent = row?.querySelector('.minicart__product-name')?.textContent.trim() || button.getAttribute('title') || '';
+    current = {picker, placeholder, button, sheet};
+    button.setAttribute('aria-expanded', 'true');
+    button.setAttribute('aria-controls', sheet.id);
+    sheet.getBoundingClientRect();
+    sheet.classList.add('is-open');
+    requestAnimationFrame(() => {
+      const target = picker.querySelector('[data-option-value][aria-pressed="true"]') || picker.querySelector('[data-option-value], select:not([hidden])');
+      if (window.matchMedia('(pointer: coarse)').matches) sheet.focus({preventScroll: true});
+      else target?.focus({preventScroll: true});
+    });
+  }
   document.addEventListener('click', e => {
     const button = e.target.closest?.('.cart-item__variant-edit');
     if (!button) return;
     e.preventDefault();
-    const picker = button.closest('.cart-item')?.querySelector('cart-item-variant-switch');
-    if (!picker) return;
-    const isOpening = picker.hasAttribute('hidden') || picker.dataset.closing === 'true';
-    button.setAttribute('aria-expanded', String(isOpening));
-    togglePicker(picker, isOpening);
-    if (isOpening) picker.querySelector('[data-option-value][aria-pressed="true"], [data-option-value], select:not([hidden])')?.focus({preventScroll:true});
+    openEditor(button);
   });
-  // Height and opacity ease open and closed; reduced motion switches instantly.
-  function togglePicker(picker, open) {
-    picker._animation?.cancel();
-    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches || typeof picker.animate !== 'function';
-    if (open) {
-      delete picker.dataset.closing;
-      picker.hidden = false;
-      if (still) return;
-      const height = picker.scrollHeight;
-      picker.style.overflow = 'hidden';
-      picker._animation = picker.animate([{height: '0px', opacity: 0, transform: 'translateY(-4px)'}, {height: height + 'px', opacity: 1, transform: 'none'}], {duration: 260, easing: 'cubic-bezier(.22, 1, .36, 1)'});
-      picker._animation.onfinish = picker._animation.oncancel = () => { picker.style.overflow = ''; picker._animation = null; };
-    } else {
-      if (still) { picker.hidden = true; return; }
-      picker.dataset.closing = 'true';
-      picker.style.overflow = 'hidden';
-      picker._animation = picker.animate([{height: picker.offsetHeight + 'px', opacity: 1}, {height: '0px', opacity: 0}], {duration: 200, easing: 'cubic-bezier(.4, 0, 1, 1)'});
-      picker._animation.onfinish = () => { picker.hidden = true; delete picker.dataset.closing; picker.style.overflow = ''; picker._animation = null; };
-      picker._animation.oncancel = () => { delete picker.dataset.closing; picker.style.overflow = ''; };
-    }
-  }
+  window.materiaCloseVariantEditor = closeEditor;
 })();
