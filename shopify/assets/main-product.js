@@ -100,9 +100,12 @@ class StickyAddCart extends HTMLElement {
     }
     this._navNodes = new Set();
     this._navAttributes = new MutationObserver(this._onScroll);
-    this.placeAboveNav();
     this.layoutForWidth();
-    this.evaluate();
+    // Measured in the first frame, not while the page's scripts still run
+    // (that forced a layout of the whole page there). The bar is hidden
+    // until the section's button has scrolled away, so nothing waits on it.
+    this._ticking = true;
+    this._scrollFrame = requestAnimationFrame(() => this.evaluate());
   }
   teardown() {
     this._mtObserving = false;

@@ -487,10 +487,27 @@ html body #minicart_wrapper.minicart :is(.quantity-input, .minicart__actions, .m
     if (!ink) { ink = document.createElement('style'); ink.id = 'materia-cart-ink'; document.head.append(ink); }
     if (ink.textContent !== css) ink.textContent = css;
   }
-  let inkFrame = 0;
-  const queueInk = () => { cancelAnimationFrame(inkFrame); inkFrame = requestAnimationFrame(ensureInk); };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', queueInk, {once: true}); else queueInk();
-  window.addEventListener('load', queueInk, {once: true});
+  // Reading the drawer's colours forces a style pass of the whole page, so it
+  // is done only when they can matter: once while the page is idle after
+  // load, and in the frame the drawer opens if anything changed since (a
+  // style added, new drawer markup). A closed drawer is never checked again
+  // on every change; it was three or four forced passes (60-90ms) per load.
+  let inkFrame = 0, inkDirty = true;
+  const drawerShown = () => {
+    if (document.documentElement.classList.contains('open-minicart')) return true;
+    const cart = document.getElementById('minicart_wrapper');
+    return !!cart && (cart.classList.contains('open') || !!cart.querySelector('.minicart__wrapper.open'));
+  };
+  const runInk = () => { inkFrame = 0; if (!inkDirty) return; inkDirty = false; ensureInk(); };
+  const queueInk = () => {
+    inkDirty = true;
+    if (inkFrame || !drawerShown()) return;
+    inkFrame = requestAnimationFrame(runInk);
+  };
+  const idle = window.requestIdleCallback ? fn => requestIdleCallback(fn, {timeout: 3000}) : fn => setTimeout(fn, 600);
+  const inkWhenIdle = () => idle(() => { if (inkDirty && !inkFrame) runInk(); });
+  if (document.readyState === 'complete') inkWhenIdle(); else window.addEventListener('load', inkWhenIdle, {once: true});
+  if (drawerShown()) queueInk();
   document.addEventListener('materia:cart-drawer-updated', queueInk);
   // Check again when the drawer opens and when its markup or colours arrive.
   new MutationObserver(queueInk).observe(document.documentElement, {attributes: true, attributeFilter: ['class']});

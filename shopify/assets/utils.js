@@ -306,10 +306,11 @@ function initLazyload() {
       scrollLazyload();
     });
   }, { passive: true });
-  let pos = window.pageYOffset;
-  if (pos > 40) {
-    scrollLazyload();
-  }
+  // Read in the first frame: reading the scroll position while the page's
+  // scripts run forced a layout of the whole page (50-75ms on a phone).
+  requestAnimationFrame(() => {
+    if (window.pageYOffset > 40) scrollLazyload();
+  });
 }
 initLazyload();
 

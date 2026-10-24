@@ -229,23 +229,66 @@ class SlideSection extends HTMLElement {
     if (!this.classList.contains("slideshow") || this.isConnected) this.init();
   }
 
+  // The slideshow and the announcement bar start at once; the cart's
+  // recommendations too (the drawer opens them). Every other slider is built
+  // when it comes within a screen of the viewport, each in its own task: at
+  // load only the ones in or near view are built, a hidden one (a closed tab,
+  // a display:none layout) waits until it is shown, and nothing is built
+  // twice. This used to build every slider of a product page at load, and on
+  // the home page the rest all at once on the first mouse move or touch.
   init() {
     if (this.classList.contains('slideshow')) { this.initSlideshow(); return; }
-    if (this.classList.contains('swiper-cart-upsell')) { this.initSlide(); return; }
-    if (document.body.classList.contains("index")) {
-      let pos = window.pageYOffset;
-      if (pos > 0 || document.body.classList.contains("swiper-lazy")) {
-        this.initSlide();
-      } else {
-        if (this.classList.contains("lazy-loading-swiper-before")) {
-          this.initSlide();
-        } else {
-          this.classList.add("lazy-loading-swiper-after");
-        }
-      }
-    } else {
-      this.initSlide();
+    if (this.classList.contains('swiper-cart-upsell') || this.classList.contains('topbar-slider')) { this.initSlide(); return; }
+    SlideSection.whenNear(this, () => this.initSlide());
+  }
+
+  // Runs start() once el is within a screen of the viewport (or at once
+  // without IntersectionObserver). The observer's first report comes after
+  // the page's first layout, so nothing here forces one.
+  static whenNear(el, start) {
+    if (!("IntersectionObserver" in window)) { start(); return; }
+    const S = SlideSection;
+    if (!S._near) {
+      S._nearWaiting = new Map();
+      S._nearQueue = [];
+      S._near = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting || !S._nearWaiting.has(entry.target)) return;
+          S._near.unobserve(entry.target);
+          S._nearQueue.push(entry.target);
+        });
+        S._drainNear();
+      }, { rootMargin: "100% 0px" });
     }
+    S._nearWaiting.set(el, start);
+    S._near.observe(el);
+  }
+
+  // One slider per task, so several coming into view never make one long task.
+  static _drainNear() {
+    const S = SlideSection;
+    if (S._nearTimer || !S._nearQueue.length) return;
+    S._nearTimer = setTimeout(() => {
+      S._nearTimer = 0;
+      const el = S._nearQueue.shift();
+      const start = el && S._nearWaiting.get(el);
+      if (el) S._nearWaiting.delete(el);
+      if (start && el.isConnected) {
+        try { start(); } catch (e) { console.error(e); }
+      }
+      S._drainNear();
+    }, 0);
+  }
+
+  // Builds a waiting slider now (a script needs it before it is in view).
+  static startNow(el) {
+    const S = SlideSection;
+    const start = S._nearWaiting && S._nearWaiting.get(el);
+    if (!start) return false;
+    S._nearWaiting.delete(el);
+    S._near.unobserve(el);
+    start();
+    return true;
   }
 
   // Slide effects by schema value. The creative presets keep the slide being
@@ -700,6 +743,10 @@ class SlideSection extends HTMLElement {
     // and each redraw in the builder used to add another set. Checked a frame
     // later, so an element that is only moved keeps its slider.
     requestAnimationFrame(() => {
+      if (!this.isConnected && SlideSection._nearWaiting && SlideSection._nearWaiting.delete(this)) {
+        SlideSection._near.unobserve(this);
+        this._nearDropped = true;
+      }
       if (this.isConnected || !this.globalSlide || this.globalSlide.destroyed) return;
       try { this.globalSlide.destroy(true, false); } catch (e) {}
     });
@@ -708,6 +755,7 @@ class SlideSection extends HTMLElement {
   connectedCallback() {
     if (!this.classList.contains("slideshow")) {
       if (this.globalSlide && this.globalSlide.destroyed && typeof this.initSlide === "function") this.initSlide();
+      else if (this._nearDropped) { this._nearDropped = false; this.init(); }
       return;
     }
     if (!this.globalSlide || this.globalSlide.destroyed) this.initSlideshow();
@@ -722,6 +770,8 @@ class SlideSection extends HTMLElement {
   }
 }
 customElements.define("slide-section", SlideSection);
+// Other sliders (the product gallery in theme.js) wait for the viewport the same way.
+window.MateriaNearView = { when: (el, start) => SlideSection.whenNear(el, start), now: (el) => SlideSection.startNow(el) };
 // Builder events reach the slideshow they belong to.
 ["shopify:block:select", "shopify:block:deselect"].forEach((type) => {
   document.addEventListener(type, (event) => {

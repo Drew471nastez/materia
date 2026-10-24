@@ -180,12 +180,19 @@ class ZoomAction extends HTMLElement {
     this.updateSwiper();
   }
 
+  // The thumbnail strip is measured again only when its box changed (Swiper
+  // updated it already otherwise; on window load this was a 40-60ms task),
+  // and not before it is built.
   updateSwiper() {
-    if (typeof Swiper !== 'undefined') {
-      if (this.querySelector('.thumbnail-slide')) {
-        this.querySelector('.thumbnail-slide').swiper.update();
-      }
-    }
+    const el = this.querySelector('.thumbnail-slide');
+    const sw = el && el.swiper;
+    if (!sw || sw.destroyed) return;
+    // Swiper's own width/height: the client box less padding, as it measures it.
+    const cs = getComputedStyle(el);
+    const w = el.clientWidth - (parseInt(cs.paddingLeft, 10) || 0) - (parseInt(cs.paddingRight, 10) || 0);
+    const h = el.clientHeight - (parseInt(cs.paddingTop, 10) || 0) - (parseInt(cs.paddingBottom, 10) || 0);
+    if (sw.width === w && sw.height === h) return;
+    sw.update();
   }
 
   disconnectedCallback() {

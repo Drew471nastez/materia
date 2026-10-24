@@ -55,7 +55,27 @@ function markDone(el) {
 
 const msOf = value => value.trim().endsWith('ms') ? parseFloat(value) : parseFloat(value) * 1000;
 
+// The first report of an element just set up says where it sits at load.
+// Content in the first screen (or above it) shows at once; only what is below
+// the fold is armed and waits to reveal on scroll (its next report).
+const revealArming = new WeakSet();
+function armReveal(entries) {
+  const fold = window.innerHeight;
+  return entries.filter(entry => {
+    const el = entry.target;
+    if (!revealArming.has(el)) return true;
+    revealArming.delete(el);
+    if (!el.isConnected || el.hasAttribute(SCROLL_ANIMATION_DONE_ATTR)) { revealObserver.unobserve(el); return false; }
+    if (entry.boundingClientRect.top < fold) { revealObserver.unobserve(el); markDone(el); return false; }
+    // A motion element that gave way to this reveal pinned itself visible.
+    if (el.tagName === 'MOTION-ELEMENT') el.style.removeProperty('opacity');
+    el.classList.add('scroll-trigger--offscreen', 'scroll-trigger--armed');
+    return false;
+  });
+}
+
 const revealObserver = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
+  entries = armReveal(entries);
   // Things that come into view together play in reading order, a short
   // stagger apart; the order comes from the observer's own boxes.
   const entering = entries.filter(entry => entry.isIntersecting)
@@ -94,6 +114,7 @@ function initializeScrollAnimationTrigger(root = document, editorEvent = false) 
     const container = !!el.querySelector(SCROLL_ANIMATION_TRIGGER_CLASSNAME);
     if (essentialProductContent || container || editor || reducedMotion() || !revealObserver || el.hasAttribute(SCROLL_ANIMATION_DONE_ATTR)) {
       revealObserver?.unobserve(el);
+      revealArming.delete(el);
       markDone(el);
       return;
     }
@@ -101,18 +122,11 @@ function initializeScrollAnimationTrigger(root = document, editorEvent = false) 
     revealInitialized.add(el);
     fresh.push(el);
   });
-  // Measure every element first, then change classes: one layout for the whole
-  // page instead of one per section. Content in the first screen (or above it)
-  // shows at once; only what is below the fold waits to reveal on scroll.
-  const fold = window.innerHeight;
-  const below = fresh.map(el => el.getBoundingClientRect().top >= fold);
-  fresh.forEach((el, i) => {
-    if (!below[i]) { markDone(el); return; }
-    // A motion element that gave way to this reveal pinned itself visible.
-    if (el.tagName === 'MOTION-ELEMENT') el.style.removeProperty('opacity');
-    el.classList.add('scroll-trigger--offscreen', 'scroll-trigger--armed');
-    revealObserver.observe(el);
-  });
+  // Where each element sits comes from the observer's first report, made
+  // after the page's own layout (see armReveal): reading boxes here forced a
+  // layout of the whole page while its scripts still ran. Nothing is hidden
+  // until then.
+  fresh.forEach(el => { revealArming.add(el); revealObserver.observe(el); });
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => initializeScrollAnimationTrigger(), {once: true});
@@ -124,7 +138,7 @@ else initializeScrollAnimationTrigger();
   document.addEventListener(name, event => initializeScrollAnimationTrigger(event.target, true));
 });
 document.addEventListener('shopify:section:unload', event => {
-  [event.target, ...event.target.querySelectorAll(SCROLL_ANIMATION_TRIGGER_CLASSNAME)].forEach(el => revealObserver?.unobserve(el));
+  [event.target, ...event.target.querySelectorAll(SCROLL_ANIMATION_TRIGGER_CLASSNAME)].forEach(el => { revealObserver?.unobserve(el); revealArming.delete(el); });
   [event.target, ...event.target.querySelectorAll('.animate--zoom-in')].forEach(el => { zoomObserver?.unobserve(el); visibleZoom.delete(el); });
 });
 window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', () => initializeScrollAnimationTrigger());

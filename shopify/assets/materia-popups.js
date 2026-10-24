@@ -393,8 +393,28 @@
   try {
     new MutationObserver(queueInset).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['data-open', 'hidden'] });
   } catch (e) {}
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', queueInset); else queueInset();
-  setTimeout(queueInset, 1200);
+  // First measured while the page is idle after it is parsed (a frame at
+  // DOMContentLoaded forced a layout of the whole page there), then whenever
+  // the bar or the banner changes size: a ResizeObserver reports after
+  // layout, so it never forces one (this was a second timed check at 1.2s).
+  function watchInset() {
+    if (typeof ResizeObserver === 'function') {
+      var ro = new ResizeObserver(queueInset), seen = [];
+      var watch = function () {
+        var parts = document.querySelectorAll('mobile-navigation-bar, .mobile-navigation-bar, cookie-consent [data-consent-panel]');
+        for (var i = 0; i < parts.length; i++) if (seen.indexOf(parts[i]) < 0) { seen.push(parts[i]); ro.observe(parts[i]); }
+      };
+      watch();
+      document.addEventListener('materia:consent', watch);
+      try { new MutationObserver(watch).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['data-open'] }); } catch (e) {}
+    }
+    queueInset();
+  }
+  var idleInset = function () {
+    if (window.requestIdleCallback) requestIdleCallback(watchInset, { timeout: 1000 });
+    else setTimeout(watchInset, 200);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', idleInset); else idleInset();
 
   window.MateriaPopups = {
     version: 1,

@@ -1314,22 +1314,31 @@ let BlsMainMenuShopify = (function () {
       window.StorelibHeaderSticky?.refresh();
     },
 
+    // A fixed-width mega menu is kept inside the window. Its position is
+    // worked out when its item is first opened (hover or keyboard focus),
+    // and again on the next open after a resize, not for every item at
+    // load: reading the layout here forced the page's first layout inside
+    // this script (60-90ms before DOMContentLoaded).
     initSubMenu: function () {
-      const main_menu = document.querySelector(".navigation.horizontal");
-      if (!main_menu || window.innerWidth <= 1024) return;
-
-      this.addCssSubMenu();
-
-      if (this._subMenuResizeBound) return;
-      this._subMenuResizeBound = true;
+      this._subMenuGeneration = (this._subMenuGeneration || 0) + 1;
+      if (this._subMenuBound) return;
+      this._subMenuBound = true;
+      const wide = window.matchMedia("(min-width: 1025px)");
+      const open = (event) => {
+        const item = event.target && event.target.closest && event.target.closest(".horizontal-list li");
+        if (!item || !wide.matches || item._subMenuPlaced === this._subMenuGeneration) return;
+        item._subMenuPlaced = this._subMenuGeneration;
+        const menus = item.querySelectorAll(".mega-menu-fix-width");
+        if (menus.length) this.addCssSubMenu(menus);
+      };
+      document.addEventListener("mouseover", open, { passive: true });
+      document.addEventListener("focusin", open);
       window.addEventListener("resize", () => {
-        if (window.innerWidth > 1024) {
-          this.addCssSubMenu();
-        }
+        this._subMenuGeneration++;
       }, { passive: true });
     },
 
-    addCssSubMenu: function () {
+    addCssSubMenu: function (menus) {
       const bodyWidth =
         document.documentElement.clientWidth || document.body.clientWidth;
       const header = document.querySelector("header");
@@ -1339,12 +1348,15 @@ let BlsMainMenuShopify = (function () {
       if (!header || bodyWidth < 1024) return;
 
       const padding = 30;
-      document
-        .querySelectorAll(".horizontal-list .mega-menu-fix-width")
-        .forEach((submenu) => {
+      // Every box is read first, then every position written: one layout.
+      const list = [...(menus || document.querySelectorAll(".horizontal-list .mega-menu-fix-width"))];
+      const boxes = list.map((submenu) => submenu_center
+        ? submenu.getBoundingClientRect()
+        : { clientWidth: submenu.clientWidth, offsetLeft: submenu.offsetLeft });
+      list.forEach((submenu, i) => {
           if (submenu_center) {
             // Handle center aligned submenu
-            const submenu_data = submenu.getBoundingClientRect();
+            const submenu_data = boxes[i];
             const width = submenu_data.width;
             const left = submenu_data.left;
             const right = submenu_data.right;
@@ -1355,8 +1367,8 @@ let BlsMainMenuShopify = (function () {
             }
           } else {
             // Handle default submenu positioning
-            const elementWidth = submenu.clientWidth;
-            const elementLeft = submenu.offsetLeft;
+            const elementWidth = boxes[i].clientWidth;
+            const elementLeft = boxes[i].offsetLeft;
 
             if (bodyWidth - (elementWidth + elementLeft) < 0) {
               let left = bodyWidth - (elementWidth + elementLeft);
@@ -6218,6 +6230,8 @@ class SwatchFunctions extends SwatchInit {
     const behavior = reduce ? "auto" : "smooth";
     const speed = reduce ? 0 : 500;
     const holder = gallery.querySelector("slide-with-thumbs");
+    // A gallery still waiting to come into view is built now, to slide.
+    if (holder && !holder.globalSlide && typeof holder.ensureStarted === "function") holder.ensureStarted();
     const slideEl = slide.closest(".swiper-slide") || slide;
     const live = (sw) => (sw && !sw.destroyed && sw.slides ? sw : null);
     const mainEl = holder && holder.querySelector(".swiper-wrapper-preview");
@@ -8924,9 +8938,24 @@ class SlideWithThumbs extends HTMLElement {
     this.thumbnailSlide = null;
     this.init();
   }
+  /* Built when it comes within a screen of the viewport (global.js), so a
+     gallery far down the page (a featured product on the home page) costs
+     nothing at load. A script that needs it sooner calls ensureStarted(). */
+  init() {
+    const near = window.MateriaNearView;
+    if (near) near.when(this, () => this.start());
+    else this.start();
+  }
+
+  ensureStarted() {
+    if (!this.globalSlide && !(window.MateriaNearView && window.MateriaNearView.now(this))) this.start();
+    return this.globalSlide;
+  }
+
   /* The product gallery first, its thumbnails in a later task: building
      both sliders at once was one long task (~400ms) on the product page. */
-  init() {
+  start() {
+    if (this.globalSlide || !this.isConnected) return;
     const nothumb = this.dataset?.nothumb;
     this.initSlide();
     this.pauseMedia();
@@ -9127,11 +9156,11 @@ class SlideWithThumbs extends HTMLElement {
   playActiveSlideVideo(swiper) {}
 
   functionGoto(position) {
-    this.globalSlide.slideTo(position, 500);
+    this.ensureStarted()?.slideTo(position, 500);
   }
 
   updateSlide() {
-    this.globalSlide.update();
+    this.ensureStarted()?.update();
   }
 
   updateThumbSlide() {
@@ -9139,7 +9168,7 @@ class SlideWithThumbs extends HTMLElement {
   }
 
   appendSlide(item) {
-    this.globalSlide.appendSlide(item);
+    this.ensureStarted()?.appendSlide(item);
   }
 }
 customElements.define("slide-with-thumbs", SlideWithThumbs);

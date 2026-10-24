@@ -213,6 +213,7 @@
     const attr = (node, name, value) => {
       if (node.getAttribute(name) !== value) node.setAttribute(name, value);
     };
+    const weights = [];
     select('.cart-discount-remove[data-theme-button]').forEach(button => {
       ['data-theme-button','data-sl-button','data-button-appearance','data-button-hover'].forEach(name => button.removeAttribute(name));
     });
@@ -234,13 +235,23 @@
         const source = document.getElementById('shopify-section-' + sticky.dataset.sectionId);
         wrapper = source?.querySelector('[data-atc-appearance]') || wrapper;
         const original = wrapper?.querySelector(role === 'secondary' ? '.shopify-payment-button__button:not(.shopify-payment-button__button--branded)' : 'button[name="add"]');
-        const weight = original && getComputedStyle(original).getPropertyValue('--mb-weight').trim();
-        if (weight && button.style.getPropertyValue('--mb-weight') !== weight) button.style.setProperty('--mb-weight', weight);
-        else if (!weight && button.style.getPropertyValue('--mb-weight')) button.style.removeProperty('--mb-weight');
+        weights.push([button, original]);
       }
       const local = button.dataset.buttonLocalAppearance || (button.dataset.buttonOutline === 'true' ? 'outline' : null) || wrapper?.dataset[role === 'secondary' ? 'buyAppearance' : 'atcAppearance'];
       const appearance = local && local !== 'theme' ? local : document.body?.getAttribute(role === 'secondary' ? 'data-btn-secondary-style' : 'data-btn-style');
       attr(button, 'data-button-appearance', appearance || (role === 'secondary' ? 'outline' : 'solid'));
+    });
+    // A sticky bar's buttons copy the weight of the buttons they stand for.
+    // Read together, then written, in the next frame: reading a computed
+    // style between the attribute writes above forced a style pass of the
+    // whole page for each button (40-70ms on the product page). The bar is
+    // out of view at that point.
+    if (weights.length) requestAnimationFrame(() => {
+      const read = weights.map(([button, original]) => [button, original && original.isConnected ? getComputedStyle(original).getPropertyValue('--mb-weight').trim() : '']);
+      read.forEach(([button, weight]) => {
+        if (weight && button.style.getPropertyValue('--mb-weight') !== weight) button.style.setProperty('--mb-weight', weight);
+        else if (!weight && button.style.getPropertyValue('--mb-weight')) button.style.removeProperty('--mb-weight');
+      });
     });
   }
   /* Search opens from the header: --search-top is the header's bottom edge
