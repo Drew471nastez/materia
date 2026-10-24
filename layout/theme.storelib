@@ -406,8 +406,13 @@
         const editor = new URL(document.referrer);
         if ((editor.hostname === 'storelib.com' || editor.hostname.endsWith('.storelib.com')) && editor.pathname.includes('/website-builder')) document.documentElement.classList.add('shopify-design-mode');
       } catch (_) {}
-      document.addEventListener('storelib:settings-change', () => document.documentElement.classList.add('shopify-design-mode'));
-      document.addEventListener('storelib:section-load', () => document.documentElement.classList.add('shopify-design-mode'));
+      // Once: adding a class the root already has still rewrites the attribute,
+      // and every observer of <html> would wake on each frame of a drag.
+      {
+        const markDesign = () => { const root = document.documentElement; if (!root.classList.contains('shopify-design-mode')) root.classList.add('shopify-design-mode'); };
+        document.addEventListener('storelib:settings-change', markDesign);
+        document.addEventListener('storelib:section-load', markDesign);
+      }
 {% comment %}{% endcomment %}    </script>
     {%- comment -%}
       Materia responsiveness guard. Stops any section, image, or embed from
@@ -541,7 +546,14 @@
           for (var i = 0; i < list.length; i++) if (list[i].media !== 'not all') list[i].media = 'not all';
         }
         release();
-        document.addEventListener('storelib:settings-change', function () { requestAnimationFrame(release); setTimeout(release, 120); });
+        // In the builder: once a frame while a control moves, and once more
+        // after it stops, not twice for every value of a drag.
+        var frame = 0, later = 0;
+        document.addEventListener('storelib:settings-change', function () {
+          if (!frame) frame = requestAnimationFrame(function () { frame = 0; release(); });
+          clearTimeout(later);
+          later = setTimeout(release, 120);
+        });
       })();
 {% comment %}{% endcomment %}    </script>
     {%- liquid

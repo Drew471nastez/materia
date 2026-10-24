@@ -290,20 +290,43 @@
   const FIELD_KEYS = ['field_text', 'field_background', 'field_style', 'storelib_input_border', 'storelib_input_radius'];
   let fieldState = {};
   try { fieldState = JSON.parse(document.querySelector('script[data-field-settings]')?.textContent || '{}') || {}; } catch (_) { fieldState = {}; }
+  /* Colours are parsed here: hex and rgb() at once, anything else (a colour
+     name, hsl) once through a hidden probe and remembered. Reading a probe's
+     computed colour makes the browser restyle the page first, which on every
+     frame of a colour drag was the canvas freezing. */
   let probe = null;
+  const named = new Map();
+  const parse = text => {
+    let m = /^#([0-9a-f]{3,8})$/i.exec(text);
+    if (m) {
+      let h = m[1];
+      if (h.length === 3 || h.length === 4) h = h.replace(/./g, '$&$&');
+      if (h.length !== 6 && h.length !== 8) return null;
+      return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16), a: h.length === 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1 };
+    }
+    m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+)(%?))?\s*\)$/i.exec(text);
+    if (m) return { r: +m[1], g: +m[2], b: +m[3], a: m[4] == null ? 1 : m[5] ? +m[4] / 100 : +m[4] };
+    if (/^transparent$/i.test(text)) return { r: 0, g: 0, b: 0, a: 0 };
+    return undefined;
+  };
   const rgba = value => {
     if (value == null || value === '') return null;
     if (typeof value === 'object') value = value.hex || value.value || value.color || '';
     const text = String(value).trim();
     if (!text) return null;
+    const quick = parse(text);
+    if (quick !== undefined) return quick;
+    if (named.has(text)) return named.get(text);
     if (!probe) { probe = document.createElement('i'); probe.style.display = 'none'; document.body.appendChild(probe); }
     probe.style.color = '';
     probe.style.color = text;
-    if (!probe.style.color) return null;
-    const m = getComputedStyle(probe).color.match(/rgba?\(([^)]+)\)/);
-    if (!m) return null;
-    const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
-    return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+    let out = null;
+    if (probe.style.color) {
+      const m = getComputedStyle(probe).color.match(/rgba?\(([^)]+)\)/);
+      if (m) { const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number); out = { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; }
+    }
+    named.set(text, out);
+    return out;
   };
   const lin = v => { const c = v / 255; return c * (0.012522878 + c * (0.682171111 + c * 0.305306011)); };
   const lum = c => 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
@@ -348,33 +371,65 @@
     document.querySelectorAll('[class*="color-"]').forEach(el => el.classList.forEach(c => { if (/^color-[\w-]+$/.test(c)) found.add(c); }));
     return [...found];
   };
+  /* The page's scheme colours are read once (all schemes in one pass, one
+     restyle) and kept until a change is let go or a section is drawn again.
+     While a scheme is dragged its colours come from the builder's own values,
+     so a drag frame reads no style, adds no element and writes one sheet. */
+  let cache = null;
+  const liveSchemes = {};
+  const readSchemes = () => {
+    const classes = schemeClasses();
+    const box = document.createElement('div');
+    box.style.display = 'none';
+    box.setAttribute('aria-hidden', 'true');
+    const items = classes.map(name => { const el = document.createElement('i'); el.className = name; box.appendChild(el); return el; });
+    document.body.appendChild(box);
+    const root = schemeOf(html);
+    const byClass = new Map(classes.map((name, i) => [name, schemeOf(items[i])]));
+    box.remove();
+    // The scheme the page itself (:root) is drawn in.
+    const same = (a, b) => (!a && !b) || (a && b && a.r === b.r && a.g === b.g && a.b === b.b);
+    let rootClass = null;
+    for (const [name, c] of byClass) if (same(c.bg, root.bg) && same(c.text, root.text) && same(c.heading, root.heading)) { rootClass = name; break; }
+    return { classes, root, byClass, rootClass };
+  };
+  const liveScheme = (name, read) => {
+    const s = name && liveSchemes[name.replace(/^color-/, '')];
+    if (!s) return read;
+    const v = s.settings || s;
+    return { bg: rgba(v.background) || read.bg, text: rgba(v.text_color) || read.text, heading: rgba(v.heading_color) || read.heading };
+  };
+  let lastOut = null;
   const redrawFields = () => {
     const s = fieldState;
     const style = String(s.field_style || 'outline');
     const radius = Number(s.storelib_input_radius);
+    if (!cache) cache = readSchemes();
     let out = 'html:root{';
     if (style === 'underline') out += '--field-border-widths:0 0 var(--inputs-border-width, 1px) 0 !important;' + (isFinite(radius) && radius >= 0 ? '' : '--input-border-radius:0px !important;');
     else out += '--field-border-widths:var(--inputs-border-width, 1px) !important;';
-    out += fieldsFor(schemeOf(html), s) + '}';
-    const holder = document.createElement('div');
-    holder.style.display = 'none';
-    document.body.appendChild(holder);
-    for (const name of schemeClasses()) {
-      holder.className = name;
-      out += `html .${name}, .${name}.${name}{${fieldsFor(schemeOf(holder), s)}}`;
-    }
-    holder.remove();
+    out += fieldsFor(liveScheme(cache.rootClass, cache.root), s) + '}';
+    for (const name of cache.classes) out += `html .${name}, .${name}.${name}{${fieldsFor(liveScheme(name, cache.byClass.get(name)), s)}}`;
+    if (out === lastOut && document.getElementById('materia-field-live')) return;
+    lastOut = out;
     let tag = document.getElementById('materia-field-live');
     if (!tag) { tag = document.createElement('style'); tag.id = 'materia-field-live'; document.head.appendChild(tag); }
     tag.textContent = out;
   };
+  let queued = 0;
   document.addEventListener('storelib:settings-change', event => {
-    const changed = event.detail?.settings || event.detail || {};
+    const detail = event.detail || {};
+    const changed = detail.settings || detail;
     const keys = Object.keys(changed).filter(k => FIELD_KEYS.includes(k) || k === 'color_schemes');
     if (!keys.length) return;
     keys.forEach(k => { fieldState[k] = changed[k]; });
-    // After the theme's own live preview has written the scheme colours.
-    requestAnimationFrame(redrawFields);
+    if (changed.color_schemes && typeof changed.color_schemes === 'object') Object.assign(liveSchemes, changed.color_schemes);
+    // Let go: the page now carries the new colours; read them again once.
+    if (detail.live !== true) cache = null;
+    // One redraw per frame however many changes arrive, after the theme's
+    // own live preview has written the scheme colours.
+    if (!queued) queued = requestAnimationFrame(() => { queued = 0; redrawFields(); });
   });
+  ['storelib:section-load', 'shopify:section:load'].forEach(name => document.addEventListener(name, () => { cache = null; }));
   window.materiaForms.redrawFields = redrawFields;
 })();
