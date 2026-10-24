@@ -238,7 +238,7 @@ const hits=(page,sel)=>page.evaluate(sel=>{
       await page.keyboard.press('ArrowDown');
       assert.equal(await page.evaluate(()=>document.getElementById('search-template').getAttribute('aria-activedescendant')),'o1');
       // The document has no search keyup handler that blocks other keys.
-      await page.keyboard.press('Escape');await page.waitForTimeout(320);
+      await page.keyboard.press('Escape');await page.waitForTimeout(390);
       assert.equal((await state(page)).open,false);
       assert.deepEqual(errors,[]);
       await page.close();passed++;

@@ -1495,6 +1495,8 @@ var BlsSearchShopify = (function () {
       }
       clearTimeout(this._hideTimer);
       // Leave the top layer and unlock the page once the panel has gone.
+      const durationText = f ? getComputedStyle(f).getPropertyValue('--search-dur').trim() : '320ms';
+      const duration = (parseFloat(durationText) || 0) * (durationText.endsWith('ms') ? 1 : 1000);
       this._hideTimer = setTimeout(() => {
         if (this.panelOpen) return;
         hideLayer(f);
@@ -1503,7 +1505,7 @@ var BlsSearchShopify = (function () {
           html.classList.remove("open-drawer");
         }
         if (typeof root !== "undefined" && root && root.style) root.style.removeProperty("padding-right");
-      }, isDrawer(f) ? 360 : 290);
+      }, duration + 30);
     },
 
     // Kept for anything that still calls the theme's original names.

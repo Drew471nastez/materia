@@ -278,6 +278,20 @@
   document.addEventListener('materia:theme-applied', event => {
     const changed = event.detail?.settings;
     if (!changed || ['btn_style','btn_secondary_style','btn_hover_effect','storelib_button_hover_effect','btn_font_weight'].some(key => Object.prototype.hasOwnProperty.call(changed,key))) syncButtons();
+    if (changed && Object.prototype.hasOwnProperty.call(changed, 'cart_drawer_recommend_pagination')) {
+      const mode = ['dots','progress','none'].includes(changed.cart_drawer_recommend_pagination) ? changed.cart_drawer_recommend_pagination : 'dots';
+      document.querySelectorAll('.swiper-cart-upsell').forEach(slider => {
+        slider.dataset.recommendPagination = mode;
+        slider.dataset.paginationProgressbar = String(mode === 'progress');
+        const swiper = slider.globalSlide;
+        if (!swiper?.pagination) return;
+        swiper.pagination.destroy();
+        swiper.params.pagination.type = mode === 'progress' ? 'progressbar' : 'bullets';
+        swiper.pagination.init();
+        swiper.pagination.render();
+        swiper.pagination.update();
+      });
+    }
   });
   new MutationObserver(records => {
     const scopes = new Set();
