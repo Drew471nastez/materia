@@ -379,6 +379,7 @@
     <link rel="preload" as="style" href="{{ 'minicart.css' | asset_url }}" fetchpriority="low">
     <link rel="preload" as="style" href="{{ 'materia-experience.css' | asset_url }}" fetchpriority="low">
     {% render 'theme-controls' %}
+    {%- render 'theme-scale' -%}
     {{ 'theme-button-contract.css' | asset_url | stylesheet_tag }}
     {%- comment -%}
       Discover first-paint styles and deferred modules before app-injected head
@@ -399,6 +400,34 @@
     <script src="{{ 'cart-drawer-safety.js' | asset_url }}" defer="defer"></script>
     <script>
       document.documentElement.className = document.documentElement.className.replace('no-js', 'js');
+      // A tap on the menu or search button before the theme's scripts have
+      // run (a slow connection) would do nothing. Hold the last such tap and
+      // give it again once the page's scripts are ready (DOMContentLoaded
+      // follows every deferred script). Links are left alone: they work.
+      (function () {
+        if (document.readyState !== 'loading') return;
+        var EARLY = '.nav-toggle, button[data-action="toggle-nav"], button.top-search-toggle';
+        var held = null;
+        function hold(e) {
+          var t = e.target && e.target.closest && e.target.closest(EARLY);
+          if (!t) return;
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          held = t;
+          t.setAttribute('aria-busy', 'true');
+        }
+        document.addEventListener('click', hold, true);
+        document.addEventListener('DOMContentLoaded', function () {
+          document.removeEventListener('click', hold, true);
+          setTimeout(function () {
+            if (!held) return;
+            var t = held;
+            held = null;
+            t.removeAttribute('aria-busy');
+            if (t.isConnected) t.click();
+          }, 0);
+        }, { once: true });
+      })();
       if ({{ request.design_mode | json }} || window.Shopify?.designMode) {
         document.documentElement.classList.add('shopify-design-mode');
       }

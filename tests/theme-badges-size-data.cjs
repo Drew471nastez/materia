@@ -65,10 +65,10 @@ const render=(name,ctx)=>h.renderTemplate(h.templateOf(read('snippets/'+name+'.s
   await page.addScriptTag({content:live});
   await page.evaluate(()=>document.dispatchEvent(new CustomEvent('storelib:settings-change',{detail:{settings:{body_font_size:19}}})));
   await page.waitForTimeout(40);
-  assert.equal(await page.$eval('html',el=>el.style.getPropertyValue('--body-font-size')),'19px');
+  assert.equal(await page.$eval('html',el=>el.style.getPropertyValue('--body-font-size')),'calc(19px * var(--sl-text-scale, 1))','body size is written under Theme settings > Scale');
   await page.evaluate(()=>document.dispatchEvent(new CustomEvent('storelib:settings-change',{detail:{section:'local',settings:{body_font_size:99}}})));
   await page.waitForTimeout(40);
-  assert.equal(await page.$eval('html',el=>el.style.getPropertyValue('--body-font-size')),'19px','section changes do not mutate global theme state');checks++;
+  assert.equal(await page.$eval('html',el=>el.style.getPropertyValue('--body-font-size')),'calc(19px * var(--sl-text-scale, 1))','section changes do not mutate global theme state');checks++;
   console.log(`${checks} badge inheritance, live opt-in, authoritative product data and dynamic size-chart checks passed`);
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1});
