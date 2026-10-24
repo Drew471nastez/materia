@@ -176,6 +176,9 @@ class StickyAddCart extends HTMLElement {
         if (r.height > 0 && r.bottom > 0) offset = Math.max(offset, Math.ceil(r.height + Math.max(0, parseFloat(cs.bottom) || 0)));
       }
     }
+    // Keep a one-pixel safety reserve when fractional mobile layout rounding
+    // oscillates. Growing clearance is immediate; never animate through the nav.
+    if (offset > 0 && this._navOffset > offset && this._navOffset - offset <= 1) offset = this._navOffset;
     if (offset !== this._navOffset) {
       this._navOffset = offset;
       this.style.setProperty("--mt-sticky-offset", offset + "px");

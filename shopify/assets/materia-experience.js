@@ -20,6 +20,20 @@
     navPendingTimer = setTimeout(clearNavPending, 8000);
   });
   window.addEventListener('pageshow', clearNavPending);
+  let pressedNav, pressedTimer;
+  const releaseNav = () => {
+    clearTimeout(pressedTimer);
+    pressedNav?.removeAttribute('data-nav-pressed');
+    pressedNav = null;
+  };
+  document.addEventListener('pointerdown', event => {
+    const action = event.target.closest?.('mobile-navigation-bar :is(a,button,[role="button"])');
+    if (!action || event.button !== 0) return;
+    releaseNav(); pressedNav = action; action.setAttribute('data-nav-pressed','');
+  }, {passive:true});
+  document.addEventListener('pointerup', () => { if (pressedNav) pressedTimer = setTimeout(releaseNav,120); }, {passive:true});
+  document.addEventListener('pointercancel', releaseNav, {passive:true});
+  window.addEventListener('pageshow', releaseNav);
   function syncButtons(scope = document) {
     const select = selector => [
       ...(scope.matches?.(selector) ? [scope] : []),
@@ -29,7 +43,7 @@
       if (node.getAttribute(name) !== value) node.setAttribute(name, value);
     };
     const purchase = '.product-detail__buy-buttons :is(button[name="add"], .shopify-payment-button__button:not(.shopify-payment-button__button--branded)), .product-detail__information :is(.btn-primary, .btn-secondary, .btn-outline, [data-sl-button]):not(.btn-reset):not(.icon-btn):not(.quantity__button), .product-item__button-submit, .footer__newsletter button[type="submit"], #minicart_wrapper .cart__addon-content :is(.btn-save, .coupon-apply, .add-giftwrap, .btn-cancel), #minicart_wrapper .drawer-bottom :is(.btn-primary, .btn-outline, .btn-secondary)';
-    const shared = ':is(a, button, input[type="submit"]):is(.btn-primary, .btn-secondary, .btn-outline, [data-sl-button], [data-button-role]):not(.btn-reset):not(.icon-btn):not(.btn-icon--circle)';
+    const shared = ':is(a, button, input[type="submit"]):is(.btn, .btn-white, .btn-primary, .btn-secondary, .btn-outline, [data-sl-button], [data-button-role]):not(.btn-reset):not(.icon-btn):not(.btn-icon--circle):not(.quantity__button):not(.swiper-arrow)';
     select(purchase + ', ' + shared).forEach(button => {
       const declared = button.dataset.buttonRole;
       const role = button.dataset.themeButton || (['primary','secondary'].includes(declared) ? declared : (button.matches('.shopify-payment-button__button, .btn-secondary, .btn-outline, .btn-cancel') ? 'secondary' : 'primary'));
