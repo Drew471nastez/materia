@@ -132,6 +132,7 @@ function filt(ctx, v, f) {
     case 'append': return String(v ?? '') + (a[0] ?? '');
     case 'prepend': return (a[0] ?? '') + String(v ?? '');
     case 'split': return String(v ?? '').split(a[0]);
+    case 'slice': { const start=Number(a[0])||0, length=a[1]==null?1:Number(a[1]); const value=Array.isArray(v)?v:String(v??''); return value.slice(start,start+length); }
     case 'first': return Array.isArray(v) ? v[0] : v;
     case 'last': return Array.isArray(v) ? v[v.length - 1] : v;
     case 'join': return (v || []).join(a[0] ?? ' ');
