@@ -1,0 +1,87 @@
+const {chromium,webkit}=require('playwright');
+const fs=require('node:fs');
+const path=require('node:path');
+const assert=require('node:assert/strict');
+const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
+(async()=>{
+  const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});
+  let passed=0;
+  try {
+    const page=await browser.newPage({viewport:{width:390,height:844}});
+    const errors=[];page.on('pageerror',e=>errors.push(e.message));
+    await page.setContent('<style>body{margin:0}#MainProduct-fixture{height:2500px}mobile-navigation-bar{display:block;position:fixed;bottom:0;left:0;right:0;height:70.5px;padding-bottom:24px;box-sizing:content-box;background:white}</style><section id="MainProduct-fixture"><button class="button-trigger__sticky">Original Add</button><sticky-add-cart data-section-id="fixture"><button name="add">Add</button></sticky-add-cart></section><div id="nav-section"><mobile-navigation-bar>Home Account Cart</mobile-navigation-bar></div>');
+    await page.addStyleTag({content:read('shopify/assets/main-product.css')});
+    const main=read('shopify/assets/main-product.js');
+    await page.addScriptTag({content:main.slice(0,main.indexOf('class SoldProduct'))});
+    await page.evaluate(()=>{window.scrollTo(0,400);Object.defineProperty(window,'innerHeight',{configurable:true,get:()=>document.documentElement.clientHeight-35});});
+    await page.waitForTimeout(500);
+    const geometry=()=>page.evaluate(()=>{
+      const bar=document.querySelector('sticky-add-cart'),nav=document.querySelector('mobile-navigation-bar');
+      return {bottom:bar.getBoundingClientRect().bottom,navTop:nav.getBoundingClientRect().top,offset:parseFloat(bar.style.getPropertyValue('--mt-sticky-offset')),shown:bar.classList.contains('show-sticky-cart')};
+    });
+    let g=await geometry();assert(g.shown);assert.equal(g.offset,95);assert(g.bottom<=g.navTop+.1,'fractional safe-area nav height must never be undercounted');passed++;
+    await page.evaluate(()=>document.querySelector('mobile-navigation-bar').style.height='105px');
+    await page.waitForTimeout(80);g=await geometry();assert.equal(g.offset,129);assert(g.bottom<=g.navTop+.1);passed++;
+    await page.evaluate(()=>{const root=document.getElementById('nav-section');root.innerHTML='<mobile-navigation-bar style="height:91px">Replaced navigation</mobile-navigation-bar>';root.dispatchEvent(new CustomEvent('storelib:section-load',{bubbles:true}));});
+    await page.waitForTimeout(80);g=await geometry();assert.equal(g.offset,115);assert(g.bottom<=g.navTop+.1);passed++;
+    await page.evaluate(()=>document.querySelector('mobile-navigation-bar').style.display='none');
+    await page.waitForTimeout(80);assert.equal((await geometry()).offset,0);
+    await page.evaluate(()=>document.querySelector('mobile-navigation-bar').style.display='block');
+    await page.setViewportSize({width:414,height:736});
+    await page.evaluate(()=>visualViewport.dispatchEvent(new Event('resize')));
+    await page.waitForTimeout(100);g=await geometry();assert.equal(g.offset,115);assert(g.bottom<=g.navTop+.1);passed++;
+    assert.deepEqual(errors,[]);await page.close();
+
+    const arrows=await browser.newPage({viewport:{width:1200,height:800}});
+    await arrows.setContent('<style>body{margin:0}.slideshow{position:relative;width:900px;height:350px;--color-background:#edf0f3;--color-heading:#123456}</style><div class="slideshow swiper"><div class="swiper-actions"><div class="swiper-arrow swiper-button-prev bg-white btn-hover"><svg></svg></div><div class="swiper-arrow swiper-button-next bg-white btn-hover"><svg></svg></div></div></div>');
+    for(const f of ['swiper-bundle.min.css','critical.css','slideshow.css'])await arrows.addStyleTag({content:read('shopify/assets/'+f)});
+    await arrows.mouse.move(1100,700);
+    const positions=()=>arrows.locator('.swiper-arrow').evaluateAll(nodes=>nodes.map(el=>{const r=el.getBoundingClientRect();return [r.x,r.y,r.width,r.height]}));
+    const resting=await positions();await arrows.hover('.slideshow');await arrows.waitForTimeout(350);
+    assert.deepEqual(await positions(),resting,'revealing the slideshow arrows must not change their positions');
+    assert.equal(await arrows.$eval('.swiper-arrow',el=>getComputedStyle(el).backgroundColor),'rgb(237, 240, 243)');
+    await arrows.hover('.swiper-button-next');await arrows.waitForTimeout(350);
+    assert.deepEqual(await positions(),resting,'hovering the arrow must not move it');
+    assert.equal(await arrows.$eval('.swiper-button-next',el=>getComputedStyle(el).backgroundColor),'rgb(18, 52, 86)');passed++;
+    await arrows.mouse.move(1100,700);
+    await arrows.evaluate(()=>{const slide=document.querySelector('.slideshow');slide.style.setProperty('--color-background','#fff4dd');slide.style.setProperty('--color-heading','#663311');});
+    await arrows.waitForTimeout(350);
+    assert.equal(await arrows.$eval('.swiper-arrow',el=>getComputedStyle(el).backgroundColor),'rgb(255, 244, 221)','arrows follow scheme changes');passed++;
+    await arrows.close();
+
+    const buttons=await browser.newPage({viewport:{width:1100,height:800}});
+    await buttons.setContent('<style>:root{--btn-primary-bg-color:#123456;--btn-primary-color:white;--btn-primary-hover-bg-color:#cc0000;--btn-primary-hover-color:white;--btn-secondary-bg-color:#eeeeee;--btn-secondary-color:#222;--btn-secondary-hover-bg-color:#008800;--btn-secondary-hover-color:white;--btn-anim-duration:300ms}.old:hover{background:purple!important;transition:none!important}</style><body data-btn-style="solid" data-btn-secondary-style="solid" data-btn-hover="slide" data-sl-btn-hover="none"><section><a id="primary" class="old" data-sl-button data-button-role="primary">Primary</a><button id="secondary" class="old" data-sl-button data-button-role="secondary">Secondary</button></section></body>');
+    await buttons.addStyleTag({content:read('shopify/assets/theme-button-contract.css')});
+    await buttons.addScriptTag({content:read('shopify/assets/materia-experience.js')});
+    for(const [id,role] of [['primary','primary'],['secondary','secondary']]){
+      assert.equal(await buttons.locator('#'+id).getAttribute('data-theme-button'),role);
+      assert.equal(await buttons.locator('#'+id).getAttribute('data-button-hover'),'slide','extra None cannot disable the main slide effect');
+      await buttons.hover('#'+id);await buttons.waitForTimeout(100);
+      const scale=await buttons.$eval('#'+id,el=>new DOMMatrix(getComputedStyle(el,'::before').transform).m11);
+      assert(scale>0&&scale<1,'both roles must animate instead of snapping');
+      await buttons.mouse.move(1000,700);await buttons.waitForTimeout(350);
+    }passed++;
+    await buttons.evaluate(()=>document.body.insertAdjacentHTML('beforeend','<a id="dynamic" data-sl-button data-button-role="secondary">Dynamic</a>'));
+    await buttons.waitForTimeout(60);
+    assert.equal(await buttons.locator('#dynamic').getAttribute('data-theme-button'),'secondary','newly inserted custom CTAs inherit the contract');passed++;
+    await buttons.evaluate(()=>{document.body.dataset.btnHover='lift';document.dispatchEvent(new CustomEvent('materia:theme-applied',{detail:{settings:{btn_hover_effect:'lift'}}}))});
+    await buttons.hover('#primary');await buttons.waitForTimeout(350);
+    assert.equal(await buttons.$eval('#primary',el=>new DOMMatrix(getComputedStyle(el).transform).m42),-2,'extra None cannot cancel main lift');passed++;
+    await buttons.mouse.move(1000,700);
+    await buttons.evaluate(()=>{document.documentElement.style.setProperty('--btn-primary-bg-color','#aa00aa');document.documentElement.style.setProperty('--btn-secondary-bg-color','#445566');});
+    await buttons.waitForTimeout(350);
+    assert.equal(await buttons.$eval('#primary',el=>getComputedStyle(el).backgroundColor),'rgb(170, 0, 170)');
+    assert.equal(await buttons.$eval('#secondary',el=>getComputedStyle(el).backgroundColor),'rgb(68, 85, 102)');
+    await buttons.evaluate(()=>document.querySelector('#primary').style.setProperty('--mb-bg','#ff8800'));
+    await buttons.waitForTimeout(350);
+    assert.equal(await buttons.$eval('#primary',el=>getComputedStyle(el).backgroundColor),'rgb(255, 136, 0)','explicit local paint overrides the scheme without replacing its motion');passed++;
+    await buttons.evaluate(()=>document.body.dataset.slBtnHover='lift');
+    await buttons.hover('#primary');
+    await buttons.emulateMedia({reducedMotion:'reduce'});
+    assert.equal(await buttons.$eval('#primary',el=>getComputedStyle(el).transitionDuration),'0s');passed++;
+    assert.equal(await buttons.$eval('#primary',el=>getComputedStyle(el).transform),'none','reduced motion also overrides extra movement');
+    await buttons.close();
+    console.log(`${passed} mobile overlap, arrow stability and shared-button checks passed`);
+    console.log('Native WebKit available:',fs.existsSync(webkit.executablePath()));
+  } finally {await browser.close();}
+})().catch(error=>{console.error(error);process.exitCode=1});

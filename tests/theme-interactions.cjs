@@ -202,7 +202,7 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
     await page.waitForTimeout(80);
     assert.equal(await page.locator('#live-slide').getAttribute('data-button-appearance'),'solid');
     assert.equal(await page.locator('#live-secondary').getAttribute('data-button-appearance'),'outline');
-    assert.equal(await page.locator('#live-slide').getAttribute('data-button-hover'),'lift');passed++;
+    assert.equal(await page.locator('#live-slide').getAttribute('data-button-hover'),'slide','extra movement must not replace the main effect');passed++;
     // Fonts, menu hover, badges and the scheme's rgb values follow the builder too.
     await page.evaluate(()=>{document.body.insertAdjacentHTML('beforeend','<header id="hdr-theme" data-menu-hover="underline" data-menu-hover-theme></header><header id="hdr-own" data-menu-hover="fade"></header><button id="font-btn" style="font-family:var(--btn-font)">Buy</button>');document.documentElement.style.setProperty('--btn-font','var(--heading-font)');});
     await page.evaluate(()=>document.dispatchEvent(new CustomEvent('storelib:settings-change',{detail:{settings:{font_heading_system:{family:'Lora',fallback_families:'serif'},menu_font:'body_font',menu_hover_style:'scale',badges_rounded_corner:7,badges_shape:'square',sale_background:'#ff0000',color_schemes:{default:{settings:{background:'#fff',text_color:'#112233',heading_color:'#222222',primary_color:'#114488'}}}}}})));

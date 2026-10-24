@@ -29,16 +29,17 @@
       if (node.getAttribute(name) !== value) node.setAttribute(name, value);
     };
     const purchase = '.product-detail__buy-buttons :is(button[name="add"], .shopify-payment-button__button:not(.shopify-payment-button__button--branded)), .product-detail__information :is(.btn-primary, .btn-secondary, .btn-outline, [data-sl-button]):not(.btn-reset):not(.icon-btn):not(.quantity__button), .product-item__button-submit, .footer__newsletter button[type="submit"], #minicart_wrapper .cart__addon-content :is(.btn-save, .coupon-apply, .add-giftwrap, .btn-cancel), #minicart_wrapper .drawer-bottom :is(.btn-primary, .btn-outline, .btn-secondary)';
-    const shared = '.shopify-section :is(a, button, input[type="submit"]):is(.btn-primary, .btn-secondary, .btn-outline):not(.btn-reset):not(.icon-btn):not(.btn-icon--circle)';
+    const shared = ':is(a, button, input[type="submit"]):is(.btn-primary, .btn-secondary, .btn-outline, [data-sl-button], [data-button-role]):not(.btn-reset):not(.icon-btn):not(.btn-icon--circle)';
     select(purchase + ', ' + shared).forEach(button => {
-      const role = button.dataset.themeButton || (button.matches('.shopify-payment-button__button, .btn-secondary, .btn-outline, .btn-cancel') ? 'secondary' : 'primary');
+      const declared = button.dataset.buttonRole;
+      const role = button.dataset.themeButton || (['primary','secondary'].includes(declared) ? declared : (button.matches('.shopify-payment-button__button, .btn-secondary, .btn-outline, .btn-cancel') ? 'secondary' : 'primary'));
       attr(button, 'data-theme-button', role);
       attr(button, 'data-sl-button', '');
     });
     select('[data-theme-button]').forEach(button => {
       const role = button.getAttribute('data-theme-button');
-      const extraHover = document.body?.dataset.slBtnHover;
-      attr(button, 'data-button-hover', extraHover && extraHover !== 'theme' ? extraHover : (document.body?.dataset.btnHover || 'fade'));
+      // Extra movement is additive. "None" must not cancel the main effect.
+      attr(button, 'data-button-hover', document.body?.dataset.btnHover || 'fade');
       let wrapper = button.closest('[data-atc-appearance]');
       const sticky = button.closest('sticky-add-cart');
       if (sticky) {
@@ -49,7 +50,7 @@
         if (weight && button.style.getPropertyValue('--mb-weight') !== weight) button.style.setProperty('--mb-weight', weight);
         else if (!weight && button.style.getPropertyValue('--mb-weight')) button.style.removeProperty('--mb-weight');
       }
-      const local = button.dataset.buttonLocalAppearance || wrapper?.dataset[role === 'secondary' ? 'buyAppearance' : 'atcAppearance'];
+      const local = button.dataset.buttonLocalAppearance || (button.dataset.buttonOutline === 'true' ? 'outline' : null) || wrapper?.dataset[role === 'secondary' ? 'buyAppearance' : 'atcAppearance'];
       const appearance = local && local !== 'theme' ? local : document.body?.getAttribute(role === 'secondary' ? 'data-btn-secondary-style' : 'data-btn-style');
       attr(button, 'data-button-appearance', appearance || (role === 'secondary' ? 'outline' : 'solid'));
     });
@@ -92,8 +93,9 @@
   });
   new MutationObserver(records => {
     const scopes = new Set();
+    const controls = '.shopify-payment-button__button, [data-theme-button], [data-sl-button], .btn-primary, .btn-secondary, .btn-outline';
     for (const record of records) for (const node of record.addedNodes) {
-      if (node.nodeType === 1 && (node.matches('.shopify-payment-button__button') || node.querySelector('.shopify-payment-button__button'))) scopes.add(node.parentElement || document);
+      if (node.nodeType === 1 && (node.matches(controls) || node.querySelector(controls))) scopes.add(node);
     }
     scopes.forEach(scope => { if (scope.isConnected) syncButtons(scope); });
   }).observe(document.documentElement, {childList: true, subtree: true});

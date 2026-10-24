@@ -9,6 +9,7 @@ class StickyAddCart extends HTMLElement {
      up again when the builder draws its section again (a new bar replaces
      the old one; a bar whose section is gone removes itself). */
   connectedCallback() {
+    if (this._mtMoving) return;
     if (!this._mtReady) {
       this._mtReady = true;
       this.setup();
@@ -32,7 +33,9 @@ class StickyAddCart extends HTMLElement {
         });
     }
     if (this.parentElement && this.parentElement !== document.body) {
+      this._mtMoving = true;
       document.body.appendChild(this);
+      this._mtMoving = false;
     }
     this.mobileQuery = window.matchMedia("(max-width: 767.98px)");
     // Hidden until the section's button scrolls away: out of the tab order.
@@ -65,7 +68,7 @@ class StickyAddCart extends HTMLElement {
     this._onScroll = () => {
       if (this._ticking) return;
       this._ticking = true;
-      requestAnimationFrame(() => this.evaluate());
+      this._scrollFrame = requestAnimationFrame(() => this.evaluate());
     };
     this._onResize = () => {
       this.placeAboveNav();
@@ -74,13 +77,17 @@ class StickyAddCart extends HTMLElement {
     };
     window.addEventListener("scroll", this._onScroll, { passive: true });
     window.addEventListener("resize", this._onResize, { passive: true });
+    window.addEventListener('pageshow', this._onResize);
+    this._viewport = window.visualViewport;
+    this._viewport?.addEventListener('resize', this._onResize, {passive:true});
+    this._viewport?.addEventListener('scroll', this._onScroll, {passive:true});
     this._onVariant = (e) => {
       const d = (e && e.detail) || {};
       if (d.sectionId != null && String(d.sectionId) !== String(this.sectionId)) return;
       requestAnimationFrame(() => this.syncPrice());
     };
     document.addEventListener("variant:change", this._onVariant);
-    this._onRedraw = () => requestAnimationFrame(() => this.isConnected && this.evaluate());
+    this._onRedraw = () => requestAnimationFrame(() => { if (this.isConnected) this._onResize(); });
     document.addEventListener("storelib:section-load", this._onRedraw);
     document.addEventListener("shopify:section:load", this._onRedraw);
     this._select = this.querySelector("select");
@@ -90,27 +97,34 @@ class StickyAddCart extends HTMLElement {
     }
     if ("ResizeObserver" in window) {
       this._ro = new ResizeObserver(() => this.placeAboveNav());
-      const nav = document.querySelector("mobile-navigation-bar");
-      if (nav) this._ro.observe(nav);
     }
+    this._navNodes = new Set();
+    this._navAttributes = new MutationObserver(this._onScroll);
     this.placeAboveNav();
     this.layoutForWidth();
     this.evaluate();
   }
   teardown() {
     this._mtObserving = false;
+    cancelAnimationFrame(this._scrollFrame);
     window.removeEventListener("scroll", this._onScroll);
     window.removeEventListener("resize", this._onResize);
+    window.removeEventListener('pageshow', this._onResize);
+    this._viewport?.removeEventListener('resize', this._onResize);
+    this._viewport?.removeEventListener('scroll', this._onScroll);
     document.removeEventListener("variant:change", this._onVariant);
     document.removeEventListener("storelib:section-load", this._onRedraw);
     document.removeEventListener("shopify:section:load", this._onRedraw);
     if (this._select && this._onSelect) this._select.removeEventListener("change", this._onSelect);
     if (this._ro) this._ro.disconnect();
+    this._navAttributes?.disconnect();
+    this._navNodes?.clear();
     this._ro = null;
     document.documentElement.classList.remove("mt-sticky-cart-shown");
   }
   evaluate() {
     this._ticking = false;
+    this.placeAboveNav();
     const main = this.findMain();
     if (!main) return this.setShown(false);
     const primaryBtn = main.querySelector(".button-trigger__sticky");
@@ -139,13 +153,27 @@ class StickyAddCart extends HTMLElement {
   // Sits on top of the phone navigation bar instead of under it; with no
   // bar below, its own padding clears the home indicator (safe area).
   placeAboveNav() {
-    const nav = document.querySelector("mobile-navigation-bar");
+    const navs = [...document.querySelectorAll('mobile-navigation-bar')];
+    if (this._navNodes && (navs.length !== this._navNodes.size || navs.some(nav => !this._navNodes.has(nav)))) {
+      this._ro?.disconnect();
+      this._navAttributes?.disconnect();
+      this._navNodes = new Set(navs);
+      navs.forEach(nav => {
+        this._ro?.observe(nav);
+        this._navAttributes?.observe(nav, {attributes:true,attributeFilter:['class','style','hidden']});
+        if (nav.parentElement) this._navAttributes?.observe(nav.parentElement, {attributes:true,attributeFilter:['class','style','hidden']});
+      });
+    }
     let offset = 0;
-    if (nav) {
+    for (const nav of navs) {
       const cs = getComputedStyle(nav);
       if (cs.display !== "none" && cs.visibility !== "hidden") {
         const r = nav.getBoundingClientRect();
-        if (r.height > 0 && r.top < window.innerHeight) offset = Math.max(0, Math.round(window.innerHeight - r.top));
+        // Both bars are fixed to the same CSS viewport. innerHeight and
+        // getBoundingClientRect can use different edges during iOS toolbar
+        // changes; their difference can undercount the nav and cause overlap.
+        // Its border-box already includes the safe-area inset and wrapping.
+        if (r.height > 0 && r.bottom > 0) offset = Math.max(offset, Math.ceil(r.height + Math.max(0, parseFloat(cs.bottom) || 0)));
       }
     }
     if (offset !== this._navOffset) {
