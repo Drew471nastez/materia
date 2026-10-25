@@ -1,27 +1,37 @@
 <template compat="shopify">
 {%- comment -%}
-  Materia Themes — Size Table block. Params: block, product.
-  Collapsible: a details.mt-acc, opened and closed smoothly by
-  product-page-ui (::details-content height, or an animation where the
-  browser cannot), the same as Expandable info rows.
-
-  Table data: one row per line, cells separated by "|". The FIRST line is the
-  header row. Source is either the block's "Table data" field (same for every
-  product using this template) OR a per-product metafield (unique per product).
+  Materia Themes. Size chart block (size_table): the sizes drawn in the
+  page, as a row that opens and closes like Expandable info rows
+  (details.mt-acc, animated by product-page-ui) or always open.
+  What it shows, first one found:
+    1. the size chart given to this product in Storelib (Products > Size
+       charts), unless "Use the product's Storelib size chart" is off;
+    2. the product's custom field named below, when that is on;
+    3. the block's Table data.
+  Rows: the first line names the columns, then one size per line, cells
+  split by "|" (snippets/size-rows-table). A product's Storelib chart only
+  reaches its own page, so elsewhere it is asked from that page by
+  size-chart.js and the block shows once it arrives.
+  Inputs: block, product.
 {%- endcomment -%}
 {%- liquid
   assign bs = block.settings
   assign uid = block.id
-  assign head_bg   = bs.accent            | default: '#E5E7EB'
-  assign head_text = bs.header_text_color | default: '#111827'
-  assign body_text = bs.body_text_color   | default: '#374151'
-  assign title     = bs.title             | default: 'Size Guide'
+  assign title = bs.title | default: 'Size guide'
+
+  assign use_chart = true
+  if bs.use_storelib_chart == false
+    assign use_chart = false
+  endif
+  assign assigned_native = blank
+  if use_chart
+    assign assigned_native = product.metafields.storelib.size_chart
+    if assigned_native == blank and page.product.id == product.id
+      assign assigned_native = page.product.metafields.storelib.size_chart
+    endif
+  endif
 
   assign raw = bs.table_data
-  assign assigned_native = product.metafields.storelib.size_chart
-  if assigned_native == blank and page.product.id == product.id
-    assign assigned_native = page.product.metafields.storelib.size_chart
-  endif
   if bs.use_metafield
     assign mf_ns  = bs.metafield_namespace | default: 'custom'
     assign mf_key = bs.metafield_key       | default: 'size_table'
@@ -30,84 +40,81 @@
       assign raw = mf.value | default: mf
     endif
   endif
-  assign rows = raw | strip | newline_to_br | split: '<br />'
--%}
-{%- capture assigned_chart -%}{%- if bs.use_storelib_chart != false and assigned_native != blank -%}{%- render 'product-size-chart-content', product: product, chart_id: block.id -%}{%- endif -%}{%- endcapture -%}
 
-{%- if raw != blank or assigned_chart != blank -%}
+  assign remote = false
+  if use_chart and assigned_native == blank and product.url != blank
+    if request.design_mode or request.path != product.url
+      assign remote = true
+    endif
+  endif
+-%}
+{%- capture assigned_chart -%}{%- if assigned_native != blank -%}{%- render 'product-size-chart-content', product: product, chart_id: block.id -%}{%- endif -%}{%- endcapture -%}
+{%- capture typed_rows -%}{%- if assigned_chart == blank -%}{%- render 'size-rows-table', data: raw, unit: bs.table_unit, uid: uid -%}{%- endif -%}{%- endcapture -%}
+{%- assign has_rows = false -%}
+{%- if assigned_chart != blank or typed_rows != blank -%}{%- assign has_rows = true -%}{%- endif -%}
+
+{%- if has_rows or remote -%}
+{%- capture st_head_bg -%}{%- render 'scheme-color', color: bs.accent, fallback: 'unset' -%}{%- endcapture -%}
+{%- capture st_head_text -%}{%- render 'scheme-color', color: bs.header_text_color, fallback: 'unset' -%}{%- endcapture -%}
+{%- capture st_text -%}{%- render 'scheme-color', color: bs.body_text_color, fallback: 'unset' -%}{%- endcapture -%}
+{%- capture st_title -%}{%- render 'scheme-color', color: bs.title_color, fallback: 'unset' -%}{%- endcapture -%}
+{%- capture st_border -%}{%- render 'scheme-color', color: bs.border_color, fallback: 'unset' -%}{%- endcapture -%}
+{%- capture st_stripe -%}{%- render 'scheme-color', color: bs.zebra_color, fallback: 'unset' -%}{%- endcapture -%}
 <style>
-  #SizeTable-{{ uid }} { font-family: var(--body-font, inherit); margin: {{ bs.space_above | default: 8 }}px 0 {{ bs.space_below | default: 8 }}px; }
-  #SizeTable-{{ uid }} .sz-wrap { border: 1px solid {{ bs.border_color | default: '#E5E7EB' }}; border-radius: {{ bs.radius | default: 10 }}px; overflow: hidden; }
+  #SizeTable-{{ uid }} {
+    margin: {{ bs.space_above | default: 8 }}px 0 {{ bs.space_below | default: 8 }}px;
+    font-family: var(--body-font, inherit);
+    {%- if st_title != 'unset' %} --mt-acc-title: {{ st_title }};{% endif %}
+    {%- if st_border != 'unset' %} --mt-acc-border: {{ st_border }};{% endif %}
+  }
+  #SizeTable-{{ uid }} .mt-size-chart {
+    --sz-radius: {{ bs.radius | default: 8 }}px;
+    --sz-fs: {{ bs.cell_size | default: 14 }}px;
+    {%- if st_head_bg != 'unset' %} --sz-head-bg: {{ st_head_bg }};{% endif %}
+    {%- if st_head_text != 'unset' %} --sz-head-text: {{ st_head_text }};{% endif %}
+    {%- if st_text != 'unset' %} --sz-text: {{ st_text }};{% endif %}
+    {%- if st_border != 'unset' %} --sz-border: {{ st_border }};{% endif %}
+    {%- if bs.zebra == false %} --sz-stripe: var(--sz-bg);{% elsif st_stripe != 'unset' %} --sz-stripe: {{ st_stripe }};{% endif %}
+  }
   #SizeTable-{{ uid }} .sz-title {
+    margin: 0;
+    color: var(--mt-acc-title, var(--color-heading));
     font-family: var(--heading-font, inherit);
-    font-size: {{ bs.title_size | default: 16 }}px; font-weight: 700; color: {{ bs.title_color | default: '#111111' }};
-    margin: 0; padding: 14px 16px; list-style: none; cursor: default;
+    font-size: {{ bs.title_size | default: 16 }}px;
+    font-weight: var(--subheading-weight, 600);
+    line-height: 1.35;
   }
-  #SizeTable-{{ uid }} details > summary.sz-title { cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
-  #SizeTable-{{ uid }} details > summary.sz-title::-webkit-details-marker { display: none; }
-  #SizeTable-{{ uid }} details > summary.sz-title::after {
-    content: ""; width: 9px; height: 9px; margin-left: 12px; flex: 0 0 auto;
-    border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
-    transform: rotate(45deg); transition: transform .2s ease;
-  }
-  #SizeTable-{{ uid }} details[open]:not(.is-closing) > summary.sz-title::after { transform: rotate(-135deg); }
-  #SizeTable-{{ uid }} details > summary.sz-title::after { transition: transform .32s cubic-bezier(.4, 0, .2, 1); }
-  #SizeTable-{{ uid }} details > summary.sz-title { min-height: 44px; font-family: var(--heading-font, inherit); }
-  #SizeTable-{{ uid }} .sz-wrap.mt-acc { border-bottom: 1px solid {{ bs.border_color | default: '#E5E7EB' }}; }
-  #SizeTable-{{ uid }} .mt-acc__body { color: inherit; }
-  @media (prefers-reduced-motion: reduce) { #SizeTable-{{ uid }} details > summary.sz-title::after { transition: none; } }
-  #SizeTable-{{ uid }} .sz-body { overflow-x: auto; }
-  #SizeTable-{{ uid }} table { width: 100%; border-collapse: collapse; font-size: {{ bs.cell_size | default: 14 }}px; }
-  #SizeTable-{{ uid }} thead th {
-    background: {{ head_bg }}; color: {{ head_text }};
-    font-weight: 700; text-transform: uppercase; letter-spacing: .02em;
-    padding: 12px 14px; text-align: center; white-space: nowrap;
-  }
-  #SizeTable-{{ uid }} thead th:first-child { text-align: left; }
-  #SizeTable-{{ uid }} tbody td { padding: 11px 14px; text-align: center; color: {{ body_text }}; border-top: 1px solid {{ bs.border_color | default: '#E5E7EB' }}; }
-  #SizeTable-{{ uid }} tbody td:first-child { text-align: left; font-weight: 600; }
-  {%- if bs.zebra != false -%}
-  #SizeTable-{{ uid }} tbody tr:nth-child(even) { background: {{ bs.zebra_color | default: '#F9FAFB' }}; }
-  {%- endif -%}
+  #SizeTable-{{ uid }} .sz-title--static { padding: 0 0 12px; }
+  #SizeTable-{{ uid }} details > summary.sz-title { padding: 12px 0; }
+  #SizeTable-{{ uid }} .sz-body { padding: 0 0 16px; }
+  #SizeTable-{{ uid }} .sz-wrap:not(.mt-acc) .sz-body { padding: 0; }
 {% comment %}{% endcomment %}</style>
 
 {%- capture _table -%}
-  {%- if assigned_chart != blank -%}
-    <div class="sz-body">{{ assigned_chart }}</div>
-  {%- else -%}
   <div class="sz-body">
-    <table>
-      {%- for row in rows -%}
-        {%- assign cells = row | strip -%}
-        {%- if cells == blank -%}{%- continue -%}{%- endif -%}
-        {%- assign cells = cells | split: '|' -%}
-        {%- if forloop.first -%}
-          <thead><tr>{%- for c in cells -%}<th scope="col">{{ c | strip | escape }}</th>{%- endfor -%}</tr></thead><tbody>
-        {%- else -%}
-          <tr>{%- for c in cells -%}<td>{{ c | strip | escape }}</td>{%- endfor -%}</tr>
-        {%- endif -%}
-      {%- endfor -%}
-      </tbody>
-    </table>
+    {%- if remote -%}<div data-size-chart-remote="{{ product.url }}"{% unless has_rows %} hidden{% endunless %}></div>{%- endif -%}
+    {%- if assigned_chart != blank -%}{{ assigned_chart }}{%- elsif typed_rows != blank -%}{%- if remote -%}<div data-size-chart-fallback>{{ typed_rows }}</div>{%- else -%}{{ typed_rows }}{%- endif -%}{%- endif -%}
   </div>
-  {%- endif -%}
 {%- endcapture -%}
 
-<div id="SizeTable-{{ uid }}" {{ block.shopify_attributes }}>
+<div id="SizeTable-{{ uid }}" class="sz" data-size-chart-root="{{ uid }}"{% if has_rows or request.design_mode != true %} {{ block.shopify_attributes }}{% endif %}{% unless has_rows %} hidden data-size-chart-await{% endunless %}>
   {%- if bs.collapsible != false -%}
     <details class="sz-wrap mt-acc" data-mt-acc-key="{{ uid }}"{% if bs.start_open %} open{% endif %}>
-      <summary class="sz-title">{{ title }}</summary>
+      <summary class="sz-title">
+        <span class="mt-acc__title">{{ title | escape }}</span>
+        <svg class="mt-acc__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </summary>
       <div class="mt-acc__body">{{ _table }}</div>
     </details>
   {%- else -%}
     <div class="sz-wrap">
-      <p class="sz-title sz-title--static">{{ title }}</p>
+      <p class="sz-title sz-title--static">{{ title | escape }}</p>
       {{ _table }}
     </div>
   {%- endif -%}
 </div>
-{%- else -%}
-  {%- render 'size-chart-preview', block: block -%}
 {%- endif -%}
-
+{%- unless has_rows -%}
+  {%- render 'size-chart-preview', block: block, rows_setting: true -%}
+{%- endunless -%}
 </template>

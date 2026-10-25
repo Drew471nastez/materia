@@ -35,7 +35,7 @@ const render=(name,ctx)=>h.renderTemplate(h.templateOf(read('snippets/'+name+'.s
    const value='Size | Chest\n'+size+' | '+id;
    const p={id,metafields:{custom:{size_table:wrapped?{value}:value}}};
    const table=render('size-table-render',{block,product:p});
-   assert(table.includes('<td>'+size+'</td>'));assert(!table.includes('Fallback'));assert(table.includes('scope="col"'));checks++;
+   assert(table.includes('<th scope="row">'+size+'</th>'),'the size column is a row header');assert(!table.includes('Fallback'));assert(table.includes('scope="col"'));checks++;
   }
   assert(render('size-table-render',{block,product:{metafields:{}}}).includes('Fallback'));checks++;
   const chart='<table><tr><td>Product chart</td></tr></table>';

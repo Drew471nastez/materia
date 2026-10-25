@@ -1,0 +1,73 @@
+<template compat="shopify">
+{%- comment -%}
+  Materia Themes. Sizes typed in a block, drawn like Storelib's own chart
+  (snippets/product-size-chart-content): the first line names the columns,
+  then one size per line, cells split by "|". With unit 'cm' or 'in' (the
+  unit the numbers were typed in) visitors get a cm / in switch: number
+  cells and ranges such as 86-91 after the first column are converted, and
+  those columns name their unit. Prints nothing without at least one size.
+  Inputs: data, unit ('', 'cm' or 'in'), uid, name (optional title).
+{%- endcomment -%}
+{%- liquid
+  assign sr_sep = '~~sr-row~~'
+  assign sr_raw = data | strip | replace: '<br />', '' | newline_to_br | split: '<br />'
+-%}
+{%- capture sr_joined -%}{%- for sr_line in sr_raw -%}{%- assign sr_l = sr_line | strip -%}{%- if sr_l != blank -%}{{ sr_l }}{{ sr_sep }}{%- endif -%}{%- endfor -%}{%- endcapture -%}
+{%- assign sr_lines = sr_joined | split: sr_sep -%}
+{%- if sr_lines.size > 1 -%}
+{%- liquid
+  assign sr_unit = unit | default: '' | downcase
+  assign sr_both = false
+  if sr_unit == 'cm' or sr_unit == 'in'
+    assign sr_both = true
+  endif
+  assign sr_head = sr_lines | first | split: '|'
+-%}
+{%- comment -%} Columns after the first that hold a number in some row. {%- endcomment -%}
+{%- capture sr_measure -%},{%- for sr_line in sr_lines -%}{%- if forloop.first -%}{%- continue -%}{%- endif -%}{%- assign sr_cells = sr_line | split: '|' -%}{%- for sr_c in sr_cells -%}{%- if forloop.first -%}{%- continue -%}{%- endif -%}{%- assign sr_v = sr_c | strip | replace: '–', '-' | remove: ' ' -%}{%- assign sr_rest = sr_v | remove: '0' | remove: '1' | remove: '2' | remove: '3' | remove: '4' | remove: '5' | remove: '6' | remove: '7' | remove: '8' | remove: '9' | remove: '.' | remove: '-' -%}{%- assign sr_digits = sr_v | remove: '.' | remove: '-' -%}{%- if sr_rest == blank and sr_digits != blank -%}{{ forloop.index }},{%- endif -%}{%- endfor -%}{%- endfor -%}{%- endcapture -%}
+{%- if sr_both -%}{%- assign sr_sets = 'cm,in' | split: ',' -%}{%- else -%}{%- assign sr_sets = 'one' | split: ',' -%}{%- endif -%}
+<div class="mt-size-chart{% if sr_both %} mt-size-chart--units{% endif %}" data-mt-size-chart data-size-triggers="{{ settings.size_trigger | default: 'Size' | escape }}">
+  {%- if name != blank -%}<p class="mt-size-chart__name"><strong>{{ name | escape }}</strong></p>{%- endif -%}
+  {%- if sr_both -%}
+  <div class="mt-size-chart__units" role="radiogroup" aria-label="Units">
+    <label><input type="radio" name="mt-size-unit-rows-{{ uid }}" value="cm"{% if sr_unit == 'cm' %} checked{% endif %}> cm</label>
+    <label><input type="radio" name="mt-size-unit-rows-{{ uid }}" value="in"{% if sr_unit == 'in' %} checked{% endif %}> in</label>
+  </div>
+  {%- endif -%}
+  {%- for sr_set in sr_sets -%}
+  <div class="mt-size-chart__scroll" data-unit="{{ sr_set }}" tabindex="0" role="region" aria-label="{{ name | default: 'Size chart' | escape }}{% if sr_set != 'one' %} ({{ sr_set }}){% endif %}">
+    <table class="mt-size-chart__table" data-unit="{{ sr_set }}">
+      <thead><tr>{%- for sr_h in sr_head -%}
+        {%- assign sr_key = ',' | append: forloop.index | append: ',' -%}
+        <th scope="col">{{ sr_h | strip | escape }}{% if sr_set != 'one' and sr_measure contains sr_key %} ({{ sr_set }}){% endif %}</th>
+      {%- endfor -%}</tr></thead>
+      <tbody>
+        {%- for sr_line in sr_lines -%}
+          {%- if forloop.first -%}{%- continue -%}{%- endif -%}
+          {%- assign sr_cells = sr_line | split: '|' -%}
+          <tr>{%- for sr_c in sr_cells -%}
+            {%- assign sr_cell = sr_c | strip -%}
+            {%- if forloop.first -%}
+              <th scope="row">{{ sr_cell | escape }}</th>
+            {%- else -%}
+              {%- assign sr_out = sr_cell -%}
+              {%- if sr_set != 'one' and sr_set != sr_unit -%}
+                {%- assign sr_v = sr_cell | replace: '–', '-' | remove: ' ' -%}
+                {%- assign sr_rest = sr_v | remove: '0' | remove: '1' | remove: '2' | remove: '3' | remove: '4' | remove: '5' | remove: '6' | remove: '7' | remove: '8' | remove: '9' | remove: '.' | remove: '-' -%}
+                {%- assign sr_digits = sr_v | remove: '.' | remove: '-' -%}
+                {%- if sr_rest == blank and sr_digits != blank -%}
+                  {%- assign sr_parts = sr_v | split: '-' -%}
+                  {%- capture sr_out -%}{%- for sr_p in sr_parts -%}{%- if sr_p == blank -%}{%- continue -%}{%- endif -%}{%- if sr_set == 'in' -%}{%- assign sr_n = sr_p | times: 1.0 | divided_by: 2.54 | round: 1 -%}{%- else -%}{%- assign sr_n = sr_p | times: 2.54 | round: 1 -%}{%- endif -%}{%- unless forloop.first -%}–{%- endunless -%}{{ sr_n }}{%- endfor -%}{%- endcapture -%}
+                {%- endif -%}
+              {%- endif -%}
+              <td>{{ sr_out | escape }}</td>
+            {%- endif -%}
+          {%- endfor -%}</tr>
+        {%- endfor -%}
+      </tbody>
+    </table>
+  </div>
+  {%- endfor -%}
+</div>
+{%- endif -%}
+</template>

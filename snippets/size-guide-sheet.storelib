@@ -1,82 +1,129 @@
 <template compat="shopify">
 {%- comment -%}
-  Materia Themes. Size guide link and its sheet for the variant picker.
-  The guide is the block's "Size guide content"; a page or a product
-  size_chart metafield is used when the content is empty. Opens in a
-  <dialog>: a bottom sheet on phones, a centred panel on larger screens.
+  Materia Themes. The Size guide block, and the size guide link of the
+  variant picker. What it shows, first one found:
+    1. the size chart given to this product in Storelib (Products > Size
+       charts), unless "Use the product's Storelib size chart" is off;
+    2. the block's own Size rows, with the text under them;
+    3. HTML or a page in the product's custom.size_chart field;
+    4. the chosen page.
+  A product's Storelib chart only reaches its own page, so elsewhere (a
+  Featured product, the builder) it is asked from that page by
+  size-chart.js, and the link shows once a chart arrives. Opens in a
+  <dialog> (a bottom sheet on phones, a centred panel on larger screens), or
+  as a collapsible row. Nothing for visitors when there are no sizes; the
+  builder shows a note saying where to add them.
   Inputs: block, product, section
 {%- endcomment -%}
-{%- capture sg_product_chart -%}{%- render 'product-size-chart-content', product: product, chart_id: block.id -%}{%- endcapture -%}
 {%- liquid
-  assign sg_suppress = false
-  assign sg_assigned = false
-  if product.metafields.storelib.size_chart != blank
-    assign sg_assigned = true
-  elsif page.product.id == product.id and page.product.metafields.storelib.size_chart != blank
-    assign sg_assigned = true
+  assign sg = block.settings
+  assign sg_own_block = false
+  if block.type == 'size_guide' or block.type == 'size_chart_popup'
+    assign sg_own_block = true
   endif
-  unless block.type == 'size_guide' or block.type == 'size_chart_popup'
+  assign sg_use_chart = true
+  if sg.use_storelib_chart == false
+    assign sg_use_chart = false
+  endif
+  assign sg_assigned = false
+  if sg_use_chart
+    if product.metafields.storelib.size_chart != blank
+      assign sg_assigned = true
+    elsif page.product.id == product.id and page.product.metafields.storelib.size_chart != blank
+      assign sg_assigned = true
+    endif
+  endif
+  assign sg_suppress = false
+  unless sg_own_block
     for chart_block in section.blocks
       if chart_block.type == 'size_guide' or chart_block.type == 'size_table' or chart_block.type == 'size_chart_popup'
         assign sg_suppress = true
       endif
     endfor
   endunless
-  assign sg_content = block.settings.size_guide_content | default: block.settings.sizes_content
-  if sg_assigned
-    assign sg_content = sg_product_chart
-  endif
-  assign sg_plain = sg_content | strip_html | strip
-  if sg_plain == blank and sg_content contains '<img'
-    assign sg_plain = 'image'
-  endif
-  if sg_plain == blank and sg_content contains '<table'
-    assign sg_plain = 'table'
-  endif
-  if sg_plain == blank
-    if sg_product_chart != blank
-      assign sg_content = sg_product_chart
+-%}
+{%- unless sg_suppress -%}
+{%- capture sg_product_chart -%}{%- if sg_use_chart -%}{%- render 'product-size-chart-content', product: product, chart_id: block.id -%}{%- endif -%}{%- endcapture -%}
+{%- capture sg_rows -%}{%- render 'size-rows-table', data: sg.table_data, unit: sg.table_unit, uid: block.id -%}{%- endcapture -%}
+{%- liquid
+  assign sg_text = sg.size_guide_content | default: sg.sizes_content
+  assign sg_text_check = sg_text | strip_html | strip
+  if sg_text_check == blank
+    if sg_text contains '<img' or sg_text contains '<table'
+      assign sg_text_check = 'media'
     endif
   endif
-  assign sg_plain = sg_content | strip_html | strip
-  if sg_plain == blank and sg_content contains '<table'
-    assign sg_plain = 'table'
+  if sg_text_check == blank
+    assign sg_text = ''
   endif
-  if sg_plain == blank and sg_content contains '<img'
-    assign sg_plain = 'image'
-  endif
-  assign sg_fallback_page = block.settings.size_guide_page | default: block.settings.sizes_page
-  if sg_plain == blank and sg_fallback_page != blank
-    assign sg_page = sg_fallback_page
-    if sg_page.content != blank
-      assign sg_content = sg_page.content
-    else
-      assign sg_content = pages[sg_page].content
+
+  if sg_assigned
+    assign sg_content = sg_product_chart
+  else
+    assign sg_content = sg_rows | append: sg_text
+    assign sg_check = sg_content | strip
+    if sg_check == blank and sg_product_chart contains '<'
+      assign sg_content = sg_product_chart
+    endif
+    assign sg_check = sg_content | strip
+    assign sg_fallback_page = sg.size_guide_page | default: sg.sizes_page
+    if sg_check == blank and sg_fallback_page != blank
+      assign sg_page = sg_fallback_page
+      if sg_page.content != blank
+        assign sg_content = sg_page.content
+      else
+        assign sg_content = pages[sg_page].content
+      endif
     endif
   endif
   assign sg_check = sg_content | strip_html | strip
-  if sg_check == blank and sg_content contains '<img'
-    assign sg_check = 'image'
+  if sg_check == blank
+    if sg_content contains '<img' or sg_content contains '<table'
+      assign sg_check = 'media'
+    endif
   endif
-  if sg_check == blank and sg_content contains '<table'
-    assign sg_check = 'table'
+
+  comment
+    Ask the product's own page for its Storelib chart: not needed on that
+    page itself (the chart is already here), only in the builder or when
+    the product is shown on another page.
+  endcomment
+  assign sg_remote = false
+  if sg_use_chart and sg_assigned == false and product.url != blank
+    if request.design_mode or request.path != product.url
+      assign sg_remote = true
+    endif
   endif
-  assign sg_label = block.settings.size_guide_label | default: block.settings.trig_text | default: 'Size guide'
+
+  assign sg_label = sg.size_guide_label | default: sg.trig_text | default: 'Size guide'
   assign sg_id = 'SizeGuide-' | append: section.id | append: '-' | append: block.id
+  assign sg_waiting = false
+  if sg_check == blank and sg_assigned == false
+    assign sg_waiting = true
+  endif
 -%}
-{%- if sg_suppress == false -%}
-{%- if sg_check != blank or sg_assigned -%}
-  {%- if block.type == 'size_guide' or block.type == 'size_chart_popup' -%}<div data-block-preview-root="{{ block.id }}" {{ block.shopify_attributes }}>{%- endif -%}
-  {%- if block.settings.size_guide_display == 'collapsible' -%}
-  <details class="mt-acc">
-    <summary>{{ sg_label | escape }}</summary>
-    <div class="mt-sheet__table-wrap rte">{{ sg_content }}</div>
+{%- if sg_check != blank or sg_assigned or sg_remote -%}
+  <div class="mt-size-guide-root{% if sg_own_block %} mt-size-guide-root--block{% endif %}" data-size-chart-root="{{ block.id }}"
+    {%- comment -%} While the builder note stands in for it, the note carries the block's attributes. {%- endcomment -%}
+    {%- if sg_own_block %}{% unless sg_waiting and request.design_mode and block.type == 'size_guide' %} data-block-preview-root="{{ block.id }}" {{ block.shopify_attributes }}{% endunless %}{% endif -%}
+    {%- if sg_waiting %} hidden data-size-chart-await{% endif %}>
+  {%- capture sg_body -%}
+    {%- if sg_remote -%}<div data-size-chart-remote="{{ product.url }}"{% if sg_waiting %} hidden{% endif %}></div>{%- endif -%}
+    {%- if sg_check != blank -%}{%- if sg_remote -%}<div data-size-chart-fallback>{{ sg_content }}</div>{%- else -%}{{ sg_content }}{%- endif -%}{%- endif -%}
+  {%- endcapture -%}
+  {%- if sg.size_guide_display == 'collapsible' -%}
+  <details class="mt-acc mt-size-guide-acc" data-mt-acc-key="{{ sg_id }}">
+    <summary>
+      <span class="mt-acc__title">{{ sg_label | escape }}</span>
+      <svg class="mt-acc__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+    </summary>
+    <div class="mt-acc__body"><div class="mt-acc__inner mt-sheet__table-wrap rte">{{ sg_body }}</div></div>
   </details>
   {%- else -%}
   <button
     type="button"
-    class="mt-size-guide{% if block.settings.size_guide_appearance == 'button' %} btn btn-secondary{% endif %}"
-    {% if block.settings.size_guide_appearance == 'button' %}data-theme-button="secondary" data-sl-button{% endif %}
+    class="mt-size-guide{% if sg.size_guide_appearance == 'button' %} btn btn-secondary{% endif %}"
+    {% if sg.size_guide_appearance == 'button' %}data-theme-button="secondary" data-sl-button{% endif %}
     data-mt-sheet-open
     aria-controls="{{ sg_id }}"
     aria-haspopup="dialog"
@@ -94,15 +141,15 @@
         </button>
       </div>
       <div class="mt-sheet__body rte">
-        <div class="mt-sheet__table-wrap">{{ sg_content }}</div>
+        <div class="mt-sheet__table-wrap">{{ sg_body }}</div>
       </div>
     </div>
   </dialog>
   {%- endif -%}
-  {%- if block.type == 'size_guide' or block.type == 'size_chart_popup' -%}</div>{%- endif -%}
+  </div>
 {%- endif -%}
+{%- if sg_waiting and block.type == 'size_guide' -%}
+  {%- render 'size-chart-preview', block: block, rows_setting: true -%}
 {%- endif -%}
-{%- if sg_check == blank and block.type == 'size_guide' and sg_assigned == false -%}
-  {%- render 'size-chart-preview', block: block -%}
-{%- endif -%}
+{%- endunless -%}
 </template>

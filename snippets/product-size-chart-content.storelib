@@ -1,10 +1,13 @@
 <template compat="shopify">
-{%- comment -%} Product-specific size chart, shared by the variant picker guide
-  and the Size Chart Popup. First found: the size chart set on the product in
-  Storelib (product.metafields.storelib.size_chart: name, unit, columns, rows,
-  rows_cm, rows_in, notes, image), drawn as a table with a cm / in switch
-  when both are given; then HTML or a page named in custom.size_chart.
-  Missing data produces no fake chart. {%- endcomment -%}
+{%- comment -%} Product-specific size chart, shared by the Size guide, the
+  Size chart table, the variant picker guide and the Size Chart Popup. First
+  found: the size chart given to the product in Storelib (Products > Size
+  charts, read as product.metafields.storelib.size_chart: name, unit,
+  columns of { name, measure }, rows, rows_cm, rows_in, notes, image),
+  drawn as a table with a cm / in switch when both are given; then HTML or a
+  page named in custom.size_chart. Missing data produces no fake chart.
+  Each table scrolls sideways inside its own box with the size column held.
+  Inputs: product, chart_id (optional, keeps the unit switch's name unique). {%- endcomment -%}
 {%- liquid
   assign slc = product.metafields.storelib.size_chart.value | default: product.metafields.storelib.size_chart
   if slc == blank and page.product.id == product.id
@@ -46,10 +49,24 @@
         {%- else -%}{%- assign slc_list = slc_rows -%}
       {%- endcase -%}
       {%- if slc_list != blank -%}
+      {%- if slc_set == 'one' -%}{%- assign slc_unit = slc.unit -%}{%- else -%}{%- assign slc_unit = slc_set -%}{%- endif -%}
+      <div class="mt-size-chart__scroll" data-unit="{{ slc_set }}" tabindex="0" role="region" aria-label="{{ slc.name | default: 'Size chart' | escape }}{% if slc_set != 'one' %} ({{ slc_set }}){% endif %}">
       <table class="mt-size-chart__table" data-unit="{{ slc_set }}">
         {%- if slc_cols != blank -%}
-          {%- comment -%} With the cm / in switch, each measurement column names its unit. {%- endcomment -%}
-          <thead><tr>{%- for col in slc_cols -%}<th scope="col">{{ col.label | default: col.name | default: col | escape }}{% if forloop.first == false and col.measurement != false %}{% if slc_set == 'cm' %} (cm){% elsif slc_set == 'in' %} (in){% endif %}{% endif %}</th>{%- endfor -%}</tr></thead>
+          {%- comment -%} A measurement column names its unit: a column { name, measure: true },
+            or any column after the first when the columns are plain names. {%- endcomment -%}
+          <thead><tr>{%- for col in slc_cols -%}
+            {%- assign col_name = col.label | default: col.name -%}
+            {%- assign col_measure = false -%}
+            {%- if col_name != blank -%}
+              {%- if col.measure == true or col.measurement == true -%}{%- assign col_measure = true -%}{%- endif -%}
+              {%- if col.measure == nil and col.measurement == nil and forloop.first == false -%}{%- assign col_measure = true -%}{%- endif -%}
+            {%- else -%}
+              {%- assign col_name = col -%}
+              {%- unless forloop.first -%}{%- assign col_measure = true -%}{%- endunless -%}
+            {%- endif -%}
+            <th scope="col">{{ col_name | escape }}{% if col_measure and slc_unit != blank %} ({{ slc_unit | escape }}){% endif %}</th>
+          {%- endfor -%}</tr></thead>
         {%- endif -%}
         <tbody>
           {%- for row in slc_list -%}
@@ -58,6 +75,7 @@
           {%- endfor -%}
         </tbody>
       </table>
+      </div>
       {%- endif -%}
     {%- endfor -%}
     {%- if slc.notes != blank -%}<p class="mt-size-chart__notes">{{ slc.notes | escape | newline_to_br }}</p>{%- endif -%}
@@ -65,17 +83,6 @@
       <img class="mt-size-chart__image" src="{{ slc.image | image_url: width: 1200 }}" alt="{{ slc.name | default: 'Size chart' | escape }}" loading="lazy" decoding="async"{% if slc.image.width %} width="{{ slc.image.width }}" height="{{ slc.image.height }}"{% endif %}>
     {%- endif -%}
   </div>
-  {%- if slc_both -%}
-  <style>
-    .mt-size-chart__units { display: inline-flex; gap: 4px; margin: 0 0 12px; padding: 3px; border: 1px solid var(--color-border); border-radius: 999px; }
-    .mt-size-chart__units label { position: relative; display: inline-grid; place-items: center; min-width: 52px; min-height: 44px; padding: 0 12px; border-radius: 999px; cursor: pointer; font-weight: 500; }
-    .mt-size-chart__units input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
-    .mt-size-chart__units label:has(input:checked) { background: var(--color-heading); color: var(--color-background); }
-    .mt-size-chart__units label:has(input:focus-visible) { outline: 2px solid var(--color-heading); outline-offset: 2px; }
-    .mt-size-chart--units:has(input[value="cm"]:checked) .mt-size-chart__table[data-unit="in"],
-    .mt-size-chart--units:has(input[value="in"]:checked) .mt-size-chart__table[data-unit="cm"] { display: none; }
-  {% comment %}{% endcomment %}</style>
-  {%- endif -%}
   </div>
 {%- elsif chart.content != blank -%}
   {{- chart.content -}}
