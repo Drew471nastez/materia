@@ -33,7 +33,7 @@ const BEFORE = {
     ...[1, 2, 3, 4].flatMap(t => ['enable', 'quantity', 'label', 'discount', 'badge', 'code'].map(k => `tier_${t}_${k}`))],
   pair_with_upsell: ['heading', 'p1', 'p2', 'p3', 'p4', 'p5', 'currency_rate', 'btn_label', 'btn_label_added', 'price_currency'],
 };
-const STYLES = {upsell_pro: ['cards', 'list', 'tiles', 'bold', 'soft', 'minimal'], bundle: ['cards', 'list', 'bold', 'soft', 'minimal'], quantity_offer: ['cards', 'list', 'bold', 'soft', 'minimal']};
+const STYLES = {upsell_pro: ['cards', 'list', 'tiles', 'bold', 'soft', 'minimal','compact'], bundle: ['cards', 'list', 'bold', 'soft', 'minimal','compact'], quantity_offer: ['cards', 'list', 'bold', 'soft', 'minimal','image_tiles']};
 const CUSTOM = {
   upsell_pro: ['text_color', 'bg_color', 'card_bg', 'border_color', 'muted_color', 'show_border', 'show_shadow', 'card_radius', 'button_radius', 'button_bg', 'button_text_color'],
   bundle: ['custom_bg', 'custom_text', 'custom_heading', 'custom_border', 'custom_selected', 'custom_save', 'custom_badge_bg', 'custom_badge_text', 'custom_radius', 'custom_border_width', 'custom_gap'],

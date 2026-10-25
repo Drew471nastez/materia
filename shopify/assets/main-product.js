@@ -374,18 +374,33 @@ customElements.define("sold-product", SoldProduct);
       (e) => {
         e.preventDefault();
         e.stopImmediatePropagation();
+        if (!form.reportValidity()) return;
         const submitBtn = form.querySelector(
           ".product-form__submit, button[name='add']:not(.shopify-payment-button__button)"
         );
         if (submitBtn) submitBtn.setAttribute("disabled", "disabled");
         const formData = new FormData(form);
+        for (const [name,value] of formData.entries()) if (value instanceof File && !value.name && !value.size) formData.delete(name);
         fetch("/cart/add.js", {
           method: "POST",
           body: formData,
           headers: { Accept: "application/json" },
         })
-          .then(() => { window.location.href = "/checkout"; })
-          .catch(() => { window.location.href = "/checkout"; });
+          .then(async response => {
+            const result = await response.json();
+            if (!response.ok || Number(result.status) >= 400) throw new Error(result.description || result.message || window.cartStrings?.error || 'Could not add this item.');
+            window.location.href = "/checkout";
+          })
+          .catch(error => {
+            submitBtn?.removeAttribute('disabled');
+            const owner = form.closest('product-form');
+            if (owner?.handleErrorMessage) owner.handleErrorMessage(error.message);
+            else {
+              let alert = form.querySelector('[data-personalization-error]');
+              if (!alert) { alert = document.createElement('p'); alert.dataset.personalizationError = ''; alert.setAttribute('role','alert'); form.append(alert); }
+              alert.textContent = error.message;
+            }
+          });
       },
       { capture: true }
     );

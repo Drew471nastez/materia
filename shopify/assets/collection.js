@@ -926,6 +926,8 @@ eventCollectionShopify.init();
         }
         if (panel) this.setPin(panel, null);
         this._lastY = null;
+        this._pinTravel = 0;
+        this._pinDirection = 0;
         return;
       }
       const header = this.headerBottom();
@@ -935,7 +937,12 @@ eventCollectionShopify.init();
       }
       const GAP = 24;
       const y = window.scrollY;
-      const dir = this._lastY == null ? 0 : Math.sign(y - this._lastY);
+      const delta = this._lastY == null ? 0 : y - this._lastY;
+      if (delta) {
+        this._pinTravel = Math.sign(delta) === Math.sign(this._pinTravel || 0) ? this._pinTravel + delta : delta;
+        if (Math.abs(this._pinTravel) >= 4) { this._pinDirection = Math.sign(this._pinTravel); this._pinTravel = 0; }
+      }
+      const dir = this._pinDirection || 0;
       this._lastY = y;
       const view = window.innerHeight;
       const height = panel.offsetHeight;

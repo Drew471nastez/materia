@@ -249,7 +249,7 @@ async function wheel(p, total, step = 80) {
       const schema = JSON.parse(read(SECTION_FILE).match(/<schema>([\s\S]*)<\/schema>/)[1]);
       const setting = schema.shopify.settings.find(s => s.id === 'toolbar_button_style');
       assert.deepEqual(setting.options.map(o => o.value), ['theme', 'outline', 'minimal', 'pill']);
-      assert.equal(setting.default, 'theme', 'the theme button stays the default');
+      assert.equal(setting.default, 'minimal', 'the compact toolbar is the default; Theme button remains selectable');
       assert.ok(setting.options.every(o => o.label.split(' ').length <= 3));
       const ctx = await browser.newContext({viewport: {width: 375, height: 800}, hasTouch: true});
       const p = await ctx.newPage();

@@ -7919,6 +7919,9 @@ if (!customElements.get("product-form")) {
       onSubmitHandler(evt) {
         evt.preventDefault();
         if (this.submitButton.getAttribute("aria-disabled") === "true") return;
+        const stickySource = this.form.closest('sticky-add-cart');
+        const personalizationScope = this.form.closest('.product-detail__information') || (stickySource && document.getElementById('shopify-section-' + stickySource.dataset.sectionId));
+        if (personalizationScope && [...personalizationScope.querySelectorAll('product-property input')].some(input => !input.reportValidity())) return;
         // Editor updates can replace or remove the drawer after this form mounted.
         this.cart = document.querySelector('cart-notification') || document.querySelector('cart-drawer');
 
@@ -7934,18 +7937,22 @@ if (!customElements.get("product-form")) {
         delete config.headers["Content-Type"];
 
         const formData = new FormData(this.form);
-        const productInfo = this.form.closest(".product-detail__information");
+        const productInfo = personalizationScope;
         if (productInfo) {
           productInfo
             .querySelectorAll("product-property input")
             .forEach((property) => {
               if (property.classList.contains("file") && property.files[0]) {
-                formData.append(property.name, property.files[0]);
+                formData.set(property.name, property.files[0]);
+              } else if (property.classList.contains('file')) {
+                formData.delete(property.name);
               } else if (
                 property.classList.contains("text") &&
                 property.value
               ) {
-                formData.append(property.name, property.value);
+                formData.set(property.name, property.value);
+              } else if (property.classList.contains('text')) {
+                formData.delete(property.name);
               }
             });
         }
