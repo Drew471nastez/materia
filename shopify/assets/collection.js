@@ -1152,7 +1152,15 @@ eventCollectionShopify.init();
         }
       }
       if (pop.hasAttribute('data-facets-panel')) {
+        // The page stays where it was: the scroll lock and the focus going
+        // back to the Filter button used to leave it a few pixels lower.
+        if (open) this._facetsScrollY = window.scrollY;
         document.documentElement.classList.toggle('facets-locked', open);
+        if (!open && typeof this._facetsScrollY === 'number') {
+          const y = this._facetsScrollY;
+          this._facetsScrollY = null;
+          requestAnimationFrame(() => { if (Math.abs(window.scrollY - y) > 1) window.scrollTo({ top: y, behavior: 'instant' }); });
+        }
         if (open) {
           // Focus starts on the drawer itself, so the first Tab lands on its
           // first control and a screen reader reads its title.
