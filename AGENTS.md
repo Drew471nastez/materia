@@ -130,6 +130,41 @@ The same as a section: line 1 `<template compat="shopify">`, the markup,
 `</template>`, then `<schema>` with the block's settings under
 `"shopify"`. A block is always in the theme's format.
 
+`blocks/size_guide.storelib`, shortened where it says so:
+
+```html
+<template compat="shopify">
+{%- assign preview_product = product | default: page.product -%}
+{%- render 'size-guide-sheet', block: block, product: preview_product, section: section -%}
+</template>
+
+<schema>
+{
+  "shopify": {
+    "type": "size_guide",
+    "name": "Size guide",
+    "limit": 1,
+    "settings": [
+      {
+        "type": "header",
+        "content": "Product size chart"
+      },
+      {
+        "type": "paragraph",
+        "content": "Uses the chart assigned in Storelib > Products > Size charts. It updates for each product. Without an assigned chart, optional content or a page below is used."
+      },
+      {
+        "type": "text",
+        "id": "size_guide_label",
+        "label": "Link or button label",
+        "default": "Size guide"
+      }
+    ]
+  }
+}
+</schema>
+```
+
 ### snippets/<name>.storelib, layout/<name>.storelib
 
 Line 1 `<template compat="shopify">`, the markup, `</template>`. No schema.

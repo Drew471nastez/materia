@@ -5,7 +5,6 @@
 -%}
 {%- assign fb_accessibility_no_products_found = 'accessibility.no_products_found' | t -%}
 {%- assign fb_accessibility_add_collection_tab_hint = 'accessibility.add_collection_tab_hint' | t -%}
-{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
 {%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
 <style>
   #shopify-section-{{ section.id }}.scroll-trigger {
@@ -21,52 +20,12 @@
   })();
 {% comment %}{% endcomment %}</script>
 {%- endif -%}
-<style data-rs-bulletproof>
-  {%- if section.settings.reset_spacing -%}
-    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
-    #shopify-section-{{ section.id }},
-    #shopify-section-{{ section.id }} > .section,
-    #shopify-section-{{ section.id }} > section,
-    #shopify-section-{{ section.id }} > div,
-    #shopify-section-{{ section.id }} > div > .section {
-      margin-top: 0 !important;
-      margin-bottom: 0 !important;
-    }
-    #shopify-section-{{ section.id }} + .shopify-section,
-    #shopify-section-{{ section.id }} + section,
-    .shopify-section + #shopify-section-{{ section.id }} {
-      margin-top: 0 !important;
-    }
-  {%- endif -%}
-{% comment %}{% endcomment %}</style>
-<style>
-  /* Theme font-weight inheritance — inherit theme weights by default; explicit rules still override */
-  #shopify-section-{{ section.id }} {
-    font-weight: var(--body-weight, inherit);
-  }
-  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
-    font-weight: var(--heading-weight, inherit);
-  }
-{% comment %}{% endcomment %}</style>
-{%- comment -%}Section isolation — prevent CSS/JS bleed between sections{%- endcomment -%}
-<style>
-  #shopify-section-{{ section.id }} { isolation: isolate; position: relative; }
-{% comment %}{% endcomment %}</style>
-{%- comment -%}
-  Materia Themes — Product Tabs Navigation (rewritten)
-  Tabs that switch between collections, GRID display only (carousel
-  mode + all its settings have been removed), with full typography
-  & color controls, optional Load More, and bulletproof tab switching.
-{%- endcomment -%}
 
 {%- liquid
   assign st = section.settings
   assign sid = section.id
 
   assign section_width = st.section_width
-
-  assign heading = st.heading
-  assign subheading = st.subheading
   assign content_alignment = st.content_alignment | default: 'center'
 
   assign items_to_show = st.items_to_show | default: 8
@@ -91,6 +50,125 @@
   if items_per_row_mobile > 1 and items_per_row_mobile < 2
     assign data_free_scroll = 'true'
   endif
+
+  # --- Blocks: one heading, one subheading, the collection tabs ---
+  assign col_count = 0
+  assign heading_found = false
+  assign subheading_found = false
+  for block in section.blocks
+    case block.type
+      when 'collection'
+        assign col_count = col_count | plus: 1
+      when 'heading'
+        unless heading_found
+          assign heading_block = block
+          assign heading_found = true
+        endunless
+      when 'subheading'
+        unless subheading_found
+          assign subheading_block = block
+          assign subheading_found = true
+        endunless
+    endcase
+  endfor
+  if heading_found
+    assign hb = heading_block.settings
+  endif
+  if subheading_found
+    assign sb = subheading_block.settings
+  endif
+  assign show_heading = false
+  if heading_found and hb.heading != blank
+    assign show_heading = true
+  endif
+  assign show_subheading = false
+  if subheading_found and sb.subheading != blank
+    assign show_subheading = true
+  endif
+
+  # --- Heading + subheading: theme typography unless the block's own style is on ---
+  assign c_heading = ''
+  assign c_sub = ''
+  assign h_custom = false
+  assign h_style = 'h2'
+  if heading_found
+    assign h_style = hb.heading_size | default: 'h2'
+    if hb.custom_style
+      assign h_custom = true
+      assign c_heading = hb.heading_color
+    endif
+  endif
+  assign s_custom = false
+  assign s_style = 'body'
+  if subheading_found
+    assign s_style = sb.text_size | default: 'body'
+    if sb.custom_style
+      assign s_custom = true
+      assign c_sub = sb.subheading_color
+    endif
+  endif
+  case h_style
+    when 'h1'
+      assign h_fb = 56
+      assign h_fb_m = 36
+    when 'h3'
+      assign h_fb = 24
+      assign h_fb_m = 20
+    else
+      assign h_fb = 36
+      assign h_fb_m = 30
+  endcase
+  case s_style
+    when 'body_large'
+      assign s_fb = 18
+    when 'body_small'
+      assign s_fb = 14
+    else
+      assign s_fb = 16
+  endcase
+
+  # --- Tabs: theme buttons and scheme unless custom styling is on ---
+  assign custom = st.enable_custom_styling
+  assign c_tab_bg = ''
+  assign c_tab_bg_on = ''
+  assign c_tab_text = ''
+  assign c_tab_text_on = ''
+  assign c_tab_border = ''
+  assign c_tab_border_on = ''
+  assign c_line = ''
+  assign c_empty = ''
+  if custom
+    assign c_tab_bg = st.tab_unchecked_bg_color
+    assign c_tab_bg_on = st.tab_checked_bg_color
+    assign c_tab_text = st.tab_unchecked_text_color
+    assign c_tab_text_on = st.tab_checked_text_color
+    assign c_tab_border = st.tab_unchecked_border_color
+    assign c_tab_border_on = st.tab_checked_border_color
+    assign c_line = st.nav_bottom_border_color
+    assign c_empty = st.empty_state_text_color
+  endif
+
+  if tab_style == 'pill' or tab_style == 'button'
+    assign tab_text_fb = 'var(--btn-secondary-color, var(--color-text))'
+    assign tab_active_text_fb = 'var(--btn-primary-color)'
+    assign tab_active_border_fb = 'var(--btn-primary-bg-color)'
+  else
+    assign tab_text_fb = 'var(--color-text)'
+    assign tab_active_text_fb = 'var(--color-heading)'
+    assign tab_active_border_fb = 'var(--color-heading)'
+  endif
+
+  assign bw_off = st.tab_unchecked_border_thickness | default: 0
+  assign bw_on = st.tab_checked_border_thickness | default: 0
+  assign ul_on = bw_on
+  if ul_on < 1
+    assign ul_on = 2
+  endif
+  if tab_style == 'pill'
+    assign tab_radius = 999
+  else
+    assign tab_radius = st.tab_border_radius | default: 8
+  endif
 -%}
 
 {%- capture col_style -%}
@@ -111,37 +189,10 @@
   --col-mobile: {{ items_per_row_mobile }};
 {%- endcapture -%}
 
-{%- liquid
-    if tab_style == 'pill' or tab_style == 'button'
-      assign tab_text_fb = 'var(--btn-secondary-color, var(--color-text))'
-      assign tab_active_text_fb = 'var(--btn-primary-color)'
-      assign tab_active_border_fb = 'var(--btn-primary-bg-color)'
-    else
-      assign tab_text_fb = 'var(--color-text)'
-      assign tab_active_text_fb = 'var(--color-heading)'
-      assign tab_active_border_fb = 'var(--color-heading)'
-    endif
-  -%}
 <style>
-  /* ===========================================================
-     PRODUCT TABS NAVIGATION — scoped styles for #shopify-section-{{ sid }}
-     =========================================================== */
-
-  /* Theme typography inheritance */
-  :where(#shopify-section-{{ sid }}) {
-    font-family: var(--body-font, inherit);
-  }
-  :where(#shopify-section-{{ sid }}) :where(button, input, textarea, select, optgroup) {
-    font-family: inherit;
-  }
-  :where(#shopify-section-{{ sid }}) h1,
-  #shopify-section-{{ sid }} h2,
-  #shopify-section-{{ sid }} h3,
-  #shopify-section-{{ sid }} h4,
-  #shopify-section-{{ sid }} h5,
-  #shopify-section-{{ sid }} h6 {
-    font-family: var(--heading-font, inherit);
-  }
+  #shopify-section-{{ sid }} { isolation: isolate; position: relative; }
+  :where(#shopify-section-{{ sid }}) { font-family: var(--body-font, inherit); font-weight: var(--body-weight, inherit); }
+  :where(#shopify-section-{{ sid }}) :where(button, input, textarea, select, optgroup) { font-family: inherit; }
 
   /* Section margins (mobile first, then desktop) */
   #shopify-section-{{ sid }} {
@@ -154,12 +205,12 @@
       margin-bottom: {{ st.section_margin_bottom_desktop | default: 0 }}px;
     }
   }
+  {%- if st.reset_spacing -%}
+    #shopify-section-{{ sid }} { margin-top: 0 !important; margin-bottom: 0 !important; }
+    #shopify-section-{{ sid }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif -%}
 
-  /* Section width — applied to .ti-tabs__inner only, so the outer section
-     keeps its color-scheme background spanning the full viewport width and
-     ONLY the inner content respects the chosen container width. Previously
-     the max-width was set on the outer #shopify-section wrapper, which
-     clipped the background to the container and left bare page edges. */
+  /* Width: only the inner content is constrained; the scheme background spans the page. */
   {%- case section_width -%}
     {%- when 'container' -%}
       #shopify-section-{{ sid }} .ti-tabs__inner { max-width: calc(var(--page-width, 1300px) + 3rem); margin-inline: auto; padding-inline: 1.5rem; box-sizing: border-box; }
@@ -169,41 +220,24 @@
       #shopify-section-{{ sid }} .ti-tabs__inner { padding-inline: 1.5rem; box-sizing: border-box; }
       @media (min-width: 1200px) { #shopify-section-{{ sid }} .ti-tabs__inner { padding-inline: 3rem; } }
     {%- when 'full_width' -%}
-      /* full bleed — no constraints, content and background both edge-to-edge */
   {%- endcase -%}
 
-  /* Reset spacing */
-  {%- if st.reset_spacing -%}
-    #shopify-section-{{ sid }} { margin-bottom: 0 !important; margin-top: 0 !important; }
-    #shopify-section-{{ sid }} + .shopify-section { margin-top: 0 !important; }
-  {%- endif -%}
+  #shopify-section-{{ sid }} .pt-section { padding-top: {{ st.padding_top | default: 30 }}px; }
+  #shopify-section-{{ sid }} .pb-section { padding-bottom: {{ st.padding_bottom | default: 30 }}px; }
 
-  /* Section padding from sliders */
-  #shopify-section-{{ sid }} .pt-section {
-    padding-top: {{ st.padding_top | default: 30 }}px;
-  }
-  #shopify-section-{{ sid }} .pb-section {
-    padding-bottom: {{ st.padding_bottom | default: 30 }}px;
-  }
-
-  /* Reveal-on-scroll for the section itself */
+  /* Reveal on scroll (live site only) */
   {%- if reveal and scroll_animation != 'none' and request.design_mode != true -%}
-    #shopify-section-{{ sid }} .ti-tabs {
-      opacity: 0;
-      will-change: opacity, transform;
-    }
-    #shopify-section-{{ sid }} .ti-tabs.is-revealed {
-      opacity: 1;
-    }
+    #shopify-section-{{ sid }} .ti-tabs { opacity: 0; will-change: opacity, transform; }
+    #shopify-section-{{ sid }} .ti-tabs.is-revealed { opacity: 1; }
     {%- case scroll_animation -%}
       {%- when 'fade-in', 'fade' -%}
         #shopify-section-{{ sid }} .ti-tabs { transition: opacity .8s ease; }
       {%- when 'slide-in' -%}
         #shopify-section-{{ sid }} .ti-tabs { transform: translateX(-20px); transition: opacity .8s ease, transform .8s ease; }
-        #shopify-section-{{ sid }} .ti-tabs.is-revealed { transform: translateX(0); }
+        #shopify-section-{{ sid }} .ti-tabs.is-revealed { transform: none; }
       {%- when 'smooth-fade-up' -%}
         #shopify-section-{{ sid }} .ti-tabs { transform: translateY(20px); transition: opacity .8s ease, transform .8s ease; }
-        #shopify-section-{{ sid }} .ti-tabs.is-revealed { transform: translateY(0); }
+        #shopify-section-{{ sid }} .ti-tabs.is-revealed { transform: none; }
       {%- when 'blur_up' -%}
         #shopify-section-{{ sid }} .ti-tabs { transform: translateY(12px); filter: blur(4px); transition: opacity .8s ease, transform .8s ease, filter .8s ease; }
         #shopify-section-{{ sid }} .ti-tabs.is-revealed { transform: none; filter: none; }
@@ -219,49 +253,70 @@
     }
   {%- endif -%}
 
-  /* ===== HEADER (Heading + Subheading) ===== */
+  /* ===== Header: Theme settings > Typography by default ===== */
   #shopify-section-{{ sid }} .ti-tabs__header {
     text-align: {{ content_alignment }};
-    margin-bottom: {{ st.vertical_gap_subheading_section_mobile | default: 15 }}px;
+    margin-bottom: {{ st.vertical_gap_subheading_section_mobile | default: 18 }}px;
   }
-  @media (min-width: 768px) {
-    #shopify-section-{{ sid }} .ti-tabs__header {
-      margin-bottom: {{ st.vertical_gap_subheading_section_desktop | default: 20 }}px;
-    }
-  }
+  #shopify-section-{{ sid }} .ti-tabs__header > * + * { margin-top: {{ st.vertical_gap_heading_subheading | default: 10 }}px; }
   #shopify-section-{{ sid }} .ti-tabs__heading {
     margin: 0;
-    font-size: {{ st.heading_font_size_mobile | default: 24 }}px;
-    line-height: 1.2;
-    {%- if st.enable_custom_font_weight_heading -%}
-      font-weight: {{ st.font_weight_heading | default: 400 }};
-    {%- endif -%}
-    color: {% render 'scheme-color', color: st.heading_color, fallback: 'var(--color-heading)' %} !important;
-  }
-  @media (min-width: 768px) {
-    #shopify-section-{{ sid }} .ti-tabs__heading {
-      font-size: {{ st.heading_font_size_desktop | default: 28 }}px;
-    }
+    font-family: var(--type-{{ h_style }}-font, var(--heading-font, inherit));
+    font-size: var(--type-{{ h_style }}-size, {{ h_fb_m }}px);
+    font-weight: var(--type-{{ h_style }}-weight, var(--heading-weight, 700));
+    line-height: var(--type-{{ h_style }}-line-height, 1.2);
+    letter-spacing: var(--type-{{ h_style }}-letter-spacing, normal);
+    text-transform: var(--type-{{ h_style }}-transform, none);
+    color: {% render 'scheme-color', color: c_heading, fallback: 'var(--color-heading)' %} !important;
+    text-wrap: balance;
   }
   #shopify-section-{{ sid }} .ti-tabs__subheading {
-    margin: {{ st.vertical_gap_heading_subheading | default: 10 }}px 0 0;
-    font-size: {{ st.subheading_font_size_mobile | default: 14 }}px;
-    color: {% render 'scheme-color', color: st.subheading_color, fallback: 'var(--color-text)' %} !important;
-    padding-left: {{ st.subheading_padding_left_right_mobile | default: 0 }}px;
-    padding-right: {{ st.subheading_padding_left_right_mobile | default: 0 }}px;
-    {%- if st.enable_custom_font_weight_subheading -%}
-      font-weight: {{ st.font_weight_subheading | default: 400 }};
-    {%- endif -%}
+    max-width: {{ sb.max_width | default: 640 }}px;
+    font-family: var(--type-{{ s_style }}-font, var(--body-font, inherit));
+    font-size: var(--type-{{ s_style }}-size, {{ s_fb }}px);
+    font-weight: var(--type-{{ s_style }}-weight, 400);
+    line-height: var(--type-{{ s_style }}-line-height, 1.6);
+    color: {% render 'scheme-color', color: c_sub, fallback: 'var(--color-text)' %} !important;
+    text-wrap: pretty;
+    {%- if content_alignment == 'center' %} margin-inline: auto;{% elsif content_alignment == 'right' %} margin-left: auto; margin-right: 0;{% endif %}
   }
+  {%- if h_custom %}
+  #shopify-section-{{ sid }} .ti-tabs__heading {
+    font-weight: {{ hb.heading_font_weight | default: '700' }};
+    font-size: {{ hb.heading_font_size_mobile | default: 24 }}px;
+    line-height: 1.2;
+  }
+  {%- endif %}
+  {%- if s_custom %}
+  #shopify-section-{{ sid }} .ti-tabs__subheading {
+    font-weight: {{ sb.subheading_font_weight | default: '400' }};
+    font-size: {{ sb.subheading_font_size_mobile | default: 14 }}px;
+    line-height: 1.5;
+  }
+  {%- endif %}
   @media (min-width: 768px) {
-    #shopify-section-{{ sid }} .ti-tabs__subheading {
-      font-size: {{ st.subheading_font_size_desktop | default: 16 }}px;
-      padding-left: {{ st.subheading_padding_left_right_desktop | default: 0 }}px;
-      padding-right: {{ st.subheading_padding_left_right_desktop | default: 0 }}px;
+    #shopify-section-{{ sid }} .ti-tabs__header { margin-bottom: {{ st.vertical_gap_subheading_section_desktop | default: 25 }}px; }
+    #shopify-section-{{ sid }} .ti-tabs__heading {
+      {%- if h_custom %}
+      font-size: {{ hb.heading_font_size_desktop | default: 28 }}px;
+      {%- else %}
+      font-size: var(--type-{{ h_style }}-size, {{ h_fb }}px);
+      {%- endif %}
     }
+    {%- if s_custom %}
+    #shopify-section-{{ sid }} .ti-tabs__subheading { font-size: {{ sb.subheading_font_size_desktop | default: 16 }}px; }
+    {%- endif %}
   }
+  #shopify-section-{{ sid }} .ti-tabs__subheading > :first-child { margin-top: 0; }
+  #shopify-section-{{ sid }} .ti-tabs__subheading > :last-child { margin-bottom: 0; }
+  #shopify-section-{{ sid }} .ti-tabs__subheading p { margin: 0; font: inherit; color: inherit; }
+  #shopify-section-{{ sid }} .ti-tabs__subheading p + p { margin-top: .6em; }
+  #shopify-section-{{ sid }} .ti-tabs__rt strong, #shopify-section-{{ sid }} .ti-tabs__rt b { font-weight: 700; }
+  #shopify-section-{{ sid }} .ti-tabs__rt em { font-style: italic; }
+  #shopify-section-{{ sid }} .ti-tabs__rt a { color: inherit; text-decoration: underline; text-underline-offset: .15em; }
+  #shopify-section-{{ sid }} .ti-tabs__rt a:hover { opacity: .75; }
 
-  /* ===== TAB NAVIGATION ===== */
+  /* ===== Tab row ===== */
   #shopify-section-{{ sid }} .ti-tabs__nav {
     display: flex;
     flex-wrap: nowrap;
@@ -272,7 +327,6 @@
     scroll-padding-inline: 16px;
     overscroll-behavior-x: contain;
     scrollbar-width: none;
-    -ms-overflow-style: none;
     gap: {{ st.tab_gap | default: 10 }}px;
     margin: 0 0 {{ st.gap_tabs_to_products | default: 30 }}px;
     padding: 4px 16px;
@@ -282,53 +336,25 @@
     position: relative;
     isolation: isolate;
     justify-content: flex-start;
+    {%- if st.show_nav_bottom_border %}
+    border-bottom: {{ st.nav_bottom_border_thickness | default: 1 }}px solid {% render 'scheme-color', color: c_line, fallback: 'var(--color-border)' %};
+    {%- endif %}
   }
-  {%- comment -%} Alignment with auto margins, not justify-content: a centred
-    row that overflows would cut off its first pills where no scroll
-    reaches them. {%- endcomment -%}
+  #shopify-section-{{ sid }} .ti-tabs__nav::-webkit-scrollbar { display: none; }
   {%- if tabs_alignment != 'left' -%}
     #shopify-section-{{ sid }} .ti-tabs__nav > .ti-tabs__btn:first-of-type { margin-inline-start: auto; }
   {%- endif -%}
   {%- if tabs_alignment == 'center' -%}
     #shopify-section-{{ sid }} .ti-tabs__nav > .ti-tabs__btn:last-of-type { margin-inline-end: auto; }
   {%- endif -%}
-  /* On mobile pills can overflow — keep them inside the viewport edge
-     with side padding so the active pill never gets clipped. */
   @media (max-width: 767px) {
-    #shopify-section-{{ sid }} .ti-tabs__nav {
-      padding-left: 16px;
-      padding-right: 16px;
-    }
     #shopify-section-{{ sid }} .ti-tabs__nav > .ti-tabs__btn:first-of-type { margin-inline-start: 0; }
     #shopify-section-{{ sid }} .ti-tabs__nav > .ti-tabs__btn:last-of-type { margin-inline-end: 0; }
-    {% if tabs_full_width %}
-      /* "Full width" mode on mobile — was previously `flex: 1 1 0;
-         min-width: 0;` which forced all tabs to share the row
-         equally AND allowed them to shrink below their content,
-         producing truncated labels like "Best Sellin…". The new
-         behaviour: tabs grow to fill the row when there's space,
-         but NEVER shrink below their natural label width — if the
-         collective content exceeds the viewport, the nav's existing
-         `overflow-x: auto` kicks in and the row scrolls horizontally.
-         Result: every label is fully readable on every device. */
-      #shopify-section-{{ sid }} .ti-tabs__nav { width: 100%; }
-      #shopify-section-{{ sid }} .ti-tabs__btn {
-        flex: 1 1 auto;
-        min-width: max-content;
-        white-space: nowrap;
-      }
-    {% endif %}
+    {%- if tabs_full_width %}
+    #shopify-section-{{ sid }} .ti-tabs__nav { width: 100%; }
+    #shopify-section-{{ sid }} .ti-tabs__btn { flex: 1 1 auto; min-width: max-content; }
+    {%- endif %}
   }
-  /* Universal — tab labels NEVER truncate. Combined with the nav's
-     horizontal scroll, this guarantees the full title is always
-     readable regardless of layout choice. */
-  #shopify-section-{{ sid }} .ti-tabs__btn,
-  #shopify-section-{{ sid }} .ti-tabs__btn-text {
-    white-space: nowrap;
-    text-overflow: clip;
-    overflow: visible;
-  }
-  #shopify-section-{{ sid }} .ti-tabs__nav::-webkit-scrollbar { display: none; }
 
   #shopify-section-{{ sid }} .ti-tabs__btn {
     display: inline-flex;
@@ -339,119 +365,85 @@
     user-select: none;
     white-space: nowrap;
     scroll-snap-align: center;
-    border: 0;
-    background: transparent;
-    color: {% render 'scheme-color', color: st.tab_unchecked_text_color, fallback: tab_text_fb %} !important;
-    font-size: {{ st.tab_font_size | default: 14 }}px;
-    {%- if st.enable_tab_font_weight -%}
-      font-weight: {{ st.tab_font_weight | default: 500 }};
-    {%- endif -%}
-    padding:
-      {{ st.tab_padding_y | default: 10 }}px
-      {{ st.tab_padding_x | default: 22 }}px;
+    flex: 0 0 auto;
     min-height: 44px;
     box-sizing: border-box;
     position: relative;
     z-index: 1;
-    flex: 0 0 auto;
+    margin: 0;
+    padding: {{ st.tab_padding_y | default: 10 }}px {{ st.tab_padding_x | default: 22 }}px;
+    border: 0;
+    background: transparent;
+    color: {% render 'scheme-color', color: c_tab_text, fallback: tab_text_fb %} !important;
+    {%- if custom %}
+    font-size: {{ st.tab_font_size | default: 14 }}px;
+    font-weight: {{ st.tab_font_weight | default: 500 }};
+    {%- else %}
+    font-family: var(--type-button-font, inherit);
+    font-size: var(--type-button-size, 15px);
+    font-weight: var(--type-button-weight, 500);
+    letter-spacing: var(--type-button-letter-spacing, normal);
+    text-transform: var(--type-button-transform, none);
+    {%- endif %}
+    line-height: 1.2;
     -webkit-tap-highlight-color: transparent;
-    transition: background-color .25s ease, color .25s ease, border-color .25s ease;
+    transition: background-color .25s ease, color .25s ease, border-color .25s ease, opacity .25s ease;
   }
-  #shopify-section-{{ sid }} .ti-tabs__btn:focus-visible {
-    outline: 2px solid currentColor;
-    outline-offset: 2px;
+  #shopify-section-{{ sid }} .ti-tabs__btn-text { white-space: nowrap; }
+  #shopify-section-{{ sid }} .ti-tabs__btn:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+  {%- if tab_style == 'pill' or tab_style == 'button' %}
+  #shopify-section-{{ sid }} .ti-tabs__btn {
+    background-color: {% render 'scheme-color', color: c_tab_bg, fallback: 'var(--btn-secondary-bg-color, transparent)' %} !important;
+    border: {{ bw_off }}px solid {% render 'scheme-color', color: c_tab_border, fallback: 'var(--btn-secondary-border-color, var(--color-border))' %};
+    border-radius: {{ tab_radius }}px;
   }
-  @media (prefers-reduced-motion: reduce) {
-    #shopify-section-{{ sid }} .ti-tabs__btn { transition: none; }
+  #shopify-section-{{ sid }} .ti-tabs__btn.is-active {
+    background-color: {% render 'scheme-color', color: c_tab_bg_on, fallback: 'var(--btn-primary-bg-color)' %} !important;
+    color: {% render 'scheme-color', color: c_tab_text_on, fallback: tab_active_text_fb %} !important;
+    border: {{ bw_on }}px solid {% render 'scheme-color', color: c_tab_border_on, fallback: tab_active_border_fb %};
   }
+  {%- endif %}
 
-  /* Tab style: pill (default) */
-  {%- if tab_style == 'pill' -%}
-    #shopify-section-{{ sid }} .ti-tabs__btn {
-      background-color: {% render 'scheme-color', color: st.tab_unchecked_bg_color, fallback: 'var(--btn-secondary-bg-color, transparent)' %} !important;
-      border: {{ st.tab_unchecked_border_thickness | default: 0 }}px solid {% render 'scheme-color', color: st.tab_unchecked_border_color, fallback: 'var(--btn-secondary-border-color, var(--color-border))' %};
-      border-radius: {{ st.tab_border_radius | default: 999 }}px;
-    }
-    #shopify-section-{{ sid }} .ti-tabs__btn.is-active {
-      background-color: {% render 'scheme-color', color: st.tab_checked_bg_color, fallback: 'var(--btn-primary-bg-color)' %} !important;
-      color: {% render 'scheme-color', color: st.tab_checked_text_color, fallback: tab_active_text_fb %} !important;
-      border: {{ st.tab_checked_border_thickness | default: 0 }}px solid {% render 'scheme-color', color: st.tab_checked_border_color, fallback: tab_active_border_fb %};
-    };
-      border: {{ st.tab_checked_border_thickness | default: 0 }}px solid {% render 'scheme-color', color: st.tab_checked_border_color, fallback: tab_active_border_fb %};
-      border-radius: {{ st.tab_border_radius | default: 999 }}px;
-    }
-  {%- endif -%}
+  {%- if tab_style == 'underline' %}
+  #shopify-section-{{ sid }} .ti-tabs__btn {
+    border-radius: 0;
+    border-bottom: {{ ul_on }}px solid transparent;
+  }
+  #shopify-section-{{ sid }} .ti-tabs__btn.is-active {
+    color: {% render 'scheme-color', color: c_tab_text_on, fallback: tab_active_text_fb %} !important;
+    border-bottom-color: {% render 'scheme-color', color: c_tab_border_on, fallback: tab_active_border_fb %};
+  }
+  {%- endif %}
 
-  /* Tab style: button (sharp/rounded square) */
-  {%- if tab_style == 'button' -%}
-    #shopify-section-{{ sid }} .ti-tabs__btn {
-      background-color: {% render 'scheme-color', color: st.tab_unchecked_bg_color, fallback: 'var(--btn-secondary-bg-color, transparent)' %} !important;
-      border: {{ st.tab_unchecked_border_thickness | default: 1 }}px solid {% render 'scheme-color', color: st.tab_unchecked_border_color, fallback: 'var(--btn-secondary-border-color, var(--color-border))' %};
-      border-radius: {{ st.tab_border_radius | default: 6 }}px;
-    }
-    #shopify-section-{{ sid }} .ti-tabs__btn.is-active {
-      background-color: {% render 'scheme-color', color: st.tab_checked_bg_color, fallback: 'var(--btn-primary-bg-color)' %} !important;
-      color: {% render 'scheme-color', color: st.tab_checked_text_color, fallback: tab_active_text_fb %} !important;
-      border: {{ st.tab_checked_border_thickness | default: 1 }}px solid {% render 'scheme-color', color: st.tab_checked_border_color, fallback: tab_active_border_fb %};
-    };
-      border: {{ st.tab_checked_border_thickness | default: 1 }}px solid {% render 'scheme-color', color: st.tab_checked_border_color, fallback: tab_active_border_fb %};
-      border-radius: {{ st.tab_border_radius | default: 6 }}px;
-    }
-  {%- endif -%}
+  {%- if tab_style == 'text' %}
+  #shopify-section-{{ sid }} .ti-tabs__btn { border-radius: 0; }
+  #shopify-section-{{ sid }} .ti-tabs__btn.is-active {
+    color: {% render 'scheme-color', color: c_tab_text_on, fallback: tab_active_text_fb %} !important;
+    font-weight: 700;
+  }
+  #shopify-section-{{ sid }} .ti-tabs__btn-text { display: inline-flex; flex-direction: column; align-items: center; }
+  #shopify-section-{{ sid }} .ti-tabs__btn-text::after {
+    content: attr(data-text);
+    font-weight: 700;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    pointer-events: none;
+    user-select: none;
+  }
+  {%- endif %}
 
-  /* Tab style: underline */
-  {%- if tab_style == 'underline' -%}
-    #shopify-section-{{ sid }} .ti-tabs__btn {
-      background: transparent;
-      border: 0;
-      border-bottom: {{ st.tab_unchecked_border_thickness | default: 2 }}px solid transparent;
-      border-radius: 0;
-      padding-left: {{ st.tab_padding_x | default: 14 }}px;
-      padding-right: {{ st.tab_padding_x | default: 14 }}px;
-    }
-    #shopify-section-{{ sid }} .ti-tabs__btn.is-active {
-      color: {% render 'scheme-color', color: st.tab_checked_text_color, fallback: tab_active_text_fb %} !important;
-      border-bottom: {{ st.tab_checked_border_thickness | default: 2 }}px solid {% render 'scheme-color', color: st.tab_checked_border_color, fallback: tab_active_border_fb %};
-    };
-    }
-  {%- endif -%}
-
-  /* Tab style: minimal text */
-  {%- if tab_style == 'text' -%}
-    #shopify-section-{{ sid }} .ti-tabs__btn {
-      background: transparent;
-      border: 0;
-      border-radius: 0;
-    }
-    #shopify-section-{{ sid }} .ti-tabs__btn.is-active {
-      color: {% render 'scheme-color', color: st.tab_checked_text_color, fallback: tab_active_text_fb %} !important;
-      font-weight: 700;
-    }
-    {%- comment -%} Each label reserves its bold width, so the active tab
-      turning bold never pushes its neighbours. {%- endcomment -%}
-    #shopify-section-{{ sid }} .ti-tabs__btn-text { display: inline-flex; flex-direction: column; align-items: center; }
-    #shopify-section-{{ sid }} .ti-tabs__btn-text::after {
-      content: attr(data-text);
-      font-weight: 700;
-      height: 0;
-      overflow: hidden;
-      visibility: hidden;
-      pointer-events: none;
-      user-select: none;
-    }
-  {%- endif -%}
-
-  /* Tab hover state */
+  /* Hover on tabs that are not open */
+  {%- if custom and st.tab_hover_bg_color != blank or custom and st.tab_hover_text_color != blank %}
   #shopify-section-{{ sid }} .ti-tabs__btn:not(.is-active):hover {
-    {%- if st.tab_hover_bg_color != blank -%}
-      background-color: {{ st.tab_hover_bg_color }} !important;
-    {%- endif -%}
-    {%- if st.tab_hover_text_color != blank -%}
-      color: {{ st.tab_hover_text_color }} !important;
-    {%- endif -%}
+    {%- if st.tab_hover_bg_color != blank %} background-color: {{ st.tab_hover_bg_color }} !important;{% endif %}
+    {%- if st.tab_hover_text_color != blank %} color: {{ st.tab_hover_text_color }} !important;{% endif %}
   }
+  {%- else %}
+  #shopify-section-{{ sid }} .ti-tabs__btn:not(.is-active):hover { opacity: .7; }
+  {%- endif %}
 
-  /* Tab icon (collection image) */
   #shopify-section-{{ sid }} .ti-tabs__icon {
     width: {{ st.tab_icon_size | default: 22 }}px;
     height: {{ st.tab_icon_size | default: 22 }}px;
@@ -459,60 +451,37 @@
     object-fit: cover;
     flex: 0 0 auto;
   }
+  #shopify-section-{{ sid }} .ti-tabs__count { opacity: .7; font-weight: inherit; }
 
-  /* ===== TAB PANELS =====
-     Every panel sits in the same grid cell, so the panel area is always as
-     tall as the tallest tab: switching never changes the height, never
-     moves the content below, and the outgoing grid stays painted under the
-     incoming one while they cross-fade (no blank frame). Panels that are
-     not shown are inert and out of the accessibility tree. Their images
-     load with the page, so a tab never opens on empty boxes. */
-  #shopify-section-{{ sid }} .ti-tabs__panels {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-  }
-  #shopify-section-{{ sid }} .ti-tabs__panels > .ti-tabs__panel {
-    grid-area: 1 / 1;
-    display: block !important;
-    min-width: 0;
-  }
-  #shopify-section-{{ sid }} .ti-tabs__panel:not(.is-active) {
-    visibility: hidden;
-    pointer-events: none;
-    z-index: 0;
-  }
-  {%- comment -%} The tab being left stays fully painted underneath until the
-    new one has faded in over it, then hides. {%- endcomment -%}
+  /* ===== Panels: one shared grid cell, so switching never changes the height ===== */
+  #shopify-section-{{ sid }} .ti-tabs__panels { display: grid; grid-template-columns: minmax(0, 1fr); }
+  #shopify-section-{{ sid }} .ti-tabs__panels > .ti-tabs__panel { grid-area: 1 / 1; display: block !important; min-width: 0; }
+  #shopify-section-{{ sid }} .ti-tabs__panel:not(.is-active) { visibility: hidden; pointer-events: none; z-index: 0; }
   #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel:not(.is-active) {
     transition: visibility 0s linear {% if tab_switch_animation == 'none' %}0s{% elsif tab_switch_animation contains 'flip' %}.55s{% else %}.4s{% endif %};
   }
-  #shopify-section-{{ sid }} .ti-tabs__panel.is-active {
-    visibility: visible;
-    z-index: 1;
-  }
+  #shopify-section-{{ sid }} .ti-tabs__panel.is-active { visibility: visible; z-index: 1; }
   #shopify-section-{{ sid }} .ti-tabs__panel:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
 
-  /* Tab switch animation: the incoming panel, only after a switch (the
-     first tab is not animated on page load). */
   {%- case tab_switch_animation -%}
     {%- when 'fade' -%}
       #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel.is-active { animation: ti-tabs-fade-{{ sid }} .35s ease both; }
       @keyframes ti-tabs-fade-{{ sid }} { from { opacity: 0; } to { opacity: 1; } }
     {%- when 'fade-in' -%}
       #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel.is-active { animation: ti-tabs-fadein-{{ sid }} .4s ease-in-out both; }
-      @keyframes ti-tabs-fadein-{{ sid }} { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+      @keyframes ti-tabs-fadein-{{ sid }} { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
     {%- when 'slide-up' -%}
       #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel.is-active { animation: ti-tabs-slideup-{{ sid }} .4s ease both; }
-      @keyframes ti-tabs-slideup-{{ sid }} { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+      @keyframes ti-tabs-slideup-{{ sid }} { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
     {%- when 'slide-down' -%}
       #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel.is-active { animation: ti-tabs-slidedown-{{ sid }} .4s ease both; }
-      @keyframes ti-tabs-slidedown-{{ sid }} { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+      @keyframes ti-tabs-slidedown-{{ sid }} { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: none; } }
     {%- when 'zoom-in' -%}
       #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel.is-active { animation: ti-tabs-zoomin-{{ sid }} .4s ease both; }
-      @keyframes ti-tabs-zoomin-{{ sid }} { from { opacity: 0; transform: scale(.95); } to { opacity: 1; transform: scale(1); } }
+      @keyframes ti-tabs-zoomin-{{ sid }} { from { opacity: 0; transform: scale(.95); } to { opacity: 1; transform: none; } }
     {%- when 'zoom-out' -%}
       #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel.is-active { animation: ti-tabs-zoomout-{{ sid }} .4s ease both; }
-      @keyframes ti-tabs-zoomout-{{ sid }} { from { opacity: 0; transform: scale(1.05); } to { opacity: 1; transform: scale(1); } }
+      @keyframes ti-tabs-zoomout-{{ sid }} { from { opacity: 0; transform: scale(1.05); } to { opacity: 1; transform: none; } }
     {%- when 'flip-x' -%}
       #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel.is-active { animation: ti-tabs-flipx-{{ sid }} .55s ease both; }
       @keyframes ti-tabs-flipx-{{ sid }} { from { opacity: 0; transform: perspective(600px) rotateX(60deg); } to { opacity: 1; transform: perspective(600px) rotateX(0deg); } }
@@ -521,140 +490,124 @@
       @keyframes ti-tabs-flipy-{{ sid }} { from { opacity: 0; transform: perspective(600px) rotateY(60deg); } to { opacity: 1; transform: perspective(600px) rotateY(0deg); } }
   {%- endcase -%}
   @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ sid }} .ti-tabs__btn { transition: none; }
     #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel,
     #shopify-section-{{ sid }} .ti-tabs__panels[data-switched] > .ti-tabs__panel.is-active { animation: none !important; transition: none !important; }
   }
 
-  /* ===== EMPTY STATE ===== */
   #shopify-section-{{ sid }} .ti-tabs__empty {
     text-align: center;
     padding: 60px 20px;
-    color: {% render 'scheme-color', color: st.empty_state_text_color, fallback: 'var(--color-text)' %} !important;
+    color: {% render 'scheme-color', color: c_empty, fallback: 'var(--color-text)' %} !important;
     font-size: {{ st.empty_state_font_size | default: 16 }}px;
   }
-
-  /* ===== LOAD MORE BUTTON ===== */
-  #shopify-section-{{ sid }} .ti-tabs__loadmore-wrap {
-    margin-top: {{ st.gap_loadmore | default: 30 }}px;
-    text-align: center;
-  }
-
-  /* ===== Visibility helpers ===== */
-  @media (min-width: 768px) { #shopify-section-{{ sid }} .hidden-desktop { display: none !important; } }
-  @media (max-width: 767px) { #shopify-section-{{ sid }} .desktop-only { display: none !important; } }
-
-  /* ===== Tab nav bottom border (optional) ===== */
-  {%- if st.show_nav_bottom_border -%}
-    #shopify-section-{{ sid }} .ti-tabs__nav {
-      border-bottom: {{ st.nav_bottom_border_thickness | default: 1 }}px solid {% render 'scheme-color', color: st.nav_bottom_border_color, fallback: 'var(--color-border)' %};
-    }
-  {%- endif -%}
+  #shopify-section-{{ sid }} .ti-tabs__loadmore-wrap { margin-top: {{ st.gap_loadmore | default: 30 }}px; text-align: center; }
 {% comment %}{% endcomment %}</style>
+
+{%- capture header_html -%}
+  {%- if show_heading or show_subheading -%}
+    <div class="ti-tabs__header">
+      {%- for block in section.blocks -%}
+        {%- if block.type == 'heading' and show_heading and block.id == heading_block.id -%}
+          <h2 class="ti-tabs__heading ti-tabs__rt" {{ block.shopify_attributes }}>{{ hb.heading }}</h2>
+        {%- elsif block.type == 'subheading' and show_subheading and block.id == subheading_block.id -%}
+          <div class="ti-tabs__subheading ti-tabs__rt" {{ block.shopify_attributes }}>{{ sb.subheading }}</div>
+        {%- endif -%}
+      {%- endfor -%}
+    </div>
+  {%- endif -%}
+{%- endcapture -%}
 
 <div
   id="section-{{ sid }}"
   class="section ti-tabs sec__collection-tab color-{{ color_scheme }} gradient pt-section pb-section{% if st.reset_spacing %} remove_spacing{% endif %}{% if reveal %} overflow-hidden{% endif %}"
 >
   <div class="ti-tabs__inner">
-    {%- if section.blocks.size == 0 -%}
-      {%- if heading != blank or subheading != blank -%}
-        <div class="ti-tabs__header">
-          {%- if heading != blank -%}
-            <h2 class="ti-tabs__heading">{{ heading }}</h2>
-          {%- endif -%}
-          {%- if subheading != blank -%}
-            <p class="ti-tabs__subheading">{{ subheading }}</p>
-          {%- endif -%}
-        </div>
-      {%- endif -%}
+    {%- if col_count == 0 -%}
+      {{ header_html }}
       <div class="ti-tabs__empty">
         {{ st.empty_state_message | default: fb_accessibility_add_collection_tab_hint }}
       </div>
     {%- else -%}
       <div class="ti-tabs__root" data-ti-tabs data-section-id="{{ sid }}">
-        {%- if heading != blank or subheading != blank -%}
-          <div class="ti-tabs__header">
-            {%- if heading != blank -%}
-              <h2 class="ti-tabs__heading">{{ heading }}</h2>
-            {%- endif -%}
-            {%- if subheading != blank -%}
-              <p class="ti-tabs__subheading">{{ subheading }}</p>
-            {%- endif -%}
-          </div>
-        {%- endif -%}
+        {{ header_html }}
 
-        {%- comment -%} ============== TAB BUTTONS ============== {%- endcomment -%}
-        <div class="ti-tabs__nav collection-tab__ta" role="tablist" aria-orientation="horizontal"{% if heading != blank %} aria-label="{{ heading | strip_html | escape }}"{% endif %}>
+        <div class="ti-tabs__nav collection-tab__ta" role="tablist" aria-orientation="horizontal"{% if show_heading %} aria-label="{{ hb.heading | strip_html | escape }}"{% endif %}>
+          {%- assign tab_i = 0 -%}
           {%- for block in section.blocks -%}
-            {%- liquid
-              assign bs = block.settings
-              assign col_handle = bs.collection
-              assign col_obj = collections[col_handle]
-              assign col_title = bs.collection_title
-              if col_title == blank
-                if col_obj != blank
-                  assign col_title = col_obj.title
-                else
-                  assign col_title = 'Collection'
+            {%- if block.type == 'collection' -%}
+              {%- liquid
+                assign tab_i = tab_i | plus: 1
+                assign bs = block.settings
+                assign col_obj = bs.collection
+                if col_obj.id == blank
+                  assign col_obj = collections[bs.collection]
                 endif
-              endif
-              assign tab_icon = bs.tab_icon
-              if tab_icon == blank and col_obj != blank
-                assign tab_icon = col_obj.image
-              endif
-            -%}
-            <button
-              type="button"
-              id="ti-tabs-btn-{{ sid }}-{{ block.id }}"
-              class="ti-tabs__btn collection-tab__tab-item{% if forloop.first %} is-active active{% endif %}"
-              data-block-id="{{ block.id }}"
-              role="tab"
-              aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
-              tabindex="{% if forloop.first %}0{% else %}-1{% endif %}"
-              aria-controls="ti-tabs-panel-{{ sid }}-{{ block.id }}"
-              {{ block.shopify_attributes }}
-            >
-              {%- if st.show_tab_icon and tab_icon != blank -%}
-                {{ tab_icon | image_url: width: 64 | image_tag: class: 'ti-tabs__icon', alt: col_title, loading: 'lazy', width: 22, height: 22 }}
-              {%- endif -%}
-              <span class="ti-tabs__btn-text" data-text="{{ col_title | escape }}">{{ col_title }}</span>
-              {%- if st.show_product_count and col_obj != blank -%}
-                <span class="ti-tabs__count">({{ col_obj.products_count }})</span>
-              {%- endif -%}
-            </button>
+                assign col_title = bs.collection_title
+                if col_title == blank
+                  if col_obj != blank and col_obj.title != blank
+                    assign col_title = col_obj.title
+                  else
+                    assign col_title = 'Collection'
+                  endif
+                endif
+                assign tab_icon = bs.tab_icon
+                if tab_icon == blank and col_obj != blank
+                  assign tab_icon = col_obj.image
+                endif
+              -%}
+              <button
+                type="button"
+                id="ti-tabs-btn-{{ sid }}-{{ block.id }}"
+                class="ti-tabs__btn collection-tab__tab-item{% if tab_i == 1 %} is-active active{% endif %}"
+                data-block-id="{{ block.id }}"
+                role="tab"
+                aria-selected="{% if tab_i == 1 %}true{% else %}false{% endif %}"
+                tabindex="{% if tab_i == 1 %}0{% else %}-1{% endif %}"
+                aria-controls="ti-tabs-panel-{{ sid }}-{{ block.id }}"
+                {{ block.shopify_attributes }}
+              >
+                {%- if st.show_tab_icon and tab_icon != blank -%}
+                  {{ tab_icon | image_url: width: 120 | image_tag: class: 'ti-tabs__icon', alt: '', loading: 'lazy', width: st.tab_icon_size, height: st.tab_icon_size }}
+                {%- endif -%}
+                <span class="ti-tabs__btn-text" data-text="{{ col_title | escape }}">{{ col_title }}</span>
+                {%- if st.show_product_count and col_obj != blank -%}
+                  <span class="ti-tabs__count">({{ col_obj.products_count | default: col_obj.products.size }})</span>
+                {%- endif -%}
+              </button>
+            {%- endif -%}
           {%- endfor -%}
         </div>
 
-        {%- comment -%} ============== TAB PANELS ============== {%- endcomment -%}
         <div class="ti-tabs__panels relative tab-content">
+          {%- assign tab_i = 0 -%}
           {%- for block in section.blocks -%}
-            {%- liquid
-              assign bs = block.settings
-              assign col_handle = bs.collection
-              assign col_obj = collections[col_handle]
-              assign panel_id = 'ti-tabs-panel-' | append: sid | append: '-' | append: block.id
-              assign all_product_visible = rows | times: items_per_row
-            -%}
-            <div
-              id="{{ panel_id }}"
-              class="ti-tabs__panel collection-tab__tab-content collection-tab-{{ block.id }}{% if forloop.first %} is-active active{% endif %}"
-              data-block-id="{{ block.id }}"
-              role="tabpanel"
-              aria-labelledby="ti-tabs-btn-{{ sid }}-{{ block.id }}"
-              tabindex="0"
-              {% if forloop.first == false %}inert aria-hidden="true"{% endif %}
-              {{ block.shopify_attributes }}
-            >
-              {%- if col_obj != blank and col_obj.id != blank and col_obj.products_count > 0 and col_obj.products.size > 0 -%}
-                {%- comment -%}
-                  -------- GRID MODE (only mode) --------
-                  Carousel mode + all related settings (autoplay,
-                  infinite loop, arrows, pagination dots) were removed.
-                  Section now renders products exclusively as a grid
-                  with optional Load More.
-                {%- endcomment -%}
-                {%- liquid
-                    assign products_avail = col_obj.products.size
+            {%- if block.type == 'collection' -%}
+              {%- liquid
+                assign tab_i = tab_i | plus: 1
+                assign bs = block.settings
+                assign col_obj = bs.collection
+                if col_obj.id == blank
+                  assign col_obj = collections[bs.collection]
+                endif
+                assign panel_id = 'ti-tabs-panel-' | append: sid | append: '-' | append: block.id
+                assign all_product_visible = rows | times: items_per_row
+                assign products_avail = 0
+                if col_obj != blank
+                  assign products_avail = col_obj.products.size
+                endif
+              -%}
+              <div
+                id="{{ panel_id }}"
+                class="ti-tabs__panel collection-tab__tab-content collection-tab-{{ block.id }}{% if tab_i == 1 %} is-active active{% endif %}"
+                data-block-id="{{ block.id }}"
+                role="tabpanel"
+                aria-labelledby="ti-tabs-btn-{{ sid }}-{{ block.id }}"
+                tabindex="0"
+                {% if tab_i != 1 %}inert aria-hidden="true"{% endif %}
+              >
+                {%- if products_avail > 0 -%}
+                  {%- liquid
                     assign products_to_show = items_to_show
                     if products_avail < items_to_show
                       assign products_to_show = products_avail
@@ -698,7 +651,6 @@
                           -%}
                         {%- endfor -%}
                       </grid-custom>
-
                       <div class="ti-tabs__loadmore-wrap">
                         <loadmore-function
                           data-all-products="{{ products_to_show }}"
@@ -719,17 +671,6 @@
                       </div>
                     {%- endpaginate -%}
                   {%- else -%}
-                    {%- comment -%}
-                      Load-More disabled branch — uses `flex-wrap` (NOT
-                      `flex-md-wrap`). `.flex-md-wrap` only enables wrapping
-                      from 768px+, leaving mobile in `flex-wrap: nowrap` which
-                      crushed every product into a single horizontal row and
-                      made only the first 2 visible (the rest overflowed off
-                      the right edge — looking like "all products hidden"
-                      when Load More was toggled off). With `flex-wrap`, the
-                      grid wraps correctly on every viewport, so toggling
-                      Load More now ONLY hides the button, not the products.
-                    {%- endcomment -%}
                     <grid-custom
                       class="swiper products-grid__items flex flex-cols{% if column_gap < 31 %} row-gap-20 row-gap-md-30{% endif %} flex-wrap"
                       style="{{ col_style | strip | strip_newlines }}"
@@ -763,13 +704,13 @@
                       {%- endfor -%}
                     </grid-custom>
                   {%- endif -%}
-              {%- else -%}
-                {%- comment -%} -------- EMPTY/UNASSIGNED STATE -------- {%- endcomment -%}
-                <div class="ti-tabs__empty">
-                  {{ st.empty_state_message | default: fb_accessibility_no_products_found }}
-                </div>
-              {%- endif -%}
-            </div>
+                {%- else -%}
+                  <div class="ti-tabs__empty">
+                    {{ st.empty_state_message | default: fb_accessibility_no_products_found }}
+                  </div>
+                {%- endif -%}
+              </div>
+            {%- endif -%}
           {%- endfor -%}
         </div>
       </div>
@@ -782,12 +723,6 @@
     var sectionEl = document.getElementById('section-{{ sid }}');
     if (!sectionEl) return;
 
-    // ----- Tabs -----
-    // Arrow keys, Home and End move between tabs and open them. The tapped
-    // pill takes the active colours in place (a short colour fade, nothing
-    // slides); the panels cross-fade in one shared grid cell, so the height
-    // never changes. A section the builder draws again gets the same set up
-    // (the flag lives on the new element).
     function initTabs(root) {
       if (!root || root.__tiTabs) return;
       root.__tiTabs = true;
@@ -801,7 +736,6 @@
       var current = function () { return btns.filter(function (b) { return b.classList.contains('is-active'); })[0] || btns[0]; };
 
       function reveal(btn, smooth) {
-        // Scroll the pill row only, never the page.
         if (nav.scrollWidth <= nav.clientWidth + 1) return;
         var left = btn.offsetLeft - (nav.clientWidth - btn.offsetWidth) / 2;
         nav.scrollTo({ left: left, behavior: smooth && !reduce.matches ? 'smooth' : 'auto' });
@@ -847,11 +781,6 @@
         e.preventDefault();
         activate(next, true);
       });
-      // The open tab is brought into the pill row once the row has a size,
-      // after the browser's own layout (a ResizeObserver's first report), and
-      // only when it is not the first pill, which already shows. Measuring the
-      // row here, while the page was still being read, forced a layout of
-      // everything above it (40-50ms on the home page).
       if (current() !== btns[0]) {
         if ('ResizeObserver' in window) {
           var firstSize = new ResizeObserver(function () { firstSize.disconnect(); reveal(current(), false); });
@@ -860,7 +789,6 @@
           window.requestAnimationFrame(function () { reveal(current(), false); });
         }
       }
-      // Builder: selecting a tab's block opens that tab.
       root.addEventListener('shopify:block:select', function (e) {
         var id = e.target && e.target.getAttribute && e.target.getAttribute('data-block-id');
         var btn = id && btns.filter(function (b) { return b.getAttribute('data-block-id') === id; })[0];
@@ -876,24 +804,9 @@
       });
     });
 
-    // ----- Reveal-on-scroll (live storefront only, not in editor) -----
-    //
-    // BUG-FIX: `.ti-tabs` is the CLASS on the section element itself
-    // (`<div id="section-X" class="section ti-tabs ...">`), NOT a child.
-    // `sectionEl.querySelector('.ti-tabs')` only matches descendants, so
-    // it returned null on every page-load, `.is-revealed` was never
-    // added, and the reveal CSS (`opacity: 0`) kept the entire section
-    // invisible on the live storefront. In the theme editor the hide-CSS
-    // is gated behind `request.design_mode != true` so the section
-    // rendered correctly there — masking the bug during preview.
-    //
-    // Prefer the section element itself (it has the .ti-tabs class);
-    // fall back to a descendant query in case the markup ever changes.
     var animation = '{{ scroll_animation }}';
-    var revealTarget = sectionEl.classList.contains('ti-tabs')
-      ? sectionEl
-      : sectionEl.querySelector('.ti-tabs');
-    if (document.body.classList.contains('shopify-design-mode')) {
+    var revealTarget = sectionEl.classList.contains('ti-tabs') ? sectionEl : sectionEl.querySelector('.ti-tabs');
+    if (document.body.classList.contains('shopify-design-mode') || !('IntersectionObserver' in window)) {
       if (revealTarget) revealTarget.classList.add('is-revealed');
     } else if (animation && animation !== 'none' && revealTarget) {
       var io = new IntersectionObserver(function(entries, obs) {
@@ -903,16 +816,13 @@
             obs.unobserve(revealTarget);
           }
         });
-      }, { threshold: 0.15 });
+      }, { threshold: 0.1 });
       io.observe(revealTarget);
     } else if (revealTarget) {
       revealTarget.classList.add('is-revealed');
     }
   })();
 {% comment %}{% endcomment %}</script>
-
-
-
 </template>
 
 <schema>
@@ -957,19 +867,32 @@
     },
     {
       "type": "checkbox",
+      "id": "enable_custom_styling",
+      "label": "Use custom tab colours and type",
+      "info": "Off: tabs follow the colour scheme, Theme settings > Buttons and Theme settings > Typography. On: the Custom tab style controls below are used.",
+      "default": false
+    },
+    {
+      "type": "checkbox",
       "id": "reset_spacing",
       "label": "Remove default space between sections",
       "default": true
     },
     {
       "type": "header",
-      "id": "hdr_5",
-      "label": "General"
+      "id": "hdr_6",
+      "label": "Heading area"
+    },
+    {
+      "type": "paragraph",
+      "id": "para_7",
+      "label": "Add a Heading and a Subheading block to write the title. Each follows your theme typography until you turn on its own style.",
+      "content": "Add a Heading and a Subheading block to write the title. Each follows your theme typography until you turn on its own style."
     },
     {
       "type": "select",
       "id": "content_alignment",
-      "label": "Header Alignment",
+      "label": "Alignment",
       "default": "center",
       "options": [
         {
@@ -987,148 +910,9 @@
       ]
     },
     {
-      "type": "header",
-      "id": "hdr_7",
-      "label": "Heading"
-    },
-    {
-      "type": "text",
-      "id": "heading",
-      "label": "Heading",
-      "default": "Featured Products"
-    },
-    {
-      "type": "range",
-      "id": "heading_font_size_desktop",
-      "label": "Heading Font Size (Desktop)",
-      "min": 10,
-      "max": 80,
-      "step": 1,
-      "unit": "px",
-      "default": 28
-    },
-    {
-      "type": "range",
-      "id": "heading_font_size_mobile",
-      "label": "Heading Font Size (Mobile)",
-      "min": 10,
-      "max": 80,
-      "step": 1,
-      "unit": "px",
-      "default": 24
-    },
-    {
-      "type": "color",
-      "id": "heading_color",
-      "label": "Heading Color"
-    },
-    {
-      "type": "checkbox",
-      "id": "enable_custom_font_weight_heading",
-      "label": "Enable Custom Font Weight (Heading)",
-      "default": false
-    },
-    {
-      "type": "select",
-      "id": "font_weight_heading",
-      "label": "Heading Font Weight",
-      "default": "500",
-      "options": [
-        {
-          "value": "300",
-          "label": "Light"
-        },
-        {
-          "value": "400",
-          "label": "Normal"
-        },
-        {
-          "value": "500",
-          "label": "Medium"
-        },
-        {
-          "value": "600",
-          "label": "Semi-Bold"
-        },
-        {
-          "value": "700",
-          "label": "Bold"
-        }
-      ]
-    },
-    {
-      "type": "header",
-      "id": "hdr_14",
-      "label": "Subheading"
-    },
-    {
-      "type": "text",
-      "id": "subheading",
-      "label": "Subheading"
-    },
-    {
-      "type": "range",
-      "id": "subheading_font_size_desktop",
-      "label": "Subheading Font Size (Desktop)",
-      "min": 10,
-      "max": 60,
-      "step": 1,
-      "unit": "px",
-      "default": 16
-    },
-    {
-      "type": "range",
-      "id": "subheading_font_size_mobile",
-      "label": "Subheading Font Size (Mobile)",
-      "min": 10,
-      "max": 60,
-      "step": 1,
-      "unit": "px",
-      "default": 14
-    },
-    {
-      "type": "color",
-      "id": "subheading_color",
-      "label": "Subheading Color"
-    },
-    {
-      "type": "checkbox",
-      "id": "enable_custom_font_weight_subheading",
-      "label": "Custom subheading weight",
-      "default": false
-    },
-    {
-      "type": "select",
-      "id": "font_weight_subheading",
-      "label": "Subheading Font Weight",
-      "default": "400",
-      "options": [
-        {
-          "value": "300",
-          "label": "Light"
-        },
-        {
-          "value": "400",
-          "label": "Normal"
-        },
-        {
-          "value": "500",
-          "label": "Medium"
-        },
-        {
-          "value": "600",
-          "label": "Semi-Bold"
-        },
-        {
-          "value": "700",
-          "label": "Bold"
-        }
-      ]
-    },
-    {
       "type": "range",
       "id": "vertical_gap_heading_subheading",
-      "label": "Gap: Heading → Subheading",
+      "label": "Gap between heading and subheading",
       "min": 0,
       "max": 50,
       "step": 1,
@@ -1138,7 +922,7 @@
     {
       "type": "range",
       "id": "vertical_gap_subheading_section_desktop",
-      "label": "Gap: Subheading → Tabs (Desktop)",
+      "label": "Space above tabs (desktop)",
       "min": 0,
       "max": 80,
       "step": 1,
@@ -1148,7 +932,7 @@
     {
       "type": "range",
       "id": "vertical_gap_subheading_section_mobile",
-      "label": "Gap: Subheading → Tabs (Mobile)",
+      "label": "Space above tabs (mobile)",
       "min": 0,
       "max": 80,
       "step": 1,
@@ -1156,34 +940,14 @@
       "default": 18
     },
     {
-      "type": "range",
-      "id": "subheading_padding_left_right_desktop",
-      "label": "Subheading Side Padding (Desktop)",
-      "min": 0,
-      "max": 100,
-      "step": 1,
-      "unit": "px",
-      "default": 0
-    },
-    {
-      "type": "range",
-      "id": "subheading_padding_left_right_mobile",
-      "label": "Subheading Side Padding (Mobile)",
-      "min": 0,
-      "max": 100,
-      "step": 1,
-      "unit": "px",
-      "default": 0
-    },
-    {
       "type": "header",
-      "id": "hdr_26",
-      "label": "Tab Navigation"
+      "id": "hdr_12",
+      "label": "Tabs"
     },
     {
       "type": "select",
       "id": "tab_style",
-      "label": "Tab Style",
+      "label": "Tab style",
       "default": "pill",
       "options": [
         {
@@ -1200,14 +964,14 @@
         },
         {
           "value": "text",
-          "label": "Plain Text"
+          "label": "Plain text"
         }
       ]
     },
     {
       "type": "select",
       "id": "tabs_alignment",
-      "label": "Tabs Alignment",
+      "label": "Tabs alignment",
       "default": "center",
       "options": [
         {
@@ -1227,52 +991,195 @@
     {
       "type": "checkbox",
       "id": "tabs_full_width",
-      "label": "Stretch tabs (mobile)",
+      "label": "Stretch tabs across the row on mobile",
       "default": true
     },
     {
-      "type": "checkbox",
-      "id": "show_tab_icon",
-      "label": "Show collection icon in tab",
-      "default": false
+      "type": "range",
+      "id": "tab_border_radius",
+      "label": "Corner radius",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 8,
+      "visible_if": "{{ section.settings.tab_style == 'button' }}"
     },
     {
       "type": "range",
-      "id": "tab_icon_size",
-      "label": "Tab Icon Size",
-      "min": 14,
+      "id": "tab_padding_x",
+      "label": "Side padding",
+      "min": 0,
       "max": 60,
       "step": 1,
       "unit": "px",
       "default": 22
     },
     {
+      "type": "range",
+      "id": "tab_padding_y",
+      "label": "Top and bottom padding",
+      "min": 0,
+      "max": 30,
+      "step": 1,
+      "unit": "px",
+      "default": 10
+    },
+    {
+      "type": "range",
+      "id": "tab_gap",
+      "label": "Gap between tabs",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "unit": "px",
+      "default": 10
+    },
+    {
+      "type": "range",
+      "id": "tab_unchecked_border_thickness",
+      "label": "Border thickness (inactive)",
+      "min": 0,
+      "max": 5,
+      "step": 1,
+      "unit": "px",
+      "default": 0,
+      "visible_if": "{{ section.settings.tab_style == 'pill' or section.settings.tab_style == 'button' }}"
+    },
+    {
+      "type": "range",
+      "id": "tab_checked_border_thickness",
+      "label": "Border thickness (active)",
+      "info": "Underline style: thickness of the line under the open tab (0 uses 2px).",
+      "min": 0,
+      "max": 5,
+      "step": 1,
+      "unit": "px",
+      "default": 0,
+      "visible_if": "{{ section.settings.tab_style != 'text' }}"
+    },
+    {
       "type": "checkbox",
-      "id": "show_product_count",
-      "label": "Show product count next to tab title",
+      "id": "show_tab_icon",
+      "label": "Show collection picture in tab",
       "default": false
     },
     {
       "type": "range",
+      "id": "tab_icon_size",
+      "label": "Picture size",
+      "min": 14,
+      "max": 60,
+      "step": 1,
+      "unit": "px",
+      "default": 22,
+      "visible_if": "{{ section.settings.show_tab_icon }}"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_product_count",
+      "label": "Show product count",
+      "default": false
+    },
+    {
+      "type": "checkbox",
+      "id": "show_nav_bottom_border",
+      "label": "Show line under tabs",
+      "default": false
+    },
+    {
+      "type": "range",
+      "id": "nav_bottom_border_thickness",
+      "label": "Line thickness",
+      "min": 1,
+      "max": 6,
+      "step": 1,
+      "unit": "px",
+      "default": 1,
+      "visible_if": "{{ section.settings.show_nav_bottom_border }}"
+    },
+    {
+      "type": "range",
+      "id": "gap_tabs_to_products",
+      "label": "Space between tabs and products",
+      "min": 0,
+      "max": 80,
+      "step": 1,
+      "unit": "px",
+      "default": 30
+    },
+    {
+      "type": "select",
+      "id": "tab_switch_animation",
+      "label": "Switch animation",
+      "default": "fade",
+      "options": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "fade",
+          "label": "Fade"
+        },
+        {
+          "value": "fade-in",
+          "label": "Fade in up"
+        },
+        {
+          "value": "slide-up",
+          "label": "Slide up"
+        },
+        {
+          "value": "slide-down",
+          "label": "Slide down"
+        },
+        {
+          "value": "zoom-in",
+          "label": "Zoom in"
+        },
+        {
+          "value": "zoom-out",
+          "label": "Zoom out"
+        },
+        {
+          "value": "flip-x",
+          "label": "Flip X"
+        },
+        {
+          "value": "flip-y",
+          "label": "Flip Y"
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "id": "hdr_29",
+      "label": "Custom tab style"
+    },
+    {
+      "type": "paragraph",
+      "id": "para_30",
+      "label": "Turn on Use custom tab colours and type (Layout) to use these.",
+      "content": "Turn on Use custom tab colours and type (Layout) to use these."
+    },
+    {
+      "type": "range",
       "id": "tab_font_size",
-      "label": "Tab Font Size",
+      "label": "Tab text size",
       "min": 10,
       "max": 30,
       "step": 1,
       "unit": "px",
-      "default": 14
-    },
-    {
-      "type": "checkbox",
-      "id": "enable_tab_font_weight",
-      "label": "Enable Custom Tab Font Weight",
-      "default": false
+      "default": 14,
+      "visible_if": "{{ section.settings.enable_custom_styling }}"
     },
     {
       "type": "select",
       "id": "tab_font_weight",
-      "label": "Tab Font Weight",
+      "label": "Tab text weight",
       "default": "500",
+      "visible_if": "{{ section.settings.enable_custom_styling }}",
       "options": [
         {
           "value": "300",
@@ -1288,7 +1195,7 @@
         },
         {
           "value": "600",
-          "label": "Semi-Bold"
+          "label": "Semibold"
         },
         {
           "value": "700",
@@ -1297,199 +1204,74 @@
       ]
     },
     {
-      "type": "range",
-      "id": "tab_padding_x",
-      "label": "Tab Horizontal Padding",
-      "min": 0,
-      "max": 60,
-      "step": 1,
-      "unit": "px",
-      "default": 22
-    },
-    {
-      "type": "range",
-      "id": "tab_padding_y",
-      "label": "Tab Vertical Padding",
-      "min": 0,
-      "max": 30,
-      "step": 1,
-      "unit": "px",
-      "default": 10
-    },
-    {
-      "type": "range",
-      "id": "tab_gap",
-      "label": "Gap Between Tabs",
-      "min": 0,
-      "max": 40,
-      "step": 1,
-      "unit": "px",
-      "default": 10
-    },
-    {
-      "type": "range",
-      "id": "tab_border_radius",
-      "label": "Tab Border Radius",
-      "min": 0,
-      "max": 100,
-      "step": 1,
-      "unit": "px",
-      "default": 100
-    },
-    {
-      "type": "range",
-      "id": "gap_tabs_to_products",
-      "label": "Gap: Tabs → Products",
-      "min": 0,
-      "max": 80,
-      "step": 1,
-      "unit": "px",
-      "default": 30
-    },
-    {
-      "type": "checkbox",
-      "id": "show_nav_bottom_border",
-      "label": "Show line under tabs",
-      "default": false
-    },
-    {
-      "type": "range",
-      "id": "nav_bottom_border_thickness",
-      "label": "Line Thickness",
-      "min": 1,
-      "max": 6,
-      "step": 1,
-      "unit": "px",
-      "default": 1
-    },
-    {
-      "type": "color",
-      "id": "nav_bottom_border_color",
-      "label": "Line Color"
-    },
-    {
-      "type": "header",
-      "id": "hdr_44",
-      "label": "Tab Colors"
-    },
-    {
       "type": "color",
       "id": "tab_unchecked_bg_color",
-      "label": "Tab Background (Inactive)"
+      "label": "Background (inactive)",
+      "visible_if": "{{ section.settings.enable_custom_styling }}"
     },
     {
       "type": "color",
       "id": "tab_checked_bg_color",
-      "label": "Tab Background (Active)"
+      "label": "Background (active)",
+      "visible_if": "{{ section.settings.enable_custom_styling }}"
     },
     {
       "type": "color",
       "id": "tab_unchecked_text_color",
-      "label": "Tab Text (Inactive)"
+      "label": "Text (inactive)",
+      "visible_if": "{{ section.settings.enable_custom_styling }}"
     },
     {
       "type": "color",
       "id": "tab_checked_text_color",
-      "label": "Tab Text (Active)"
+      "label": "Text (active)",
+      "visible_if": "{{ section.settings.enable_custom_styling }}"
     },
     {
       "type": "color",
       "id": "tab_hover_bg_color",
-      "label": "Tab Background (Hover)"
+      "label": "Background (hover)",
+      "visible_if": "{{ section.settings.enable_custom_styling }}"
     },
     {
       "type": "color",
       "id": "tab_hover_text_color",
-      "label": "Tab Text (Hover)"
-    },
-    {
-      "type": "range",
-      "id": "tab_unchecked_border_thickness",
-      "label": "Tab Border Thickness (Inactive)",
-      "min": 0,
-      "max": 5,
-      "step": 1,
-      "unit": "px",
-      "default": 0
-    },
-    {
-      "type": "range",
-      "id": "tab_checked_border_thickness",
-      "label": "Tab Border Thickness (Active)",
-      "min": 0,
-      "max": 5,
-      "step": 1,
-      "unit": "px",
-      "default": 0
+      "label": "Text (hover)",
+      "visible_if": "{{ section.settings.enable_custom_styling }}"
     },
     {
       "type": "color",
       "id": "tab_unchecked_border_color",
-      "label": "Tab Border Color (Inactive)"
+      "label": "Border (inactive)",
+      "visible_if": "{{ section.settings.enable_custom_styling }}"
     },
     {
       "type": "color",
       "id": "tab_checked_border_color",
-      "label": "Tab Border Color (Active)"
+      "label": "Border or underline (active)",
+      "visible_if": "{{ section.settings.enable_custom_styling }}"
+    },
+    {
+      "type": "color",
+      "id": "nav_bottom_border_color",
+      "label": "Line under tabs",
+      "visible_if": "{{ section.settings.enable_custom_styling and section.settings.show_nav_bottom_border }}"
+    },
+    {
+      "type": "color",
+      "id": "empty_state_text_color",
+      "label": "Empty message",
+      "visible_if": "{{ section.settings.enable_custom_styling }}"
     },
     {
       "type": "header",
-      "id": "hdr_55",
-      "label": "Tab Switch Animation"
-    },
-    {
-      "type": "select",
-      "id": "tab_switch_animation",
-      "label": "Switch Animation",
-      "default": "fade",
-      "options": [
-        {
-          "value": "none",
-          "label": "None"
-        },
-        {
-          "value": "fade",
-          "label": "Fade"
-        },
-        {
-          "value": "fade-in",
-          "label": "Fade In Up"
-        },
-        {
-          "value": "slide-up",
-          "label": "Slide Up"
-        },
-        {
-          "value": "slide-down",
-          "label": "Slide Down"
-        },
-        {
-          "value": "zoom-in",
-          "label": "Zoom In"
-        },
-        {
-          "value": "zoom-out",
-          "label": "Zoom Out"
-        },
-        {
-          "value": "flip-x",
-          "label": "Flip X"
-        },
-        {
-          "value": "flip-y",
-          "label": "Flip Y"
-        }
-      ]
-    },
-    {
-      "type": "header",
-      "id": "hdr_57",
-      "label": "Display"
+      "id": "hdr_43",
+      "label": "Products"
     },
     {
       "type": "range",
       "id": "items_to_show",
-      "label": "Total Products per Tab",
+      "label": "Products per tab",
       "min": 1,
       "max": 24,
       "step": 1,
@@ -1498,7 +1280,7 @@
     {
       "type": "range",
       "id": "items_per_row",
-      "label": "Products per Row (Desktop)",
+      "label": "Products per row (desktop)",
       "min": 2,
       "max": 6,
       "step": 1,
@@ -1507,8 +1289,8 @@
     {
       "type": "range",
       "id": "items_per_row_mobile",
-      "label": "Products per Row (Mobile)",
-      "info": "1.5 enables free-scroll on mobile.",
+      "label": "Products per row (mobile)",
+      "info": "1.5 lets the row scroll sideways on phones.",
       "min": 1,
       "max": 2,
       "step": 0.5,
@@ -1517,7 +1299,7 @@
     {
       "type": "range",
       "id": "rows",
-      "label": "Number of Rows (Grid Mode)",
+      "label": "Rows before Load more (desktop)",
       "min": 1,
       "max": 4,
       "step": 1,
@@ -1526,7 +1308,7 @@
     {
       "type": "range",
       "id": "rows_mobile",
-      "label": "Number of Rows (Mobile)",
+      "label": "Rows (mobile)",
       "min": 1,
       "max": 4,
       "step": 1,
@@ -1535,7 +1317,7 @@
     {
       "type": "range",
       "id": "column_gap",
-      "label": "Column Gap",
+      "label": "Gap between products",
       "min": 0,
       "max": 50,
       "step": 5,
@@ -1544,58 +1326,56 @@
     },
     {
       "type": "header",
-      "id": "hdr_64",
-      "label": "Load More Button"
+      "id": "hdr_50",
+      "label": "Load more"
     },
     {
       "type": "checkbox",
       "id": "show_load_more_button",
-      "label": "Enable Load More",
+      "label": "Show Load more button",
+      "info": "Appears when a tab has more products than the rows show.",
       "default": true
     },
     {
       "type": "text",
       "id": "button_label",
-      "label": "Button Label",
-      "info": "Leave blank to hide.",
-      "default": "View More"
+      "label": "Button label",
+      "default": "View More",
+      "visible_if": "{{ section.settings.show_load_more_button }}"
     },
     {
       "type": "checkbox",
       "id": "use_outline_button_style",
-      "label": "Outline Button Style",
-      "default": false
+      "label": "Outline button",
+      "default": false,
+      "visible_if": "{{ section.settings.show_load_more_button }}"
     },
     {
       "type": "range",
       "id": "gap_loadmore",
-      "label": "Gap: Products → Load More",
+      "label": "Space above button",
       "min": 0,
       "max": 80,
       "step": 1,
       "unit": "px",
-      "default": 30
+      "default": 30,
+      "visible_if": "{{ section.settings.show_load_more_button }}"
     },
     {
       "type": "header",
-      "id": "hdr_69",
-      "label": "Empty State"
+      "id": "hdr_55",
+      "label": "Empty tab"
     },
     {
       "type": "text",
       "id": "empty_state_message",
-      "label": "Empty Message",
+      "label": "Message",
       "default": "No products found in this collection."
-    },
-    {
-      "type": "color",
-      "id": "empty_state_text_color",
-      "label": "Empty Message Color"
     },
     {
       "type": "range",
       "id": "empty_state_font_size",
-      "label": "Empty Message Font Size",
+      "label": "Message size",
       "min": 10,
       "max": 32,
       "step": 1,
@@ -1604,8 +1384,8 @@
     },
     {
       "type": "header",
-      "id": "hdr_73",
-      "label": "Reveal on Scroll"
+      "id": "hdr_58",
+      "label": "Animation"
     },
     {
       "type": "checkbox",
@@ -1616,8 +1396,9 @@
     {
       "type": "select",
       "id": "scroll_animation",
-      "label": "Scroll Animation",
+      "label": "Reveal style",
       "default": "smooth-fade-up",
+      "visible_if": "{{ section.settings.reveal }}",
       "options": [
         {
           "value": "none",
@@ -1625,7 +1406,7 @@
         },
         {
           "value": "fade-in",
-          "label": "Fade In"
+          "label": "Fade in"
         },
         {
           "value": "fade",
@@ -1633,7 +1414,7 @@
         },
         {
           "value": "slide-in",
-          "label": "Slide In"
+          "label": "Slide in"
         },
         {
           "value": "blur_up",
@@ -1649,19 +1430,19 @@
         },
         {
           "value": "smooth-fade-up",
-          "label": "Smooth Fade Up"
+          "label": "Smooth fade up"
         }
       ]
     },
     {
       "type": "header",
-      "id": "hdr_76",
-      "label": "Section Padding"
+      "id": "hdr_61",
+      "label": "Spacing"
     },
     {
       "type": "range",
       "id": "padding_top",
-      "label": "Top Padding",
+      "label": "Top padding",
       "min": 0,
       "max": 200,
       "step": 2,
@@ -1671,7 +1452,7 @@
     {
       "type": "range",
       "id": "padding_bottom",
-      "label": "Bottom Padding",
+      "label": "Bottom padding",
       "min": 0,
       "max": 200,
       "step": 2,
@@ -1679,14 +1460,9 @@
       "default": 30
     },
     {
-      "type": "header",
-      "id": "hdr_79",
-      "label": "Section Margin"
-    },
-    {
       "type": "range",
       "id": "section_margin_top_desktop",
-      "label": "Top Margin (Desktop)",
+      "label": "Top margin (desktop)",
       "min": 0,
       "max": 300,
       "step": 4,
@@ -1696,7 +1472,7 @@
     {
       "type": "range",
       "id": "section_margin_bottom_desktop",
-      "label": "Bottom Margin (Desktop)",
+      "label": "Bottom margin (desktop)",
       "min": 0,
       "max": 300,
       "step": 4,
@@ -1706,7 +1482,7 @@
     {
       "type": "range",
       "id": "section_margin_top_mobile",
-      "label": "Top Margin (Mobile)",
+      "label": "Top margin (mobile)",
       "min": 0,
       "max": 300,
       "step": 4,
@@ -1716,7 +1492,7 @@
     {
       "type": "range",
       "id": "section_margin_bottom_mobile",
-      "label": "Bottom Margin (Mobile)",
+      "label": "Bottom margin (mobile)",
       "min": 0,
       "max": 300,
       "step": 4,
@@ -1726,33 +1502,260 @@
   ],
   "blocks": [
     {
+      "type": "heading",
+      "name": "Heading",
+      "settings": [
+        {
+          "type": "inline_richtext",
+          "id": "heading",
+          "label": "Heading",
+          "default": "Featured Products"
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Theme text style",
+          "info": "Follows Theme settings > Typography.",
+          "default": "h2",
+          "visible_if": "{{ block.settings.custom_style == false }}",
+          "options": [
+            {
+              "value": "h1",
+              "label": "Heading 1"
+            },
+            {
+              "value": "h2",
+              "label": "Heading 2"
+            },
+            {
+              "value": "h3",
+              "label": "Heading 3"
+            }
+          ]
+        },
+        {
+          "type": "header",
+          "id": "hdr_3",
+          "label": "Style"
+        },
+        {
+          "type": "checkbox",
+          "id": "custom_style",
+          "label": "Use custom style",
+          "info": "Off: colour, size and weight follow the colour scheme and Theme settings > Typography. On: the controls below are used.",
+          "default": false
+        },
+        {
+          "type": "color",
+          "id": "heading_color",
+          "label": "Heading color",
+          "visible_if": "{{ block.settings.custom_style }}"
+        },
+        {
+          "type": "select",
+          "id": "heading_font_weight",
+          "label": "Heading font weight",
+          "default": "700",
+          "visible_if": "{{ block.settings.custom_style }}",
+          "options": [
+            {
+              "value": "300",
+              "label": "Light"
+            },
+            {
+              "value": "400",
+              "label": "Normal"
+            },
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semibold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "heading_font_size_desktop",
+          "label": "Heading size (desktop)",
+          "min": 14,
+          "max": 80,
+          "step": 1,
+          "unit": "px",
+          "default": 28,
+          "visible_if": "{{ block.settings.custom_style }}"
+        },
+        {
+          "type": "range",
+          "id": "heading_font_size_mobile",
+          "label": "Heading size (mobile)",
+          "min": 12,
+          "max": 60,
+          "step": 1,
+          "unit": "px",
+          "default": 24,
+          "visible_if": "{{ block.settings.custom_style }}"
+        }
+      ],
+      "limit": 1
+    },
+    {
+      "type": "subheading",
+      "name": "Subheading",
+      "settings": [
+        {
+          "type": "richtext",
+          "id": "subheading",
+          "label": "Subheading",
+          "default": "<p>Pick a collection to see what is in it.</p>"
+        },
+        {
+          "type": "select",
+          "id": "text_size",
+          "label": "Theme text style",
+          "info": "Follows Theme settings > Typography.",
+          "default": "body",
+          "visible_if": "{{ block.settings.custom_style == false }}",
+          "options": [
+            {
+              "value": "body_large",
+              "label": "Body large"
+            },
+            {
+              "value": "body",
+              "label": "Body"
+            },
+            {
+              "value": "body_small",
+              "label": "Body small"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "max_width",
+          "label": "Max width",
+          "min": 320,
+          "max": 1200,
+          "step": 20,
+          "unit": "px",
+          "default": 640
+        },
+        {
+          "type": "header",
+          "id": "hdr_4",
+          "label": "Style"
+        },
+        {
+          "type": "checkbox",
+          "id": "custom_style",
+          "label": "Use custom style",
+          "info": "Off: colour, size and weight follow the colour scheme and Theme settings > Typography. On: the controls below are used.",
+          "default": false
+        },
+        {
+          "type": "color",
+          "id": "subheading_color",
+          "label": "Subheading color",
+          "visible_if": "{{ block.settings.custom_style }}"
+        },
+        {
+          "type": "select",
+          "id": "subheading_font_weight",
+          "label": "Subheading font weight",
+          "default": "400",
+          "visible_if": "{{ block.settings.custom_style }}",
+          "options": [
+            {
+              "value": "300",
+              "label": "Light"
+            },
+            {
+              "value": "400",
+              "label": "Normal"
+            },
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semibold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "subheading_font_size_desktop",
+          "label": "Subheading size (desktop)",
+          "min": 10,
+          "max": 40,
+          "step": 1,
+          "unit": "px",
+          "default": 16,
+          "visible_if": "{{ block.settings.custom_style }}"
+        },
+        {
+          "type": "range",
+          "id": "subheading_font_size_mobile",
+          "label": "Subheading size (mobile)",
+          "min": 10,
+          "max": 32,
+          "step": 1,
+          "unit": "px",
+          "default": 14,
+          "visible_if": "{{ block.settings.custom_style }}"
+        }
+      ],
+      "limit": 1
+    },
+    {
       "type": "collection",
       "name": "Collection Tab",
       "settings": [
         {
           "type": "collection",
           "id": "collection",
-          "label": "Pick a Collection"
+          "label": "Collection"
         },
         {
           "type": "text",
           "id": "collection_title",
-          "label": "Custom Tab Title"
+          "label": "Tab title",
+          "info": "Leave empty to use the collection's name."
         },
         {
           "type": "image_picker",
           "id": "tab_icon",
-          "label": "Custom Tab Icon"
+          "label": "Tab picture",
+          "info": "Shown when Show collection picture in tab is on. Leave empty to use the collection's picture."
         }
       ],
       "limit": 8
     }
   ],
+  "max_blocks": 10,
   "presets": [
     {
       "name": "Product Tabs Navigation",
       "category": "Products",
       "blocks": [
+        {
+          "type": "heading"
+        },
+        {
+          "type": "subheading"
+        },
         {
           "type": "collection"
         },
@@ -1819,18 +1822,29 @@
       },
       {
         "type": "checkbox",
+        "id": "enable_custom_styling",
+        "label": "Use custom tab colours and type",
+        "info": "Off: tabs follow the colour scheme, Theme settings > Buttons and Theme settings > Typography. On: the Custom tab style controls below are used.",
+        "default": false
+      },
+      {
+        "type": "checkbox",
         "id": "reset_spacing",
         "label": "Remove default space between sections",
         "default": true
       },
       {
         "type": "header",
-        "content": "General"
+        "content": "Heading area"
+      },
+      {
+        "type": "paragraph",
+        "content": "Add a Heading and a Subheading block to write the title. Each follows your theme typography until you turn on its own style."
       },
       {
         "type": "select",
         "id": "content_alignment",
-        "label": "Header Alignment",
+        "label": "Alignment",
         "default": "center",
         "options": [
           {
@@ -1848,146 +1862,9 @@
         ]
       },
       {
-        "type": "header",
-        "content": "Heading"
-      },
-      {
-        "type": "text",
-        "id": "heading",
-        "label": "Heading",
-        "default": "Featured Products"
-      },
-      {
-        "type": "range",
-        "id": "heading_font_size_desktop",
-        "label": "Heading Font Size (Desktop)",
-        "min": 10,
-        "max": 80,
-        "step": 1,
-        "unit": "px",
-        "default": 28
-      },
-      {
-        "type": "range",
-        "id": "heading_font_size_mobile",
-        "label": "Heading Font Size (Mobile)",
-        "min": 10,
-        "max": 80,
-        "step": 1,
-        "unit": "px",
-        "default": 24
-      },
-      {
-        "type": "color",
-        "id": "heading_color",
-        "label": "Heading Color"
-      },
-      {
-        "type": "checkbox",
-        "id": "enable_custom_font_weight_heading",
-        "label": "Enable Custom Font Weight (Heading)",
-        "default": false
-      },
-      {
-        "type": "select",
-        "id": "font_weight_heading",
-        "label": "Heading Font Weight",
-        "default": "500",
-        "options": [
-          {
-            "value": "300",
-            "label": "Light"
-          },
-          {
-            "value": "400",
-            "label": "Normal"
-          },
-          {
-            "value": "500",
-            "label": "Medium"
-          },
-          {
-            "value": "600",
-            "label": "Semi-Bold"
-          },
-          {
-            "value": "700",
-            "label": "Bold"
-          }
-        ]
-      },
-      {
-        "type": "header",
-        "content": "Subheading"
-      },
-      {
-        "type": "text",
-        "id": "subheading",
-        "label": "Subheading"
-      },
-      {
-        "type": "range",
-        "id": "subheading_font_size_desktop",
-        "label": "Subheading Font Size (Desktop)",
-        "min": 10,
-        "max": 60,
-        "step": 1,
-        "unit": "px",
-        "default": 16
-      },
-      {
-        "type": "range",
-        "id": "subheading_font_size_mobile",
-        "label": "Subheading Font Size (Mobile)",
-        "min": 10,
-        "max": 60,
-        "step": 1,
-        "unit": "px",
-        "default": 14
-      },
-      {
-        "type": "color",
-        "id": "subheading_color",
-        "label": "Subheading Color"
-      },
-      {
-        "type": "checkbox",
-        "id": "enable_custom_font_weight_subheading",
-        "label": "Custom subheading weight",
-        "default": false
-      },
-      {
-        "type": "select",
-        "id": "font_weight_subheading",
-        "label": "Subheading Font Weight",
-        "default": "400",
-        "options": [
-          {
-            "value": "300",
-            "label": "Light"
-          },
-          {
-            "value": "400",
-            "label": "Normal"
-          },
-          {
-            "value": "500",
-            "label": "Medium"
-          },
-          {
-            "value": "600",
-            "label": "Semi-Bold"
-          },
-          {
-            "value": "700",
-            "label": "Bold"
-          }
-        ]
-      },
-      {
         "type": "range",
         "id": "vertical_gap_heading_subheading",
-        "label": "Gap: Heading → Subheading",
+        "label": "Gap between heading and subheading",
         "min": 0,
         "max": 50,
         "step": 1,
@@ -1997,7 +1874,7 @@
       {
         "type": "range",
         "id": "vertical_gap_subheading_section_desktop",
-        "label": "Gap: Subheading → Tabs (Desktop)",
+        "label": "Space above tabs (desktop)",
         "min": 0,
         "max": 80,
         "step": 1,
@@ -2007,7 +1884,7 @@
       {
         "type": "range",
         "id": "vertical_gap_subheading_section_mobile",
-        "label": "Gap: Subheading → Tabs (Mobile)",
+        "label": "Space above tabs (mobile)",
         "min": 0,
         "max": 80,
         "step": 1,
@@ -2015,33 +1892,13 @@
         "default": 18
       },
       {
-        "type": "range",
-        "id": "subheading_padding_left_right_desktop",
-        "label": "Subheading Side Padding (Desktop)",
-        "min": 0,
-        "max": 100,
-        "step": 1,
-        "unit": "px",
-        "default": 0
-      },
-      {
-        "type": "range",
-        "id": "subheading_padding_left_right_mobile",
-        "label": "Subheading Side Padding (Mobile)",
-        "min": 0,
-        "max": 100,
-        "step": 1,
-        "unit": "px",
-        "default": 0
-      },
-      {
         "type": "header",
-        "content": "Tab Navigation"
+        "content": "Tabs"
       },
       {
         "type": "select",
         "id": "tab_style",
-        "label": "Tab Style",
+        "label": "Tab style",
         "default": "pill",
         "options": [
           {
@@ -2058,14 +1915,14 @@
           },
           {
             "value": "text",
-            "label": "Plain Text"
+            "label": "Plain text"
           }
         ]
       },
       {
         "type": "select",
         "id": "tabs_alignment",
-        "label": "Tabs Alignment",
+        "label": "Tabs alignment",
         "default": "center",
         "options": [
           {
@@ -2085,52 +1942,192 @@
       {
         "type": "checkbox",
         "id": "tabs_full_width",
-        "label": "Stretch tabs (mobile)",
+        "label": "Stretch tabs across the row on mobile",
         "default": true
       },
       {
-        "type": "checkbox",
-        "id": "show_tab_icon",
-        "label": "Show collection icon in tab",
-        "default": false
+        "type": "range",
+        "id": "tab_border_radius",
+        "label": "Corner radius",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 8,
+        "visible_if": "{{ section.settings.tab_style == 'button' }}"
       },
       {
         "type": "range",
-        "id": "tab_icon_size",
-        "label": "Tab Icon Size",
-        "min": 14,
+        "id": "tab_padding_x",
+        "label": "Side padding",
+        "min": 0,
         "max": 60,
         "step": 1,
         "unit": "px",
         "default": 22
       },
       {
+        "type": "range",
+        "id": "tab_padding_y",
+        "label": "Top and bottom padding",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "unit": "px",
+        "default": 10
+      },
+      {
+        "type": "range",
+        "id": "tab_gap",
+        "label": "Gap between tabs",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 10
+      },
+      {
+        "type": "range",
+        "id": "tab_unchecked_border_thickness",
+        "label": "Border thickness (inactive)",
+        "min": 0,
+        "max": 5,
+        "step": 1,
+        "unit": "px",
+        "default": 0,
+        "visible_if": "{{ section.settings.tab_style == 'pill' or section.settings.tab_style == 'button' }}"
+      },
+      {
+        "type": "range",
+        "id": "tab_checked_border_thickness",
+        "label": "Border thickness (active)",
+        "info": "Underline style: thickness of the line under the open tab (0 uses 2px).",
+        "min": 0,
+        "max": 5,
+        "step": 1,
+        "unit": "px",
+        "default": 0,
+        "visible_if": "{{ section.settings.tab_style != 'text' }}"
+      },
+      {
         "type": "checkbox",
-        "id": "show_product_count",
-        "label": "Show product count next to tab title",
+        "id": "show_tab_icon",
+        "label": "Show collection picture in tab",
         "default": false
       },
       {
         "type": "range",
+        "id": "tab_icon_size",
+        "label": "Picture size",
+        "min": 14,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 22,
+        "visible_if": "{{ section.settings.show_tab_icon }}"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_product_count",
+        "label": "Show product count",
+        "default": false
+      },
+      {
+        "type": "checkbox",
+        "id": "show_nav_bottom_border",
+        "label": "Show line under tabs",
+        "default": false
+      },
+      {
+        "type": "range",
+        "id": "nav_bottom_border_thickness",
+        "label": "Line thickness",
+        "min": 1,
+        "max": 6,
+        "step": 1,
+        "unit": "px",
+        "default": 1,
+        "visible_if": "{{ section.settings.show_nav_bottom_border }}"
+      },
+      {
+        "type": "range",
+        "id": "gap_tabs_to_products",
+        "label": "Space between tabs and products",
+        "min": 0,
+        "max": 80,
+        "step": 1,
+        "unit": "px",
+        "default": 30
+      },
+      {
+        "type": "select",
+        "id": "tab_switch_animation",
+        "label": "Switch animation",
+        "default": "fade",
+        "options": [
+          {
+            "value": "none",
+            "label": "None"
+          },
+          {
+            "value": "fade",
+            "label": "Fade"
+          },
+          {
+            "value": "fade-in",
+            "label": "Fade in up"
+          },
+          {
+            "value": "slide-up",
+            "label": "Slide up"
+          },
+          {
+            "value": "slide-down",
+            "label": "Slide down"
+          },
+          {
+            "value": "zoom-in",
+            "label": "Zoom in"
+          },
+          {
+            "value": "zoom-out",
+            "label": "Zoom out"
+          },
+          {
+            "value": "flip-x",
+            "label": "Flip X"
+          },
+          {
+            "value": "flip-y",
+            "label": "Flip Y"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Custom tab style"
+      },
+      {
+        "type": "paragraph",
+        "content": "Turn on Use custom tab colours and type (Layout) to use these."
+      },
+      {
+        "type": "range",
         "id": "tab_font_size",
-        "label": "Tab Font Size",
+        "label": "Tab text size",
         "min": 10,
         "max": 30,
         "step": 1,
         "unit": "px",
-        "default": 14
-      },
-      {
-        "type": "checkbox",
-        "id": "enable_tab_font_weight",
-        "label": "Enable Custom Tab Font Weight",
-        "default": false
+        "default": 14,
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
       },
       {
         "type": "select",
         "id": "tab_font_weight",
-        "label": "Tab Font Weight",
+        "label": "Tab text weight",
         "default": "500",
+        "visible_if": "{{ section.settings.enable_custom_styling }}",
         "options": [
           {
             "value": "300",
@@ -2146,7 +2143,7 @@
           },
           {
             "value": "600",
-            "label": "Semi-Bold"
+            "label": "Semibold"
           },
           {
             "value": "700",
@@ -2155,196 +2152,73 @@
         ]
       },
       {
-        "type": "range",
-        "id": "tab_padding_x",
-        "label": "Tab Horizontal Padding",
-        "min": 0,
-        "max": 60,
-        "step": 1,
-        "unit": "px",
-        "default": 22
-      },
-      {
-        "type": "range",
-        "id": "tab_padding_y",
-        "label": "Tab Vertical Padding",
-        "min": 0,
-        "max": 30,
-        "step": 1,
-        "unit": "px",
-        "default": 10
-      },
-      {
-        "type": "range",
-        "id": "tab_gap",
-        "label": "Gap Between Tabs",
-        "min": 0,
-        "max": 40,
-        "step": 1,
-        "unit": "px",
-        "default": 10
-      },
-      {
-        "type": "range",
-        "id": "tab_border_radius",
-        "label": "Tab Border Radius",
-        "min": 0,
-        "max": 100,
-        "step": 1,
-        "unit": "px",
-        "default": 100
-      },
-      {
-        "type": "range",
-        "id": "gap_tabs_to_products",
-        "label": "Gap: Tabs → Products",
-        "min": 0,
-        "max": 80,
-        "step": 1,
-        "unit": "px",
-        "default": 30
-      },
-      {
-        "type": "checkbox",
-        "id": "show_nav_bottom_border",
-        "label": "Show line under tabs",
-        "default": false
-      },
-      {
-        "type": "range",
-        "id": "nav_bottom_border_thickness",
-        "label": "Line Thickness",
-        "min": 1,
-        "max": 6,
-        "step": 1,
-        "unit": "px",
-        "default": 1
-      },
-      {
-        "type": "color",
-        "id": "nav_bottom_border_color",
-        "label": "Line Color"
-      },
-      {
-        "type": "header",
-        "content": "Tab Colors"
-      },
-      {
         "type": "color",
         "id": "tab_unchecked_bg_color",
-        "label": "Tab Background (Inactive)"
+        "label": "Background (inactive)",
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
       },
       {
         "type": "color",
         "id": "tab_checked_bg_color",
-        "label": "Tab Background (Active)"
+        "label": "Background (active)",
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
       },
       {
         "type": "color",
         "id": "tab_unchecked_text_color",
-        "label": "Tab Text (Inactive)"
+        "label": "Text (inactive)",
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
       },
       {
         "type": "color",
         "id": "tab_checked_text_color",
-        "label": "Tab Text (Active)"
+        "label": "Text (active)",
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
       },
       {
         "type": "color",
         "id": "tab_hover_bg_color",
-        "label": "Tab Background (Hover)"
+        "label": "Background (hover)",
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
       },
       {
         "type": "color",
         "id": "tab_hover_text_color",
-        "label": "Tab Text (Hover)"
-      },
-      {
-        "type": "range",
-        "id": "tab_unchecked_border_thickness",
-        "label": "Tab Border Thickness (Inactive)",
-        "min": 0,
-        "max": 5,
-        "step": 1,
-        "unit": "px",
-        "default": 0
-      },
-      {
-        "type": "range",
-        "id": "tab_checked_border_thickness",
-        "label": "Tab Border Thickness (Active)",
-        "min": 0,
-        "max": 5,
-        "step": 1,
-        "unit": "px",
-        "default": 0
+        "label": "Text (hover)",
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
       },
       {
         "type": "color",
         "id": "tab_unchecked_border_color",
-        "label": "Tab Border Color (Inactive)"
+        "label": "Border (inactive)",
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
       },
       {
         "type": "color",
         "id": "tab_checked_border_color",
-        "label": "Tab Border Color (Active)"
+        "label": "Border or underline (active)",
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
+      },
+      {
+        "type": "color",
+        "id": "nav_bottom_border_color",
+        "label": "Line under tabs",
+        "visible_if": "{{ section.settings.enable_custom_styling and section.settings.show_nav_bottom_border }}"
+      },
+      {
+        "type": "color",
+        "id": "empty_state_text_color",
+        "label": "Empty message",
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
       },
       {
         "type": "header",
-        "content": "Tab Switch Animation"
-      },
-      {
-        "type": "select",
-        "id": "tab_switch_animation",
-        "label": "Switch Animation",
-        "default": "fade",
-        "options": [
-          {
-            "value": "none",
-            "label": "None"
-          },
-          {
-            "value": "fade",
-            "label": "Fade"
-          },
-          {
-            "value": "fade-in",
-            "label": "Fade In Up"
-          },
-          {
-            "value": "slide-up",
-            "label": "Slide Up"
-          },
-          {
-            "value": "slide-down",
-            "label": "Slide Down"
-          },
-          {
-            "value": "zoom-in",
-            "label": "Zoom In"
-          },
-          {
-            "value": "zoom-out",
-            "label": "Zoom Out"
-          },
-          {
-            "value": "flip-x",
-            "label": "Flip X"
-          },
-          {
-            "value": "flip-y",
-            "label": "Flip Y"
-          }
-        ]
-      },
-      {
-        "type": "header",
-        "content": "Display"
+        "content": "Products"
       },
       {
         "type": "range",
         "id": "items_to_show",
-        "label": "Total Products per Tab",
+        "label": "Products per tab",
         "min": 1,
         "max": 24,
         "step": 1,
@@ -2353,7 +2227,7 @@
       {
         "type": "range",
         "id": "items_per_row",
-        "label": "Products per Row (Desktop)",
+        "label": "Products per row (desktop)",
         "min": 2,
         "max": 6,
         "step": 1,
@@ -2362,8 +2236,8 @@
       {
         "type": "range",
         "id": "items_per_row_mobile",
-        "label": "Products per Row (Mobile)",
-        "info": "1.5 enables free-scroll on mobile.",
+        "label": "Products per row (mobile)",
+        "info": "1.5 lets the row scroll sideways on phones.",
         "min": 1,
         "max": 2,
         "step": 0.5,
@@ -2372,7 +2246,7 @@
       {
         "type": "range",
         "id": "rows",
-        "label": "Number of Rows (Grid Mode)",
+        "label": "Rows before Load more (desktop)",
         "min": 1,
         "max": 4,
         "step": 1,
@@ -2381,7 +2255,7 @@
       {
         "type": "range",
         "id": "rows_mobile",
-        "label": "Number of Rows (Mobile)",
+        "label": "Rows (mobile)",
         "min": 1,
         "max": 4,
         "step": 1,
@@ -2390,7 +2264,7 @@
       {
         "type": "range",
         "id": "column_gap",
-        "label": "Column Gap",
+        "label": "Gap between products",
         "min": 0,
         "max": 50,
         "step": 5,
@@ -2399,56 +2273,54 @@
       },
       {
         "type": "header",
-        "content": "Load More Button"
+        "content": "Load more"
       },
       {
         "type": "checkbox",
         "id": "show_load_more_button",
-        "label": "Enable Load More",
+        "label": "Show Load more button",
+        "info": "Appears when a tab has more products than the rows show.",
         "default": true
       },
       {
         "type": "text",
         "id": "button_label",
-        "label": "Button Label",
-        "info": "Leave blank to hide.",
-        "default": "View More"
+        "label": "Button label",
+        "default": "View More",
+        "visible_if": "{{ section.settings.show_load_more_button }}"
       },
       {
         "type": "checkbox",
         "id": "use_outline_button_style",
-        "label": "Outline Button Style",
-        "default": false
+        "label": "Outline button",
+        "default": false,
+        "visible_if": "{{ section.settings.show_load_more_button }}"
       },
       {
         "type": "range",
         "id": "gap_loadmore",
-        "label": "Gap: Products → Load More",
+        "label": "Space above button",
         "min": 0,
         "max": 80,
         "step": 1,
         "unit": "px",
-        "default": 30
+        "default": 30,
+        "visible_if": "{{ section.settings.show_load_more_button }}"
       },
       {
         "type": "header",
-        "content": "Empty State"
+        "content": "Empty tab"
       },
       {
         "type": "text",
         "id": "empty_state_message",
-        "label": "Empty Message",
+        "label": "Message",
         "default": "No products found in this collection."
-      },
-      {
-        "type": "color",
-        "id": "empty_state_text_color",
-        "label": "Empty Message Color"
       },
       {
         "type": "range",
         "id": "empty_state_font_size",
-        "label": "Empty Message Font Size",
+        "label": "Message size",
         "min": 10,
         "max": 32,
         "step": 1,
@@ -2457,7 +2329,7 @@
       },
       {
         "type": "header",
-        "content": "Reveal on Scroll"
+        "content": "Animation"
       },
       {
         "type": "checkbox",
@@ -2468,8 +2340,9 @@
       {
         "type": "select",
         "id": "scroll_animation",
-        "label": "Scroll Animation",
+        "label": "Reveal style",
         "default": "smooth-fade-up",
+        "visible_if": "{{ section.settings.reveal }}",
         "options": [
           {
             "value": "none",
@@ -2477,7 +2350,7 @@
           },
           {
             "value": "fade-in",
-            "label": "Fade In"
+            "label": "Fade in"
           },
           {
             "value": "fade",
@@ -2485,7 +2358,7 @@
           },
           {
             "value": "slide-in",
-            "label": "Slide In"
+            "label": "Slide in"
           },
           {
             "value": "blur_up",
@@ -2501,18 +2374,18 @@
           },
           {
             "value": "smooth-fade-up",
-            "label": "Smooth Fade Up"
+            "label": "Smooth fade up"
           }
         ]
       },
       {
         "type": "header",
-        "content": "Section Padding"
+        "content": "Spacing"
       },
       {
         "type": "range",
         "id": "padding_top",
-        "label": "Top Padding",
+        "label": "Top padding",
         "min": 0,
         "max": 200,
         "step": 2,
@@ -2522,7 +2395,7 @@
       {
         "type": "range",
         "id": "padding_bottom",
-        "label": "Bottom Padding",
+        "label": "Bottom padding",
         "min": 0,
         "max": 200,
         "step": 2,
@@ -2530,13 +2403,9 @@
         "default": 30
       },
       {
-        "type": "header",
-        "content": "Section Margin"
-      },
-      {
         "type": "range",
         "id": "section_margin_top_desktop",
-        "label": "Top Margin (Desktop)",
+        "label": "Top margin (desktop)",
         "min": 0,
         "max": 300,
         "step": 4,
@@ -2546,7 +2415,7 @@
       {
         "type": "range",
         "id": "section_margin_bottom_desktop",
-        "label": "Bottom Margin (Desktop)",
+        "label": "Bottom margin (desktop)",
         "min": 0,
         "max": 300,
         "step": 4,
@@ -2556,7 +2425,7 @@
       {
         "type": "range",
         "id": "section_margin_top_mobile",
-        "label": "Top Margin (Mobile)",
+        "label": "Top margin (mobile)",
         "min": 0,
         "max": 300,
         "step": 4,
@@ -2566,7 +2435,7 @@
       {
         "type": "range",
         "id": "section_margin_bottom_mobile",
-        "label": "Bottom Margin (Mobile)",
+        "label": "Bottom margin (mobile)",
         "min": 0,
         "max": 300,
         "step": 4,
@@ -2574,7 +2443,224 @@
         "default": 0
       }
     ],
+    "max_blocks": 10,
     "blocks": [
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "inline_richtext",
+            "id": "heading",
+            "label": "Heading",
+            "default": "Featured Products"
+          },
+          {
+            "type": "select",
+            "id": "heading_size",
+            "label": "Theme text style",
+            "info": "Follows Theme settings > Typography.",
+            "default": "h2",
+            "visible_if": "{{ block.settings.custom_style == false }}",
+            "options": [
+              {
+                "value": "h1",
+                "label": "Heading 1"
+              },
+              {
+                "value": "h2",
+                "label": "Heading 2"
+              },
+              {
+                "value": "h3",
+                "label": "Heading 3"
+              }
+            ]
+          },
+          {
+            "type": "header",
+            "content": "Style"
+          },
+          {
+            "type": "checkbox",
+            "id": "custom_style",
+            "label": "Use custom style",
+            "info": "Off: colour, size and weight follow the colour scheme and Theme settings > Typography. On: the controls below are used.",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "heading_color",
+            "label": "Heading color",
+            "visible_if": "{{ block.settings.custom_style }}"
+          },
+          {
+            "type": "select",
+            "id": "heading_font_weight",
+            "label": "Heading font weight",
+            "default": "700",
+            "visible_if": "{{ block.settings.custom_style }}",
+            "options": [
+              {
+                "value": "300",
+                "label": "Light"
+              },
+              {
+                "value": "400",
+                "label": "Normal"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semibold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "heading_font_size_desktop",
+            "label": "Heading size (desktop)",
+            "min": 14,
+            "max": 80,
+            "step": 1,
+            "unit": "px",
+            "default": 28,
+            "visible_if": "{{ block.settings.custom_style }}"
+          },
+          {
+            "type": "range",
+            "id": "heading_font_size_mobile",
+            "label": "Heading size (mobile)",
+            "min": 12,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 24,
+            "visible_if": "{{ block.settings.custom_style }}"
+          }
+        ]
+      },
+      {
+        "type": "subheading",
+        "name": "Subheading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "richtext",
+            "id": "subheading",
+            "label": "Subheading",
+            "default": "<p>Pick a collection to see what is in it.</p>"
+          },
+          {
+            "type": "select",
+            "id": "text_size",
+            "label": "Theme text style",
+            "info": "Follows Theme settings > Typography.",
+            "default": "body",
+            "visible_if": "{{ block.settings.custom_style == false }}",
+            "options": [
+              {
+                "value": "body_large",
+                "label": "Body large"
+              },
+              {
+                "value": "body",
+                "label": "Body"
+              },
+              {
+                "value": "body_small",
+                "label": "Body small"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "max_width",
+            "label": "Max width",
+            "min": 320,
+            "max": 1200,
+            "step": 20,
+            "unit": "px",
+            "default": 640
+          },
+          {
+            "type": "header",
+            "content": "Style"
+          },
+          {
+            "type": "checkbox",
+            "id": "custom_style",
+            "label": "Use custom style",
+            "info": "Off: colour, size and weight follow the colour scheme and Theme settings > Typography. On: the controls below are used.",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "subheading_color",
+            "label": "Subheading color",
+            "visible_if": "{{ block.settings.custom_style }}"
+          },
+          {
+            "type": "select",
+            "id": "subheading_font_weight",
+            "label": "Subheading font weight",
+            "default": "400",
+            "visible_if": "{{ block.settings.custom_style }}",
+            "options": [
+              {
+                "value": "300",
+                "label": "Light"
+              },
+              {
+                "value": "400",
+                "label": "Normal"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semibold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "subheading_font_size_desktop",
+            "label": "Subheading size (desktop)",
+            "min": 10,
+            "max": 40,
+            "step": 1,
+            "unit": "px",
+            "default": 16,
+            "visible_if": "{{ block.settings.custom_style }}"
+          },
+          {
+            "type": "range",
+            "id": "subheading_font_size_mobile",
+            "label": "Subheading size (mobile)",
+            "min": 10,
+            "max": 32,
+            "step": 1,
+            "unit": "px",
+            "default": 14,
+            "visible_if": "{{ block.settings.custom_style }}"
+          }
+        ]
+      },
       {
         "type": "collection",
         "name": "Collection Tab",
@@ -2583,17 +2669,19 @@
           {
             "type": "collection",
             "id": "collection",
-            "label": "Pick a Collection"
+            "label": "Collection"
           },
           {
             "type": "text",
             "id": "collection_title",
-            "label": "Custom Tab Title"
+            "label": "Tab title",
+            "info": "Leave empty to use the collection's name."
           },
           {
             "type": "image_picker",
             "id": "tab_icon",
-            "label": "Custom Tab Icon"
+            "label": "Tab picture",
+            "info": "Shown when Show collection picture in tab is on. Leave empty to use the collection's picture."
           }
         ]
       }
@@ -2603,6 +2691,12 @@
         "name": "Product Tabs Navigation",
         "category": "Products",
         "blocks": [
+          {
+            "type": "heading"
+          },
+          {
+            "type": "subheading"
+          },
           {
             "type": "collection"
           },
