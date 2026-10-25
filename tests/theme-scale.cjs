@@ -37,7 +37,10 @@ for (const id of IDS) {
 }
 checks++;
 const saved = JSON.parse(read('config/settings.json')).shopify;
-for (const id of IDS) assert.equal(saved[id], 100, `config/settings.json saves ${id}`);
+// The creator's own values may differ from the default; each is saved and in range.
+for (const id of IDS) assert(typeof saved[id] === 'number' && saved[id] >= 80 && saved[id] <= 120, `config/settings.json saves ${id}`);
+// The checks below measure from the default (100), whatever the creator picked.
+const base100 = {...saved, ...Object.fromEntries(IDS.map(id => [id, 100]))};
 checks++;
 const layout = read('layout/theme.storelib');
 const iControls = layout.indexOf("{% render 'theme-controls' %}"), iScale = layout.indexOf("render 'theme-scale'"), iHeader = layout.indexOf('{{ content_for_header }}');
@@ -60,7 +63,7 @@ function renderScale(st) {
   assert(!/\{\{|\{%/.test(css), 'snippet renders completely: ' + (css.match(/\{[{%][^}]*\}/) || [''])[0]);
   return css;
 }
-const at100 = renderScale(saved);
+const at100 = renderScale(base100);
 assert.match(at100, /--sl-scale-desktop: 1;/); assert.match(at100, /--sl-scale-text: 1;/);
 checks++;
 
@@ -79,7 +82,7 @@ function layoutRoot(st) {
       return /divided_by/.test(m) ? String(Number(v) / 100) : String(v);
     });
 }
-if (process.env.DEBUG_SCALE) { console.log(layoutRoot(saved)); process.exit(0); }
+if (process.env.DEBUG_SCALE) { console.log(layoutRoot(base100)); process.exit(0); }
 const controlsCss = read('snippets/theme-controls.storelib').match(/<style>([\s\S]*?)<\/style>/)[1]
   .replace(/\{%-?\s*comment\s*-?%\}[\s\S]*?\{%-?\s*endcomment\s*-?%\}/g, '')
   .replace(/\{\{\s*fp\s*\}\}/g, ":where(html:not([data-font-priority='off']))").replace(/\{\{\s*button_radius\s*\}\}/g, '8')
@@ -107,7 +110,7 @@ const num = v => parseFloat(v);
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     const build = async (scaleCss, width) => {
       await page.setViewportSize({width, height: 800});
-      await page.setContent(`<!doctype html><html><head><style>${layoutRoot(saved)}</style></head><body>${PROBE}</body></html>`);
+      await page.setContent(`<!doctype html><html><head><style>${layoutRoot(base100)}</style></head><body>${PROBE}</body></html>`);
       await page.addStyleTag({content: read('shopify/assets/critical.css')});
       await page.addStyleTag({content: controlsCss});
       if (scaleCss) await page.addStyleTag({content: scaleCss});
@@ -133,19 +136,19 @@ const num = v => parseFloat(v);
     for (const [width, id] of [[375, 'theme_scale_mobile'], [768, 'theme_scale_tablet'], [1366, 'theme_scale_desktop']]) {
       await build('', width); const base = await measure(page);
       for (const v of [90, 110]) {
-        await build(renderScale({...saved, [id]: v}), width);
+        await build(renderScale({...base100, [id]: v}), width);
         expectScaled(base, await measure(page), v / 100, v / 100, `${id}=${v} at ${width}px`);
         // The other breakpoints' sliders do not reach this width.
         const others = IDS.slice(0, 3).filter(x => x !== id);
-        await build(renderScale({...saved, [others[0]]: v, [others[1]]: v}), width);
+        await build(renderScale({...base100, [others[0]]: v, [others[1]]: v}), width);
         assert.deepEqual(await measure(page), base, `${others.join(', ')} leave ${width}px alone`);
       }
     }
     checks++;
     await build('', 1366); const base1366 = await measure(page);
-    await build(renderScale({...saved, theme_scale_desktop: 110, theme_scale_text: 90}), 1366);
+    await build(renderScale({...base100, theme_scale_desktop: 110, theme_scale_text: 90}), 1366);
     expectScaled(base1366, await measure(page), 0.99, 1.1, 'desktop 110 with text 90');
-    await build(renderScale({...saved, theme_scale_spacing: 120}), 1366);
+    await build(renderScale({...base100, theme_scale_spacing: 120}), 1366);
     expectScaled(base1366, await measure(page), 1, 1.2, 'spacing 120');
     checks++;
 
@@ -225,7 +228,7 @@ const num = v => parseFloat(v);
         assert(shot0.equals(shot1), `${width}px: at 100% the screenshot is identical`);
         const id = width < 768 ? 'theme_scale_mobile' : width < 1025 ? 'theme_scale_tablet' : 'theme_scale_desktop';
         for (const v of [90, 110]) {
-          await inject(renderScale({...saved, [id]: v})); await settle();
+          await inject(renderScale({...base100, [id]: v})); await settle();
           assert.equal(await p.evaluate(() => getComputedStyle(document.documentElement).fontSize), `${10 * v / 100}px`, `${width}px at ${v}%: root size`);
           if (process.env.SCALE_SHOTS) await p.screenshot({path: path.join(process.env.SCALE_SHOTS, `scale-${width}-${v}.png`), fullPage: true});
           const sw = await p.evaluate(() => [document.documentElement.scrollWidth, document.body.scrollWidth, innerWidth]);

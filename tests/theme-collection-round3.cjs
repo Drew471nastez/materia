@@ -272,14 +272,16 @@ const headingState = p => p.evaluate(() => {
     await group('4 Filter button on the theme button contract', async () => {
       const ctx = await browser.newContext({viewport: {width: 375, height: 800}, hasTouch: true});
       const p = await ctx.newPage();
-      await serve(p, renderCollection());
+      // Pinned to the default style: the creator may pick another (theme-collection-round4 covers those).
+      await serve(p, renderCollection({extra: {toolbar_button_style: 'theme'}}));
       const btn = p.locator('[data-facets-open]');
       assert.equal(await btn.getAttribute('data-theme-button'), 'secondary');
       assert.ok(/\bbtn\b/.test(await btn.getAttribute('class')) && /\bbtn-secondary\b/.test(await btn.getAttribute('class')), 'theme classes');
       assert.equal(await p.getAttribute('.facets-panel__done', 'data-theme-button'), 'primary');
       const look = () => btn.evaluate(el => { const cs = getComputedStyle(el); return {pt: cs.paddingTop, pl: cs.paddingLeft, fs: cs.fontSize, radius: cs.borderTopLeftRadius, bg: cs.backgroundColor, color: cs.color, border: cs.borderTopColor, bw: cs.borderTopWidth}; });
       await p.evaluate(() => { const s = document.documentElement.style; s.setProperty('--btn-padding-y', '12px'); s.setProperty('--btn-padding-x', '30px'); s.setProperty('--btn-font-size', '17px'); s.setProperty('--btn-radius', '22px'); s.setProperty('--btn-secondary-bg-color', 'rgb(1, 2, 3)'); s.setProperty('--btn-secondary-color', 'rgb(250, 250, 250)'); s.setProperty('--btn-secondary-border-color', 'rgb(9, 8, 7)'); s.setProperty('--btn-border-width', '2px'); });
-      assert.deepEqual(await look(), {pt: '12px', pl: '30px', fs: '17px', radius: '22px', bg: 'rgb(1, 2, 3)', color: 'rgb(250, 250, 250)', border: 'rgb(9, 8, 7)', bw: '2px'}, 'size, corners and colours from Theme settings > Buttons');
+      // Padding is the toolbar's own compact size (collection-page.css); the rest follows Theme settings > Buttons.
+      { const {pt, pl, ...rest} = await look(); assert.deepEqual(rest, {fs: '17px', radius: '22px', bg: 'rgb(1, 2, 3)', color: 'rgb(250, 250, 250)', border: 'rgb(9, 8, 7)', bw: '2px'}, 'corners, type and colours from Theme settings > Buttons'); }
       await btn.evaluate(el => el.setAttribute('data-button-appearance', 'outline'));
       assert.equal((await look()).bg, 'rgba(0, 0, 0, 0)', 'the theme appearance applies (outline)');
       assert.ok(!/facets-toolbar__filter\s*\{[^}]*--mb-(padding|font-size|radius)/.test(read('shopify/assets/collection-page.css')), 'no local size over the theme settings');

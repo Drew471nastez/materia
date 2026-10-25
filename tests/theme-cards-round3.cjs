@@ -496,7 +496,7 @@ async function snapshot(page) {
         ['hidden_price', false, true],
         ['show_vendor', true, false],
         ['show_short_description', true, false],
-        ['short_description_words', 5, 30],
+        ['short_description_words', 5, 30, null, {show_short_description: true}],
         ['show_rate', true, false],
         ['show_variant', true, false],
         ['show_add_cart', true, false],
