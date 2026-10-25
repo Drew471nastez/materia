@@ -7482,7 +7482,8 @@ class VariantGroupDetail extends VariantRadiosDetail {
                 }
                 parentContainer.innerHTML += item.outerHTML;
               }
-              if (elementFeatureProduct) {
+              // Never empties the gallery: only a filtered set with pictures replaces it.
+              if (elementFeatureProduct && slidePreviewFeatureProduct && parentContainer.querySelector(".media-gallery__image, .swiper-slide")) {
                 slidePreviewFeatureProduct.innerHTML =
                   parentContainer.innerHTML;
                 wrapperFeatureProduct.updateSlide();
@@ -9041,7 +9042,15 @@ class SlideWithThumbs extends HTMLElement {
   init() {
     const near = window.MateriaNearView;
     if (near) near.when(this, () => this.start());
-    else this.start();
+    else if (this.isConnected) this.start();
+    // Made outside the page (a builder redraw parsed first): built once it is in.
+    else this._startOnConnect = true;
+  }
+
+  connectedCallback() {
+    if (!this._startOnConnect || this.globalSlide) return;
+    this._startOnConnect = false;
+    this.init();
   }
 
   ensureStarted() {
@@ -9356,6 +9365,13 @@ customElements.define("recently-viewed-products", ProductRecentlyViewed);
 class MediaGallery extends HTMLElement {
   constructor() {
     super();
+  }
+  // Every gallery the page gets (first load, a builder redraw with or
+  // without an event, a new product picked) is checked by product-page-ui.js
+  // so it never stays blank: pictures shown once loaded, the slider built
+  // and measured.
+  connectedCallback() {
+    if (typeof window.MateriaGalleryHeal === "function") window.MateriaGalleryHeal(this);
   }
   setActiveMedia(mediaId, prepend) {
     const activeMedia = this.querySelector(

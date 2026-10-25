@@ -15,8 +15,12 @@ class ZoomAction extends HTMLElement {
   }
   init() {
     if (this.type === 'no_zoom') return;
-    window.addEventListener('resize', this.responsive.bind(this));
-    window.addEventListener('load', this.responsive.bind(this));
+    this._onResize = this.responsive.bind(this);
+    window.addEventListener('resize', this._onResize);
+    // A gallery drawn after the page loaded (a builder redraw, a new product
+    // picked, a section further down) sets its zoom up now: 'load' is past.
+    if (document.readyState === 'complete') setTimeout(() => { if (this.isConnected) this.responsive(); }, 0);
+    else window.addEventListener('load', this._onResize, { once: true });
   }
   initLightBox() {
     if (this.lightbox !== null) return;
@@ -170,7 +174,7 @@ class ZoomAction extends HTMLElement {
       if (this.type !== 'open_lightbox') {
         if (this.drift !== null) {
           this.drift.destroy();
-          this.drift == null;
+          this.drift = null;
         }
         this.initLightBox();
       } else {
@@ -196,8 +200,9 @@ class ZoomAction extends HTMLElement {
   }
 
   disconnectedCallback() {
-    window.removeEventListener('resize', this.responsive.bind(this));
-    window.removeEventListener('load', this.responsive.bind(this));
+    if (!this._onResize) return;
+    window.removeEventListener('resize', this._onResize);
+    window.removeEventListener('load', this._onResize);
   }
 }
 customElements.define('zoom-action', ZoomAction);

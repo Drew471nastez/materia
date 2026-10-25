@@ -998,5 +998,242 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", function () { paintWishlist(); });
   else paintWishlist();
 
-  window.MateriaProductUi = { openSheet: openSheet, closeSheet: closeSheet, openLightbox: openLightbox, closeLightbox: closeLightbox, scanVideos: scanVideos, paintWishlist: paintWishlist };
+  /* ---------------------------------------------------------------------
+     6. Sticky media (Main product, Featured product, the product spotlight):
+        on a computer the gallery and the information column are both
+        sticky under the header (product-page-ui.css), so whichever is
+        shorter stays in view while the other scrolls. A column taller than
+        the screen would have its end cut off, so it scrolls with the page
+        until its end shows and sticks there (--mt-sticky-tall). Measured
+        only when a column or the window changes size: nothing on scroll.
+     ------------------------------------------------------------------- */
+  var STICKY = "media-gallery.sticky.top-30, .product-detail__information > .sticky.top-30, [data-mt-sticky]";
+  var wideQuery = window.matchMedia ? window.matchMedia("(min-width: 768px)") : null;
+  var stickyEls = new Set();
+  var stickyRo = null;
+  var stickyFrame = 0;
+  var stickyHeader = 0;
+  function headerTop() {
+    var css = getComputedStyle(document.documentElement);
+    var v = parseFloat(css.getPropertyValue("--product-sticky-top")) || parseFloat(css.getPropertyValue("--sticky-top")) || 0;
+    // The header comes back on scrolling up: leave it room.
+    if (v > stickyHeader) stickyHeader = v;
+    return stickyHeader;
+  }
+  function measureSticky() {
+    stickyFrame = 0;
+    var on = !wideQuery || wideQuery.matches;
+    var vh = window.innerHeight;
+    var room = vh - headerTop() - 40;
+    var writes = [];
+    stickyEls.forEach(function (el) {
+      if (!el.isConnected) {
+        stickyEls.delete(el);
+        if (stickyRo) stickyRo.unobserve(el);
+        return;
+      }
+      var h = el.offsetHeight;
+      writes.push([el, on && h > room ? Math.round(vh - h - 20) + "px" : null]);
+    });
+    writes.forEach(function (w) {
+      var el = w[0];
+      if (w[1] == null) {
+        if (el.classList.contains("mt-sticky-tall")) {
+          el.classList.remove("mt-sticky-tall");
+          el.style.removeProperty("--mt-sticky-tall");
+        }
+        return;
+      }
+      if (el.style.getPropertyValue("--mt-sticky-tall") !== w[1]) el.style.setProperty("--mt-sticky-tall", w[1]);
+      if (!el.classList.contains("mt-sticky-tall")) el.classList.add("mt-sticky-tall");
+    });
+  }
+  function scheduleSticky() {
+    if (!stickyFrame) stickyFrame = requestAnimationFrame(measureSticky);
+  }
+  function scanSticky(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    var found = Array.prototype.slice.call(scope.querySelectorAll(STICKY));
+    if (scope.matches && scope.matches(STICKY)) found.push(scope);
+    found.forEach(function (el) {
+      if (stickyEls.has(el)) return;
+      stickyEls.add(el);
+      if (!stickyRo && "ResizeObserver" in window) stickyRo = new ResizeObserver(scheduleSticky);
+      if (stickyRo) stickyRo.observe(el);
+    });
+    scheduleSticky();
+  }
+  window.addEventListener("resize", scheduleSticky);
+
+  /* ---------------------------------------------------------------------
+     7. Gallery health. A product gallery is never left blank: its pictures
+        show as soon as they have loaded (the theme's reveal class could
+        stay on a picture drawn again by the builder, an empty white box
+        with only the arrows), the slider is built once the gallery is in
+        view, built again if a redraw kept the element but reset its
+        markup, and measured again when its slides or width changed.
+        Runs for every gallery: on load, on each builder redraw (with or
+        without an event, media-gallery tells it), after a new product is
+        picked, and each time a gallery comes into view.
+     ------------------------------------------------------------------- */
+  function revealImage(img) {
+    img.classList.remove("bls-loading-image");
+    var motion = img.closest("motion-element");
+    if (motion) motion.classList.remove("bls-loading-image");
+  }
+  // A picture the image service could not resize is asked for as uploaded.
+  function originalOf(src) {
+    var at = src ? src.indexOf("/_next/image?") : -1;
+    if (at < 0) return "";
+    try {
+      return new URL(src, location.href).searchParams.get("url") || "";
+    } catch (err) {
+      return "";
+    }
+  }
+  function settle(img) {
+    var frame = img._mtFrame;
+    if (frame) frame.classList.remove("mt-media-loading");
+    revealImage(img);
+  }
+  function healImages(gallery) {
+    gallery.querySelectorAll("img").forEach(function (img) {
+      if (img.complete) {
+        if (!img.naturalWidth && !img._mtRetried && img.getAttribute("src")) onError(img);
+        else settle(img);
+        return;
+      }
+      if (img._mtWatch) return;
+      img._mtWatch = true;
+      // Until it arrives the slide shows a soft placeholder, never a blank box.
+      img._mtFrame = img.closest('[style*="--aspect-ratio"]');
+      if (img._mtFrame) img._mtFrame.classList.add("mt-media-loading");
+      img.addEventListener("load", function () { settle(img); });
+      img.addEventListener("error", function () { onError(img); });
+    });
+  }
+  function onError(img) {
+    var original = img._mtRetried ? "" : originalOf(img.currentSrc || img.getAttribute("src"));
+    img._mtRetried = true;
+    if (original) {
+      img.removeAttribute("srcset");
+      img.removeAttribute("sizes");
+      img.src = original;
+      return;
+    }
+    settle(img);
+  }
+  function rebuildSlider(holder) {
+    try { if (holder.thumbnailSlide && !holder.thumbnailSlide.destroyed) holder.thumbnailSlide.destroy(true, true); } catch (err) {}
+    try { if (holder.globalSlide && !holder.globalSlide.destroyed) holder.globalSlide.destroy(true, true); } catch (err) {}
+    holder.globalSlide = null;
+    holder.thumbnailSlide = null;
+    if (typeof holder.start === "function") holder.start();
+  }
+  function healSlider(gallery, inView) {
+    var holder = gallery.querySelector("slide-with-thumbs");
+    if (!holder || !holder.isConnected) return;
+    var el = holder.querySelector(".swiper-wrapper-preview");
+    if (!el) return;
+    var sw = el.swiper;
+    if (!sw || sw.destroyed) {
+      if (holder.globalSlide && (holder.globalSlide.destroyed || holder.globalSlide.el !== el)) {
+        holder.globalSlide = null;
+        holder.thumbnailSlide = null;
+      }
+      // In view and still not built (its near-view call was missed).
+      if (inView && !holder.globalSlide && typeof holder.ensureStarted === "function" && window.Swiper) holder.ensureStarted();
+      return;
+    }
+    // The element was kept but its markup drawn again: the slider lost its frame.
+    if (!el.classList.contains("swiper-initialized")) {
+      rebuildSlider(holder);
+      return;
+    }
+    var slides = el.querySelectorAll(":scope > .swiper-wrapper > .swiper-slide");
+    var same = slides.length === sw.slides.length;
+    for (var i = 0; same && i < slides.length; i++) if (slides[i] !== sw.slides[i]) same = false;
+    var width = el.clientWidth;
+    if (!same || (width && Math.abs((sw.width || 0) - width) > 1)) sw.update();
+    if (!slides.length) return;
+    if (sw.activeIndex > slides.length - 1) sw.slideTo(0, 0, false);
+    if (!inView || !width) return;
+    // The current slide must be inside the frame.
+    var active = sw.slides[sw.activeIndex];
+    if (!active) return;
+    var a = active.getBoundingClientRect();
+    var b = el.getBoundingClientRect();
+    var horizontal = typeof sw.isHorizontal !== "function" || sw.isHorizontal();
+    var outside = horizontal ? (a.width < 1 || a.right <= b.left + 1 || a.left >= b.right - 1) : (a.height < 1 || a.bottom <= b.top + 1 || a.top >= b.bottom - 1);
+    if (outside) {
+      sw.update();
+      sw.slideTo(sw.activeIndex, 0, false);
+    }
+  }
+  function healGallery(gallery, inView) {
+    if (!gallery || !gallery.isConnected) return;
+    healImages(gallery);
+    try { healSlider(gallery, inView); } catch (err) {}
+  }
+  var galleryIo = null;
+  var galleriesSeen = typeof WeakSet === "function" ? new WeakSet() : null;
+  function watchGallery(gallery) {
+    if (!gallery || gallery.nodeType !== 1) return;
+    healImages(gallery);
+    scanSticky(gallery);
+    if (!("IntersectionObserver" in window)) { healGallery(gallery, true); return; }
+    if (!galleryIo) {
+      galleryIo = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          var g = entry.target;
+          // After the slider's own near-view build (a task) has had its turn.
+          setTimeout(function () { healGallery(g, true); }, 60);
+        });
+      }, { rootMargin: "200px 0px" });
+    }
+    if (galleriesSeen) {
+      if (galleriesSeen.has(gallery)) return;
+      galleriesSeen.add(gallery);
+    }
+    galleryIo.observe(gallery);
+  }
+  function galleriesIn(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    var list = Array.prototype.slice.call(scope.querySelectorAll("media-gallery"));
+    if (scope.matches && scope.matches("media-gallery")) list.push(scope);
+    return list;
+  }
+  function onRedraw(e) {
+    var root = e && e.target && e.target.querySelectorAll ? e.target : document;
+    scanSticky(root);
+    galleriesIn(root).forEach(function (g) {
+      watchGallery(g);
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { healGallery(g, true); });
+      });
+    });
+  }
+  window.MateriaGalleryHeal = watchGallery;
+  function firstScan() {
+    scanSticky(document);
+    galleriesIn(document).forEach(watchGallery);
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", firstScan);
+  else firstScan();
+  window.addEventListener("load", function () {
+    scheduleSticky();
+    galleriesIn(document).forEach(function (g) { healImages(g); });
+  });
+  document.addEventListener("storelib:section-load", onRedraw);
+  document.addEventListener("shopify:section:load", onRedraw);
+  // A setting drawn in place (no redraw): its section's galleries are checked.
+  document.addEventListener("storelib:settings-change", function (e) {
+    var d = e && e.detail;
+    if (!d || !d.section || d.live) return;
+    var section = document.getElementById("shopify-section-" + d.section);
+    if (section) requestAnimationFrame(function () { onRedraw({ target: section }); });
+  });
+
+  window.MateriaProductUi = { openSheet: openSheet, closeSheet: closeSheet, openLightbox: openLightbox, closeLightbox: closeLightbox, scanVideos: scanVideos, paintWishlist: paintWishlist, healGallery: healGallery, scanSticky: scanSticky };
 })();
