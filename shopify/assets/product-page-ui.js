@@ -227,10 +227,104 @@
         if (document.contains(opener)) opener.focus({ preventScroll: true });
       }
     }
-    if (reduced()) return finish();
     var panel = dialog.querySelector(".mt-sheet__panel") || dialog;
-    panel.addEventListener("transitionend", finish, { once: true });
-    setTimeout(finish, 380);
+    panel.style.transform = "";
+    panel.style.transition = "";
+    if (reduced()) return finish();
+    // The panel's own slide ends it: a hover fade on a button inside, or the
+    // quicker opacity fade on larger screens, must not cut it short.
+    function onEnd(ev) {
+      if (ev.target !== panel || ev.propertyName !== "transform") return;
+      panel.removeEventListener("transitionend", onEnd);
+      finish();
+    }
+    panel.addEventListener("transitionend", onEnd);
+    setTimeout(function () {
+      panel.removeEventListener("transitionend", onEnd);
+      finish();
+    }, 420);
+  }
+
+  /* On a phone the sheet follows a finger dragged down from its top bar or
+     from a body scrolled to the top, and closes when let go past a quarter
+     of its height or flicked down; otherwise it springs back. */
+  var drag = null;
+  document.addEventListener("touchstart", function (e) {
+    if (e.touches.length !== 1) return;
+    var target = e.target;
+    var panel = target && target.closest ? target.closest("dialog.mt-sheet.is-open .mt-sheet__panel") : null;
+    if (!panel || window.matchMedia("(min-width: 768px)").matches) return;
+    if (target.closest("button, a, input, select, textarea, label")) return;
+    var body = panel.querySelector(".mt-sheet__body");
+    var inHead = !!target.closest(".mt-sheet__head");
+    if (!inHead && body && body.scrollTop > 0) return;
+    var touch = e.touches[0];
+    drag = { panel: panel, y: touch.clientY, x: touch.clientX, dy: 0, t: now(), v: 0, moving: false };
+    // Only the open sheet listens to a moving finger, so the page keeps its
+    // fast scrolling everywhere else.
+    if (!panel._mtDrag) {
+      panel._mtDrag = true;
+      panel.addEventListener("touchmove", onDragMove, { passive: false });
+    }
+  }, { passive: true });
+  function onDragMove(e) {
+    if (!drag || drag.panel !== e.currentTarget) return;
+    var touch = e.touches[0];
+    var dy = touch.clientY - drag.y, dx = touch.clientX - drag.x;
+    if (!drag.moving) {
+      // A sideways swipe (a wide table) or a push upwards scrolls instead.
+      if (Math.abs(dx) > Math.abs(dy) || dy < 0) {
+        if (Math.abs(dx) > 6 || dy < -6) drag = null;
+        return;
+      }
+      if (dy < 6) return;
+      drag.moving = true;
+      drag.panel.style.transition = "none";
+    }
+    if (e.cancelable) e.preventDefault();
+    var t = now();
+    var next = Math.max(0, dy);
+    drag.v = (next - drag.dy) / Math.max(1, t - drag.t);
+    drag.t = t;
+    drag.dy = next;
+    drag.panel.style.transform = "translate3d(0," + next + "px,0)";
+  }
+  function endDrag() {
+    if (!drag) return;
+    var d = drag;
+    drag = null;
+    if (!d.moving) return;
+    var dialog = d.panel.closest("dialog");
+    // Let go: carry on from where the finger left it, down and out or back.
+    d.panel.getBoundingClientRect();
+    d.panel.style.transition = "";
+    if (d.dy > d.panel.offsetHeight * 0.25 || d.v > 0.5) {
+      lastHandled = now();
+      dialog.classList.remove("is-open");
+      d.panel.style.transform = "";
+      closeSheet(dialog);
+    } else {
+      d.panel.style.transform = "";
+    }
+  }
+  document.addEventListener("touchend", endDrag, { passive: true });
+  document.addEventListener("touchcancel", endDrag, { passive: true });
+
+  /* In the builder, selecting a size guide block opens its sheet so it can
+     be seen while its settings change; leaving the block closes it. */
+  if (editor) {
+    ["shopify:block:select", "shopify:block:deselect"].forEach(function (type) {
+      document.addEventListener(type, function (e) {
+        var root = e.target;
+        if (!root || !root.querySelector) return;
+        var opener = root.matches && root.matches("[data-mt-sheet-open]") ? root : root.querySelector("[data-mt-sheet-open]");
+        var dialog = opener && document.getElementById(opener.getAttribute("aria-controls"));
+        if (!dialog || dialog.tagName !== "DIALOG" || !dialog.classList.contains("mt-sheet")) return;
+        // A guide still waiting for its chart stays shut.
+        if (type === "shopify:block:select") { if (!opener.closest("[hidden]")) openSheet(dialog, opener); }
+        else closeSheet(dialog);
+      });
+    });
   }
   document.addEventListener("click", function (e) {
     var t = e.target;
