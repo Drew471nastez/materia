@@ -1325,7 +1325,7 @@ eventCollectionShopify.init();
       const results = this.querySelector('[data-facets-part="results"]');
       this._resultEntrance?.cancel();
       if (results?.animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        this._resultEntrance = results.animate([{opacity:.72,transform:'translateY(3px)'},{opacity:1,transform:'none'}],{duration:180,easing:'ease-out'});
+        this._resultEntrance = results.animate([{opacity:.72},{opacity:1}],{duration:180,easing:'ease-out'});
       }
       this.markSort();
       this.showClearFallback();
