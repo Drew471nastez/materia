@@ -22,13 +22,23 @@
 <style data-rs-bulletproof>
   {%- if section.settings.reset_spacing -%}
     /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
-    #shopify-section-{{ section.id }},
     #shopify-section-{{ section.id }} > .section,
     #shopify-section-{{ section.id }} > section,
     #shopify-section-{{ section.id }} > div,
     #shopify-section-{{ section.id }} > div > .section {
       margin-top: 0 !important;
       margin-bottom: 0 !important;
+    }
+    /* The reset removes the theme's default gap; the section's own margin sliders still apply on top of it */
+    #shopify-section-{{ section.id }}#shopify-section-{{ section.id }} {
+      margin-top: {{ section.settings.section_margin_top_mobile | default: 0 }}px !important;
+      margin-bottom: {{ section.settings.section_margin_bottom_mobile | default: 0 }}px !important;
+    }
+    @media (min-width: 768px) {
+      #shopify-section-{{ section.id }}#shopify-section-{{ section.id }} {
+        margin-top: {{ section.settings.section_margin_top_desktop | default: 0 }}px !important;
+        margin-bottom: {{ section.settings.section_margin_bottom_desktop | default: 0 }}px !important;
+      }
     }
     #shopify-section-{{ section.id }} + .shopify-section,
     #shopify-section-{{ section.id }} + section,
@@ -98,11 +108,7 @@
     {%- when 'full_width' -%}
       /* full bleed — no constraints */
   {%- endcase -%}
-  /* Reset spacing */
-  {%- if section.settings.reset_spacing -%}
-    #shopify-section-{{ section.id }} { margin-bottom: 0 !important; margin-top: 0 !important; }
-    #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
-  {%- endif -%}
+  /* Reset spacing is handled in the data-rs-bulletproof block above, keeping the margin sliders live */
 {% comment %}{% endcomment %}</style>
 <!-- ti-theme:start -->
 {%- liquid
@@ -184,10 +190,15 @@
   }
 
   /* Only recolor when explicitly enabled; never force fills */
-  .scrolling-marquee-1 .scrolling__marquee-svg-wrap[data-colorize="true"] svg,
-  .scrolling-marquee-1 .scrolling__marquee-svg-wrap[data-colorize="true"] svg * {
-    stroke: var(--svg-color, currentColor) !important; /* why: recolor strokes only, preserve fills */
+  .scrolling-marquee-1 .scrolling__marquee-svg-wrap[data-colorize="true"] svg:not([fill="none"]),
+  .scrolling-marquee-1 .scrolling__marquee-svg-wrap[data-colorize="true"] svg [fill]:not([fill="none"]) {
+    fill: var(--svg-color, currentColor) !important;
   }
+  .scrolling-marquee-1 .scrolling__marquee-svg-wrap[data-colorize="true"] svg[stroke]:not([stroke="none"]),
+  .scrolling-marquee-1 .scrolling__marquee-svg-wrap[data-colorize="true"] svg [stroke]:not([stroke="none"]) {
+    stroke: var(--svg-color, currentColor) !important;
+  }
+  .scrolling-marquee-1 .scrolling__marquee-svg-wrap { display: flex; align-items: center; justify-content: center; line-height: 0; }
 {% endstylesheet %}
 
 {%- capture html_id -%}
@@ -203,7 +214,7 @@
     --scrolling-padding-bottom: {{ section.settings.mobile_bottom_padding }}px;
     --scrolling-background-color: {% if section.settings.background_gradient != blank %}{{ section.settings.background_gradient }}{% else %}{% render 'scheme-color', color: section.settings.background_color, fallback: 'var(--color-background)' %}{% endif %} !important;
     --scrolling-text-color: {% render 'scheme-color', color: section.settings.text_color, fallback: 'var(--color-text)' %} !important;
-    --scrolling-animation-duration: {{ section.settings.duration }}s;
+    --scrolling-animation-duration: {% if section.settings.duration > 0 %}{{ section.settings.duration }}{% else %}30{% endif %}s;
     --scrolling-text-size: {{ section.settings.mobile_text_size }}px;
     --scrolling-section-width: {% if section.settings.inner_width > 0 %}{{ section.settings.inner_width }}px{% else %}none{% endif %};
     --scrolling-pause-on-hover: {% if section.settings.pause_on_hover %}paused{% else %}running{% endif %};
@@ -219,7 +230,18 @@
       --scrolling-text-size: {{ section.settings.desktop_text_size }}px;
     }
   }
+  {%- if section.settings.reveal and __ti_scroll_animation == 'none' -%}
+  @keyframes scrollingMarqueeReveal {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: none; }
+  }
+  #scrolling-{{ section.id }} { animation: scrollingMarqueeReveal 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  @supports (animation-timeline: view()) {
+    #scrolling-{{ section.id }} { animation-duration: auto; animation-timeline: view(); animation-range: entry 0% entry 80%; }
+  }
+  {%- endif -%}
   @media (prefers-reduced-motion: reduce) {
+    #scrolling-{{ section.id }} { animation: none; }
     #scrolling-{{ section.id }} .scrolling__marquee { overflow-x: auto; }
     #scrolling-{{ section.id }} .scrolling__marquee-wrapper { animation: none; }
   }
@@ -228,9 +250,11 @@
 {% capture marquee_wrapper %}
   <div class="scrolling__marquee-wrapper">
     {%- for block in section.blocks -%}
+      {%- if block.settings.text != blank -%}
       <div class="scrolling__marquee-item">
         {{ block.settings.text }}
       </div>
+      {%- endif -%}
 
       {% if block.settings.svg_icon != blank %}
         <div
@@ -253,21 +277,13 @@
         <div class="scrolling__marquee-item">
           {{ block.settings.image | image_url: width: 60 | image_tag: loading: 'lazy', class: "scrolling__marquee-img" }}
         </div>
-      {% else %}
-        {%- capture demo_mq -%}{%- render 'demo-image', key: block.id -%}{%- endcapture -%}
-        {%- assign demo_mq = demo_mq | strip -%}
-        {%- if demo_mq != blank -%}
-          <div class="scrolling__marquee-item">
-            <img src="{{ demo_mq }}" class="scrolling__marquee-img" loading="lazy" alt="">
-          </div>
-        {%- endif -%}
       {% endif %}
     {% endfor %}
   </div>
 {% endcapture %}
 
 <div id="scrolling-{{ section.id }}" class="scrolling-{{ section.id }} scrolling-marquee-1 color-{{ color_scheme }} gradient">
-  <div {{ html_id }} class="{{ 'scrolling__marquee ' | append: section.settings.html_class | strip }}">
+  <div {{ html_id }} class="{{ 'scrolling__marquee ' | append: section.settings.html_class | replace: ',', ' ' | strip }}">
     {%- for i in (1..section.settings.repeat_count) -%}
       {{ marquee_wrapper }}
     {%- endfor -%}
