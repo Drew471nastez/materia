@@ -840,6 +840,96 @@ function HoverIntent(exitTime, elements, userConfig) {
   // Leaving the phone layout with the drawer open would leave the page locked.
   phone.addEventListener?.("change", () => { if (!phone.matches && isOpen()) close(true); });
 
+  /* Builder: selecting a header menu block shows what it draws. A mega menu,
+     a link style or a link's phone banner opens that link's dropdown (on a
+     phone, the menu drawer at that link) and keeps it open while the block
+     is selected, through redraws; a block whose link title is not in the
+     menu, or a banner that only shows on phones, says so. */
+  let shown = null;
+  let note = null;
+  const isDesign = () => {
+    try {
+      return window.self !== window.top || !!window.Shopify?.designMode || html.classList.contains("shopify-design-mode");
+    } catch (e) {
+      return true;
+    }
+  };
+  function builderNote(text) {
+    if (!note) {
+      note = document.createElement("div");
+      note.className = "mm-builder-note";
+      note.setAttribute("role", "status");
+    }
+    note.textContent = text;
+    document.body.append(note);
+  }
+  function hideNote() {
+    note?.remove();
+  }
+  function idsOf(event) {
+    const ids = [];
+    const blockId = event.detail?.blockId;
+    if (blockId != null) ids.push(String(blockId));
+    const own = event.target?.closest?.("[data-mm-blocks]");
+    if (own) ids.push(...own.dataset.mmBlocks.split(/\s+/));
+    return ids.filter(Boolean);
+  }
+  function itemFor(ids) {
+    const inDrawer = phone.matches;
+    return [...document.querySelectorAll(".navigation li[data-mm-blocks]")].find((li) =>
+      (li.hasAttribute("data-mm-orphan") || !!li.closest(".navigation.mobile") === inDrawer) &&
+      li.dataset.mmBlocks.split(/\s+/).some((id) => ids.includes(id)));
+  }
+  function showBlock(ids, banner) {
+    const li = itemFor(ids);
+    if (!li) {
+      if (banner) {
+        if (phone.matches) open();
+        else builderNote("This banner shows at the foot of the menu on phones and tablets.");
+      }
+      return false;
+    }
+    shown = { ids, banner };
+    if (li.hasAttribute("data-mm-orphan")) {
+      const text = li.dataset.mmText;
+      builderNote(text
+        ? `No top-level link in the header menu is called “${text}”. Type the title of a link from Navigation, for example Shop.`
+        : "Type the title of a top-level link from Navigation, for example Shop, to show this under it.");
+      return true;
+    }
+    hideNote();
+    if (phone.matches) {
+      open();
+      const item = li.querySelector(":scope > menu-item");
+      if (item && li.querySelector(":scope > .submenu") && !item.classList.contains("is-open")) openLevel(item);
+    } else if (banner) {
+      builderNote("This banner shows inside this link's menu on phones and tablets.");
+    } else if (li.classList.contains("menu-parent")) {
+      desktopEnter(li);
+    }
+    return true;
+  }
+  function hideBlock() {
+    hideNote();
+    if (!shown) return;
+    shown = null;
+    if (phone.matches) close();
+    else document.querySelectorAll(".navigation.horizontal li.menu-parent.visible").forEach(desktopExit);
+  }
+  document.addEventListener("shopify:block:select", (event) => {
+    if (!isDesign() || !event.target?.closest?.("header, .section-header, [id*='header']")) return;
+    const ids = idsOf(event);
+    if (!ids.length && !event.target.closest(".menu-mobile-banner")) return;
+    showBlock(ids, !!event.target.closest(".menu-mobile-banner"));
+  });
+  document.addEventListener("shopify:block:deselect", (event) => {
+    if (shown || note?.isConnected) hideBlock();
+  });
+  // A redraw while a block is selected draws the header closed: open it again.
+  ["storelib:section-load", "shopify:section:load"].forEach((type) => document.addEventListener(type, () => {
+    if (shown) requestAnimationFrame(() => shown && showBlock(shown.ids, shown.banner));
+  }));
+
   window.MateriaMenu = { open, close, toggle, sync, upgrade, upgradeEl, resetAll, openLevel, backLevel, isOpen, phone };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => upgrade());
   else upgrade();
