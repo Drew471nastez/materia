@@ -145,7 +145,8 @@ const liquidless=t=>t.replace(/\{\{\s*fp\s*\}\}/g,":where(html:not([data-font-pr
   for(const id of ['body_font_size','body_font_weight','body_line_height','heading_font_scale','heading_font_weight','heading_line_height','subheading_font_weight','heading_text_transform','heading_letter_spacing','menu_font','button_font','font_body_system','font_heading_system','font_body_google_family','font_heading_google_family','typography_preset','theme_font_priority'])assert(ids.has(id),id);checks++;
   // New settings carry their default in config/settings.json.
   const values=JSON.parse(read('config/settings.json')).shopify;
-  for(const id of ['font_body_google_family','font_heading_google_family'])assert.equal(values[id],'none',id);checks++;
+  // Saved, with the default or the creator's own pick from the list.
+  for(const id of ['font_body_google_family','font_heading_google_family']){const opts=typo.find(s=>s.id===id).options.map(o=>o.value);assert(id in values&&opts.includes(values[id]),id+': '+values[id]);}checks++;
   assert.deepEqual(errors,[]);
   console.log(`${checks} typography setting checks passed`);
  } finally {await browser.close();}
