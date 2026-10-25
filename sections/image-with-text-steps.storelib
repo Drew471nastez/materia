@@ -59,7 +59,8 @@
   assign image_position = s.image_position | default: 'left'
   assign placeholder_src = s.placeholder_url | default: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22%3E%3Crect width=%22400%22 height=%22300%22 fill=%22%23efefef%22/%3E%3Ccircle cx=%22172%22 cy=%22124%22 r=%2214%22 fill=%22%23cfcfcf%22/%3E%3Cpath d=%22M140 192l40-46 25 28 20-18 35 36z%22 fill=%22%23cfcfcf%22/%3E%3C/svg%3E'
 -%}
-{%- capture mk_color -%}{% render 'scheme-color', color: s.marker_color, fallback: 'var(--color-primary)' %}{%- endcapture -%}
+{%- capture mk_base -%}{% render 'scheme-color', color: s.marker_color, fallback: 'var(--color-primary)' %}{%- endcapture -%}
+{%- assign mk_color = 'var(--mk)' -%}
 {%- capture line_color -%}{% render 'scheme-color', color: s.line_color, fallback: 'var(--color-primary)' %}{%- endcapture -%}
 
 <style>
@@ -94,7 +95,7 @@
       {%- when 'fluid_container' -%} max-width: var(--fluid-container-width, 1500px);
       {%- when 'stretch_width' -%} max-width: none;
       {%- when 'full_width' -%} max-width: none;
-      {%- else -%} max-width: var(--page-width, 1300px);
+      {%- else -%} max-width: var(--theme-page-width, var(--page-width, 1300px));
     {%- endcase -%}
     margin-inline: auto;
     display: flex;
@@ -163,20 +164,46 @@
     #shopify-section-{{ sid }} .iws__col { flex: 1 1 0; }
   }
 
+  /* Text blocks follow the colour scheme and Theme settings > Typography
+     until a block's "Use custom style" is switched on. */
   #shopify-section-{{ sid }} .iws__eyebrow {
     margin: 0;
+    font-family: var(--theme-font-body, inherit);
+    font-size: var(--sl-caption-size, 12px);
+    font-weight: var(--sl-caption-weight, 600);
     text-transform: uppercase;
     letter-spacing: 0.18em;
+    color: var(--color-heading);
   }
-  #shopify-section-{{ sid }} .iws__heading {
-    margin: 0;
-    font-weight: var(--heading-weight, 700);
-    line-height: 1.1;
+  #shopify-section-{{ sid }} .iws__eyebrow--custom {
+    font-size: var(--iws-e-size);
+    color: var(--iws-e-color);
+  }
+  #shopify-section-{{ sid }} .iws__heading { margin: 0; color: var(--color-heading); }
+  #shopify-section-{{ sid }} .iws__heading--custom {
+    color: var(--iws-h-color);
+    font-size: var(--iws-h-size-m);
+    font-weight: var(--iws-h-weight);
+    line-height: 1.15;
+  }
+  @container iws (min-width: 760px) {
+    #shopify-section-{{ sid }} .iws__heading--custom { font-size: var(--iws-h-size-d); }
+  }
+  @media (min-width: 900px) {
+    #shopify-section-{{ sid }} .iws__heading--custom { font-size: var(--iws-h-size-d); }
   }
   #shopify-section-{{ sid }} .iws__sub {
     margin: 0;
-    line-height: 1.55;
+    font-family: var(--theme-font-body, inherit);
+    line-height: 1.6;
+    color: var(--color-text);
   }
+  #shopify-section-{{ sid }} .iws__sub--custom {
+    font-size: var(--iws-s-size);
+    color: var(--iws-s-color);
+  }
+  #shopify-section-{{ sid }} .iws__heading a,
+  #shopify-section-{{ sid }} .iws__sub a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
   #shopify-section-{{ sid }} .iws__sub p { margin: 0 0 0.5em; }
   #shopify-section-{{ sid }} .iws__sub p:last-child { margin: 0; }
 
@@ -190,6 +217,7 @@
     gap: 0;
   }
   #shopify-section-{{ sid }} .iws__step {
+    --mk: {{ mk_base }};
     position: relative;
     display: grid;
     grid-template-columns: {{ s.marker_size | default: 32 }}px 1fr;
@@ -241,6 +269,9 @@
     background: transparent;
     color: {{ mk_color }};
   }
+  #shopify-section-{{ sid }} .iws__step--prefixed { grid-template-columns: 1fr; }
+  #shopify-section-{{ sid }} .iws__step--prefixed .iws__step-marker,
+  #shopify-section-{{ sid }} .iws__step--prefixed:not(:last-child)::before { display: none; }
   #shopify-section-{{ sid }} .iws__step--icon .iws__step-marker {
     background: transparent;
     border: 0;
@@ -302,7 +333,9 @@
           {%- assign demo_iws = demo_iws | strip -%}
         {%- endif -%}
         {%- if s.image != blank -%}
-          {{ s.image | image_url: width: 1200 | image_tag: loading: 'lazy', sizes: '(max-width: 760px) 100vw, 50vw', widths: '480, 720, 960, 1200, 1600' }}
+          {{ s.image | image_url: width: 1200 | image_tag: alt: s.image_alt, loading: 'lazy', sizes: '(max-width: 760px) 100vw, 50vw', widths: '480, 720, 960, 1200, 1600' }}
+        {%- elsif s.placeholder_url != blank -%}
+          {{ s.placeholder_url | image_url: width: 1200 | image_tag: alt: s.image_alt, loading: 'lazy', sizes: '(max-width: 760px) 100vw, 50vw' }}
         {%- elsif demo_iws != blank -%}
           <img src="{{ demo_iws }}" alt="" loading="lazy">
         {%- else -%}
@@ -316,55 +349,58 @@
           {%- case block.type -%}
             {%- when 'eyebrow' -%}
               {%- if bs.text != blank -%}
-                <p class="iws__eyebrow"
-                   style="color: {% render 'scheme-color', color: bs.color, fallback: 'var(--color-heading)' %}; font-size: {{ bs.size | default: 12 }}px;"
+                <p class="iws__eyebrow{% if bs.custom_style %} iws__eyebrow--custom{% endif %}"
+                   {% if bs.custom_style %}style="--iws-e-color: {% render 'scheme-color', color: bs.color, fallback: 'var(--color-heading)' %}; --iws-e-size: {{ bs.size | default: 12 }}px;"{% endif %}
                    {{ block.shopify_attributes }}>{{ bs.text | escape }}</p>
               {%- endif -%}
             {%- when 'heading' -%}
               {%- if bs.text != blank -%}
-                <{{ bs.tag | default: 'h2' }} class="iws__heading"
-                   style="color: {% render 'scheme-color', color: bs.color, fallback: 'var(--color-heading)' %}; font-size: {{ bs.size_mobile | default: 28 }}px;"
-                   {{ block.shopify_attributes }}>{{ bs.text | escape }}</{{ bs.tag | default: 'h2' }}>
+                {%- assign h_tag = bs.tag | default: 'h2' -%}
+                <{{ h_tag }} class="iws__heading{% if bs.custom_style %} iws__heading--custom{% endif %}"
+                   {% if bs.custom_style %}style="--iws-h-color: {% render 'scheme-color', color: bs.color, fallback: 'var(--color-heading)' %}; --iws-h-size-m: {{ bs.size_mobile | default: 28 }}px; --iws-h-size-d: {{ bs.size_desktop | default: 40 }}px; --iws-h-weight: {{ bs.weight | default: 700 }};"{% endif %}
+                   {{ block.shopify_attributes }}>{{ bs.text }}</{{ h_tag }}>
               {%- endif -%}
             {%- when 'subheading' -%}
               {%- if bs.text != blank -%}
-                <div class="iws__sub"
-                     style="color: {% render 'scheme-color', color: bs.color, fallback: 'var(--color-text)' %}; font-size: {{ bs.size | default: 15 }}px; max-width: {{ bs.max_width | default: 560 }}px;"
+                <div class="iws__sub{% if bs.custom_style %} iws__sub--custom{% endif %}"
+                     style="max-width: {{ bs.max_width | default: 560 }}px;{% if bs.custom_style %} --iws-s-color: {% render 'scheme-color', color: bs.color, fallback: 'var(--color-text)' %}; --iws-s-size: {{ bs.size | default: 15 }}px;{% endif %}"
                      {{ block.shopify_attributes }}>{{ bs.text }}</div>
               {%- endif -%}
           {%- endcase -%}
         {%- endfor -%}
 
         {%- if step_blocks.size > 0 -%}
-          <ul class="iws__steps">
+          <ol class="iws__steps">
             {%- for block in step_blocks -%}
               {%- assign sb = block.settings -%}
               {%- assign step_class = step_style -%}
-              {%- if sb.icon != blank -%}{%- assign step_class = 'icon' -%}{%- endif -%}
-              <li class="iws__step iws__step--{{ step_class }}" {{ block.shopify_attributes }}>
-                <div class="iws__step-marker"
-                     style="{% if sb.marker_color != blank and sb.marker_color.alpha != 0 %}background: {{ sb.marker_color }}; border-color: {{ sb.marker_color }};{% endif %}">
+              {%- if sb.icon != blank -%}
+                {%- assign step_class = 'icon' -%}
+              {%- elsif step_style == 'icon' -%}
+                {%- assign step_class = 'numbered_outline' -%}
+              {%- endif -%}
+              <li class="iws__step iws__step--{{ step_class }}"{% if sb.marker_color != blank and sb.marker_color.alpha != 0 %} style="--mk: {{ sb.marker_color }};"{% endif %} {{ block.shopify_attributes }}>
+                <div class="iws__step-marker" aria-hidden="true">
                   {%- if sb.icon != blank -%}
                     {{ sb.icon | image_url: width: 80 | image_tag: alt: '', loading: 'lazy' }}
-                  {%- elsif step_style == 'numbered' or step_style == 'numbered_outline' -%}
+                  {%- elsif step_class == 'numbered' or step_class == 'numbered_outline' -%}
                     {{ forloop.index }}
-                  {%- elsif step_style == 'dot' or step_style == 'dot_outline' -%}
                   {%- endif -%}
                 </div>
                 <div class="iws__step-content">
-                  <p class="iws__step-title" style="{% if sb.title_color != blank and sb.title_color.alpha != 0 %}color: {{ sb.title_color }};{% endif %}">
+                  <h3 class="iws__step-title" style="{% if sb.title_color != blank and sb.title_color.alpha != 0 %}color: {{ sb.title_color }};{% endif %}">
                     {%- if step_style == 'prefixed' -%}
                       <span class="iws__step-prefix">{{ forloop.index | prepend: '0' | slice: -2, 2 }}</span>
                     {%- endif -%}
                     {{ sb.title | default: fb_accessibility_step_title | escape }}
-                  </p>
+                  </h3>
                   {%- if sb.description != blank -%}
                     <div class="iws__step-desc" style="{% if sb.description_color != blank and sb.description_color.alpha != 0 %}color: {{ sb.description_color }};{% endif %}">{{ sb.description }}</div>
                   {%- endif -%}
                 </div>
               </li>
             {%- endfor -%}
-          </ul>
+          </ol>
         {%- endif -%}
 
         {%- liquid
@@ -422,12 +458,6 @@
         }
       ],
       "default": "container"
-    },
-    {
-      "type": "color_scheme",
-      "id": "color_scheme",
-      "label": "Color scheme",
-      "default": "default-color-scheme"
     },
     {
       "type": "checkbox",
@@ -513,8 +543,8 @@
     },
     {
       "type": "header",
-      "id": "hdr_11",
-      "label": "Lifestyle image"
+      "id": "hdr_10",
+      "label": "Image"
     },
     {
       "type": "image_picker",
@@ -522,9 +552,17 @@
       "label": "Image"
     },
     {
-      "type": "url",
+      "type": "text",
+      "id": "image_alt",
+      "label": "Image description (alt text)",
+      "info": "Describes the picture for screen readers.",
+      "default": ""
+    },
+    {
+      "type": "image_picker",
       "id": "placeholder_url",
-      "label": "Fallback image URL"
+      "label": "Fallback image",
+      "info": "Shown when no image is picked above."
     },
     {
       "type": "select",
@@ -588,7 +626,7 @@
     {
       "type": "header",
       "id": "hdr_18",
-      "label": "Step style"
+      "label": "Steps"
     },
     {
       "type": "select",
@@ -755,7 +793,14 @@
     {
       "type": "header",
       "id": "hdr_35",
-      "label": "Button styling"
+      "label": "Button"
+    },
+    {
+      "type": "checkbox",
+      "id": "use_theme_button",
+      "label": "Use theme button style",
+      "info": "On: size and shape follow Theme settings › Buttons. Leave the colours empty to follow the theme too.",
+      "default": true
     },
     {
       "type": "color",
@@ -771,12 +816,6 @@
       "type": "color",
       "id": "button_bg_hover",
       "label": "Button background (hover)"
-    },
-    {
-      "type": "checkbox",
-      "id": "use_theme_button",
-      "label": "Use theme button style",
-      "default": true
     },
     {
       "type": "range",
@@ -835,12 +874,24 @@
     {
       "type": "header",
       "id": "hdr_45",
-      "label": "Colors and spacing"
+      "label": "Colours"
+    },
+    {
+      "type": "color_scheme",
+      "id": "color_scheme",
+      "label": "Color scheme",
+      "default": "default-color-scheme"
     },
     {
       "type": "color",
       "id": "section_bg",
-      "label": "Background"
+      "label": "Background",
+      "info": "Leave empty to use the colour scheme's background."
+    },
+    {
+      "type": "header",
+      "id": "hdr_48",
+      "label": "Spacing"
     },
     {
       "type": "range",
@@ -895,14 +946,23 @@
           "default": "Why us"
         },
         {
+          "type": "checkbox",
+          "id": "custom_style",
+          "label": "Use custom style",
+          "info": "Off: follows the colour scheme and Theme settings › Typography.",
+          "default": false
+        },
+        {
           "type": "color",
           "id": "color",
-          "label": "Color"
+          "label": "Color",
+          "visible_if": "{{ block.settings.custom_style }}"
         },
         {
           "type": "range",
           "id": "size",
           "label": "Font size",
+          "visible_if": "{{ block.settings.custom_style }}",
           "min": 9,
           "max": 20,
           "step": 1,
@@ -917,7 +977,7 @@
       "name": "Heading",
       "settings": [
         {
-          "type": "text",
+          "type": "inline_richtext",
           "id": "text",
           "label": "Heading text",
           "default": "Built for results."
@@ -943,19 +1003,68 @@
           ]
         },
         {
+          "type": "checkbox",
+          "id": "custom_style",
+          "label": "Use custom style",
+          "info": "Off: colour, font, size and weight follow the colour scheme and Theme settings › Typography.",
+          "default": false
+        },
+        {
           "type": "color",
           "id": "color",
-          "label": "Color"
+          "label": "Color",
+          "visible_if": "{{ block.settings.custom_style }}"
         },
         {
           "type": "range",
           "id": "size_mobile",
           "label": "Size (mobile)",
+          "visible_if": "{{ block.settings.custom_style }}",
           "min": 18,
           "max": 56,
           "step": 1,
           "unit": "px",
           "default": 28
+        },
+        {
+          "type": "range",
+          "id": "size_desktop",
+          "label": "Size (desktop)",
+          "visible_if": "{{ block.settings.custom_style }}",
+          "min": 20,
+          "max": 72,
+          "step": 1,
+          "unit": "px",
+          "default": 40
+        },
+        {
+          "type": "select",
+          "id": "weight",
+          "label": "Font weight",
+          "visible_if": "{{ block.settings.custom_style }}",
+          "default": "700",
+          "options": [
+            {
+              "value": "400",
+              "label": "Regular"
+            },
+            {
+              "value": "500",
+              "label": "Medium"
+            },
+            {
+              "value": "600",
+              "label": "Semibold"
+            },
+            {
+              "value": "700",
+              "label": "Bold"
+            },
+            {
+              "value": "800",
+              "label": "Extra bold"
+            }
+          ]
         }
       ],
       "limit": 1
@@ -971,14 +1080,23 @@
           "default": "<p>Quality you can feel, simplicity you can trust.</p>"
         },
         {
+          "type": "checkbox",
+          "id": "custom_style",
+          "label": "Use custom style",
+          "info": "Off: colour, font and size follow the colour scheme and Theme settings › Typography.",
+          "default": false
+        },
+        {
           "type": "color",
           "id": "color",
-          "label": "Color"
+          "label": "Color",
+          "visible_if": "{{ block.settings.custom_style }}"
         },
         {
           "type": "range",
           "id": "size",
           "label": "Font size",
+          "visible_if": "{{ block.settings.custom_style }}",
           "min": 12,
           "max": 22,
           "step": 1,
@@ -1136,12 +1254,6 @@
         "default": "container"
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
-      },
-      {
         "type": "checkbox",
         "id": "reset_spacing",
         "label": "Remove space between sections",
@@ -1225,7 +1337,7 @@
       },
       {
         "type": "header",
-        "content": "Lifestyle image"
+        "content": "Image"
       },
       {
         "type": "image_picker",
@@ -1233,9 +1345,17 @@
         "label": "Image"
       },
       {
-        "type": "url",
+        "type": "text",
+        "id": "image_alt",
+        "label": "Image description (alt text)",
+        "info": "Describes the picture for screen readers.",
+        "default": ""
+      },
+      {
+        "type": "image_picker",
         "id": "placeholder_url",
-        "label": "Fallback image URL"
+        "label": "Fallback image",
+        "info": "Shown when no image is picked above."
       },
       {
         "type": "select",
@@ -1298,7 +1418,7 @@
       },
       {
         "type": "header",
-        "content": "Step style"
+        "content": "Steps"
       },
       {
         "type": "select",
@@ -1463,7 +1583,14 @@
       },
       {
         "type": "header",
-        "content": "Button styling"
+        "content": "Button"
+      },
+      {
+        "type": "checkbox",
+        "id": "use_theme_button",
+        "label": "Use theme button style",
+        "info": "On: size and shape follow Theme settings › Buttons. Leave the colours empty to follow the theme too.",
+        "default": true
       },
       {
         "type": "color",
@@ -1479,12 +1606,6 @@
         "type": "color",
         "id": "button_bg_hover",
         "label": "Button background (hover)"
-      },
-      {
-        "type": "checkbox",
-        "id": "use_theme_button",
-        "label": "Use theme button style",
-        "default": true
       },
       {
         "type": "range",
@@ -1542,12 +1663,23 @@
       },
       {
         "type": "header",
-        "content": "Colors and spacing"
+        "content": "Colours"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "color",
         "id": "section_bg",
-        "label": "Background"
+        "label": "Background",
+        "info": "Leave empty to use the colour scheme's background."
+      },
+      {
+        "type": "header",
+        "content": "Spacing"
       },
       {
         "type": "range",
@@ -1603,14 +1735,23 @@
             "default": "Why us"
           },
           {
+            "type": "checkbox",
+            "id": "custom_style",
+            "label": "Use custom style",
+            "info": "Off: follows the colour scheme and Theme settings › Typography.",
+            "default": false
+          },
+          {
             "type": "color",
             "id": "color",
-            "label": "Color"
+            "label": "Color",
+            "visible_if": "{{ block.settings.custom_style }}"
           },
           {
             "type": "range",
             "id": "size",
             "label": "Font size",
+            "visible_if": "{{ block.settings.custom_style }}",
             "min": 9,
             "max": 20,
             "step": 1,
@@ -1625,7 +1766,7 @@
         "limit": 1,
         "settings": [
           {
-            "type": "text",
+            "type": "inline_richtext",
             "id": "text",
             "label": "Heading text",
             "default": "Built for results."
@@ -1651,19 +1792,68 @@
             ]
           },
           {
+            "type": "checkbox",
+            "id": "custom_style",
+            "label": "Use custom style",
+            "info": "Off: colour, font, size and weight follow the colour scheme and Theme settings › Typography.",
+            "default": false
+          },
+          {
             "type": "color",
             "id": "color",
-            "label": "Color"
+            "label": "Color",
+            "visible_if": "{{ block.settings.custom_style }}"
           },
           {
             "type": "range",
             "id": "size_mobile",
             "label": "Size (mobile)",
+            "visible_if": "{{ block.settings.custom_style }}",
             "min": 18,
             "max": 56,
             "step": 1,
             "unit": "px",
             "default": 28
+          },
+          {
+            "type": "range",
+            "id": "size_desktop",
+            "label": "Size (desktop)",
+            "visible_if": "{{ block.settings.custom_style }}",
+            "min": 20,
+            "max": 72,
+            "step": 1,
+            "unit": "px",
+            "default": 40
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Font weight",
+            "visible_if": "{{ block.settings.custom_style }}",
+            "default": "700",
+            "options": [
+              {
+                "value": "400",
+                "label": "Regular"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semibold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              },
+              {
+                "value": "800",
+                "label": "Extra bold"
+              }
+            ]
           }
         ]
       },
@@ -1679,14 +1869,23 @@
             "default": "<p>Quality you can feel, simplicity you can trust.</p>"
           },
           {
+            "type": "checkbox",
+            "id": "custom_style",
+            "label": "Use custom style",
+            "info": "Off: colour, font and size follow the colour scheme and Theme settings › Typography.",
+            "default": false
+          },
+          {
             "type": "color",
             "id": "color",
-            "label": "Color"
+            "label": "Color",
+            "visible_if": "{{ block.settings.custom_style }}"
           },
           {
             "type": "range",
             "id": "size",
             "label": "Font size",
+            "visible_if": "{{ block.settings.custom_style }}",
             "min": 12,
             "max": 22,
             "step": 1,
