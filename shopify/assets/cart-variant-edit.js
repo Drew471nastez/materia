@@ -43,7 +43,7 @@
       document.querySelectorAll('.cart-count').forEach(el => {
         el.textContent = el.classList.contains('cart-count-drawer') ? ` (${cart.item_count})` : (cart.item_count > 100 ? '~' : String(cart.item_count));
       });
-      document.querySelector('free-ship-progress-bar')?.init?.(cart.items_subtotal_price);
+      document.querySelector('free-ship-progress-bar')?.init?.(cart.total_price);
     }
     if (updated) {
       document.querySelector('cart-notification')?.cartAction?.();

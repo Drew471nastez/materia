@@ -187,7 +187,7 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
     await page.addScriptTag({content:liveScript});
     await page.mouse.move(1100,750);
     await page.evaluate(()=>document.dispatchEvent(new CustomEvent('storelib:settings-change',{detail:{live:true,settings:{btn_style:'outline',btn_hover_effect:'slide',color_schemes:{default:{settings:{background:'#ffffff',text_color:'#111111',heading_color:'#222222',primary_color:'#114488',btn_primary_background:'#114488',btn_primary_color:'#ffffff',btn_primary_border_color:'#008800',btn_primary_hover_border_color:'#ff9900',btn_primary_hover_background:'#cc0000',btn_primary_hover_color:'#ffffff'}}}}}})));
-    await page.waitForTimeout(80);
+    await page.waitForFunction(()=>document.querySelector('#live-slide').getAttribute('data-button-appearance')==='outline');
     assert.equal(await page.locator('#live-slide').getAttribute('data-button-appearance'),'outline');
     assert.equal(await page.locator('#live-slide').getAttribute('data-button-hover'),'slide');
     assert.equal(await page.$eval('#live-slide',el=>getComputedStyle(el).color),'rgb(17, 68, 136)');

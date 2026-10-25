@@ -4790,7 +4790,7 @@ class ButtonSubmitBundle extends HTMLElement {
       .then((response) => response.json())
       .then((response) => {
         if (response.status) {
-          this.handleErrorMessagePopup(response.description);
+          this.handleErrorMessagePopup(response.message || response.description);
           return;
         } else if (response.errors) {
           this.handleErrorMessagePopup(response.errors);
@@ -4838,7 +4838,7 @@ class ButtonSubmitBundle extends HTMLElement {
 
           const cartFreeShip = document.querySelector("free-ship-progress-bar");
           if (cartFreeShip) {
-            cartFreeShip.init(cart.items_subtotal_price);
+            cartFreeShip.init(cart.total_price);
           }
         }
       })
@@ -5089,7 +5089,7 @@ if (!customElements.get("product-form-quick-edit")) {
                     "free-ship-progress-bar"
                   );
                   if (cart_free_ship) {
-                    cart_free_ship.init(cart.items_subtotal_price);
+                    cart_free_ship.init(cart.total_price);
                   }
                 }
               })
@@ -8073,9 +8073,9 @@ if (!customElements.get("product-form")) {
                 errors: response.errors || response.description,
                 message: response.message,
               });
-              this.handleErrorMessage(response.description);
+              this.handleErrorMessage(response.message || response.description);
               if (this.productItem) {
-                this.handleErrorMessagePopup(response.description);
+                this.handleErrorMessagePopup(response.message || response.description);
               }
               return;
             } else if (response.sections) {
@@ -8109,7 +8109,7 @@ if (!customElements.get("product-form")) {
                     "free-ship-progress-bar"
                   );
                   if (cart_free_ship) {
-                    cart_free_ship.init(cart.items_subtotal_price);
+                    cart_free_ship.init(cart.total_price);
                   }
                 }
               })

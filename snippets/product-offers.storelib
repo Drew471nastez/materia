@@ -14,12 +14,24 @@
   corners, border and spacing, else the colour scheme and theme buttons.
 {%- endcomment -%}
 {%- liquid
+  assign product = product | default: page.product
+  assign kind = kind | default: block.type
+  assign native_offers = product.metafields.storelib.offers.value | default: product.metafields.storelib.offers
+  assign native_render = false
+  if kind == 'quantity_offer'
+    assign native_render = true
+  elsif kind == 'bundle' and native_offers.bundles != blank
+    assign native_render = true
+  endif
   assign bs = block.settings
   assign uid = block.id
   assign accent = bs.accent_color
   assign heading_level = 'h2'
   assign po_style = bs.style | default: 'cards'
 -%}
+{%- if native_render -%}
+  {%- render 'storelib-product-offers', product: product, block: block, kind: kind, product_form_id: product_form_id -%}
+{%- else -%}
 {%- capture po_vars -%}
 --po-pad-top: {{ bs.padding_top | default: 8 }}px; --po-pad-bottom: {{ bs.padding_bottom | default: 16 }}px;
 {%- comment -%} Style > Accent always applies (empty follows the scheme). The Custom colours group applies while its switch is on, so colours a creator switched off stay off. {%- endcomment -%}
@@ -82,7 +94,7 @@
             </span>
           {%- endif -%}
           <span class="po-line__info">
-            {%- if key == 'main' and bs.this_item_label != blank -%}<span class="po-line__tag">{{ bs.this_item_label | escape }}</span>{%- endif -%}
+            {%- if key == 'main' and bs.this_item_label != blank -%}<span class="po-line__tag">{{ bs.this_item_label }}</span>{%- endif -%}
             <span class="po-line__title">{{ p.title | escape }}</span>
           </span>
         </label>
@@ -94,7 +106,7 @@
           <input type="hidden" data-line-variant value="{{ v0.id }}" data-price="{{ v0.price }}" data-compare="{{ v0.compare_at_price | default: 0 }}" data-available="{{ v0.available }}">
         {%- else -%}
           <span class="po-select">
-            <select data-line-variant aria-label="{{ p.title | escape }}: {{ bs.option_label | escape }}">
+            <select data-line-variant aria-label="{{ p.title | escape }}: {{ bs.option_label | escape_once }}">
               {%- for v in p.variants -%}
                 <option value="{{ v.id }}" data-price="{{ v.price }}" data-compare="{{ v.compare_at_price | default: 0 }}" data-available="{{ v.available }}"{% if v.id == v0.id %} selected{% endif %}{% unless v.available %} disabled{% endunless %}>{{ v.title | escape }}{% unless v.available %} ({{ sold_out_text }}){% endunless %}</option>
               {%- endfor -%}
@@ -105,7 +117,8 @@
     {%- endfor -%}
   {%- endcapture -%}
   {%- if picked > 0 -%}
-    {%- assign saving = full_total | times: pct | divided_by: 100 -%}
+    {%- assign saving = 0 -%}
+    {%- assign pct = 0 -%}
     <product-bundle
       class="po po-bundle"
       id="ProductBundle-{{ uid }}"
@@ -113,35 +126,36 @@
       {%- if bs.custom_style %} data-custom-style{% endif %}
       data-block-id="{{ uid }}"
       data-product-id="{{ product.id }}"
+      data-currency="{{ localization.country.currency.iso_code | default: cart.currency | default: shop.currency }}" data-store-currency="{{ shop.currency }}"
       data-form-id="{{ product_form_id }}"
       data-discount="{{ pct }}"
       data-show-compare="{{ bs.show_compare }}"
-      {%- if bs.discount_code != blank %} data-discount-code="{{ bs.discount_code | strip | escape }}"{% endif %}
+      {%- if bs.discount_code != blank %} data-discount-code="{{ bs.discount_code | strip | escape_once }}"{% endif %}
       data-money-format="{{ shop.money_format | strip_html | escape }}"
-      data-error="{{ bs.error_text | escape }}"
+      data-error="{{ bs.error_text | escape_once }}"
       style="{{ po_vars | strip }}"
       {{ block.shopify_attributes }}
     >
-      {%- if bs.caption != blank -%}<p class="po-caption"><span>{{ bs.caption | escape }}</span></p>{%- endif -%}
+      {%- if bs.caption != blank -%}<p class="po-caption"><span>{{ bs.caption }}</span></p>{%- endif -%}
       <div class="po-box">
-        {%- if bs.badge != blank -%}<span class="po-box__badge">{{ bs.badge | escape }}</span>{%- endif -%}
-        {%- if bs.heading != blank -%}<{{ heading_level }} class="po-heading h5 heading-color" id="ProductBundle-{{ uid }}-heading">{{ bs.heading | escape }}</{{ heading_level }}>{%- endif -%}
-        {%- if bs.text != blank -%}<p class="po-text">{{ bs.text | escape }}</p>{%- endif -%}
+        {%- if bs.badge != blank -%}<span class="po-box__badge">{{ bs.badge }}</span>{%- endif -%}
+        {%- if bs.heading != blank -%}<{{ heading_level }} class="po-heading h5 heading-color" id="ProductBundle-{{ uid }}-heading">{{ bs.heading }}</{{ heading_level }}>{%- endif -%}
+        {%- if bs.text != blank -%}<p class="po-text">{{ bs.text }}</p>{%- endif -%}
         <ul class="po-bundle__lines" role="list"{% if bs.heading != blank %} aria-labelledby="ProductBundle-{{ uid }}-heading"{% endif %}>
           {{- bundle_lines -}}
         </ul>
         <div class="po-summary" aria-live="polite">
-          <span class="po-summary__label">{{ bs.total_label | escape }}</span>
+          <span class="po-summary__label">{{ bs.total_label }}</span>
           <span class="po-summary__prices">
             <s class="po-summary__compare" data-total-compare{% if pct == 0 %} hidden{% endif %}>{{ full_total | money }}</s>
             <span class="po-summary__amount" data-total>{{ full_total | minus: saving | money }}</span>
           </span>
-          <span class="po-summary__saving" data-saving{% if pct == 0 %} hidden{% endif %}>{{ bs.savings_label | escape }} <span data-saving-amount>{{ saving | money }}</span></span>
+          <span class="po-summary__saving" data-saving{% if pct == 0 %} hidden{% endif %}>{{ bs.savings_label }} <span data-saving-amount>{{ saving | money }}</span></span>
         </div>
         <button type="button" class="btn btn-primary po-button" data-theme-button="primary" data-sl-button data-button-role="primary" data-offer-add>
-          <span class="po-button__text">{{ bs.button_label | escape }}</span>
+          <span class="po-button__text">{{ bs.button_label }}</span>
         </button>
-        {%- if bs.checkout_note != blank -%}<p class="po-note" data-offer-note hidden>{{ bs.checkout_note | escape }}</p>{%- endif -%}
+        {%- if bs.checkout_note != blank -%}<p class="po-note" data-offer-note hidden>{{ bs.checkout_note }}</p>{%- endif -%}
         <p class="po-message" role="status" data-message hidden></p>
       </div>
     </product-bundle>
@@ -167,14 +181,14 @@
       data-sync-form="{{ bs.sync_form_quantity }}"
       data-show-compare="{{ bs.show_compare }}"
       data-money-format="{{ shop.money_format | strip_html | escape }}"
-      data-error="{{ bs.error_text | escape }}"
+      data-error="{{ bs.error_text | escape_once }}"
       data-sold-out="{{ 'products.product.sold_out' | t | escape }}"
       style="{{ po_vars | strip }}"
       {{ block.shopify_attributes }}
     >
-      {%- if bs.caption != blank -%}<p class="po-caption"><span>{{ bs.caption | escape }}</span></p>{%- endif -%}
-      {%- if bs.heading != blank -%}<{{ heading_level }} class="po-heading h5 heading-color" id="QuantityOffer-{{ uid }}-heading">{{ bs.heading | escape }}</{{ heading_level }}>{%- endif -%}
-      <div class="po-tiers" role="radiogroup"{% if bs.heading != blank %} aria-labelledby="QuantityOffer-{{ uid }}-heading"{% elsif bs.caption != blank %} aria-label="{{ bs.caption | escape }}"{% else %} aria-label="{{ bs.button_label | escape }}"{% endif %}>
+      {%- if bs.caption != blank -%}<p class="po-caption"><span>{{ bs.caption }}</span></p>{%- endif -%}
+      {%- if bs.heading != blank -%}<{{ heading_level }} class="po-heading h5 heading-color" id="QuantityOffer-{{ uid }}-heading">{{ bs.heading }}</{{ heading_level }}>{%- endif -%}
+      <div class="po-tiers" role="radiogroup"{% if bs.heading != blank %} aria-labelledby="QuantityOffer-{{ uid }}-heading"{% elsif bs.caption != blank %} aria-label="{{ bs.caption | escape_once }}"{% else %} aria-label="{{ bs.button_label | escape_once }}"{% endif %}>
         {%- for t in tiers -%}
           {%- liquid
             assign k_on = 'tier_' | append: t | append: '_enable'
@@ -219,13 +233,13 @@
               <span class="po-tier__main">
                 <span class="po-tier__label">{{ bs[k_label] | default: units | escape }}</span>
                 {%- if bs[k_caption] != blank -%}<span class="po-tier__caption">{{ bs[k_caption] | escape }}</span>{%- endif -%}
-                {%- if disc > 0 and bs.save_label != blank -%}<span class="po-tier__save">{{ bs.save_label | escape }} {{ disc }}%</span>{%- endif -%}
-                {%- if bs.you_save_label != blank -%}<span class="po-tier__yousave" data-tier-saving{% unless tier_saving > 0 %} hidden{% endunless %}>{{ bs.you_save_label | escape }} <span data-tier-saving-amount>{{ tier_saving | money }}</span></span>{%- endif -%}
+                {%- if disc > 0 and bs.save_label != blank -%}<span class="po-tier__save">{{ bs.save_label }} {{ disc }}%</span>{%- endif -%}
+                {%- if bs.you_save_label != blank -%}<span class="po-tier__yousave" data-tier-saving{% unless tier_saving > 0 %} hidden{% endunless %}>{{ bs.you_save_label }} <span data-tier-saving-amount>{{ tier_saving | money }}</span></span>{%- endif -%}
               </span>
               <span class="po-tier__prices">
                 <span class="po-tier__total" data-tier-total>{{ total | money }}</span>
                 <s class="po-tier__compare" data-tier-compare{% unless bs.show_compare and compare_total > total %} hidden{% endunless %}>{{ compare_total | money }}</s>
-                {%- if units > 1 and bs.per_item_label != blank -%}<span class="po-tier__each"><span data-tier-each>{{ each | money }}</span> {{ bs.per_item_label | escape }}</span>{%- endif -%}
+                {%- if units > 1 and bs.per_item_label != blank -%}<span class="po-tier__each"><span data-tier-each>{{ each | money }}</span> {{ bs.per_item_label | escape_once }}</span>{%- endif -%}
               </span>
               {%- if bs[k_badge] != blank -%}<span class="po-tier__badge">{{ bs[k_badge] | escape }}</span>{%- endif -%}
             </span>
@@ -234,10 +248,10 @@
       </div>
       {%- if bs.show_button -%}
         <button type="button" class="btn btn-primary po-button" data-theme-button="primary" data-sl-button data-button-role="primary" data-offer-add{% unless v0.available %} disabled{% endunless %}>
-          <span class="po-button__text">{{ bs.button_label | escape }}</span>
+          <span class="po-button__text">{{ bs.button_label }}</span>
         </button>
       {%- endif -%}
-      {%- if bs.checkout_note != blank -%}<p class="po-note" data-offer-note hidden>{{ bs.checkout_note | escape }}</p>{%- endif -%}
+      {%- if bs.checkout_note != blank -%}<p class="po-note" data-offer-note hidden>{{ bs.checkout_note }}</p>{%- endif -%}
       <p class="po-message" role="status" data-message hidden></p>
       <script type="application/json" data-variants>[{%- for v in product.variants -%}{"id":{{ v.id | json }},"price":{{ v.price | default: 0 }},"compare":{{ v.compare_at_price | default: 0 }},"available":{{ v.available | json }}}{%- unless forloop.last -%},{%- endunless -%}{%- endfor -%}]</script>
       <script type="application/json" data-selected>{{ v0.id | json }}</script>
@@ -245,5 +259,6 @@
   {%- else -%}
     {%- render 'editor-block-preview', block: block, title: 'Quantity offer', message: 'Pick a product for this section to preview its quantities and prices.', commerce: true -%}
   {%- endif -%}
+{%- endif -%}
 {%- endif -%}
 </template>

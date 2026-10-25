@@ -25,11 +25,11 @@
   const money = (cents, format) => {
     const value = Math.max(0, Math.round(Number(cents) || 0));
     if (window.Shopify && typeof window.Shopify.formatMoney === 'function') {
-      try { return window.Shopify.formatMoney(value, format || window.cartStrings?.money_format); } catch (_) {}
+      try { const text=document.createElement('textarea');text.innerHTML=window.Shopify.formatMoney(value, format || window.cartStrings?.money_format);return text.value; } catch (_) {}
     }
-    const currency = window.Shopify?.currency?.active || 'USD';
-    try { return new Intl.NumberFormat(document.documentElement.lang || undefined, {style: 'currency', currency}).format(value / 100); }
-    catch (_) { return (value / 100).toFixed(2); }
+    // Storelib/Shopify formats hundredths, including zero-decimal currencies.
+    // Never guess a currency or perform another conversion here.
+    return '';
   };
 
   const addUrl = () => String(window.routes?.cart_add_url || '/cart/add').replace(/\.js$/, '') + '.js';
@@ -47,7 +47,7 @@
     let data = null;
     try { data = await response.json(); } catch (_) {}
     if (!response.ok || (data && data.status && Number(data.status) >= 400)) {
-      const message = (data && (data.description || data.message || (typeof data.errors === 'string' && data.errors))) || '';
+      const message = (data && (data.message || data.description || (typeof data.errors === 'string' && data.errors))) || '';
       const error = new Error(message || 'HTTP ' + response.status);
       error.userMessage = message;
       throw error;
@@ -59,11 +59,12 @@
      without it answers 404 and the block keeps its own settings. */
   const offerCache = new Map();
   function readOffers(url) {
-    if (!offerCache.has(url)) {
-      offerCache.set(url, fetch(url, {headers: {Accept: 'application/json'}, credentials: 'same-origin'})
-        .then(r => (r.ok ? r.json() : null)).catch(() => null));
+    const cached = offerCache.get(url);
+    if (!cached || cached.expires <= Date.now()) {
+      offerCache.set(url, {expires:Date.now()+60000, value:fetch(url, {headers: {Accept: 'application/json'}, credentials: 'same-origin'})
+        .then(r => (r.ok ? r.json() : null)).catch(() => null)});
     }
-    return offerCache.get(url);
+    return offerCache.get(url).value;
   }
 
   function renderDrawer(cart, data) {
@@ -83,14 +84,14 @@
 
   async function refreshCounts() {
     try {
-      const cart = await (await fetch('/cart.json', {headers: {Accept: 'application/json'}})).json();
+      const cart = await (await fetch('/cart.js', {headers: {Accept: 'application/json'}, cache:'no-store'})).json();
       if (cart.item_count == null) return cart;
       document.querySelectorAll('.cart-count').forEach(el => {
         el.innerHTML = el.classList.contains('cart-count-drawer') ? `(${cart.item_count})` : (cart.item_count > 100 ? '~' : cart.item_count);
         el.classList.remove('hidden');
       });
       document.querySelector('header-total-price')?.updateTotal?.(cart);
-      document.querySelector('free-ship-progress-bar')?.init?.(cart.items_subtotal_price);
+      document.querySelector('free-ship-progress-bar')?.init?.(cart.total_price);
       document.dispatchEvent(new CustomEvent('cart:updated', {detail: {source: 'product-offers', cart}}));
       return cart;
     } catch (_) { return null; }
@@ -99,7 +100,7 @@
   /* Drops empty properties so a plain line stays plain. */
   function cleanItems(items) {
     return items.map(item => {
-      const line = {id: String(item.id), quantity: Math.max(1, Math.min(99, parseInt(item.quantity, 10) || 1))};
+      const line = {id: String(item.id), quantity: Math.max(1, parseInt(item.quantity, 10) || 1)};
       const props = {};
       Object.entries(item.properties || {}).forEach(([k, v]) => { if (v !== '' && v != null) props[k] = String(v); });
       if (Object.keys(props).length) line.properties = props;
@@ -132,7 +133,8 @@
       return data;
     }
     renderDrawer(cart, data);
-    refreshCounts();
+    const confirmed = await refreshCounts();
+    if (!data.sections && confirmed?.items && typeof cart.applyCartState === 'function') await cart.applyCartState(confirmed);
     /* utils.js declares publish and PUB_SUB_EVENTS as page globals. */
     if (typeof publish === 'function' && typeof PUB_SUB_EVENTS !== 'undefined') {
       try { publish(PUB_SUB_EVENTS.cartUpdate, {source: options.source || 'product-offers', cartData: data}); } catch (_) {}
@@ -164,6 +166,25 @@
       compare: Number(source.dataset.compare) || 0,
       available: source.dataset.available !== 'false',
     };
+  }
+
+  async function personalization(form) {
+    if (!form) return {};
+    if (!form.reportValidity()) throw new Error('Complete the required product fields.');
+    const properties = {};
+    for (const [name, value] of new FormData(form)) {
+      const match = name.match(/^properties\[(.+)\]$/);
+      if (!match) continue;
+      if (value instanceof File) {
+        if (!value.size) continue;
+        const body = new FormData(); body.append('file', value);
+        const response = await fetch('/cart/upload', {method:'POST',credentials:'same-origin',body});
+        const result = await response.json();
+        if (!response.ok || !result.upload?.value) throw new Error(result.message || result.description || 'Unable to upload this image.');
+        properties[match[1]] = result.upload.value;
+      } else if (value !== '') properties[match[1]] = value;
+    }
+    return properties;
   }
 
   class OfferBase extends HTMLElement {
@@ -200,8 +221,12 @@
       this.say('');
       this.button.setAttribute('aria-busy', 'true');
       this.button.classList.add('loading');
-      try { await addLines(items, {discountCode, source: this.localName}); }
-      catch (error) { this.say(error.userMessage || this.dataset.error || window.cartStrings?.error || '', 'error'); }
+      try {
+        const properties = await personalization(this.form());
+        if (items[0]) items[0].properties = {...properties,...items[0].properties};
+        await addLines(items, {discountCode, source: this.localName});
+      }
+      catch (error) { this.say(error.userMessage || error.message || this.dataset.error || window.cartStrings?.error || '', 'error'); }
       finally { this.button.removeAttribute('aria-busy'); this.button.classList.remove('loading'); }
     }
     setup() {}
@@ -224,7 +249,7 @@
     async syncStorelib() {
       const productId = this.dataset.productId;
       if (!productId || this.dataset.storelibSync === 'off') return;
-      const data = await readOffers(`/api/offers/bundles?product=${encodeURIComponent(productId)}`);
+      const data = await readOffers(`/api/offers?product=${encodeURIComponent(productId)}`);
       if (!this.isConnected || !data || !Array.isArray(data.bundles)) return;
       const mine = this.lines.map(l => String(l.dataset.productId)).sort().join(',');
       const match = data.bundles.find(b => Array.isArray(b.items) && b.items.map(i => String(i.id)).sort().join(',') === mine);
@@ -236,6 +261,7 @@
         value: Number(match.discountValue) || 0,
         /* An amount off each set, in cents, as the store priced the set. */
         amountCents: full > price ? full - price : 0,
+        fullCents: full,
       };
       this.dataset.offerId = this.offer.id;
       this.toggleAttribute('data-storelib-offer', true);
@@ -251,12 +277,11 @@
     variantOf(line) { return variantFrom(line.querySelector('[data-line-variant]')); }
     saving(total, count) {
       if (this.offer) {
-        /* Storelib takes a percent off each item, or an amount off each set. */
-        if (this.offer.type === 'amount') return Math.min(total, this.offer.amountCents);
-        return Math.round(total * Math.min(100, Math.max(0, this.offer.value)) / 100);
+        if (this.dataset.currency && this.dataset.storeCurrency && this.dataset.currency!==this.dataset.storeCurrency) return 0;
+        return total === this.offer.fullCents ? this.offer.amountCents : 0;
       }
-      const percent = Math.min(90, Math.max(0, Number(this.dataset.discount) || 0));
-      return Math.round(total * percent / 100);
+      // Block settings are presentation, not a discount authorization.
+      return 0;
     }
     update() {
       const showCompare = this.dataset.showCompare === 'true';
@@ -342,14 +367,14 @@
       this.syncStorelib();
     }
     /* Quantity breaks the store set up in Storelib, when the platform lists
-       them (docs/upsells-storelib.md, GET /api/offers/quantity-breaks). A tier
+       them (docs/upsells-storelib.md, GET /api/offers?product=<id>). A tier
        with the same paid and free quantity shows the store's saving. */
     async syncStorelib() {
       const productId = this.dataset.productId;
       if (!productId || this.dataset.storelibSync === 'off') return;
-      const data = await readOffers(`/api/offers/quantity-breaks?product=${encodeURIComponent(productId)}`);
-      if (!this.isConnected || !data || !Array.isArray(data.offers) || !data.offers.length) return;
-      const offer = data.offers[0];
+      const data = await readOffers(`/api/offers?product=${encodeURIComponent(productId)}`);
+      if (!this.isConnected || !data || !Array.isArray(data.quantityBreaks) || !data.quantityBreaks.length) return;
+      const offer = data.quantityBreaks[0];
       let matched = false;
       this.radios.forEach(radio => {
         const paid = this.paidOf(radio); const free = this.freeOf(radio);
@@ -380,10 +405,11 @@
     /* What a tier costs for this variant: paid units at the tier's price, free units at nothing. */
     priceOf(radio, variant) {
       const paid = this.paidOf(radio); const free = this.freeOf(radio); const units = paid + free;
-      const percent = Math.min(90, Math.max(0, Number(radio.dataset.discount) || 0));
-      const amount = Math.max(0, Number(radio.dataset.amount) || 0);
+      const authorized = !!radio.dataset.offerId;
+      const percent = authorized ? Math.min(100, Math.max(0, Number(radio.dataset.discount) || 0)) : 0;
+      const amount = authorized ? Math.max(0, Number(radio.dataset.amount) || 0) : 0;
       const eachPaid = Math.round(variant.price * (100 - percent) / 100);
-      const total = Math.max(0, eachPaid * paid - amount);
+      const total = authorized ? Math.max(0, eachPaid * paid - amount) : variant.price * units;
       const plain = percent === 0 && free === 0 && amount === 0;
       const compareEach = plain ? Math.max(variant.price, variant.compare || 0) : variant.price;
       const compare = compareEach * units;
@@ -671,7 +697,196 @@
     }
   }
 
-  window.MateriaProductOffers = {addLines, removeVariant, money};
+  const node = (tag, cls, text) => {
+    const el = document.createElement(tag); if (cls) el.className = cls;
+    if (text != null) el.textContent = String(text); return el;
+  };
+  const parse = value => { try { return JSON.parse(value || 'null'); } catch (_) { return null; } };
+  let nativeOfferSequence=0;
+  const tierPrice = (tier, variant) => {
+    const paid = Math.max(1, Number(tier.quantity) || 1), free = Math.max(0, Number(tier.freeQuantity) || 0);
+    const percent = tier.discountType === 'percent' ? Math.min(100, Math.max(0, Number(tier.discountValue) || 0)) : 0;
+    const amount = tier.discountType === 'amount' ? Math.max(0, Number(tier.discountValue) || 0) : 0;
+    const total = Math.max(0, Math.round(variant.price * (100-percent) / 100) * paid - amount);
+    const plain = !free && !percent && !amount;
+    const compare = (plain ? Math.max(variant.price, variant.compare || 0) : variant.price) * (paid+free);
+    return {total,compare,quantity:paid+free,each:Math.round(total/(paid+free))};
+  };
+  class StorelibProductOffers extends HTMLElement {
+    connectedCallback() {
+      this.events?.abort(); this.events = new AbortController();
+      this.instance ||= ++nativeOfferSequence;
+      this.options = parse(this.dataset.options) || {};
+      Object.keys(this.options).forEach(key=>{if(typeof this.options[key]==='string'){const text=document.createElement('textarea');text.innerHTML=this.options[key];this.options[key]=text.value;}});
+      this.variants = (parse(this.dataset.variants) || []).map(v => ({id:String(v.id),price:Number(v.price ?? v.priceCents)||0,compare:Number(v.compare_at_price)||0,available:v.available!==false,title:v.title||v.name||''}));
+      this.selected = this.dataset.selected;
+      this.market = !!this.dataset.currency && !!this.dataset.storeCurrency && this.dataset.currency !== this.dataset.storeCurrency;
+      const signal=this.events.signal;
+      document.addEventListener('change',e=>{
+        if (e.target.name==='id' && e.target.form?.getAttribute('id')===this.dataset.formId) { this.selected=String(e.target.value); this.paintPrices(); }
+      },{signal});
+      document.addEventListener('cart:updated',e=>{
+        if (!Array.isArray(e.detail?.cart?.items)) return;
+        this.confirmedCart=e.detail.cart;
+        this.paintButtons();
+        this.dataset.cartProductQuantity=String(e.detail.cart.items.filter(i=>String(i.product_id)===this.dataset.productId).reduce((n,i)=>n+Number(i.quantity||0),0));
+      },{signal});
+      const payload=parse(this.dataset.offers);
+      if (payload && typeof payload==='object') this.draw(payload);
+      else readOffers('/api/offers?product='+encodeURIComponent(this.dataset.productId)).then(data=>{if(this.isConnected && !signal.aborted && data)this.draw(data);});
+    }
+    disconnectedCallback(){
+      this.events?.abort();
+      this.form()?.querySelectorAll('[data-native-offer-owner="'+this.instance+'"]').forEach(input=>input.remove());
+    }
+    form(){return this.dataset.formId ? document.getElementById(this.dataset.formId) : null;}
+    variant(){const id=this.form()?.querySelector('[name="id"]')?.value || this.selected;return this.variants.find(v=>v.id===String(id))||this.variants.find(v=>v.available)||this.variants[0];}
+    amount(value){return money(value,this.dataset.moneyFormat);}
+    draw(data){
+      this.rows=[];
+      const kind=this.dataset.kind, offers=kind==='quantity_offer'?data.quantityBreaks:kind==='bundle'?data.bundles:data.checkoutOffers;
+      if(!Array.isArray(offers)||!offers.length)return;
+      this.replaceChildren();
+      this.actions=[];
+      this.upsellChoices=[];
+      const s=this.options;
+      const box=node('div',kind==='upsell_pro'?'upsell-pro':'po po-bundle');box.dataset.style=s.style||'cards';
+      const numeric=kind==='upsell_pro'?{padding_top:'--up-pt',padding_bottom:'--up-pb',gap:'--up-gap',image_size_px:'--up-img',heading_size:'--up-heading-size',heading_gap:'--up-heading-gap'}:{padding_top:'--po-pad-top',padding_bottom:'--po-pad-bottom'};
+      Object.entries(numeric).forEach(([key,token])=>{if(s[key]!=null && Number.isFinite(Number(s[key])))box.style.setProperty(token,Math.max(0,Number(s[key]))+'px');});
+      if(s.accent_color)box.style.setProperty('--po-accent',s.accent_color);
+      if(s.custom_style){
+        box.dataset.customStyle='';
+        if(s.show_border)box.dataset.border='';if(s.show_shadow)box.dataset.shadow='';
+        const tokens=kind==='upsell_pro'?{bg_color:'--up-bg',text_color:'--up-text',card_bg:'--up-card-bg',border_color:'--up-border',button_bg:'--up-btn-bg',button_text_color:'--up-btn-ink'}:{custom_bg:'--po-c-bg',custom_text:'--po-c-text',custom_heading:'--po-c-heading',custom_border:'--po-c-border',custom_selected:'--po-c-selected',custom_save:'--po-c-save',custom_badge_bg:'--po-c-badge-bg',custom_badge_text:'--po-c-badge-text'};
+        Object.entries(tokens).forEach(([key,token])=>{if(s[key])box.style.setProperty(token,s[key]);});
+        const dimensions=kind==='upsell_pro'?{card_radius:'--up-card-radius',button_radius:'--up-btn-radius'}:{custom_radius:'--po-c-radius',custom_gap:'--po-c-gap',custom_border_width:'--po-c-bw'};
+        Object.entries(dimensions).forEach(([key,token])=>{if(s[key]!=null && Number.isFinite(Number(s[key])))box.style.setProperty(token,Math.max(0,Number(s[key]))+'px');});
+      }
+      if(s.caption)box.append(node('p','po-caption',s.caption));
+      box.append(node('h3',kind==='upsell_pro'?'upsell-pro__heading':'po-heading h5',s.heading||offers[0].title||''));
+      if(s.text||s.subheading)box.append(node('p',kind==='upsell_pro'?'upsell-pro__sub':'po-text',s.text||s.subheading));this.append(box);
+      this.box=box;
+      if(kind==='quantity_offer')this.quantity(offers[0]);
+      else if(kind==='bundle')offers.forEach(offer=>this.bundle(offer));
+      else {
+        offers.slice(0,Number(s.max_products)||3).forEach(offer=>this.upsell(offer));
+        if(s.add_mode==='selected'){
+          const footer=node('div','upsell-pro__footer');box.append(footer);
+          this.button(footer,s.add_selected_label||'Add chosen items',()=>this.upsellChoices.filter(c=>c.check.checked).map(c=>({id:c.select.value,quantity:1,properties:{_sl_offer_id:c.offer.offerId,_sl_offer:'upsell'}})));
+        }
+      }
+      this.paintPrices();
+    }
+    button(parent,label,action){
+      const button=node('button','btn btn-primary po-button');const text=node('span','po-button__text hidden-on-load',label);button.append(text);button.type='button';button.dataset.themeButton='primary';button.dataset.slButton='';button.dataset.buttonRole='primary';
+      this.actions ||= [];this.actions.push({button,text,label,action});
+      const status=node('p','po-message');status.setAttribute('role','status');
+      parent.append(button,status);
+      button.addEventListener('click',async()=>{
+        if(button.getAttribute('aria-busy')==='true')return;
+        button.setAttribute('aria-busy','true');button.classList.add('loading');button.disabled=true;status.textContent='';status.classList.remove('visually-hidden');
+        try{
+          const lines=action();if(!lines?.length)return;
+          const props=await personalization(this.form());
+          const own=lines.find(line=>this.variants.some(v=>v.id===String(line.id)));
+          if(own)own.properties={...props,...own.properties};
+          await addLines(lines,{open:this.dataset.kind==='upsell_pro'?safelyOpen(this.options):true,source:'storelib-offers'});
+          button.dataset.added='true';text.textContent=this.options.added_text||'Added';status.textContent=text.textContent;status.classList.add('visually-hidden');
+        }catch(error){status.textContent=error.userMessage||error.message||this.options.error_text||'';}
+        finally{button.removeAttribute('aria-busy');button.classList.remove('loading');button.disabled=false;this.paintPrices();}
+      },{signal:this.events.signal});return button;
+    }
+    paintButtons(){
+      for(const entry of this.actions||[]){
+        const lines=entry.action();entry.button.disabled=!lines?.length||entry.button.getAttribute('aria-busy')==='true';
+        if(!this.confirmedCart)continue;
+        const added=lines.length>0&&lines.every(line=>this.confirmedCart.items.filter(i=>String(i.variant_id||i.id)===String(line.id)).reduce((n,i)=>n+Number(i.quantity||0),0)>=line.quantity);
+        entry.button.dataset.added=String(added);entry.text.textContent=added?this.options.added_text||'Added':entry.label;
+      }
+    }
+    quantity(offer){
+      const initial=Math.max(0,Math.min((offer.tiers?.length||1)-1,(Number(this.options.default_tier)||1)-1));
+      const group=node('div','po-tiers');group.setAttribute('role','radiogroup');group.setAttribute('aria-label',offer.title||this.options.heading||'Quantity');this.box.append(group);
+      (offer.tiers||[]).forEach((tier,i)=>{
+        const label=node('label','po-tier'),radio=node('input','po-tier__radio');radio.type='radio';radio.name='native-tier-'+this.instance;radio.checked=i===initial;radio.value=String(Number(tier.quantity)+Number(tier.freeQuantity||0));
+        const card=node('span','po-tier__card'),main=node('span','po-tier__main'),prices=node('span','po-tier__prices');
+        main.append(node('span','po-tier__label',tier.label||radio.value));card.append(node('span','po-tier__dot'),main,prices);
+        if(tier.badge)card.append(node('span','po-tier__badge',tier.badge));
+        const total=node('span','po-tier__total'),compare=node('s','po-tier__compare'),each=node('span','po-tier__each');prices.append(total,compare,each);label.append(radio,card);group.append(label);
+        radio.addEventListener('change',()=>{this.chosen=tier;this.syncQuantity();this.paintButtons();},{signal:this.events.signal});
+        this.rows.push({tier,total,compare,each});
+      });
+      this.offerId=offer.offerId;this.chosen=offer.tiers?.[initial];this.syncQuantity();
+      if(!this.form())this.variantPicker(this.box);
+      this.addButton=this.button(this.box,this.options.button_label||'Add to cart',()=>{
+        const variant=this.variant();if(!variant?.available||!this.chosen)return [];
+        return [{id:variant.id,quantity:tierPrice(this.chosen,variant).quantity,properties:{_sl_offer_id:offer.offerId,_sl_offer:'quantity_break'}}];
+      });
+      if((this.dataset.compact==='true' && this.form()) || this.options.show_button===false)this.addButton.hidden=true;
+    }
+    syncQuantity(){
+      if(!this.chosen)return;
+      const form=this.form();if(!form)return;
+      const quantity=Number(this.chosen.quantity)+Number(this.chosen.freeQuantity||0);
+      let inputs=[...form.elements].filter(el=>el.name==='quantity');
+      if(!inputs.length){const input=node('input');input.type='hidden';input.name='quantity';input.dataset.nativeOfferOwner=String(this.instance);form.append(input);inputs=[input];}
+      inputs.forEach(input=>{input.value=String(quantity);input.dispatchEvent(new Event('change',{bubbles:true}));});
+      let offerInput=form.querySelector('[data-native-offer-id]');
+      if(!offerInput){offerInput=node('input');offerInput.type='hidden';offerInput.name='properties[_sl_offer_id]';offerInput.dataset.nativeOfferId='';form.append(offerInput);}
+      offerInput.dataset.nativeOfferOwner=String(this.instance);
+      offerInput.value=this.offerId||'';
+    }
+    variantPicker(parent,variants=this.variants){
+      const wrap=node('span','po-select'),select=node('select');select.setAttribute('aria-label',this.options.option_label||'Variant');
+      variants.forEach(v=>{const option=node('option','',v.title||v.name||'Default');option.value=String(v.id);option.disabled=v.available===false;select.append(option);});
+      const tracksProduct=variants===this.variants;
+      if(tracksProduct && [...select.options].some(o=>o.value===this.selected))select.value=this.selected;
+      select.addEventListener('change',()=>{if(tracksProduct){this.selected=select.value;this.paintPrices();}},{signal:this.events.signal});wrap.append(select);parent.append(wrap);return select;
+    }
+    paintPrices(){
+      this.paintButtons();
+      const variant=this.variant();if(this.addButton)this.addButton.disabled=!variant?.available;
+      if(!variant)return;
+      for(const row of this.rows||[]){
+        const p=tierPrice(row.tier,variant), monetary=!this.market||(!['amount','percent'].includes(row.tier.discountType));
+        row.total.textContent=monetary?this.amount(p.total):(row.tier.label||'');row.compare.hidden=!monetary||p.compare<=p.total||this.options.show_compare===false;
+        row.compare.textContent=monetary?this.amount(p.compare):'';row.each.textContent=monetary?this.amount(p.each)+(this.options.per_item_label?' '+this.options.per_item_label:''):'';
+      }
+    }
+    bundle(offer){
+      const list=node('ul','po-bundle__lines');this.box.append(list);const controls=[];
+      (offer.items||[]).forEach(item=>{
+        const row=node('li','po-line'),label=node('label','po-line__label'),check=node('input');check.type='checkbox';check.checked=true;check.setAttribute('aria-label',item.title||'Product');
+        label.append(check);this.image(label,item);label.append(node('span','po-line__title',item.title));row.append(label);list.append(row);
+        const variants=(item.variants?.length?item.variants:[{id:item.id,name:item.title,priceCents:item.priceCents}]).map(v=>({...v,title:v.name,price:v.priceCents}));
+        const select=this.variantPicker(row,variants);controls.push({item,check,select,initial:select.value});
+      });
+      const price=node('p','po-summary__amount'),compare=node('s','po-summary__compare'),label=node('p','po-note',offer.label||'');
+      const paint=()=>{const exact=!this.market&&controls.every(c=>c.check.checked&&c.select.value===c.initial);price.textContent=exact?this.amount(offer.priceCents):'';compare.textContent=exact?this.amount(offer.fullCents):'';compare.hidden=!exact||offer.fullCents<=offer.priceCents||this.options.show_compare===false;this.paintButtons();};
+      list.addEventListener('change',paint,{signal:this.events.signal});this.box.append(compare,price,label);paint();
+      this.button(this.box,this.options.button_label||'Add bundle to cart',()=>controls.filter(c=>c.check.checked).map(c=>({id:c.select.value,quantity:1,properties:{_sl_offer_id:offer.offerId,_sl_offer:'bundle'}})));
+    }
+    upsell(offer){
+      const item=offer.product;if(!item)return;
+      const card=node('div','upsell-card'),info=node('div','upsell-card__info');this.image(card,item);info.append(node('span','upsell-card__title',item.title),node('span','upsell-card__sub',offer.label||''));card.append(info);this.box.append(card);
+      const variants=item.variants?.length?item.variants:[{id:item.id,name:item.title}];const select=this.variantPicker(info,variants);
+      if(this.options.show_variant_selector===false || variants.length<2)select.parentElement.hidden=true;
+      const price=node('span','upsell-card__price');price.textContent=!this.market?this.amount(offer.offerPriceCents):'';info.append(price);
+      price.hidden=this.options.show_price===false;
+      select.addEventListener('change',()=>{price.textContent='';this.paintButtons();},{signal:this.events.signal});
+      if(this.options.add_mode==='selected'){
+        const label=node('label','upsell-card__pick'),check=node('input','native-up-check');check.type='checkbox';check.checked=this.options.preselect!==false;check.setAttribute('aria-label',item.title||'Product');label.append(check);card.prepend(label);this.upsellChoices.push({check,select,offer});
+        check.addEventListener('change',()=>{card.toggleAttribute('data-picked',check.checked);this.paintButtons();},{signal:this.events.signal});card.toggleAttribute('data-picked',check.checked);
+      }else this.button(card,this.options.upsell_button_text||'Add',()=>[{id:select.value,quantity:1,properties:{_sl_offer_id:offer.offerId,_sl_offer:'upsell'}}]);
+    }
+    image(parent,item){
+      if(this.options.show_images===false||this.options.show_image===false||!item.imageUrl)return;
+      try{const url=new URL(item.imageUrl,location.href);if(!['http:','https:'].includes(url.protocol))return;const img=node('img','po-line__media');img.src=url.href;img.alt='';img.width=56;img.height=56;img.loading='lazy';img.decoding='async';parent.append(img);}catch(_){}
+    }
+  }
+  const safelyOpen = options => options.open_drawer_after_add === true;
+  window.MateriaProductOffers = {addLines, removeVariant, money, tierPrice};
+  if (!customElements.get('storelib-product-offers')) customElements.define('storelib-product-offers',StorelibProductOffers);
   if (!customElements.get('product-bundle')) customElements.define('product-bundle', ProductBundle);
   if (!customElements.get('quantity-offer')) customElements.define('quantity-offer', QuantityOffer);
   if (!customElements.get('upsell-pro')) customElements.define('upsell-pro', UpsellPro);

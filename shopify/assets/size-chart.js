@@ -27,8 +27,6 @@
     const source=host.querySelector('[data-assigned-chart-source]');
     const payload=source?.dataset.chartJson || source?.textContent;
     if (!source || host._chartSource===payload) return;
-    // The server already drew the rows: keep them.
-    if (host.querySelector('.mt-size-chart__table tbody tr')) { host._chartSource=payload; return; }
     let chart;
     try { chart=normalize(JSON.parse(payload)); } catch (_) { return; }
     const columns=chart?.columns || chart?.headers;
@@ -44,18 +42,18 @@
         return columns.map((col,i)=>row?.[col.key || col.id || columnName(col)] ?? (i===0 ? row?.size || row?.label || row?.name || '' : ''));
       });
     };
-    const rows=rowsOf(chart.rows),cm=rowsOf(chart.rows_cm),inch=rowsOf(chart.rows_in);
+    const rows=rowsOf(chart.rows),cm=rowsOf(chart.rows_cm || chart.tables?.cm?.rows),inch=rowsOf(chart.rows_in || chart.tables?.in?.rows);
     if (!rows.length && !cm.length && !inch.length) return;
-    const baseUnit=chart.unit==='in' ? 'in' : 'cm';
+    const baseUnit=chart.unit==='in' ? 'in' : chart.unit==='cm' ? 'cm' : '';
     const convert = (value,to) => {
       const m=String(value).trim().match(/^(\d+(?:\.\d+)?)(\s*[-–]\s*(\d+(?:\.\d+)?))?$/);
-      if (!m || to===baseUnit) return String(value);
+      if (!m || !baseUnit || to===baseUnit) return String(value);
       const factor=to==='in'?1/2.54:2.54;
       return (Number(m[1])*factor).toFixed(1)+(m[3]?'–'+(Number(m[3])*factor).toFixed(1):'');
     };
     const explicit=columns.some(c=>c && typeof c==='object' && (c.measure===true || c.measurement===true || c.isMeasurement===true || c.convert===true));
     const converted = to => rows.map(row=>row.map((cell,i)=>isMeasure(columns[i],i) ? convert(cell,to) : String(cell ?? '')));
-    const both=(cm.length && inch.length) || explicit;
+    const both=(cm.length && inch.length) || (baseUnit && chart.has_measurements!==false && explicit && (!chart.units || (chart.units.includes('cm') && chart.units.includes('in'))));
     const box=document.createElement('div');
     box.className='mt-size-chart'+(both?' mt-size-chart--units':'');box.dataset.mtSizeChart='';
     box.dataset.sizeTriggers=host.querySelector('[data-size-triggers]')?.dataset.sizeTriggers || 'Size';
@@ -89,6 +87,13 @@
       }
     } catch (_) {}
     if(chartImage || existingImage)box.append(chartImage || existingImage.cloneNode(true));
+    if(chart.measuring_guide){
+      const guide=document.createElement('div');guide.className='mt-size-chart__guide';
+      if(chart.measuring_guide.text){const text=document.createElement('p');text.textContent=chart.measuring_guide.text;guide.append(text);}
+      const address=typeof chart.measuring_guide.image==='string'?chart.measuring_guide.image:chart.measuring_guide.image?.url || chart.measuring_guide.image?.src;
+      try{const url=new URL(address,location.href);if(address && ['http:','https:'].includes(url.protocol)){const img=document.createElement('img');img.src=url.href;img.alt='';img.loading='lazy';img.decoding='async';img.className='mt-size-chart__image';guide.append(img);}}catch(_){}
+      box.append(guide);
+    }
     host.replaceChildren(box,source);host._chartSource=payload;
   });
 

@@ -128,7 +128,7 @@ class MinicartDiscount extends HTMLElement {
   #updateCartFreeShipping(data) {
     const cart_free_ship = document.querySelector("free-ship-progress-bar");
     if (cart_free_ship) {
-      cart_free_ship.init(data.items_subtotal_price);
+      cart_free_ship.init(data.total_price);
     }
   }
 
@@ -216,6 +216,9 @@ class MinicartDiscount extends HTMLElement {
           String(discount.code || "").toLowerCase() === wanted
       );
       if (!applied || applied.applicable === false) {
+        // The server retained the code. Show its inapplicable state too, so it
+        // can be removed and doesn't silently disappear from the cart UI.
+        this.#updateCartUI(data);
         this.#handleDiscountError();
         return;
       }

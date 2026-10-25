@@ -171,10 +171,10 @@ const page = `<!doctype html><html lang="en"><head><meta name="viewport" content
       const body = req.postData() ? JSON.parse(req.postData()) : null;
       requests.push({path: url.pathname, method: req.method(), body});
       if (url.pathname === '/cart/add.js') {
-        if (failAdd) return json({status: 422, message: 'Cart Error', description: 'Only 2 left'}, 422);
+        if (failAdd) return json({status: 422, message: 'Only 2 left', description: 'Only 2 left'}, 422);
         return json({items: body.items, sections: body.sections ? {'minicart-form': '<div id="minicart-form"><p class="added">Added</p></div>'} : undefined});
       }
-      if (url.pathname === '/cart.js') return json({discount_codes: [{code: 'WELCOME', applicable: true}], items: []});
+      if (url.pathname === '/cart.js') return json({discount_codes: [{code: 'WELCOME', applicable: true}], items: [],item_count:3,total_price:100});
       if (url.pathname === '/cart/update.js') return json({discount_codes: body.discount.split(',').map(code => ({code, applicable: true})), sections: {'minicart-form': '<div id="minicart-form"><p class="added">Added with code</p></div>'}});
       if (url.pathname === '/cart.json') return json({item_count: 3, items_subtotal_price: 100});
       return route.fulfill({status: 404, body: ''});
@@ -183,17 +183,17 @@ const page = `<!doctype html><html lang="en"><head><meta name="viewport" content
     await tab.waitForFunction(() => customElements.get('product-bundle') && customElements.get('quantity-offer'));
     const text = sel => tab.$eval(sel, el => el.hidden ? '' : el.textContent.trim());
 
-    // Bundle: real prices, saving on the complete set
-    assert.equal(await text('#ProductBundle-b1 [data-total]'), money(Math.round(21277 * .9)));
-    assert.equal(await text('#ProductBundle-b1 [data-total-compare]'), money(21277));
-    assert.equal(await text('#ProductBundle-b1 [data-saving-amount]'), money(Math.round(21277 * .1)));
+    // Legacy manual set: local discount settings never authorize a saving
+    assert.equal(await text('#ProductBundle-b1 [data-total]'), money(21277));
+    assert.equal(await text('#ProductBundle-b1 [data-total-compare]'), '');
+    assert.equal(await text('#ProductBundle-b1 [data-saving-amount]'), money(0));
     assert.equal(await text('#ProductBundle-b1 [data-main-line] [data-line-compare]'), money(21193), 'compare at price from the variant');
     checks++;
 
     // follows the product form's variant
     await tab.evaluate(() => { const i = document.querySelector('#product-form-main [name=id]'); i.value = 'v-a2'; i.dispatchEvent(new Event('change', {bubbles: true})); });
     assert.equal(await tab.$eval('#ProductBundle-b1 [data-main-line] select', s => s.value), 'v-a2');
-    assert.equal(await text('#ProductBundle-b1 [data-total]'), money(Math.round(21500 * .9)));
+    assert.equal(await text('#ProductBundle-b1 [data-total]'), money(21500));
     checks++;
 
     // exclude a line by keyboard: no saving on an incomplete set, total of what is ticked
@@ -252,16 +252,16 @@ const page = `<!doctype html><html lang="en"><head><meta name="viewport" content
     await tab.click('#QuantityOffer-q1 .po-tier:nth-child(2)');
     assert.equal(await tab.$eval('#product-form-main [name=quantity]', i => i.value), '2');
     await tab.focus('#QuantityOffer-q1 .po-tier:nth-child(2) input');
-    assert.equal(await tierTotal(2), money(12600 * 2));
-    assert.equal(await text('#QuantityOffer-q1 .po-tier:nth-child(2) [data-tier-each]'), money(12600));
-    assert.equal(await text('#QuantityOffer-q1 .po-tier:nth-child(2) [data-tier-compare]'), money(28000));
+    assert.equal(await tierTotal(2), money(14000 * 2));
+    assert.equal(await text('#QuantityOffer-q1 .po-tier:nth-child(2) [data-tier-each]'), money(14000));
+    assert.equal(await text('#QuantityOffer-q1 .po-tier:nth-child(2) [data-tier-compare]'), money(21193 * 2));
     await tab.keyboard.press('ArrowDown');
     assert.equal(await tab.$eval('#QuantityOffer-q1 .po-tier:nth-child(3) input', r => r.checked), true, 'arrow keys move between tiers');
     assert.equal(await tab.$eval('#product-form-main [name=quantity]', i => i.value), '3');
     const tierRing = await tab.$eval('#QuantityOffer-q1 .po-tier:nth-child(3) .po-tier__card', el => getComputedStyle(el).outlineStyle);
     assert.equal(tierRing, 'solid', 'focused tier shows a ring');
     await tab.evaluate(() => { const i = document.querySelector('#product-form-main [name=id]'); i.value = 'v-a1'; i.dispatchEvent(new Event('change', {bubbles: true})); });
-    assert.equal(await tierTotal(3), money(Math.round(13777 * .85) * 3));
+    assert.equal(await tierTotal(3), money(13777 * 3));
     checks++;
 
     requests.length = 0;

@@ -1,0 +1,61 @@
+<template compat="shopify">
+{%- liquid
+  assign offer_product = product | default: current_product | default: page.product
+  assign offer_data = offer_product.metafields.storelib.offers.value | default: offer_product.metafields.storelib.offers
+  assign offer_kind = kind | default: block.type
+  case offer_kind
+    when 'bundle'
+      assign selected_offers = offer_data.bundles
+    when 'quantity_offer'
+      assign selected_offers = offer_data.quantityBreaks
+    else
+      assign selected_offers = offer_data.checkoutOffers
+  endcase
+  assign product_form_id = product_form_id | default: ''
+  if product_form_id == blank and section.id != blank
+    assign product_form_id = 'product-form-' | append: section.id
+  endif
+  assign offer_currency = localization.country.currency.iso_code | default: cart.currency.iso_code | default: cart.currency | default: shop.currency
+-%}
+{{ 'product-offers.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'product-offers.js' | asset_url }}" defer="defer"></script>
+{%- if offer_product.id != blank -%}
+<storelib-product-offers
+  data-kind="{{ offer_kind }}" data-product-id="{{ offer_product.id }}"
+  data-compact="{{ compact }}"
+  data-form-id="{{ product_form_id }}" data-block-id="{{ block.id }}"
+  data-currency="{{ offer_currency }}" data-store-currency="{{ shop.currency }}"
+  data-money-format="{{ shop.money_format | strip_html | escape }}"
+  data-offers="{{ offer_data | json | escape }}"
+  data-options="{{ block.settings | json | escape }}"
+  data-variants="{{ offer_product.variants | json | escape }}"
+  data-selected="{{ offer_product.selected_or_first_available_variant.id }}"
+  data-title="{{ offer_product.title | escape }}"
+  {{ block.shopify_attributes }}>
+  <div data-offer-server-preview>
+    {%- case offer_kind -%}
+      {%- when 'quantity_offer' -%}
+        {%- for offer in offer_data.quantityBreaks -%}
+          <p>{{ offer.title | escape }}</p>
+          {%- for tier in offer.tiers -%}
+            <p>{{ tier.label | escape }}{% if offer_currency == shop.currency %} <span>{{ tier.totalCents | money }}</span>{% endif %}</p>
+          {%- endfor -%}
+        {%- endfor -%}
+      {%- when 'bundle' -%}
+        {%- for offer in offer_data.bundles -%}
+          <p>{{ offer.title | escape }}</p>
+          <ul>{%- for item in offer.items -%}<li>{{ item.title | escape }}</li>{%- endfor -%}</ul>
+          {%- if offer_currency == shop.currency -%}<p>{{ offer.priceCents | money }}</p>{%- endif -%}
+        {%- endfor -%}
+      {%- when 'upsell_pro' -%}
+        {%- for offer in offer_data.checkoutOffers -%}<p>{{ offer.product.title | escape }} · {{ offer.label | escape }}</p>{%- endfor -%}
+    {%- endcase -%}
+    {%- if selected_offers == blank and request.design_mode -%}
+      {%- render 'editor-block-preview', block: block, title: 'Storelib product offers', message: 'Active offers for this product appear here. Configure quantity breaks, bundles or upsells in Storelib Products.', commerce: true -%}
+    {%- endif -%}
+  </div>
+</storelib-product-offers>
+{%- else -%}
+  {%- render 'editor-block-preview', block: block, title: 'Product offers', message: 'Choose a product to preview its active Storelib offers.', commerce: true -%}
+{%- endif -%}
+</template>

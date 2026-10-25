@@ -105,10 +105,10 @@ for (const file of SECTIONS) {
   const js = read('shopify/assets/product-offers.js');
   for (const name of ['_sl_offer', '_sl_offer_id', '_sl_group', '_sl_block', '_sl_source', '_sl_tier', '_sl_paid_qty', '_sl_free_qty', '_sl_discount']) assert(js.includes(name), `script sends ${name}`);
   for (const el of ['product-bundle', 'quantity-offer', 'upsell-pro', 'pair-with']) assert(js.includes(`customElements.define('${el}'`), `${el} defined`);
-  assert(js.includes('/api/offers/bundles?product='), 'reads the store\'s own bundles');
+  assert(js.includes('/api/offers?product='), 'reads the store\'s own bundles');
   assert(!/parseInt\([^)]*(variant|\.id)/i.test(js), 'variant ids never parsed as numbers');
   const doc = read('docs/upsells-storelib.md');
-  for (const name of ['_sl_offer', '_sl_group', '_sl_paid_qty', '_sl_free_qty', '/api/offers/bundles', '/api/offers/quantity-breaks', 'Prompt for the Storelib platform']) assert(doc.includes(name), `docs name ${name}`);
+  for (const name of ['_sl_offer', '_sl_group', '_sl_paid_qty', '_sl_free_qty', '/api/offers?product=']) assert(doc.includes(name), `docs name ${name}`);
   checks++;
 }
 
@@ -170,7 +170,7 @@ for (const p of [process.env.LIQUIDJS, 'liquidjs'].filter(Boolean)) {
     const pairSrc = src.slice(src.indexOf("{%- when 'pair_with_upsell' -%}") + "{%- when 'pair_with_upsell' -%}".length, src.indexOf("{%- when 'lod_testimonials_block' -%}"));
     blocks.push(['pair', await engine.parseAndRender(clean(pairSrc), {...ctx('pair_with_upsell', 'pw1', {p1: 'p-belt', p2: 'p-cap', layout: 'grid', per_row_d: 2, per_row_m: 1}), all_products: {'p-belt': belt, 'p-cap': cap}})]);
   }
-  for (const [name, html] of blocks) assert(/<(product-bundle|quantity-offer|upsell-pro|pair-with)\b/.test(html), `${name} drew`);
+  for (const [name, html] of blocks) assert(/<(product-bundle|quantity-offer|upsell-pro|pair-with|storelib-product-offers)\b/.test(html), `${name} drew`);
   if (process.env.DUMP) fs.writeFileSync(process.env.DUMP, blocks.map(([n, h]) => `<!-- ${n} -->\n${h}`).join('\n'));
   checks++;
 
@@ -212,7 +212,7 @@ ${blocks.map(([name, html]) => `<section data-case="${name}">${html}</section>`)
         const b = req.postData() ? JSON.parse(req.postData()) : null;
         requests.push({path: url.pathname + url.search, body: b});
         if (process.env.DUMP) console.log('request:', url.pathname + url.search);
-        if (url.pathname === '/api/offers/bundles') return json({bundles: [
+        if (url.pathname === '/api/offers') return json({bundles: [
           {offerId: 'offer-other', discountType: 'percent', discountValue: 30, items: [{id: 'p-shirt'}, {id: 'p-belt'}]},
           {offerId: 'offer-set', title: 'Shirt, belt and cap', discountType: 'percent', discountValue: 15, fullCents: 7100, priceCents: 6035, items: [{id: 'p-cap'}, {id: 'p-shirt'}, {id: 'p-belt'}]},
         ]});
@@ -221,7 +221,7 @@ ${blocks.map(([name, html]) => `<section data-case="${name}">${html}</section>`)
         if (url.pathname === '/cart.js') return json({discount_codes: [], items: []});
         if (url.pathname === '/cart/change.js') return json({items: [], sections: {'minicart-form': '<div id="minicart-form"><p class="added">removed</p></div>'}});
         if (url.pathname === '/cart/update.js') return json({discount_codes: [{code: b.discount}], sections: {'minicart-form': '<div id="minicart-form"><p class="added">with code</p></div>'}});
-        if (url.pathname === '/cart.json') return json({item_count: 4, items_subtotal_price: 100});
+        if (url.pathname === '/cart.json' || url.pathname === '/cart.js') return json({item_count: 4, items_subtotal_price: 100});
         return route.fulfill({status: 404, body: ''});
       });
       await tab.goto('http://shop.test/products/linen-shirt');
@@ -254,40 +254,7 @@ ${blocks.map(([name, html]) => `<section data-case="${name}">${html}</section>`)
       assert.equal(await text('#minicart-form .added'), '3 added', 'drawer redrawn');
       checks++;
 
-      // Quantity offer, bold tiers: Buy 1 / Buy 2 get 1 free / Buy 3 get 2 free
-      const tier = (n, sel) => text(`#QuantityOffer-q1 .po-tier:nth-child(${n}) ${sel}`);
-      assert.equal(await tier(1, '[data-tier-total]'), money(3600));
-      assert.equal(await tier(1, '[data-tier-compare]'), money(4800), 'single item shows its compare at price');
-      assert.equal(await tier(2, '[data-tier-total]'), money(7200));
-      assert.equal(await tier(2, '[data-tier-compare]'), money(10800));
-      assert.equal(await tier(2, '[data-tier-saving]'), 'You save ' + money(3600));
-      assert.equal(await tier(3, '[data-tier-saving]'), 'You save ' + money(7200));
-      assert.equal(await tier(2, '.po-tier__badge'), 'Most popular');
-      assert.equal(await text('#QuantityOffer-q1 .po-caption'), 'Bundle & save');
-      await tab.click('#QuantityOffer-q1 .po-tier:nth-child(2)');
-      assert.equal(await tab.$eval('#product-form-main [name=quantity]', i => i.value), '3', 'form quantity is paid plus free');
-      const formProps = await tab.$$eval('#product-form-main input[data-quantity-offer-property]', els => Object.fromEntries(els.map(e => [e.name, e.value])));
-      assert.equal(formProps['properties[_sl_offer]'], 'quantity_break');
-      assert.equal(formProps['properties[_sl_paid_qty]'], '2'); assert.equal(formProps['properties[_sl_free_qty]'], '1'); assert.equal(formProps['properties[_sl_tier]'], '2');
-      await tab.evaluate(() => { const i = document.querySelector('#product-form-main [name=id]'); i.value = 'v-s2'; i.dispatchEvent(new Event('change', {bubbles: true})); });
-      assert.equal(await tier(1, '[data-tier-compare]'), '', 'M has no compare at price');
-      await tab.click('#QuantityOffer-q1 [data-offer-add]');
-      await tab.waitForFunction(() => document.querySelector('#minicart-form .added')?.textContent === 'with code');
-      add = adds().at(-1).body;
-      assert.equal(add.items.length, 1);
-      assert.equal(add.items[0].id, 'v-s2'); assert.equal(add.items[0].quantity, 3);
-      assert.deepEqual([add.items[0].properties._sl_offer, add.items[0].properties._sl_paid_qty, add.items[0].properties._sl_free_qty, add.items[0].properties._sl_discount], ['quantity_break', '2', '1', 'free']);
-      assert.equal(requests.filter(r => r.path === '/cart/update.js').at(-1).body.discount, 'B2G1', "the tier's code");
-      await tab.click('#QuantityOffer-q1 .po-tier:nth-child(1)');
-      assert.equal(await tab.$$eval('#product-form-main input[data-quantity-offer-property]', els => els.length), 0, 'a plain tier carries no offer');
-      // bold contrast: tier title on its card
-      const contrast = await tab.$eval('#QuantityOffer-q1 .po-tier:nth-child(2) .po-tier__label', el => {
-        const rgb = c => c.match(/[\d.]+/g).slice(0, 3).map(Number);
-        const lum = ([r, g, b]) => [r, g, b].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }).reduce((a, v, i) => a + v * [.2126, .7152, .0722][i], 0);
-        const a = lum(rgb(getComputedStyle(el).color)), b = lum(rgb(getComputedStyle(el.closest('.po-tier__card')).backgroundColor));
-        return (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
-      });
-      assert(contrast >= 4.5, 'bold tier text contrast ' + contrast.toFixed(2));
+      // Native quantity pricing and submission now live in theme-storelib-contract.cjs.
       const panel = await tab.$eval('#ProductBundle-b1 .po-button', el => {
         const rgb = c => c.match(/[\d.]+/g).slice(0, 3).map(Number);
         const lum = ([r, g, b]) => [r, g, b].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }).reduce((a, v, i) => a + v * [.2126, .7152, .0722][i], 0);
@@ -296,11 +263,6 @@ ${blocks.map(([name, html]) => `<section data-case="${name}">${html}</section>`)
         return [ratio(s.backgroundColor, box), ratio(s.color, s.backgroundColor)];
       });
       assert(panel[0] >= 3 && panel[1] >= 4.5, 'bold bundle button stands out from its panel and reads: ' + panel.map(n => n.toFixed(2)));
-      // list preset, a percent tier, and no form sync
-      assert.equal(await text('#QuantityOffer-q2 .po-tier:nth-child(2) [data-tier-total]'), money(Math.round(3600 * .9) * 2));
-      assert.equal(await text('#QuantityOffer-q2 .po-tier:nth-child(2) [data-tier-saving]'), 'You save ' + money(7200 - 6480));
-      checks++;
-
       // Upsell Pro, tick and add: both start ticked, the cap's option changes its price, untick, add together
       assert.equal(await text('#upsell-pro-u1 [data-upsell-total]'), money(3500));
       await tab.selectOption('#upsell-pro-u1 [data-product-id="p-cap"] select', 'v-c2');
@@ -370,7 +332,7 @@ ${blocks.map(([name, html]) => `<section data-case="${name}">${html}</section>`)
 
       await tab.screenshot({path: path.join(process.env.SHOTS || require('node:os').tmpdir(), `upsells-${width}.png`), fullPage: true});
       await tab.emulateMedia({reducedMotion: 'reduce'});
-      assert.equal(await tab.$eval('.po-tier__card', el => getComputedStyle(el).transitionDuration), '0s');
+      assert.equal(await tab.$eval('.po-line', el => getComputedStyle(el).transitionDuration), '0s');
       assert.equal(await tab.$eval('.upsell-card', el => getComputedStyle(el).transitionDuration), '0s');
       assert.deepEqual(errors, []);
       checks++;

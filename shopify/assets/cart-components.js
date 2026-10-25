@@ -33,24 +33,13 @@ function materiaTweenMoney(el, toCents, finalHTML) {
   if (el._materiaTarget === toCents && (finalHTML == null || el._materiaFinal === finalHTML)) return;
   cancelAnimationFrame(el._materiaFrame);
   const template = el.textContent.trim();
-  const from = el._materiaCents ?? materiaParseMoney(template);
-  el._materiaTarget = toCents; el._materiaFinal = finalHTML;
-  const done = () => {
-    el._materiaCents = toCents; el._materiaTarget = null;
-    if (finalHTML != null) { if (el.innerHTML !== finalHTML) el.innerHTML = finalHTML; }
-    else el.textContent = materiaFormatMoney(toCents, template);
-  };
-  if (from == null || from === toCents || materiaReduced()) { done(); return; }
-  const start = performance.now(), duration = 240;
-  const step = now => {
-    const t = Math.min(1, (now - start) / duration), eased = 1 - Math.pow(1 - t, 3);
-    if (t >= 1) return done();
-    const value = Math.round(from + (toCents - from) * eased);
-    el._materiaCents = value;
-    el.textContent = materiaFormatMoney(value, template);
-    el._materiaFrame = requestAnimationFrame(step);
-  };
-  el._materiaFrame = requestAnimationFrame(step);
+  el._materiaTarget = null; el._materiaFinal = finalHTML; el._materiaCents = toCents;
+  // Reveal the confirmed server amount immediately. Animate presentation,
+  // never a sequence of intermediate prices that checkout would not charge.
+  if (finalHTML != null) { if (el.innerHTML !== finalHTML) el.innerHTML = finalHTML; }
+  else el.textContent = materiaFormatMoney(toCents, template);
+  if (!materiaReduced() && el.animate) el.animate([{opacity:.72},{opacity:1}], {duration:180,easing:'ease-out'});
+
 }
 // Bars scale (transform) instead of resizing; ProgressBar keeps its width maths.
 function materiaSyncShippingBar(bar) {
@@ -674,7 +663,7 @@ class CartNotification extends HTMLElement {
                 "free-ship-progress-bar"
               );
               if (cart_free_ship) {
-                cart_free_ship.init(cart.items_subtotal_price);
+                cart_free_ship.init(cart.total_price);
               }
             }
           })
@@ -764,8 +753,8 @@ class CartNotification extends HTMLElement {
         this._recommendationAdded = new Set(cart.items.map(item => String(item.variant_id || item.id)));
         this.paintRecommendationStates();
         this._confirmedCount = cart.item_count;
-        if (!this._desired?.size && cart.items_subtotal_price != undefined) {
-          this._confirmedOrder = Number(cart.items_subtotal_price);
+        if (!this._desired?.size && cart.total_price != undefined) {
+          this._confirmedOrder = Number(cart.total_price);
           const bar = document.querySelector("free-ship-progress-bar");
           if (bar) this._paintedOrder = bar.dataset.order;
           try { document.querySelector("header-total-price")?.updateTotal?.(cart); } catch (_) {}
@@ -785,7 +774,7 @@ class CartNotification extends HTMLElement {
       count += qty - server;
       const item = this._cart?.items?.find(line => line.key === key);
       if (!item) { if (qty !== server) known = false; continue; }
-      cents += (qty - server) * Number(item.final_price ?? item.price ?? 0);
+      // Prices can cross offer tiers. Only the server can price this change.
     }
     return {cents, count, known};
   }
@@ -800,10 +789,7 @@ class CartNotification extends HTMLElement {
         this._confirmedSubtotal = {el: subtotal, cents: subtotal._materiaTarget ?? materiaParseMoney(subtotal._materiaFinal ?? subtotal.textContent), html: subtotal._materiaFinal ?? subtotal.innerHTML};
       }
       const base = this._confirmedSubtotal;
-      if (base.cents != null && delta.known) {
-        if (delta.cents === 0) materiaTweenMoney(subtotal, base.cents, base.html);
-        else materiaTweenMoney(subtotal, Math.max(0, base.cents + delta.cents));
-      } else if (base.cents != null) {
+      if (base.cents != null) {
         // Prices of the changed lines are not known yet: show the confirmed
         // total rather than keep an older one.
         materiaTweenMoney(subtotal, base.cents, base.html);
@@ -816,7 +802,7 @@ class CartNotification extends HTMLElement {
       if (shown != null && (this._confirmedOrder == null || (this._paintedOrder != null && shown !== String(this._paintedOrder)))) this._confirmedOrder = Number(shown) || 0;
       if (this._confirmedOrder != null) {
         // Unknown line prices: the confirmed amount, never a guess.
-        const order = Math.max(0, Math.round(this._confirmedOrder + (delta.known ? delta.cents : 0)));
+        const order = Math.max(0, Math.round(this._confirmedOrder));
         if (String(this._paintedOrder) !== String(order) || !bar.__materiaPainted) {
           this._paintedOrder = order;
           bar.__materiaPainted = true;
@@ -907,8 +893,8 @@ class CartNotification extends HTMLElement {
     if (Array.isArray(parsedState.items)) this._cart = parsedState;
     else this.ensureCartState(true);
     this._confirmedCount = parsedState.item_count ?? this._confirmedCount;
-    if (parsedState.items_subtotal_price != undefined) {
-      this._confirmedOrder = Number(parsedState.items_subtotal_price);
+    if (parsedState.total_price != undefined) {
+      this._confirmedOrder = Number(parsedState.total_price);
       const bar = document.querySelector("free-ship-progress-bar");
       if (bar) this._paintedOrder = bar.dataset.order;
     }

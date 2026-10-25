@@ -146,7 +146,7 @@ class CartUtils {
     }
 
     // Update free shipping
-    CartUtils.updateFreeShippingBar(parsedState.items_subtotal_price);
+    CartUtils.updateFreeShippingBar(parsedState.total_price);
 
     // Reinitialize components
     BlsLazyloadImg.init();
@@ -386,7 +386,7 @@ class CartItems extends HTMLElement {
             if (cart.item_count !== undefined) {
               CartUtils.updateCartCount(cart.item_count);
               CartUtils.updateHeaderTotalPrice(cart);
-              CartUtils.updateFreeShippingBar(cart.items_subtotal_price);
+              CartUtils.updateFreeShippingBar(cart.total_price);
             }
             return { parsedState, cart };
           });
@@ -443,7 +443,7 @@ class CartItems extends HTMLElement {
             if (cart.item_count !== undefined) {
               CartUtils.updateCartCount(cart.item_count);
               CartUtils.updateHeaderTotalPrice(cart);
-              CartUtils.updateFreeShippingBar(cart.items_subtotal_price);
+              CartUtils.updateFreeShippingBar(cart.total_price);
             }
             return { parsedState, cart };
           });
@@ -722,7 +722,7 @@ class CartDiscount extends HTMLElement {
   #updateCartFreeShipping(data) {
     const cart_free_ship = document.querySelector("free-ship-progress-bar");
     if (cart_free_ship) {
-      cart_free_ship.init(data.items_subtotal_price);
+      cart_free_ship.init(data.total_price);
     }
   }
 

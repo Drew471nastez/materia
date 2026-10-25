@@ -242,7 +242,8 @@ async function touchDrag(page,x,y,steps,{dy=12,gap=16,check}={}){
       assert.equal(await page.evaluate(()=>disabledSeen),0,'no disabled flicker');
       assert.equal((await page.textContent('[data-cart-subtotal-price]')).trim(),'€310.00');
       const sub=await page.evaluate(()=>subTrace);
-      assert(sub.some(t=>t!=='€310.00'&&t!=='€70.00'),'the total counts up: '+sub.slice(0,6));
+      const confirmedTotals=new Set(['€70.00',...changes.map(q=>money(q*4000+3000))]);
+      assert(sub.every(t=>confirmedTotals.has(t)),'only server-confirmed totals are displayed: '+[...new Set(sub)]);
       assert.equal(await page.$eval('.cart_shipping__fill',el=>el.style.getPropertyValue('--fs-progress')),'1');
       assert(await page.$eval('free-ship-progress-bar',el=>el.classList.contains('cart_shipping_free')));
       // Typing a number.
@@ -251,7 +252,7 @@ async function touchDrag(page,x,y,steps,{dy=12,gap=16,check}={}){
       await page.waitForTimeout(900);
       assert.equal(store.items.find(i=>i.key==='v1').quantity,3);
       assert.equal(await page.inputValue('#minicart__product-v1 input[name="updates[]"]'),'3');
-      assert.equal((await page.textContent('[data-cart-subtotal-price]')).trim(),'€150.00');
+      await page.waitForFunction(()=>document.querySelector('[data-cart-subtotal-price]').textContent.trim()==='€150.00');
       assert.deepEqual(errors,[]);ok();
       await context.close();
     }
@@ -355,7 +356,7 @@ async function touchDrag(page,x,y,steps,{dy=12,gap=16,check}={}){
       assert.equal(store.items.find(i=>i.key==='v1').quantity,4);
       assert.deepEqual(await visible(),[0,1],'check once reached');
       const bar=await page.$eval('.cart_shipping__fill',el=>{const r=el.getBoundingClientRect(),t=el.parentElement.getBoundingClientRect();return Math.round(r.left-t.left)});
-      assert.equal(bar,0,'full bar');
+      assert.equal(Math.abs(bar),0,'full bar');
       assert.deepEqual(errors,[]);ok();
       await context.close();
     }
