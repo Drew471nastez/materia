@@ -127,37 +127,64 @@ The same as a section: line 1 `<template compat="shopify">`, the markup,
 `</template>`, then `<schema>` with the block's settings under
 `"shopify"`. A block is always in the theme's format.
 
-`blocks/product_custom_field.storelib`, shortened where it says so:
+`blocks/menu_link_style.storelib`, shortened where it says so:
 
 ```html
 <template compat="shopify">
-{%- assign preview_product = product | default: page.product -%}
-{%- assign preview_form = 'product-form-' | append: section.id -%}
-{%- render 'product-personalization', product: preview_product, block: block, section: section, product_form_id: preview_form -%}
+{%- render 'menu-block-preview', block: block, title: 'Menu link: badge & colour' -%}
 </template>
 
 <schema>
 {
   "shopify": {
-    "type": "product_custom_field",
-    "name": "Personalization fields",
-    "limit": 1,
+    "type": "menu_link_style",
+    "name": "Menu link: badge & colour",
     "settings": [
       {
         "type": "header",
         "content": "Content"
       },
       {
-        "type": "checkbox",
-        "id": "enable_field_text",
-        "label": "t:sections.main-product.blocks.product_custom_field.settings.field_type.enable_field_text",
-        "default": true
+        "type": "text",
+        "id": "text",
+        "label": "Top-level menu link title",
+        "info": "The top-level link this styles, for example Buy Theme!"
       },
       {
-        "type": "checkbox",
-        "id": "enable_field_image",
-        "label": "t:sections.main-product.blocks.product_custom_field.settings.field_type.enable_field_image",
-        "default": true
+        "type": "select",
+        "id": "item_label",
+        "default": "hot",
+        "label": "Badge above the link",
+        "options": [
+          {
+            "value": "unset",
+            "label": "No badge"
+          },
+          {
+            "value": "hot",
+            "label": "Hot"
+          },
+          {
+            "value": "new",
+            "label": "New"
+          },
+          {
+            "value": "sale",
+            "label": "Sale"
+          },
+          {
+            "value": "popular",
+            "label": "Popular"
+          },
+          {
+            "value": "custom_1",
+            "label": "Custom 1"
+          },
+          {
+            "value": "custom_2",
+            "label": "Custom 2"
+          }
+        ]
       }
     ]
   }
