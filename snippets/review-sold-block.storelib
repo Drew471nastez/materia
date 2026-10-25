@@ -9,7 +9,20 @@
   the builder says so.
 {%- endcomment -%}
 {%- liquid
+  assign product = product | default: page.product
   assign st = block.settings
+  assign rs_custom = true
+  if mode != blank and st.enable_counter_custom != true
+    assign rs_custom = false
+  endif
+  assign rs_reviews_enabled = true
+  assign rs_sold_enabled = true
+  if mode == 'sold' or st.show_review == false
+    assign rs_reviews_enabled = false
+  endif
+  if mode == 'reviews' or st.show_sold_products == false
+    assign rs_sold_enabled = false
+  endif
 
   comment
     Sold count: the product's own field first, unless the block says Mine only.
@@ -25,8 +38,10 @@
     assign sold_ok = true
   endif
   if sold_ok == false or sold_raw contains ','
-    assign sold_raw = st.sold | strip
-    assign sold_from_block = true
+    if mode == blank or st.sold_source == 'manual'
+      assign sold_raw = st.sold | strip
+      assign sold_from_block = true
+    endif
   endif
   assign sold_count = sold_raw | plus: 0
   assign sold_integer = sold_count | floor
@@ -65,8 +80,10 @@
       endif
     endif
     unless rating_from_app
-      assign rating = st.manual_review_rating | plus: 0
-      assign rating_count = st.manual_review_count | plus: 0
+      if mode == blank or st.review_source == 'manual'
+        assign rating = st.manual_review_rating | plus: 0
+        assign rating_count = st.manual_review_count | plus: 0
+      endif
       assign count_integer = rating_count | floor
       if rating > 5 or rating_count != count_integer
         assign rating = 0
@@ -74,31 +91,37 @@
     endunless
   endunless
   assign show_rating = false
-  if st.show_review != false and rating > 0 and rating_count > 0
+  if rs_reviews_enabled and rating > 0 and rating_count > 0
     assign show_rating = true
   endif
   assign show_sold = false
-  if st.show_sold_products != false and sold_count > 0
+  if rs_sold_enabled and sold_count > 0
     assign show_sold = true
   endif
   assign show_app = false
-  if st.show_review != false and rating_from_app
+  if rs_reviews_enabled and rating_from_app
     assign show_app = true
   endif
   assign review_label = st.review_label | default: 'reviews'
   assign rating_shown = rating | round: 1
   assign rating_fill = rating | times: 20 | round: 1
   assign rs_style = st.review_style | default: 'stars'
+  assign rs_preview_title = 'Reviews & sold counter'
+  if mode == 'reviews'
+    assign rs_preview_title = 'Reviews'
+  elsif mode == 'sold'
+    assign rs_preview_title = 'Sold counter'
+  endif
 -%}
 {%- if show_rating or show_sold or show_app -%}
 <div
   class="review_sold rs rs--{{ rs_style }}"
   id="review-sold-{{ block.id }}"
   {{ block.shopify_attributes }}
-  style="--rs-size-m: {{ st.font_size_mobile | default: 13 }}px; --rs-size-d: {{ st.font_size_desktop | default: 14 }}px; --rs-pt: {{ st.padding_top | default: 0 }}px; --rs-pb: {{ st.padding_bottom | default: 0 }}px;
-    {%- if st.star_color != blank %} --rs-star: {{ st.star_color }};{% endif -%}
-    {%- if st.text_color != blank %} --rs-text: {{ st.text_color }};{% endif -%}
-    {%- if st.live_dot_color != blank %} --rs-dot: {{ st.live_dot_color }};{% endif %}"
+  style="{% if mode != blank and rs_custom == false %}--rs-size-m:calc(var(--body-font-size,16px) * .875); --rs-size-d:calc(var(--body-font-size,16px) * .875);{% else %}--rs-size-m: {{ st.font_size_mobile | default: 13 }}px; --rs-size-d: {{ st.font_size_desktop | default: 14 }}px;{% endif %} --rs-pt: {{ st.padding_top | default: 0 }}px; --rs-pb: {{ st.padding_bottom | default: 0 }}px;
+    {%- if rs_custom and st.star_color != blank %} --rs-star: {{ st.star_color }};{% endif -%}
+    {%- if rs_custom and st.text_color != blank %} --rs-text: {{ st.text_color }};{% endif -%}
+    {%- if rs_custom and st.live_dot_color != blank %} --rs-dot: {{ st.live_dot_color }};{% endif %}"
 >
   {%- if show_rating -%}
     <span class="product-reviews rs__rating">
@@ -127,10 +150,10 @@
 {%- comment -%} Builder only: what is missing, and how to fill it. {%- endcomment -%}
 {%- liquid
   assign rs_note = ''
-  if st.show_review != false and show_rating == false and show_app == false
+  if rs_reviews_enabled and show_rating == false and show_app == false
     assign rs_note = 'Reviews: this product has no rating of its own yet. Type your rating and review count in this block to show them.'
   endif
-  if st.show_sold_products != false and show_sold == false
+  if rs_sold_enabled and show_sold == false
     if st.sold contains ','
       assign rs_note = rs_note | append: ' Sold: “' | append: st.sold | append: '” is a list the original theme picked from at random. Type one real number, such as 34.'
     else
@@ -141,11 +164,11 @@
   endif
   assign rs_note = rs_note | strip
 -%}
-{%- if rs_note != blank -%}
+{%- if rs_note != blank and request.design_mode -%}
   {%- if show_rating or show_sold or show_app -%}
     <p class="rs__note"{% if request.design_mode %} data-editor-preview{% endif %} role="note">{{ rs_note | escape }}</p>
   {%- else -%}
-    {%- render 'editor-block-preview', block: block, title: 'Reviews & sold counter', message: rs_note -%}
+    {%- render 'editor-block-preview', block: block, title: rs_preview_title, message: rs_note -%}
   {%- endif -%}
 {%- endif -%}
 {%- if show_rating or show_sold or show_app or rs_note != blank -%}

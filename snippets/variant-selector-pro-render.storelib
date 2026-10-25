@@ -8,11 +8,20 @@
   the address and the gallery all follow a choice the same way.
   Inputs: block, section, product
 {%- endcomment -%}
+{%- assign product = product | default: page.product -%}
 {%- unless product == blank or product.has_only_default_variant -%}
 {%- liquid
   assign vsp = block.settings
   assign vsp_selected = product.selected_or_first_available_variant
-  assign vsp_style = vsp.swatch_style | default: 'image'
+  assign product = product | default: page.product
+  assign vsp_style = vsp.swatch_style | default: 'theme'
+  if vsp_style == 'theme'
+    if settings.swatch_item_type == 'variant_images'
+      assign vsp_style = 'image'
+    else
+      assign vsp_style = 'color'
+    endif
+  endif
   assign vsp_size = vsp.swatch_size | default: 44
   comment
     Picture swatches use Overall option size (desktop, mobile); 0 falls
@@ -48,7 +57,7 @@
     assign vsp_justify = 'flex-end'
   endif
   assign vsp_accent = vsp.selected_border
-  if vsp.vsp_custom_colors and vsp.accent != blank
+  if vsp.enable_vsp_custom and vsp.accent != blank
     assign vsp_accent = vsp.accent
   endif
   if settings.color_swatch_trigger != blank
@@ -59,8 +68,9 @@
 -%}
 <variant-radios-detail
   id="VariantSelectorPro-{{ block.id }}"
-  class="vsp block{% if vsp.hover_effect != blank and vsp.hover_effect != 'none' %} vsp--hover-{{ vsp.hover_effect }}{% endif %}{% if vsp.selected_anim != blank and vsp.selected_anim != 'none' %} vsp--anim-{{ vsp.selected_anim }}{% endif %}"
-  data-vsp
+  class="vsp block{% if vsp.enable_vsp_custom and vsp.hover_effect != blank and vsp.hover_effect != 'none' %} vsp--hover-{{ vsp.hover_effect }}{% endif %}{% if vsp.enable_vsp_custom and vsp.selected_anim != blank and vsp.selected_anim != 'none' %} vsp--anim-{{ vsp.selected_anim }}{% endif %}"
+  data-vsp{% if vsp.enable_vsp_custom %} data-vsp-custom{% endif %}
+  data-vsp-mode="{{ vsp.swatch_style | default: 'theme' }}" data-vsp-fill="{{ vsp_style }}"
   data-section="{{ section.id }}"
   data-url="{{ product.url }}"
   {%- if vsp.aria_label != blank %} role="group" aria-label="{{ vsp.aria_label | escape }}"{% endif %}
@@ -70,7 +80,7 @@
     {%- if vsp.image_bg != blank %} --vsp-img-bg: {{ vsp.image_bg }};{% endif -%}
     {%- if vsp.card_bg != blank %} --vsp-bg: {{ vsp.card_bg }};{% endif -%}
     {%- if vsp.muted_color != blank %} --vsp-muted: {{ vsp.muted_color }};{% endif -%}
-    {%- if vsp.vsp_custom_colors -%}
+    {%- if vsp.enable_vsp_custom -%}
       {%- if vsp.text_color != blank %} --vsp-text: {{ vsp.text_color }};{% endif -%}
       {%- if vsp.selected_text_color != blank %} --vsp-selected-text: {{ vsp.selected_text_color }};{% endif -%}
       {%- if vsp.border_color != blank %} --vsp-border: {{ vsp.border_color }};{% endif -%}
@@ -91,6 +101,7 @@
   {%- for option in product.options_with_values -%}
     {%- liquid
       assign opt_pos = option.position | default: forloop.index | plus: 0
+      assign opt_index = opt_pos | minus: 1
       assign opt_key = 'option' | append: opt_pos
       assign opt_name_down = option.name | downcase | strip
       assign is_color = false
@@ -100,7 +111,7 @@
           assign is_color = true
         endif
       endfor
-      assign opt_selected = option.selected_value | default: vsp_selected[opt_key]
+      assign opt_selected = option.selected_value | default: vsp_selected[opt_key] | default: vsp_selected.options[opt_index].value | default: vsp_selected.options[opt_index].name | default: vsp_selected.options[opt_index]
     -%}
     <fieldset class="product-form__input vsp__option{% if is_color %} vsp__option--color{% else %} vsp__option--button{% endif %}">
       <legend class="vsp__legend">
@@ -115,9 +126,10 @@
           {%- liquid
             assign vsp_id = 'vsp-' | append: block.id | append: '-' | append: opt_pos | append: '-' | append: forloop.index0
             assign value_available = false
-            assign value_image = blank
+            assign value_image = ''
             for v in product.variants
-              if v[opt_key] == value
+              assign variant_value = v[opt_key] | default: v.options[opt_index].value | default: v.options[opt_index].name | default: v.options[opt_index]
+              if variant_value == value
                 if v.available
                   assign value_available = true
                 endif
@@ -140,7 +152,7 @@
               Variant 1 to 10 overrides: the Nth value of a colour option
               takes its own picture, colour and label.
             endcomment
-            if is_color and forloop.index <= 10
+            if vsp.enable_vsp_custom and is_color and forloop.index <= 10
               assign ov_img_key = 'variant_' | append: forloop.index | append: '_image'
               assign ov_col_key = 'variant_' | append: forloop.index | append: '_color'
               assign ov_lab_key = 'variant_' | append: forloop.index | append: '_label'
@@ -183,7 +195,7 @@
             value="{{ value | escape }}"
             {% if value_checked %}checked{% endif %}
           >
-          <label for="{{ vsp_id }}" class="vsp__cell" title="{{ value_label | escape }}"{% if use_image %} data-image="{{ value_image_url }}"{% endif %}>
+          <label for="{{ vsp_id }}" class="vsp__cell" data-vsp-image="{{ value_image_url | escape }}" data-vsp-color-value="{{ swatch_color | default: color_name | escape }}" title="{{ value_label | escape }}"{% if use_image %} data-image="{{ value_image_url }}"{% endif %}>
             {%- if is_color -%}
               {%- if use_image -%}
                 {%- comment -%} With colour dots, a picture fills a dot of the same size. {%- endcomment -%}
@@ -216,7 +228,7 @@
   {%- if vsp.footer_note != blank -%}
     <p class="vsp__footer"{% if vsp.footer_color != blank %} style="color: {{ vsp.footer_color }};"{% endif %}>{{ vsp.footer_note | escape }}</p>
   {%- endif -%}
-  <script type="application/json">
+  <script type="application/json" data-variant-data>
     {{ product.variants | json }}
 {% comment %}{% endcomment %}  </script>
   {%- render 'variant-price-map', product: product -%}
@@ -237,6 +249,14 @@
     font-family: var(--body-font);
     font-weight: var(--body-weight);
   }
+  #VariantSelectorPro-{{ block.id }}:not([data-vsp-custom]) {
+    --vsp-size:44px!important; --vsp-img-d:44px!important; --vsp-img-m:44px!important; --vsp-gap:8px!important; --vsp-gap-m:8px!important;
+    --vsp-accent:var(--color-heading)!important; --vsp-text:var(--color-text)!important; --vsp-border:var(--color-border)!important;
+    --vsp-bg:var(--color-background)!important; --vsp-selected-bg:var(--color-heading)!important; --vsp-selected-text:var(--color-background)!important;
+    --vsp-img-bg:var(--color-background)!important; --vsp-muted:var(--color-text)!important;
+    --vsp-radius:var(--input-border-radius,4px)!important; --vsp-bw:var(--input-border-width,1px)!important;
+  }
+  #VariantSelectorPro-{{ block.id }}:not([data-vsp-custom]) :is(.vsp__title,.vsp__subtitle,.vsp__value,.vsp__label,.vsp__chip-text,.vsp__footer) { font-family:inherit!important; font-size:inherit!important; color:inherit!important; letter-spacing:normal!important; text-transform:none!important; }
   #VariantSelectorPro-{{ block.id }} .vsp__head { margin: 0 0 var(--vsp-header-gap); }
   #VariantSelectorPro-{{ block.id }} .vsp__title { margin: 0; line-height: 1.3; color: var(--vsp-heading); font-family: var(--heading-font, inherit); }
   #VariantSelectorPro-{{ block.id }} .vsp__subtitle { margin: 4px 0 0; line-height: 1.4; color: var(--vsp-muted); }

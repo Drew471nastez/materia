@@ -1012,13 +1012,11 @@
   var stickyEls = new Set();
   var stickyRo = null;
   var stickyFrame = 0;
-  var stickyHeader = 0;
   function headerTop() {
     var css = getComputedStyle(document.documentElement);
-    var v = parseFloat(css.getPropertyValue("--product-sticky-top")) || parseFloat(css.getPropertyValue("--sticky-top")) || 0;
-    // The header comes back on scrolling up: leave it room.
-    if (v > stickyHeader) stickyHeader = v;
-    return stickyHeader;
+    var productTop = parseFloat(css.getPropertyValue("--product-sticky-top"));
+    var v = Number.isFinite(productTop) ? productTop : parseFloat(css.getPropertyValue("--sticky-top")) || 0;
+    return v;
   }
   function measureSticky() {
     stickyFrame = 0;
@@ -1064,6 +1062,24 @@
     scheduleSticky();
   }
   window.addEventListener("resize", scheduleSticky);
+  // Re-measure only when the visible header offset actually changes; never
+  // retain the largest header height from an earlier editor/viewport state.
+  var lastStickyOffset='';
+  var stickyRootObserver = new MutationObserver(function(){
+    var root=document.documentElement;
+    if(!root)return;
+    var offset=root.style.getPropertyValue('--product-sticky-top')+'|'+root.style.getPropertyValue('--sticky-top');
+    if(offset!==lastStickyOffset){lastStickyOffset=offset;scheduleSticky();}
+  });
+  function watchStickyRoot(){
+    stickyRootObserver.disconnect();lastStickyOffset='';
+    if(!document.documentElement)return;
+    stickyRootObserver.observe(document.documentElement,{attributes:true,attributeFilter:['style']});
+    scheduleSticky();
+  }
+  watchStickyRoot();
+  // A full canvas redraw may replace <html> without replacing the window.
+  new MutationObserver(watchStickyRoot).observe(document,{childList:true});
 
   /* ---------------------------------------------------------------------
      7. Gallery health. A product gallery is never left blank: its pictures
@@ -1227,9 +1243,29 @@
   });
   document.addEventListener("storelib:section-load", onRedraw);
   document.addEventListener("shopify:section:load", onRedraw);
+  function refreshVsp(type) {
+    document.querySelectorAll('[data-vsp][data-vsp-mode="theme"]').forEach(function(root){
+      var fill=type==='variant_images'?'image':'color';
+      root.querySelectorAll('.vsp__option--color .vsp__cell').forEach(function(cell){
+        var chip=cell.querySelector('.vsp__chip');if(!chip)return;
+        if(!cell._vspOriginal){cell._vspOriginal=chip.cloneNode(true);cell._vspFill=root.dataset.vspFill;}
+        if(fill===cell._vspFill){chip.replaceWith(cell._vspOriginal.cloneNode(true));return;}
+        var next=cell._vspOriginal.cloneNode(false);
+        if(fill==='image' && cell.dataset.vspImage){
+          var img=document.createElement('img');img.src=cell.dataset.vspImage;img.alt='';img.width=120;img.height=120;img.loading='lazy';next.className='vsp__chip vsp__chip--image';next.appendChild(img);
+        }else{
+          next.className='vsp__chip vsp__chip--dot';var color=cell.dataset.vspColorValue;
+          if(color && CSS.supports('color',color))next.style.setProperty('--vsp-dot',color);
+          else{next.classList.add('vsp__chip--text');next.textContent=cell.title;}
+        }
+        chip.replaceWith(next);
+      });
+    });
+  }
   // A setting drawn in place (no redraw): its section's galleries are checked.
   document.addEventListener("storelib:settings-change", function (e) {
     var d = e && e.detail;
+    if(d && !d.section && d.settings && d.settings.swatch_item_type)refreshVsp(d.settings.swatch_item_type);
     if (!d || !d.section || d.live) return;
     var section = document.getElementById("shopify-section-" + d.section);
     if (section) requestAnimationFrame(function () { onRedraw({ target: section }); });

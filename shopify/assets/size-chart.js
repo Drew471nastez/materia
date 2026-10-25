@@ -166,7 +166,16 @@
   const sectionOf = chart => chart.closest('.shopify-section, [data-section-id]') || document;
   const syncUnit = chart => {
     const unit=chart.querySelector('.mt-size-chart__units input:checked')?.value;
-    chart.querySelectorAll('[data-unit]').forEach(el=>{el.hidden=!!unit && el.dataset.unit!=='one' && el.dataset.unit!==unit;});
+    const scrolls=[...chart.querySelectorAll('.mt-size-chart__scroll[data-unit]')];
+    if(scrolls.length>1 && !chart.querySelector('.mt-size-chart__tables')){
+      const stack=document.createElement('div');stack.className='mt-size-chart__tables';scrolls[0].before(stack);scrolls.forEach(el=>stack.append(el));
+      const columns=scrolls[0].querySelector('tr')?.cells.length||1;stack.style.setProperty('--chart-min-width',Math.max(280,columns*100)+'px');
+    }
+    chart.querySelectorAll('[data-unit]').forEach(el=>{
+      const off=!!unit && el.dataset.unit!=='one' && el.dataset.unit!==unit;
+      el.hidden=off;
+      if(el.matches('.mt-size-chart__scroll')){el.inert=off;el.setAttribute('aria-hidden',String(off));}
+    });
   };
   const highlight = (chart, value) => {
     chart.querySelectorAll('tbody tr').forEach(row => {

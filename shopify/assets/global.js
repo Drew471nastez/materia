@@ -1001,7 +1001,7 @@ class SwatchInit extends HTMLElement {
     });
   }
   checkSwatches(e) {
-    const previewType = window.__materiaSwatchSettings?.swatch_item_type;
+    const previewType = e.closest('[data-swatch-override]')?.dataset.swatchOverride || window.__materiaSwatchSettings?.swatch_item_type;
     if (previewType && e.hasAttribute('data-color')) {
       e.dataset.swatchType = previewType;
       e.classList.remove('color_swatches','variant_images');

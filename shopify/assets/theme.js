@@ -1955,60 +1955,36 @@ try { BlsSearchShopify.init(); } catch (e) { console.error("[theme] search init"
 class HeaderSearch extends HTMLElement {}
 customElements.define("header-search", HeaderSearch);
 class QuantityInput extends HTMLElement {
-  constructor() {
-    super();
-    this.input = this.querySelector("input");
-    this.changeEvent = new Event("change", { bubbles: true });
-    this.input.addEventListener("change", this.onInputChange.bind(this));
-    this.querySelectorAll("button").forEach((button) =>
-      button.addEventListener("click", this.onButtonClick.bind(this))
-    );
-  }
-
-  quantityUpdateUnsubscriber = undefined;
-
   connectedCallback() {
-    this.validateQtyRules();
-    this.quantityUpdateUnsubscriber = subscribe(
-      PUB_SUB_EVENTS.quantityUpdate,
-      this.validateQtyRules.bind(this)
-    );
-  }
-
-  disconnectedCallback() {
-    if (this.quantityUpdateUnsubscriber) {
-      this.quantityUpdateUnsubscriber();
-    }
-  }
-
-  onInputChange() {
+    this.events?.abort(); this.events=new AbortController();
+    this.input=this.querySelector('input'); if(!this.input)return;
+    if(this.input.value==='')this.input.value=this.input.min||'1';
+    const signal=this.events.signal;
+    this.input.addEventListener('change',()=>this.onInputChange(),{signal});
+    this.addEventListener('click',event=>{if(event.target.closest('button'))this.onButtonClick(event);},{signal});
+    this.rules?.disconnect();this.rules=new MutationObserver(()=>this.validateQtyRules());
+    this.rules.observe(this.input,{attributes:true,attributeFilter:['min','max','step','value','disabled']});
+    this.quantityUpdateUnsubscriber?.();
+    if(typeof subscribe==='function' && typeof PUB_SUB_EVENTS!=='undefined')this.quantityUpdateUnsubscriber=subscribe(PUB_SUB_EVENTS.quantityUpdate,()=>this.validateQtyRules());
     this.validateQtyRules();
   }
-
-  onButtonClick(event) {
-    event.preventDefault();
-    const previousValue = this.input.value;
-
-    event.target.name === "plus" ||
-    event.target.closest("button").name === "plus"
-      ? this.input.stepUp()
-      : this.input.stepDown();
-    if (previousValue !== this.input.value)
-      this.input.dispatchEvent(this.changeEvent);
+  disconnectedCallback(){this.events?.abort();this.rules?.disconnect();this.quantityUpdateUnsubscriber?.();}
+  bounds(){return {min:this.input.min===''?0:Number(this.input.min),max:this.input.max===''?Infinity:Number(this.input.max),step:Math.max(1,Number(this.input.step)||1)};}
+  onInputChange(){
+    const {min,max,step}=this.bounds();const raw=Number(this.input.value);
+    const value=Math.min(max,Math.max(min,Number.isFinite(raw)?min+Math.round((raw-min)/step)*step:min));
+    this.input.value=String(value);this.validateQtyRules();
   }
-
-  validateQtyRules() {
-    const value = parseInt(this.input.value);
-    if (this.input.min) {
-      const min = parseInt(this.input.min);
-      const buttonMinus = this.querySelector(".quantity__button[name='minus']");
-      buttonMinus.classList.toggle("disabled", value <= min);
-    }
-    if (this.input.max) {
-      const max = parseInt(this.input.max);
-      const buttonPlus = this.querySelector(".quantity__button[name='plus']");
-      buttonPlus.classList.toggle("disabled", value >= max);
-    }
+  onButtonClick(event){
+    const button=event.target.closest('button');if(!button || button.disabled || this.input.disabled)return;
+    event.preventDefault();const {min,max,step}=this.bounds();const old=this.input.value;
+    const value=Number(old);this.input.value=String(Math.min(max,Math.max(min,(Number.isFinite(value)?value:min)+(button.name==='plus'?step:-step))));
+    this.validateQtyRules();if(old!==this.input.value){this.input.dispatchEvent(new Event('input',{bubbles:true}));this.input.dispatchEvent(new Event('change',{bubbles:true}));}
+  }
+  validateQtyRules(){
+    if(!this.input)return;const {min,max}=this.bounds(),value=Number(this.input.value);
+    this.querySelectorAll('button[name="minus"],button[name="plus"]').forEach(button=>{const off=this.input.disabled || (button.name==='minus'?value<=min:value>=max);button.disabled=off;button.classList.toggle('disabled',off);button.setAttribute('aria-disabled',String(off));});
+    this.input.style.setProperty('--quantity-digits',Math.max(2,this.input.value.length)+'ch');
   }
 }
 
@@ -4574,7 +4550,7 @@ if (!customElements.get("product-form-bundle")) {
             cartStrings?.money_format
           );
         });
-        const totalElement = document.querySelector(".subtotal-price__bundle");
+        const totalElement = scope.querySelector(".subtotal-price__bundle");
         if (itemTotalPrice > 0) {
           totalElement.textContent = totalPrice;
         } else {
@@ -4647,39 +4623,8 @@ if (!customElements.get("product-form-bundle")) {
   );
 }
 
-class QuantityInputBundle extends HTMLElement {
-  constructor() {
-    super();
-    this.input = this.querySelector("input");
-    this.changeEvent = new Event("change", { bubbles: true });
-
-    this.previousValue = parseInt(this.input.value) || 1;
-
-    this.input.addEventListener("change", this.onInputChange.bind(this));
-    this.querySelectorAll("button").forEach((button) =>
-      button.addEventListener("click", this.onButtonClick.bind(this))
-    );
-  }
-
-  onInputChange() {
-    this.updateBundleQuantity();
-  }
-
-  onButtonClick(event) {
-    event.preventDefault();
-    this.previousValue = parseInt(this.input.value);
-
-    event.target.name === "plus" ||
-    event.target.closest("button").name === "plus"
-      ? this.input.stepUp()
-      : this.input.stepDown();
-
-    if (this.previousValue !== parseInt(this.input.value)) {
-      this.input.dispatchEvent(this.changeEvent);
-      this.updateBundleQuantity();
-    }
-  }
-
+class QuantityInputBundle extends QuantityInput {
+  onInputChange(){super.onInputChange();this.updateBundleQuantity();}
   updateBundleQuantity() {
     const bundleContainer = this.closest("[data-product-bundle-variant]");
     if (!bundleContainer) return;
@@ -4692,7 +4637,8 @@ class QuantityInputBundle extends HTMLElement {
 
   updateBundleTotal() {
     let itemTotalPrice = 0;
-    const bundleItems = document.querySelectorAll(
+    const scope = this.closest(".shopify-section") || document;
+    const bundleItems = scope.querySelectorAll(
       "[data-product-bundle-variant][data-variant-id]"
     );
 
@@ -5831,17 +5777,17 @@ class SwatchFunctions extends SwatchInit {
   // Another picker of the same section chose a variant: show it here too,
   // without announcing it again.
   applyVariant(variant) {
-    const fieldsets = this.querySelectorAll("fieldset");
+    const fieldsets = this.querySelectorAll(".product-form__input");
     fieldsets.forEach((fieldset, index) => {
       const value =
         variant[`option${index + 1}`] ??
         (Array.isArray(variant.options) ? variant.options[index] : null);
       if (value == null) return;
-      fieldset.querySelectorAll('input[type="radio"]').forEach((input) => {
+      this.optionControls(fieldset).filter(input=>input.tagName==='INPUT').forEach((input) => {
         input.checked = String(input.value) === String(value);
       });
       // A dropdown picker keeps its option list in a select.
-      fieldset.querySelectorAll("select").forEach((sel) => {
+      this.optionControls(fieldset).filter(input=>input.tagName==='SELECT').forEach((sel) => {
         if ([...sel.options].some((o) => String(o.value) === String(value))) sel.value = value;
       });
     });
@@ -5862,6 +5808,8 @@ class SwatchFunctions extends SwatchInit {
 
   onVariantChange(e) {
     const target = e.target;
+    const nestedControl=target?.closest('[data-mt-size-chart], .mt-size-chart__units, dialog');
+    if (nestedControl && this.contains(nestedControl)) return;
     // Only option inputs drive a variant change (quantity, gift card and
     // other inputs inside the picker must not).
     if (!target || !target.matches || !target.matches('input[type="radio"], select')) return;
@@ -5897,7 +5845,7 @@ class SwatchFunctions extends SwatchInit {
     // The picked value has no variant with the other choices: move to the
     // closest one that has it, in stock first, so a tap always selects.
     if (!this.currentVariant && target.matches('input[type="radio"], fieldset select')) {
-      const fieldsets = [...this.querySelectorAll("fieldset")];
+      const fieldsets = [...this.querySelectorAll(".product-form__input")];
       const index = fieldsets.indexOf(target.closest("fieldset"));
       if (index > -1) {
         const key = `option${index + 1}`;
@@ -6710,18 +6658,23 @@ class SwatchFunctions extends SwatchInit {
   // Greys out the values that make no available variant with the values
   // chosen in the options before them. Every option is checked, the first
   // one against stock alone.
+  optionControls(wrapper) {
+    return [...wrapper.querySelectorAll('input[type="radio"], select')].filter(input => {
+      const nested=input.closest('[data-mt-size-chart], .mt-size-chart__units, dialog');
+      return input.closest('.product-form__input')===wrapper && (!nested || !this.contains(nested));
+    });
+  }
   updateVariantStatuses() {
     const variants = this.getVariantData();
     const inputWrappers = [...this.querySelectorAll(".product-form__input")];
     const chosen = inputWrappers.map((wrapper) => {
-      const checked = wrapper.querySelector("input:checked");
-      const sel = checked ? null : wrapper.querySelector("select");
+      const controls = this.optionControls(wrapper);
+      const checked = controls.find(input => input.checked);
+      const sel = checked ? null : controls.find(input => input.tagName === 'SELECT');
       return checked ? String(checked.value) : sel ? String(sel.value) : null;
     });
     inputWrappers.forEach((wrapper, index) => {
-      const optionInputs = [
-        ...wrapper.querySelectorAll('input[type="radio"], option'),
-      ];
+      const optionInputs = this.optionControls(wrapper).flatMap(input => input.tagName === 'SELECT' ? [...input.options] : [input]);
       const availableValues = variants
         .filter((variant) => {
           if (!variant.available) return false;
@@ -6753,6 +6706,11 @@ class SwatchFunctions extends SwatchInit {
   }
   updateOptions() {
     this.options = [];
+    const wrappers=[...this.querySelectorAll('.product-form__input')];
+    if (wrappers.length) {
+      this.options=wrappers.map(wrapper=>{const controls=this.optionControls(wrapper);const input=controls.find(el=>el.checked)||controls.find(el=>el.tagName==='SELECT');return input?.value;});
+      return;
+    }
     Array.from(this.querySelectorAll("select, fieldset"), (element) => {
       if (element.tagName === "SELECT") {
         // A select inside a fieldset is read with that fieldset.
@@ -6828,12 +6786,11 @@ class SwatchFunctions extends SwatchInit {
   getVariantData() {
     if (this.variantData) return this.variantData;
     let list = null;
-    const own = this.querySelector(
-      'script[type="application/json"]:not([data-variant-prices])'
-    );
-    if (own) {
+    const sources = [...this.querySelectorAll('script[data-variant-data]'), ...this.querySelectorAll('script[type="application/json"]:not([data-variant-data]):not([data-variant-prices]):not([data-assigned-chart-source])')];
+    for (const own of sources) {
       try {
         list = JSON.parse(own.textContent);
+        if (Array.isArray(list)) break;
       } catch (err) {
         list = null;
       }
@@ -6895,9 +6852,7 @@ class SwatchFunctions extends SwatchInit {
         ) {
           variant.inventory_management = null;
         }
-        if (typeof variant.id === "string" && /^\d+$/.test(variant.id)) {
-          variant.id = Number(variant.id);
-        }
+        if (variant.id != null) variant.id = String(variant.id);
         return variant;
       });
   }

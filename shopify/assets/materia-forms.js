@@ -263,6 +263,36 @@
 
   window.materiaForms = { toast, hideToast, arm: armAll, MIN_MS };
 
+  // Newsletter sections keep their form and scroll position. Use Storelib's
+  // existing /contact JSON contract, not a full section redraw/navigation.
+  const inlineSubscribe = async (form, button, key, already) => {
+    pending(form,button,true);
+    const label=button?.querySelector('[data-inline-label]');
+    const original=button?.dataset.inlineOriginalLabel || label?.textContent;
+    if(button && original)button.dataset.inlineOriginalLabel=original;
+    let message=form.querySelector('[data-inline-result]');
+    if(message){message.textContent='';message.hidden=true;}
+    try {
+      const url=new URL(form.action || '/contact',location.href);url.hash='';
+      if(url.origin!==location.origin || !/^\/contact(?:\/|$)/.test(url.pathname))throw new Error(say(form).errorMessage || 'Unable to subscribe.');
+      const response=await fetch(url.href,{method:'POST',credentials:'same-origin',headers:{Accept:'application/json','X-Requested-With':'XMLHttpRequest'},body:new FormData(form)});
+      const result=await response.json();
+      if(!response.ok || result.ok!==true)throw Object.assign(new Error(result.message || say(form).errorMessage || 'Unable to subscribe.'),{userMessage:result.message});
+      if(!form.isConnected)return;
+      form.dataset.state='done';if(key)remember(key);
+      form.dataset.subscribedEmail=emailOf(form);
+      if(label)label.textContent=form.querySelector('[data-subscribed-label]')?.textContent || 'Subscribed';
+      button?.setAttribute('data-subscribed','true');
+      form.querySelector('input[type=email]')?.removeAttribute('aria-invalid');
+      toast(already && say(form).alreadyMessage || say(form).successMessage || thanks(form),form,say(form).successMs);
+    } catch(error) {
+      if(!form.isConnected)return;
+      form.dataset.state='error';if(label)label.textContent=original;
+      if(!message){message=document.createElement('p');message.dataset.inlineResult='';message.className='mt-form-error';message.setAttribute('role','alert');form.append(message);}
+      message.textContent=error.userMessage || say(form).errorMessage || error.message;message.hidden=false;
+    } finally {pending(form,button,false);}
+  };
+
   if (!design()) {
     addEventListener('invalid', event => {
       const field = event.target;
@@ -276,6 +306,12 @@
     addEventListener('input', event => {
       const field = event.target;
       if (field?.getAttribute?.('data-mt-error') && field.checkValidity()) clearFieldError(field);
+      const form=field?.form;
+      if(form?.hasAttribute('data-mt-inline-subscribe') && form.dataset.state==='done' && emailOf(form)!==form.dataset.subscribedEmail){
+        const button=form.querySelector('[data-subscribed]');
+        if(button){const label=button.querySelector('[data-inline-label]');if(label)label.textContent=button.dataset.inlineOriginalLabel;button.removeAttribute('data-subscribed');}
+        delete form.dataset.state;
+      }
     }, true);
 
     // Window capture runs before the theme's and Storelib's document listeners.
@@ -288,7 +324,7 @@
         return;
       }
       const trap = form.querySelector('[data-mt-trap] input');
-      if ((trap && trap.value !== '') || performance.now() < MIN_MS) {
+      if ((trap && trap.value !== '') || (!form.hasAttribute('data-mt-inline-subscribe') && performance.now() < MIN_MS)) {
         // A script, by the trap or by its speed: it is told the form went, and nothing is sent.
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -300,6 +336,13 @@
       form.querySelectorAll('[data-mt-error]').forEach(clearFieldError);
       form.querySelectorAll('.mt-form-error').forEach(el => el.classList.remove('mt-form-error'));
       form.parentNode?.querySelectorAll(':scope > .storelib-form-note').forEach(el => el.remove());
+      if(form.hasAttribute('data-mt-inline-subscribe')){
+        event.preventDefault();event.stopImmediatePropagation();
+        if(!form.reportValidity())return;
+        const key=emailOf(form)?hash(emailOf(form)):'';
+        inlineSubscribe(form,event.submitter || form.querySelector('[type=submit]'),key,Boolean(key && seen().includes(key)));
+        return;
+      }
       pending(form, event.submitter || form.querySelector('[type="submit"]'), true);
       const key = typeOf(form) === 'contact' ? '' : (emailOf(form) ? hash(emailOf(form)) : '');
       watch(form, event.submitter, Boolean(key && seen().includes(key)), key);
