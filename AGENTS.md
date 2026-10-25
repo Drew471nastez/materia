@@ -127,33 +127,36 @@ The same as a section: line 1 `<template compat="shopify">`, the markup,
 `</template>`, then `<schema>` with the block's settings under
 `"shopify"`. A block is always in the theme's format.
 
-`blocks/size_guide.storelib`, shortened where it says so:
+`blocks/product_custom_field.storelib`, shortened where it says so:
 
 ```html
 <template compat="shopify">
 {%- assign preview_product = product | default: page.product -%}
-{%- render 'size-guide-sheet', block: block, product: preview_product, section: section -%}
+{%- assign preview_form = 'product-form-' | append: section.id -%}
+{%- render 'product-personalization', product: preview_product, block: block, section: section, product_form_id: preview_form -%}
 </template>
 
 <schema>
 {
   "shopify": {
-    "type": "size_guide",
-    "name": "Size guide",
+    "type": "product_custom_field",
+    "name": "Personalization fields",
     "limit": 1,
     "settings": [
       {
         "type": "header",
-        "content": "Sizes"
-      },
-      {
-        "type": "paragraph",
-        "content": "Shows the size chart you gave this product in Storelib (Products > Size charts), so each product gets its own. A product without one shows your Size rows, then the text or page below."
+        "content": "Content"
       },
       {
         "type": "checkbox",
-        "id": "use_storelib_chart",
-        "label": "Use the product's Storelib size chart",
+        "id": "enable_field_text",
+        "label": "t:sections.main-product.blocks.product_custom_field.settings.field_type.enable_field_text",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_field_image",
+        "label": "t:sections.main-product.blocks.product_custom_field.settings.field_type.enable_field_image",
         "default": true
       }
     ]
