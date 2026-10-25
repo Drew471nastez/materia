@@ -97,27 +97,24 @@ Then `<schema>`, one JSON object, `</schema>`. Inside it, the
 (`<template>`, `<style scoped>`, `<schema>`, see below) is also drawn
 in this theme and is kept in that format.
 
-`sections/cart-drawer-live.storelib`, shortened where it says so:
+`sections/size-chart-data.storelib`, shortened where it says so:
 
 ```html
 <template compat="shopify">
-<style>
-  #shopify-section-{{ section.id }} { display: none !important; }
-{% comment %}{% endcomment %}</style>
 {%- comment -%}
-  Materia Themes. Settings carrier for the cart drawer, never shown. The
-  builder redraws sections with unsaved settings but not the layout, where the
-  drawer lives. This section holds an inert copy of the drawer (a template
-  element: nothing in it renders or runs); in the editor the real drawer reads
-  the copy after each redraw and updates itself in place.
+  Materia Themes. Never placed on a page, and never shown. Storelib gives a
+  product's size chart (Products > Size charts) to that product's own page
+  only, so a size guide showing the product elsewhere (Featured product, the
+  builder) asks for it as /products/<handle>?section_id=size-chart-data and
+  size-chart.js copies the chart from here.
 {%- endcomment -%}
-<div data-ti-no-reveal data-no-image-carry hidden><template data-cart-drawer-source>{%- render 'minicart', carrier: true -%}</template></div>
+<div data-size-chart-data data-product="{{ product.id }}" hidden>{%- render 'product-size-chart-content', product: product, chart_id: 'remote' -%}</div>
 </template>
 
 <schema>
 {
   "shopify": {
-    "name": "Cart drawer",
+    "name": "Size chart data",
     "settings": []
   }
 }
@@ -147,17 +144,17 @@ The same as a section: line 1 `<template compat="shopify">`, the markup,
     "settings": [
       {
         "type": "header",
-        "content": "Product size chart"
+        "content": "Sizes"
       },
       {
         "type": "paragraph",
-        "content": "Uses the chart assigned in Storelib > Products > Size charts. It updates for each product. Without an assigned chart, optional content or a page below is used."
+        "content": "Shows the size chart you gave this product in Storelib (Products > Size charts), so each product gets its own. A product without one shows your Size rows, then the text or page below."
       },
       {
-        "type": "text",
-        "id": "size_guide_label",
-        "label": "Link or button label",
-        "default": "Size guide"
+        "type": "checkbox",
+        "id": "use_storelib_chart",
+        "label": "Use the product's Storelib size chart",
+        "default": true
       }
     ]
   }
