@@ -57,8 +57,8 @@ let checks = 0;
       assert(ids.includes('enable_video_autoplay') && ids.includes('enable_video_looping'), file + ': autoplay and loop settings');
     }
     for (const model of [s, s.shopify]) {
-      const sc = model.blocks.find(b => b.type === 'size_chart_popup');
-      assert.equal(sc.settings.find(x => x.id === 'modal_width_m').visible_if, '{{ false }}', file + ': phones use a full-width sheet, the mobile width has no control');
+      assert(!model.blocks.some(b=>b.type==='size_chart_popup'),file+': legacy popup retired');
+      assert(model.blocks.some(b=>b.type==='size_guide'),file+': assigned-product size guide available');
     }
   }
   const layout = read('snippets/product-media-layout.storelib');

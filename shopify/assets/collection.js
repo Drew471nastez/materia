@@ -919,6 +919,7 @@ eventCollectionShopify.init();
     placeSidebar() {
       const panel = this.filterPanel;
       if (!panel || !panel.matches('.facets-panel--vertical') || !this.panelInline) {
+        this.removeAttribute('data-facets-sticky-results');
         if (this._stickyTop != null) {
           this.style.removeProperty('--facets-sticky-top');
           this._stickyTop = null;
@@ -940,6 +941,8 @@ eventCollectionShopify.init();
       const height = panel.offsetHeight;
       const topGap = header + GAP;
       const results = this.querySelector('.facets__results');
+      const pinResults = !!results && results.offsetHeight <= view - topGap - GAP && height > results.offsetHeight;
+      if (this.hasAttribute('data-facets-sticky-results') !== pinResults) this.toggleAttribute('data-facets-sticky-results', pinResults);
       const room = Math.max(0, (results ? results.offsetHeight : 0) - height);
       if (height + topGap + GAP <= view || room <= 0) {
         this.setPin(panel, null);
@@ -1304,6 +1307,11 @@ eventCollectionShopify.init();
     }
 
     afterSwap(key, scroll) {
+      const results = this.querySelector('[data-facets-part="results"]');
+      this._resultEntrance?.cancel();
+      if (results?.animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        this._resultEntrance = results.animate([{opacity:.72,transform:'translateY(3px)'},{opacity:1,transform:'none'}],{duration:180,easing:'ease-out'});
+      }
       this.markSort();
       this.showClearFallback();
       if (key) {

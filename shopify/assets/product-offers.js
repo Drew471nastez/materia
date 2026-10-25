@@ -486,6 +486,11 @@
       const signal = this.events.signal;
       this.format = this.dataset.moneyFormat || '';
       this.cards = [...this.querySelectorAll('[data-upsell-card]')];
+      this.addedVariants ||= new Set();
+      try {
+        const variants = JSON.parse(this.querySelector('[data-upsell-cart-variants]')?.textContent || '[]');
+        if (Array.isArray(variants)) variants.forEach(id => this.addedVariants.add(String(id)));
+      } catch (_) {}
       this.addEventListener('change', event => {
         const card = event.target.closest('[data-upsell-card]');
         if (!card) return;
@@ -499,6 +504,12 @@
         if (all && this.contains(all)) { event.preventDefault(); this.addSelected(all); }
       }, {signal});
       this.cards.forEach(card => this.applyVariant(card));
+      document.addEventListener('cart:updated', event => {
+        const items = event.detail?.cart?.items;
+        if (!Array.isArray(items)) return;
+        this.addedVariants = new Set(items.map(item => String(item.variant_id || item.id)));
+        this.cards.forEach(card => this.applyVariant(card));
+      }, {signal});
       this.updateTotal();
     }
     disconnectedCallback() { this.events?.abort(); }
@@ -518,9 +529,12 @@
       if (badge) badge.hidden = !onSale;
       const button = card.querySelector('[data-upsell-add]');
       if (button) {
+        const added = this.addedVariants.has(String(variant.id));
+        card.classList.toggle('is-added', added);
+        button.setAttribute('aria-pressed', String(added));
         button.disabled = !variant.available;
         const label = button.querySelector('[data-label]') || button;
-        label.textContent = variant.available ? (this.dataset.buttonText || label.textContent) : (this.dataset.soldoutText || label.textContent);
+        label.textContent = variant.available ? (added ? this.dataset.addedText || 'Added' : this.dataset.buttonText || label.textContent) : (this.dataset.soldoutText || label.textContent);
       }
       const check = card.querySelector('[data-upsell-check]');
       if (check) { check.disabled = !variant.available; if (!variant.available) check.checked = false; }
@@ -548,19 +562,20 @@
       if (!card || card.classList.contains('is-loading') || card.hasAttribute('data-unavailable') || !card.dataset.variantId) return;
       const label = button.querySelector('[data-label]') || button;
       const text = this.dataset.buttonText || label.textContent;
+      const variantId = String(card.dataset.variantId);
       card.classList.add('is-loading');
       button.setAttribute('aria-busy', 'true');
       button.disabled = true;
       try {
         await addLines([this.lineOf(card, groupId('upsell'))], {open: this.dataset.openDrawer === 'true', source: 'upsell-pro'});
-        card.classList.add('is-added');
-        label.textContent = this.dataset.addedText || text;
+        this.addedVariants.add(variantId);
+        this.applyVariant(card);
       } catch (error) {
         label.textContent = error.userMessage || this.dataset.errorText || text;
       } finally {
         card.classList.remove('is-loading');
         button.removeAttribute('aria-busy');
-        setTimeout(() => { card.classList.remove('is-added'); label.textContent = text; button.disabled = card.hasAttribute('data-unavailable'); }, 1800);
+        button.disabled = card.hasAttribute('data-unavailable');
       }
     }
     async addSelected(button) {
@@ -573,6 +588,8 @@
       const group = groupId('upsell');
       try {
         await addLines(picked.map(card => this.lineOf(card, group)), {source: 'upsell-pro'});
+        picked.forEach(card => this.addedVariants.add(String(card.dataset.variantId)));
+        if (message) { message.textContent = this.dataset.addedText || 'Added'; message.hidden = false; message.dataset.tone = 'success'; }
       } catch (error) {
         if (message) { message.textContent = error.userMessage || this.dataset.errorText || ''; message.hidden = !message.textContent; message.dataset.tone = 'error'; }
       } finally {
