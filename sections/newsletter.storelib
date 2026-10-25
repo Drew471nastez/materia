@@ -121,6 +121,23 @@
     #shopify-section-{{ section.id }} { margin-bottom: 0 !important; margin-top: 0 !important; }
     #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
   {%- endif -%}
+  /* A margin slider above 0 wins over Remove default space (which is on by default). */
+  {%- liquid
+    assign nl_mt_m = section.settings.section_margin_top_mobile | default: 0
+    assign nl_mb_m = section.settings.section_margin_bottom_mobile | default: 0
+    assign nl_mt_d = section.settings.section_margin_top_desktop | default: 0
+    assign nl_mb_d = section.settings.section_margin_bottom_desktop | default: 0
+  -%}
+  #shopify-section-{{ section.id }} {
+    {%- if nl_mt_m > 0 %} margin-top: {{ nl_mt_m }}px !important;{% endif -%}
+    {%- if nl_mb_m > 0 %} margin-bottom: {{ nl_mb_m }}px !important;{% endif %}
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ section.id }} {
+      {%- if nl_mt_d > 0 %} margin-top: {{ nl_mt_d }}px !important;{% elsif nl_mt_m > 0 %} margin-top: 0 !important;{% endif -%}
+      {%- if nl_mb_d > 0 %} margin-bottom: {{ nl_mb_d }}px !important;{% elsif nl_mb_m > 0 %} margin-bottom: 0 !important;{% endif %}
+    }
+  }
   /* Form fields follow Theme settings > Forms and fields */
   #shopify-section-{{ section.id }} .subscribe-form .subcribe-input {
     min-height: var(--input-height, 50px);
@@ -340,29 +357,53 @@
             {% endif %}
           "
         >
+          {%- liquid
+            assign nl_button_label = section_st.btn_text | strip
+            if nl_button_label == blank
+              assign nl_button_label = 'newsletter.button_label' | t
+            endif
+            assign nl_email_label = section_st.email_label | strip
+            if nl_email_label == blank
+              assign nl_email_label = section_st.email_placeholder | default: 'Email'
+            endif
+            assign nl_button_style = section_st.button_style | default: 'primary'
+            assign nl_success_ms = section_st.success_duration | default: 5 | times: 1000
+          -%}
           {%- form 'customer', class: 'subscribe-form flex justify-content-inherit' -%}
             <input type="hidden" name="contact[tags]" value="newsletter">
+            {%- comment -%} The messages the shopper sees (materia-forms.js reads them). Hidden, so they are not part of the form's text. {%- endcomment -%}
+            <span
+              hidden
+              data-mt-words
+              data-success-message="{{ section_st.success_text | default: "Thanks, you're on the list." | escape }}"
+              data-already-message="{{ section_st.already_text | escape }}"
+              data-invalid-message="{{ section_st.invalid_text | escape }}"
+              data-error-message="{{ section_st.error_text | escape }}"
+              data-success-ms="{{ nl_success_ms }}"
+            ></span>
+            {%- if form.posted_successfully? -%}<span hidden data-mt-posted></span>{%- endif -%}
+            {%- if form.errors -%}<span hidden data-mt-failed></span>{%- endif -%}
             <div class="newsletter-inner flex flex-wrap gap-10 w-full justify-content-{{ header_alignment }}">
+              <label class="visually-hidden" for="NewsletterEmail-{{ section.id }}">{{ nl_email_label }}</label>
               <input
+                id="NewsletterEmail-{{ section.id }}"
                 type="email"
                 required
                 name="contact[email]"
                 value="{% if customer %}{{ customer.email }}{% endif %}"
                 placeholder="{{ section_st.email_placeholder }}"
+                autocomplete="email"
+                autocapitalize="off"
+                spellcheck="false"
                 class="subcribe-input btn-radius flex-1 flex-grow{% if form_layout == 'horizontal' %} col {% else %} input-vertical{% endif %}"
               >
               <button
                 type="submit"
                 name="commit"
-                class="subcribe-button btn-primary"
-                data-theme-button="primary" data-sl-button
-                aria-label="{%- if section_st.btn_text != blank -%}{{ section_st.btn_text }} {%- else -%} {{ 'subscribe.button_label' | t }} {% endif %}"
+                class="subcribe-button {% if nl_button_style == 'secondary' %}btn-secondary{% else %}btn-primary{% endif %}"
+                data-theme-button="{{ nl_button_style }}" data-sl-button
               >
-                {%- if section_st.btn_text != blank -%}
-                  {{ section_st.btn_text }}
-                {%- else -%}
-                  {{ 'newsletter.button_label' | t }}
-                {% endif %}
+                {{- nl_button_label -}}
               </button>
             </div>
           {%- endform -%}
@@ -899,10 +940,72 @@
         "default": "Subscribe"
       },
       {
+        "type": "select",
+        "id": "button_style",
+        "label": "Button style",
+        "default": "primary",
+        "options": [
+          {
+            "value": "primary",
+            "label": "Primary"
+          },
+          {
+            "value": "secondary",
+            "label": "Secondary"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "id": "email_label",
+        "label": "Email field label",
+        "info": "Read out by screen readers. Empty uses the placeholder.",
+        "default": "Email address"
+      },
+      {
         "type": "inline_richtext",
         "id": "note",
         "default": "Your personal data will be used to support your experience throughout this website, and for other purposes described in our Privacy Policy.",
         "label": "t:sections.footer.blocks.newsletter.settings.note.label"
+      },
+      {
+        "type": "header",
+        "content": "Messages"
+      },
+      {
+        "type": "text",
+        "id": "success_text",
+        "label": "Success message",
+        "default": "Thanks, you're on the list."
+      },
+      {
+        "type": "range",
+        "id": "success_duration",
+        "label": "Success message shows for",
+        "min": 2,
+        "max": 15,
+        "step": 1,
+        "unit": "s",
+        "default": 5
+      },
+      {
+        "type": "text",
+        "id": "already_text",
+        "label": "Already subscribed message",
+        "info": "Shown when this address was signed up from the same browser before.",
+        "default": "You're already on the list."
+      },
+      {
+        "type": "text",
+        "id": "invalid_text",
+        "label": "Invalid email message",
+        "default": "Enter a valid email address."
+      },
+      {
+        "type": "text",
+        "id": "error_text",
+        "label": "Could not send message",
+        "default": "That did not go through. Check your connection and try again."
       },
       {
         "type": "header",

@@ -10,6 +10,12 @@
      errors stay inline under the form or the field.
    Forms with their own success element (data-storelib-success: popups, the
    promo banner) keep their own success view.
+   A form can carry its own words, from its section's settings:
+   data-success-message, data-already-message (the address was signed up from
+   this browser before), data-invalid-message, data-error-message (the post did
+   not go through) and data-success-ms (how long the toast stays).
+   A section that draws no message of its own after a post marks the redrawn
+   form with a hidden [data-mt-posted] or [data-mt-failed].
    In the builder nothing is sent; there it redraws field colours live when
    Theme settings > Forms and fields change (snippets/field-colors does the
    same at render time). */
@@ -25,10 +31,16 @@
   const reduced = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const isForm = el => el instanceof HTMLFormElement && el.matches(FORMS);
   const ownSuccess = form => Boolean(form.querySelector('[data-storelib-success]'));
+  /* The form's words: on the form itself or on a hidden [data-mt-words] inside it. */
+  const say = form => ({ ...(form.querySelector('[data-mt-words]')?.dataset || {}), ...Object.fromEntries(Object.entries(form.dataset).filter(([, v]) => v !== '')) });
   const typeOf = form => form.querySelector('input[name="form_type"]')?.value || form.dataset.storelibForm || '';
   const visible = el => Boolean(el && !el.hidden && el.getClientRects().length);
 
-  /* Trap: off screen, out of the tab order, hidden from assistive tech. */
+  /* Trap: off screen, out of the tab order, hidden from assistive tech. It
+     holds no text: Storelib compares the form's text before and after it
+     draws the section again to decide whether to add its own note, so a
+     word in the trap would hide every result of a form with no message of
+     its own (the newsletter section). */
   const arm = form => {
     if (!isForm(form) || form.querySelector('[data-mt-trap]') || form.querySelector('[name="company"]')) return;
     const trap = document.createElement('div');
@@ -36,7 +48,6 @@
     trap.setAttribute('data-mt-trap', '');
     trap.setAttribute('aria-hidden', 'true');
     const label = document.createElement('label');
-    label.textContent = 'Company';
     const input = document.createElement('input');
     input.type = 'text';
     input.name = 'company';
@@ -75,7 +86,7 @@
     clearTimeout(toastHideTimer);
     toastHideTimer = setTimeout(() => { if (toastEl && !toastEl.hasAttribute('data-show')) toastEl.hidden = true; }, reduced() ? 0 : 320);
   };
-  const toast = (text, from) => {
+  const toast = (text, from, ms) => {
     if (!text) return;
     if (!toastEl) {
       toastEl = document.createElement('div');
@@ -97,11 +108,19 @@
     toastEl.hidden = false;
     void toastEl.offsetWidth;
     toastEl.setAttribute('data-show', '');
-    toastTimer = setTimeout(hideToast, TOAST_MS);
+    const stay = Number(ms);
+    toastTimer = setTimeout(hideToast, stay >= 1000 ? stay : TOAST_MS);
   };
   const thanks = form => typeOf(form) === 'contact'
-    ? (form.dataset.successMessage || "Thanks for writing. We'll get back to you soon.")
-    : (form.dataset.successMessage || 'Thanks for subscribing.');
+    ? (say(form).successMessage || "Thanks for writing. We'll get back to you soon.")
+    : (say(form).successMessage || 'Thanks for subscribing.');
+
+  /* Addresses signed up from this browser, kept as short hashes, never the address. */
+  const SEEN = 'materia:signed-up';
+  const hash = text => { let h = 0x811c9dc5; for (const ch of String(text).trim().toLowerCase()) { h ^= ch.codePointAt(0); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(36); };
+  const seen = () => { try { const v = JSON.parse(localStorage.getItem(SEEN) || '[]'); return Array.isArray(v) ? v : []; } catch (_) { return []; } };
+  const remember = key => { try { const v = seen().filter(x => x !== key); v.push(key); localStorage.setItem(SEEN, JSON.stringify(v.slice(-20))); } catch (_) {} };
+  const emailOf = form => (form && form.querySelector('input[type="email"]')?.value || '').trim();
 
   /* A success message drawn in or after the form becomes the toast. */
   const successOf = form => {
@@ -109,7 +128,8 @@
     const inside = [...form.querySelectorAll(SUCCESS)].find(visible);
     if (inside) return inside;
     const next = form.nextElementSibling;
-    return next && next.matches('.storelib-form-note[role="status"]') ? next : null;
+    if (next && next.matches('.storelib-form-note[role="status"]')) return next;
+    return form.querySelector('[data-mt-posted]');
   };
   const errorOf = form => {
     if (!form) return null;
@@ -117,15 +137,32 @@
     const inside = [...form.querySelectorAll(ERROR)].find(el => visible(el) && el.textContent.trim());
     if (inside) return inside;
     const next = form.nextElementSibling;
-    return next && next.matches('.storelib-form-note[role="alert"]') ? next : null;
+    if (next && next.matches('.storelib-form-note[role="alert"]')) return next;
+    return form.querySelector('[data-mt-failed]');
   };
-  const toastFrom = (form, el) => {
-    const text = (el && el.textContent.replace(/\s+/g, ' ').trim()) || thanks(form);
-    if (el && el !== form) {
-      if (el.matches('.storelib-form-note')) el.remove();
-      else { el.classList.add('mt-form-msg--toasted'); el.setAttribute('aria-hidden', 'true'); }
+  const toastFrom = (form, el, already) => {
+    // The form's own words win over Storelib's generic note and the hidden marker.
+    const generic = !el || el.matches('.storelib-form-note, [data-mt-posted]');
+    const own = already && say(form).alreadyMessage ? say(form).alreadyMessage : (generic && say(form).successMessage) || '';
+    const text = own || (el && el.textContent.replace(/\s+/g, ' ').trim()) || thanks(form);
+    if (el && el !== form && !el.matches('.storelib-form-note, [data-mt-posted]')) { el.classList.add('mt-form-msg--toasted'); el.setAttribute('aria-hidden', 'true'); }
+    // Storelib's generic note (and the focus it was given) gives way to the toast; focus goes back to the form's button.
+    const note = form.nextElementSibling;
+    const notes = [el, note].filter(n => n && n !== form && n.matches?.('.storelib-form-note[role="status"]'));
+    if (notes.length) {
+      const focused = notes.includes(document.activeElement);
+      notes.forEach(n => n.remove());
+      if (focused) { try { form.querySelector('button[type="submit"], button:not([type]), input[type="submit"]')?.focus({ preventScroll: true }); } catch (_) {} }
     }
-    toast(text, form);
+    toast(text, form, say(form).successMs);
+  };
+  /* Storelib's own words for a post that did not go through become the form's. */
+  const STORELIB_FAILED = /^It did not send\. Try again\.?$/;
+  const wordError = (form, el) => {
+    if (!el || !el.matches('.storelib-form-note[role="alert"]')) return;
+    const text = el.textContent.trim();
+    if (STORELIB_FAILED.test(text) && say(form).errorMessage) el.textContent = say(form).errorMessage;
+    else if (/valid email/i.test(text) && say(form).invalidMessage) el.textContent = say(form).invalidMessage;
   };
 
   /* Pending state and completion. */
@@ -143,7 +180,7 @@
     if (!on) form.querySelectorAll('.materia-form-pending').forEach(b => b.classList.remove('materia-form-pending'));
   };
 
-  const watch = (form, button) => {
+  const watch = (form, button, already, key) => {
     const section = form.closest('.shopify-section, [id^="shopify-section-"]') || form.parentElement || document.body;
     const forms = () => [...section.querySelectorAll(FORMS)];
     const index = forms().indexOf(form);
@@ -159,11 +196,13 @@
       if (target && target !== form) pending(target, null, false);
       const shown = target || form;
       if (ok === true) {
-        if (!own) toastFrom(shown, successOf(shown));
+        if (key) remember(key);
+        if (!own) toastFrom(shown, successOf(shown), already);
         shown.querySelectorAll('.mt-field-error').forEach(el => el.remove());
       } else if (ok === false) {
         const err = errorOf(shown);
-        if (err && err !== shown) err.classList.add('mt-form-error');
+        wordError(shown, err);
+        if (err && err !== shown && !err.matches('[data-mt-failed]')) err.classList.add('mt-form-error');
         shown.querySelector('input[type="email"]')?.setAttribute('aria-invalid', 'true');
       }
     };
@@ -230,7 +269,7 @@
       // Popups and the promo banner draw their own form states.
       if (!field?.form || !isForm(field.form) || ownSuccess(field.form)) return;
       event.preventDefault();
-      fieldError(field, field.validationMessage);
+      fieldError(field, (field.type === 'email' && say(field.form).invalidMessage) || field.validationMessage);
       const first = field.form.querySelector(':invalid:not(fieldset)');
       if (first === field) { try { field.focus({ preventScroll: false }); } catch (_) {} }
     }, true);
@@ -262,7 +301,8 @@
       form.querySelectorAll('.mt-form-error').forEach(el => el.classList.remove('mt-form-error'));
       form.parentNode?.querySelectorAll(':scope > .storelib-form-note').forEach(el => el.remove());
       pending(form, event.submitter || form.querySelector('[type="submit"]'), true);
-      watch(form, event.submitter);
+      const key = typeOf(form) === 'contact' ? '' : (emailOf(form) ? hash(emailOf(form)) : '');
+      watch(form, event.submitter, Boolean(key && seen().includes(key)), key);
     }, true);
 
     // A page drawn after a full post (no script on the way there) still gets the toast.
@@ -281,6 +321,28 @@
     else init();
     return;
   }
+
+  /* Builder: nothing is sent. A form that carries its own success words shows
+     them as the toast it would show on the live site, with a line saying where
+     sign-ups go, so the creator can see and time the success state. */
+  window.addEventListener('submit', event => {
+    const form = event.target;
+    if (!isForm(form) || ownSuccess(form) || !say(form).successMessage) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (!form.checkValidity()) {
+      const field = form.querySelector(':invalid:not(fieldset)');
+      if (field) fieldError(field, (field.type === 'email' && say(form).invalidMessage) || field.validationMessage);
+      return;
+    }
+    form.querySelectorAll('[data-mt-error]').forEach(clearFieldError);
+    const preview = typeOf(form) === 'contact' ? '' : ' Sign-ups go to Subscribers on your live site.';
+    toast(say(form).successMessage + preview, form, say(form).successMs);
+  }, true);
+  addEventListener('input', event => {
+    const field = event.target;
+    if (field?.getAttribute?.('data-mt-error') && field.checkValidity()) clearFieldError(field);
+  }, true);
 
   /* Builder: redraw readable field colours while Forms and fields change.
      Same rules as snippets/field-colors: the field background is the picked
