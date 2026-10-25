@@ -14,6 +14,43 @@
   assign vsp_selected = product.selected_or_first_available_variant
   assign vsp_style = vsp.swatch_style | default: 'image'
   assign vsp_size = vsp.swatch_size | default: 44
+  comment
+    Picture swatches use Overall option size (desktop, mobile); 0 falls
+    back to Swatch size. Colour dots and buttons use Swatch size.
+  endcomment
+  assign vsp_img_d = vsp.option_size_d | default: 0
+  if vsp_img_d == 0
+    assign vsp_img_d = vsp_size
+  endif
+  assign vsp_img_m = vsp.option_size_m | default: 0
+  if vsp_img_m == 0
+    assign vsp_img_m = vsp_img_d
+  endif
+  if vsp.thumb_max_size > 0
+    if vsp_img_d > vsp.thumb_max_size
+      assign vsp_img_d = vsp.thumb_max_size
+    endif
+    if vsp_img_m > vsp.thumb_max_size
+      assign vsp_img_m = vsp.thumb_max_size
+    endif
+  endif
+  assign vsp_ratio = '1 / 1'
+  if vsp.image_aspect == 'portrait'
+    assign vsp_ratio = '3 / 4'
+  elsif vsp.image_aspect == 'landscape'
+    assign vsp_ratio = '4 / 3'
+  endif
+  assign vsp_sep = vsp.current_variant_separator | default: ':'
+  assign vsp_justify = 'flex-start'
+  if vsp.option_alignment == 'center'
+    assign vsp_justify = 'center'
+  elsif vsp.option_alignment == 'right'
+    assign vsp_justify = 'flex-end'
+  endif
+  assign vsp_accent = vsp.selected_border
+  if vsp.vsp_custom_colors and vsp.accent != blank
+    assign vsp_accent = vsp.accent
+  endif
   if settings.color_swatch_trigger != blank
     assign vsp_color_names = settings.color_swatch_trigger | downcase | split: ','
   else
@@ -22,21 +59,35 @@
 -%}
 <variant-radios-detail
   id="VariantSelectorPro-{{ block.id }}"
-  class="vsp block"
+  class="vsp block{% if vsp.hover_effect != blank and vsp.hover_effect != 'none' %} vsp--hover-{{ vsp.hover_effect }}{% endif %}{% if vsp.selected_anim != blank and vsp.selected_anim != 'none' %} vsp--anim-{{ vsp.selected_anim }}{% endif %}"
   data-vsp
   data-section="{{ section.id }}"
   data-url="{{ product.url }}"
+  {%- if vsp.aria_label != blank %} role="group" aria-label="{{ vsp.aria_label | escape }}"{% endif %}
   {{ block.shopify_attributes }}
-  style="--vsp-size: {{ vsp_size }}px; --vsp-mt: {{ vsp.mt | default: 0 }}px; --vsp-mb: {{ vsp.mb | default: 16 }}px;
+  style="--vsp-size: {{ vsp_size }}px; --vsp-img-d: {{ vsp_img_d }}px; --vsp-img-m: {{ vsp_img_m }}px; --vsp-ratio: {{ vsp_ratio }}; --vsp-mt: {{ vsp.mt | default: 0 }}px; --vsp-mb: {{ vsp.mb | default: 16 }}px; --vsp-gap: {{ vsp.card_gap | default: 8 }}px; --vsp-gap-m: {{ vsp.card_gap_mobile | default: vsp.card_gap | default: 8 }}px; --vsp-justify: {{ vsp_justify }}; --vsp-radius: {% if vsp.card_radius != blank %}{{ vsp.card_radius }}px{% else %}var(--btn-radius, 0px){% endif %}; --vsp-img-radius: {{ vsp.image_radius | default: 6 }}px; --vsp-img-fit: {{ vsp.image_fit | default: 'cover' }}; --vsp-img-pad: {{ vsp.thumb_inner_padding | default: 0 }}px; --vsp-bw: {{ vsp.selected_border_width | default: 2 }}px; --vsp-ring: {{ vsp.selected_ring_size | default: 0 }}px; --vsp-header-gap: {{ vsp.header_gap | default: 10 }}px;
+    {%- if vsp_accent != blank %} --vsp-accent: {{ vsp_accent }};{% endif -%}
+    {%- if vsp.image_bg != blank %} --vsp-img-bg: {{ vsp.image_bg }};{% endif -%}
+    {%- if vsp.card_bg != blank %} --vsp-bg: {{ vsp.card_bg }};{% endif -%}
+    {%- if vsp.muted_color != blank %} --vsp-muted: {{ vsp.muted_color }};{% endif -%}
     {%- if vsp.vsp_custom_colors -%}
       {%- if vsp.text_color != blank %} --vsp-text: {{ vsp.text_color }};{% endif -%}
       {%- if vsp.selected_text_color != blank %} --vsp-selected-text: {{ vsp.selected_text_color }};{% endif -%}
       {%- if vsp.border_color != blank %} --vsp-border: {{ vsp.border_color }};{% endif -%}
-      {%- if vsp.accent != blank %} --vsp-accent: {{ vsp.accent }};{% endif -%}
       {%- if vsp.chip_bg != blank %} --vsp-bg: {{ vsp.chip_bg }};{% endif -%}
       {%- if vsp.selected_bg != blank %} --vsp-selected-bg: {{ vsp.selected_bg }};{% endif -%}
     {%- endif -%}"
 >
+  {%- if vsp.show_static_title and vsp.title != blank or vsp.subtitle != blank -%}
+    <div class="vsp__head" style="text-align: {{ vsp.title_align | default: 'left' }};">
+      {%- if vsp.show_static_title and vsp.title != blank -%}
+        <p class="vsp__title" style="font-size: {{ vsp.title_size | default: 13 }}px; font-weight: {{ vsp.title_weight | default: 600 }};{% if vsp.title_color != blank %} color: {{ vsp.title_color }};{% endif %}{% if vsp.title_uppercase %} text-transform: uppercase;{% endif %} letter-spacing: {{ vsp.title_letter_spacing | default: 0 }}em;">{{ vsp.title | escape }}</p>
+      {%- endif -%}
+      {%- if vsp.subtitle != blank -%}
+        <p class="vsp__subtitle" style="font-size: {{ vsp.subtitle_size | default: 12 }}px;{% if vsp.subtitle_color != blank %} color: {{ vsp.subtitle_color }};{% endif %}">{{ vsp.subtitle | escape }}</p>
+      {%- endif -%}
+    </div>
+  {%- endif -%}
   {%- for option in product.options_with_values -%}
     {%- liquid
       assign opt_pos = option.position | default: forloop.index | plus: 0
@@ -55,8 +106,8 @@
       <legend class="vsp__legend">
         <span class="vsp__name">{{ option.name }}</span>
         {%- if vsp.show_current_variant -%}
-          <span class="vsp__sep" aria-hidden="true">:</span>
-          <span class="vsp__value option_value">{{ opt_selected }}</span>
+          <span class="vsp__sep" aria-hidden="true">{{ vsp_sep | escape }}</span>
+          <span class="vsp__value option_value" style="{% if vsp.current_variant_color != blank %}color: {{ vsp.current_variant_color }}; {% endif %}font-weight: {{ vsp.current_variant_weight | default: 700 }};{% if vsp.current_variant_uppercase %} text-transform: uppercase;{% endif %}">{{ opt_selected }}</span>
         {%- endif -%}
       </legend>
       <div class="vsp__values">
@@ -83,7 +134,45 @@
             if value.swatch.color
               assign swatch_color = value.swatch.color
             endif
+            assign value_label = value
+            assign ov_img_key = ''
+            comment
+              Variant 1 to 10 overrides: the Nth value of a colour option
+              takes its own picture, colour and label.
+            endcomment
+            if is_color and forloop.index <= 10
+              assign ov_img_key = 'variant_' | append: forloop.index | append: '_image'
+              assign ov_col_key = 'variant_' | append: forloop.index | append: '_color'
+              assign ov_lab_key = 'variant_' | append: forloop.index | append: '_label'
+              if vsp[ov_img_key] != blank
+                assign value_image = vsp[ov_img_key]
+              endif
+              if vsp[ov_col_key] != blank
+                assign swatch_color = vsp[ov_col_key]
+              endif
+              if vsp[ov_lab_key] != blank
+                assign value_label = vsp[ov_lab_key]
+              endif
+            endif
             assign color_name = value | downcase | remove: ' ' | remove: '"' | remove: "'"
+            assign value_image_url = ''
+            comment
+              A picked picture is an image (sized with image_url); an address
+              pasted under the picker is used as it is.
+            endcomment
+            if value_image != blank
+              if value_image.src != blank or value_image.id != blank
+                assign value_image_url = value_image | image_url: width: 240
+              else
+                assign value_image_url = value_image
+              endif
+            endif
+            assign use_image = false
+            if is_color and value_image_url != blank
+              if vsp_style == 'image' or ov_img_key != blank and vsp[ov_img_key] != blank
+                assign use_image = true
+              endif
+            endif
           -%}
           {%- if vsp.hide_unavailable and value_available == false and value_checked == false -%}{%- continue -%}{%- endif -%}
           <input
@@ -94,37 +183,39 @@
             value="{{ value | escape }}"
             {% if value_checked %}checked{% endif %}
           >
-          {%- if is_color -%}
-            {%- if vsp_style == 'image' and value_image != blank -%}
-              <label for="{{ vsp_id }}" class="vsp__chip vsp__chip--image" title="{{ value | escape }}" data-image="{{ value_image | image_url: width: 160 }}">
-                <img
-                  src="{{ value_image | image_url: width: 160 }}"
-                  alt=""
-                  width="80"
-                  height="80"
-                  loading="lazy"
-                  decoding="async"
-                >
-                <span class="visually-hidden">{{ value }}</span>
-              </label>
-            {%- elsif swatch_color != blank -%}
-              <label for="{{ vsp_id }}" class="vsp__chip vsp__chip--dot" title="{{ value | escape }}" style="--vsp-dot: {{ swatch_color }};">
-                <span class="visually-hidden">{{ value }}</span>
-              </label>
+          <label for="{{ vsp_id }}" class="vsp__cell" title="{{ value_label | escape }}"{% if use_image %} data-image="{{ value_image_url }}"{% endif %}>
+            {%- if is_color -%}
+              {%- if use_image -%}
+                {%- comment -%} With colour dots, a picture fills a dot of the same size. {%- endcomment -%}
+                <span class="vsp__chip vsp__chip--image{% if vsp_style == 'color' %} vsp__chip--photo{% endif %}">
+                  <img src="{{ value_image_url }}" alt="" width="120" height="120" loading="lazy" decoding="async">
+                </span>
+              {%- elsif swatch_color != blank -%}
+                <span class="vsp__chip vsp__chip--dot" style="--vsp-dot: {{ swatch_color }};"></span>
+              {%- else -%}
+                <span class="vsp__chip vsp__chip--dot" data-vsp-color="{{ color_name | escape }}" style="--vsp-dot: {{ color_name | escape }};">
+                  <span class="vsp__chip-text" style="font-size: {{ vsp.placeholder_size | default: 11 }}px; font-weight: {{ vsp.placeholder_weight | default: 600 }};{% if vsp.placeholder_uppercase %} text-transform: uppercase;{% endif %}">{{ value_label }}</span>
+                </span>
+              {%- endif -%}
+              {%- if vsp.show_label -%}
+                <span class="vsp__label" style="font-size: {{ vsp.label_size | default: 11 }}px; font-weight: {{ vsp.label_weight | default: 500 }};{% if vsp.label_uppercase %} text-transform: uppercase;{% endif %} margin-top: {{ vsp.label_gap | default: 6 }}px;">{{ value_label }}</span>
+              {%- else -%}
+                <span class="visually-hidden">{{ value_label }}</span>
+              {%- endif -%}
             {%- else -%}
-              <label for="{{ vsp_id }}" class="vsp__chip vsp__chip--dot" title="{{ value | escape }}" data-vsp-color="{{ color_name | escape }}" style="--vsp-dot: {{ color_name | escape }};">
-                <span class="vsp__chip-text">{{ value }}</span>
-              </label>
+              <span class="vsp__chip vsp__chip--button"><span>{{ value_label }}</span></span>
             {%- endif -%}
-          {%- else -%}
-            <label for="{{ vsp_id }}" class="vsp__chip vsp__chip--button">
-              <span>{{ value }}</span>
-            </label>
-          {%- endif -%}
+            {%- if value_available == false and vsp.sold_out_label != blank -%}
+              <span class="vsp__soldout" style="{% if vsp.sold_out_badge_bg != blank %}background: {{ vsp.sold_out_badge_bg }};{% endif %}{% if vsp.sold_out_badge_text != blank %} color: {{ vsp.sold_out_badge_text }};{% endif %}">{{ vsp.sold_out_label | escape }}</span>
+            {%- endif -%}
+          </label>
         {%- endfor -%}
       </div>
     </fieldset>
   {%- endfor -%}
+  {%- if vsp.footer_note != blank -%}
+    <p class="vsp__footer"{% if vsp.footer_color != blank %} style="color: {{ vsp.footer_color }};"{% endif %}>{{ vsp.footer_note | escape }}</p>
+  {%- endif -%}
   <script type="application/json">
     {{ product.variants | json }}
 {% comment %}{% endcomment %}  </script>
@@ -140,142 +231,130 @@
     --vsp-selected-bg: var(--color-background);
     --vsp-bg: var(--color-background);
     --vsp-selected-text: var(--vsp-heading);
+    --vsp-muted: color-mix(in srgb, var(--vsp-text) 70%, transparent);
     margin: var(--vsp-mt) 0 var(--vsp-mb);
     color: var(--vsp-text);
     font-family: var(--body-font);
     font-weight: var(--body-weight);
   }
-  #VariantSelectorPro-{{ block.id }} .vsp__option {
-    border: 0;
-    margin: 0 0 16px;
-    padding: 0;
-    min-width: 0;
-  }
+  #VariantSelectorPro-{{ block.id }} .vsp__head { margin: 0 0 var(--vsp-header-gap); }
+  #VariantSelectorPro-{{ block.id }} .vsp__title { margin: 0; line-height: 1.3; color: var(--vsp-heading); font-family: var(--heading-font, inherit); }
+  #VariantSelectorPro-{{ block.id }} .vsp__subtitle { margin: 4px 0 0; line-height: 1.4; color: var(--vsp-muted); }
+  #VariantSelectorPro-{{ block.id }} .vsp__footer { margin: 12px 0 0; font-size: 13px; line-height: 1.45; color: var(--vsp-muted); }
+  #VariantSelectorPro-{{ block.id }} .vsp__option { border: 0; margin: 0 0 16px; padding: 0; min-width: 0; }
   #VariantSelectorPro-{{ block.id }} .vsp__option:last-of-type { margin-bottom: 0; }
   #VariantSelectorPro-{{ block.id }} .vsp__legend {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 4px;
-    padding: 0;
-    margin: 0 0 10px;
-    line-height: 1.4;
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px;
+    padding: 0; margin: 0 0 10px; line-height: 1.4;
   }
-  #VariantSelectorPro-{{ block.id }} .vsp__name {
-    color: var(--vsp-heading);
-    font-weight: var(--heading-weight);
-  }
+  #VariantSelectorPro-{{ block.id }} .vsp__name { color: var(--vsp-heading); font-weight: var(--heading-weight); }
   #VariantSelectorPro-{{ block.id }} .vsp__sep { margin-left: -2px; color: var(--vsp-heading); }
   #VariantSelectorPro-{{ block.id }} .vsp__value { color: var(--vsp-text); }
   #VariantSelectorPro-{{ block.id }} .vsp__values {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+    display: flex; flex-wrap: wrap; align-items: flex-start;
+    justify-content: var(--vsp-justify); gap: var(--vsp-gap-m);
   }
-  #VariantSelectorPro-{{ block.id }} .vsp__chip {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 44px;
-    min-height: 44px;
-    margin: 0;
-    cursor: pointer;
-    color: var(--vsp-text);
+  @media (min-width: 750px) {
+    #VariantSelectorPro-{{ block.id }} .vsp__values { gap: var(--vsp-gap); }
+  }
+  #VariantSelectorPro-{{ block.id }} .vsp__cell {
+    position: relative; display: inline-flex; flex-direction: column; align-items: center;
+    margin: 0; cursor: pointer; min-width: 44px; max-width: 100%;
     -webkit-tap-highlight-color: transparent;
-    transition: border-color .2s ease, background-color .2s ease, color .2s ease, box-shadow .2s ease;
+  }
+  #VariantSelectorPro-{{ block.id }} .vsp__label { display: block; max-width: calc(var(--vsp-img-d) + 16px); text-align: center; line-height: 1.25; color: var(--vsp-text); overflow-wrap: anywhere; }
+  #VariantSelectorPro-{{ block.id }} .vsp__chip {
+    position: relative; box-sizing: border-box;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 44px; min-height: 44px; margin: 0;
+    color: var(--vsp-text);
+    transition: border-color .2s ease, background-color .2s ease, color .2s ease, box-shadow .2s ease, transform .2s cubic-bezier(.2,.7,.2,1);
   }
   #VariantSelectorPro-{{ block.id }} .vsp__chip--button {
     padding: 0 16px;
     border: 1px solid var(--vsp-border);
-    border-radius: var(--btn-radius, 0);
+    border-radius: var(--vsp-radius);
     background: var(--vsp-bg);
     font-family: var(--btn-font, var(--body-font));
     font-weight: var(--btn-font-weight, var(--body-weight));
     letter-spacing: var(--btn-letter-spacing, normal);
     line-height: 1.2;
   }
-  #VariantSelectorPro-{{ block.id }} .vsp__chip--button:hover { border-color: var(--vsp-accent); }
-  #VariantSelectorPro-{{ block.id }} .vsp__radio:checked + .vsp__chip--button {
+  #VariantSelectorPro-{{ block.id }} .vsp__cell:hover .vsp__chip { border-color: var(--vsp-accent); }
+  #VariantSelectorPro-{{ block.id }} .vsp__radio:checked + .vsp__cell .vsp__chip--button {
     border-color: var(--vsp-accent);
     background: var(--vsp-selected-bg);
-    box-shadow: inset 0 0 0 1px var(--vsp-accent);
+    box-shadow: inset 0 0 0 calc(var(--vsp-bw) - 1px) var(--vsp-accent);
     color: var(--vsp-selected-text);
   }
-  #VariantSelectorPro-{{ block.id }} .vsp__chip--image,
-  #VariantSelectorPro-{{ block.id }} .vsp__chip--dot {
-    width: var(--vsp-size);
-    height: var(--vsp-size);
-    min-width: var(--vsp-size);
-    min-height: var(--vsp-size);
-    padding: 0;
-    border: 1px solid var(--vsp-border);
-    background: var(--vsp-bg);
-    overflow: visible;
-  }
   #VariantSelectorPro-{{ block.id }} .vsp__chip--image {
-    border-radius: var(--input-border-radius, 4px);
+    width: var(--vsp-img-m); height: auto; aspect-ratio: var(--vsp-ratio);
+    padding: var(--vsp-img-pad);
+    border: 1px solid var(--vsp-border);
+    border-radius: var(--vsp-img-radius);
+    background: var(--vsp-img-bg, var(--vsp-bg));
+    overflow: hidden;
+  }
+  @media (min-width: 750px) {
+    #VariantSelectorPro-{{ block.id }} .vsp__chip--image { width: var(--vsp-img-d); }
+    #VariantSelectorPro-{{ block.id }} .vsp__label { max-width: calc(var(--vsp-img-d) + 16px); }
   }
   #VariantSelectorPro-{{ block.id }} .vsp__chip--image img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: inherit;
+    display: block; width: 100%; height: 100%;
+    object-fit: var(--vsp-img-fit); border-radius: calc(var(--vsp-img-radius) - 2px);
   }
   #VariantSelectorPro-{{ block.id }} .vsp__chip--dot {
-    border-radius: 50%;
-    background: var(--vsp-dot, var(--color-background));
-    background-clip: padding-box;
+    width: var(--vsp-size); height: var(--vsp-size);
+    min-width: var(--vsp-size); min-height: var(--vsp-size);
+    padding: 0; border: 1px solid var(--vsp-border); border-radius: 50%;
+    background: var(--vsp-dot, var(--color-background)); background-clip: padding-box;
   }
+  #VariantSelectorPro-{{ block.id }} .vsp__chip--photo,
+  #VariantSelectorPro-{{ block.id }} .vsp__chip--photo img {
+    width: var(--vsp-size) !important; height: var(--vsp-size); min-width: var(--vsp-size); aspect-ratio: 1; padding: 0; border-radius: 50%;
+  }
+  /* The name is already in the chip: no second label under it. */
+  #VariantSelectorPro-{{ block.id }} .vsp__chip--text + .vsp__label { display: none; }
   #VariantSelectorPro-{{ block.id }} .vsp__chip-text {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
   }
   /* A colour with no picture and no swatch colour reads as its name. */
   #VariantSelectorPro-{{ block.id }} .vsp__chip--text {
-    width: auto;
-    padding: 0 16px;
-    border-radius: var(--btn-radius, 0);
-    background: var(--vsp-bg);
+    width: auto; padding: 0 16px; border-radius: var(--vsp-radius); background: var(--vsp-bg);
   }
-  #VariantSelectorPro-{{ block.id }} .vsp__chip--text .vsp__chip-text {
-    position: static;
-    width: auto;
-    height: auto;
-    clip: auto;
-  }
-  #VariantSelectorPro-{{ block.id }} .vsp__chip--image:hover,
-  #VariantSelectorPro-{{ block.id }} .vsp__chip--dot:hover { border-color: var(--vsp-accent); }
-  #VariantSelectorPro-{{ block.id }} .vsp__radio:checked + .vsp__chip--image,
-  #VariantSelectorPro-{{ block.id }} .vsp__radio:checked + .vsp__chip--dot {
+  #VariantSelectorPro-{{ block.id }} .vsp__chip--text .vsp__chip-text { position: static; width: auto; height: auto; clip: auto; }
+  #VariantSelectorPro-{{ block.id }} .vsp__radio:checked + .vsp__cell :is(.vsp__chip--image, .vsp__chip--dot):not(.vsp__chip--text) {
     border-color: var(--vsp-accent);
-    box-shadow: 0 0 0 2px var(--color-background), 0 0 0 3px var(--vsp-accent);
+    box-shadow: 0 0 0 calc(2px + var(--vsp-ring)) var(--color-background), 0 0 0 calc(2px + var(--vsp-ring) + var(--vsp-bw)) var(--vsp-accent);
   }
-  #VariantSelectorPro-{{ block.id }} .vsp__radio:checked + .vsp__chip--text {
-    background: var(--vsp-selected-bg);
-    color: var(--vsp-selected-text);
+  #VariantSelectorPro-{{ block.id }} .vsp__radio:checked + .vsp__cell .vsp__chip--text {
+    background: var(--vsp-selected-bg); color: var(--vsp-selected-text);
     box-shadow: inset 0 0 0 1px var(--vsp-accent);
   }
-  #VariantSelectorPro-{{ block.id }} .vsp__radio:focus-visible + .vsp__chip {
-    outline: 2px solid var(--vsp-accent);
-    outline-offset: 3px;
-  }
-  #VariantSelectorPro-{{ block.id }} .vsp__radio.option-disabled + .vsp__chip { opacity: .5; }
-  #VariantSelectorPro-{{ block.id }} .vsp__radio.option-disabled + .vsp__chip::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    border-radius: inherit;
+  #VariantSelectorPro-{{ block.id }} .vsp__radio:checked + .vsp__cell .vsp__label { color: var(--vsp-heading); font-weight: 600; }
+  #VariantSelectorPro-{{ block.id }} .vsp__radio:focus-visible + .vsp__cell .vsp__chip { outline: 2px solid var(--vsp-accent); outline-offset: 3px; }
+  #VariantSelectorPro-{{ block.id }} .vsp__radio.option-disabled + .vsp__cell .vsp__chip { opacity: .5; }
+  #VariantSelectorPro-{{ block.id }} .vsp__radio.option-disabled + .vsp__cell .vsp__chip::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
     background: linear-gradient(to top left, transparent calc(50% - .5px), var(--vsp-text) calc(50% - .5px), var(--vsp-text) calc(50% + .5px), transparent calc(50% + .5px));
   }
+  #VariantSelectorPro-{{ block.id }} .vsp__soldout {
+    position: absolute; top: -6px; right: -6px; z-index: 1;
+    padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 600; line-height: 1.5;
+    background: var(--color-heading); color: var(--color-background); pointer-events: none;
+  }
+  /* Hover: lift, glow or both */
+  @media (hover: hover) {
+    #VariantSelectorPro-{{ block.id }}:is(.vsp--hover-lift, .vsp--hover-both) .vsp__cell:hover .vsp__chip { transform: translateY(-2px); }
+    #VariantSelectorPro-{{ block.id }}:is(.vsp--hover-glow, .vsp--hover-both) .vsp__cell:hover .vsp__chip { box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--vsp-accent) 60%, transparent); }
+  }
+  /* Selected animation */
+  #VariantSelectorPro-{{ block.id }}.vsp--anim-scale .vsp__radio:checked + .vsp__cell .vsp__chip { transform: scale(1.04); }
+  #VariantSelectorPro-{{ block.id }}.vsp--anim-pulse .vsp__radio:checked + .vsp__cell .vsp__chip { animation: vsp-pulse-{{ block.id | handle }} .45s ease-out 1; }
+  @keyframes vsp-pulse-{{ block.id | handle }} { 0% { transform: scale(.94); } 60% { transform: scale(1.05); } 100% { transform: none; } }
   @media (prefers-reduced-motion: reduce) {
-    #VariantSelectorPro-{{ block.id }} .vsp__chip { transition: none; }
+    #VariantSelectorPro-{{ block.id }} .vsp__chip { transition: none; animation: none !important; transform: none !important; }
   }
 {% comment %}{% endcomment %}</style>
 {%- endunless -%}
