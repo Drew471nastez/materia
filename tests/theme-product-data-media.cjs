@@ -40,7 +40,7 @@ const render=(name,ctx)=>engine.parseAndRender(clean(read('snippets/'+name+'.sto
   await page.locator('input[type=text]').evaluate(el=>el.required=false);await page.locator('input[type=text]').fill('');await page.locator('input[type=file]').setInputFiles([]);
   await page.locator('#main-add').click();await page.waitForTimeout(80);assert.equal(await page.evaluate(()=>sent[2].filter(x=>x.key.startsWith('properties[')).length),0,'empty optional fields do not become empty file uploads');checks++;
   const manual=await render('review-sold-block',{block:{id:'review',settings:{show_review:true,show_sold_products:true,review_source:'manual',manual_review_rating:4.8,manual_review_count:23,sold_source:'manual',sold:'17',sold_label:'sold',review_label:'reviews'}}});
-  assert(manual.includes('4.8 / 5 · 23 reviews')&&manual.includes('17 sold'));checks++;
+  assert(manual.includes('4.8 / 5')&&manual.includes('23 reviews')&&manual.includes('17 sold'));checks++;
   const chart={name:'Assigned chart',unit:'cm',columns:[{key:'size',label:'Size'},{key:'chest',label:'Chest',measurement:true},{key:'eu',label:'EU',measurement:false}],rows:[{size:'S',cells:['86-91','38']}],notes:'<script>window.bad=true</script>'};
   const markup=await render('product-size-chart-content',{product:{id:'p',metafields:{storelib:{size_chart:JSON.stringify(chart)}}},settings:{size_trigger:'Size'}});
   await page.setContent('<div class="shopify-section">'+markup+'</div>');await page.addStyleTag({content:read('shopify/assets/product-page-ui.css')});await page.addScriptTag({content:read('shopify/assets/size-chart.js')});

@@ -1,47 +1,191 @@
 <template compat="shopify">
+{%- comment -%}
+  Materia Themes. Reviews & sold counter (Main product, Featured product).
+  Reviews: the product's own rating (Storelib's rating and review count, or
+  a reviews app), else the rating and count typed in this block. Sold: the
+  product's custom.sold_count, else the count typed in this block. "Mine
+  only" always uses the typed values. A list such as 8,10,12 (the original
+  theme picked one at random) is never shown: only one real number is, and
+  the builder says so.
+{%- endcomment -%}
 {%- liquid
   assign st = block.settings
-  assign sold_raw = product.metafields.custom.sold_count.value | default: product.metafields.custom.sold_count
-  if st.sold_source == 'manual'
-    assign sold_raw = st.sold
+
+  comment
+    Sold count: the product's own field first, unless the block says Mine only.
+  endcomment
+  assign sold_raw = ''
+  assign sold_from_block = false
+  if st.sold_source != 'manual'
+    assign sold_raw = product.metafields.custom.sold_count.value | default: product.metafields.custom.sold_count | default: ''
+  endif
+  assign sold_count = sold_raw | plus: 0
+  assign sold_ok = false
+  if sold_count > 0
+    assign sold_ok = true
+  endif
+  if sold_ok == false or sold_raw contains ','
+    assign sold_raw = st.sold | strip
+    assign sold_from_block = true
   endif
   assign sold_count = sold_raw | plus: 0
   assign sold_integer = sold_count | floor
-  if sold_count != sold_integer
-    assign sold_count = 0
-  endif
-  if sold_raw contains ','
+  if sold_count != sold_integer or sold_raw contains ','
     assign sold_count = 0
   endif
   assign sold_hours = 0
-  if st.sold_source == 'manual'
-    assign sold_hours = st.hours | plus: 0
-    if st.hours contains ','
+  if sold_from_block
+    assign hours_raw = st.hours | strip
+    assign sold_hours = hours_raw | plus: 0
+    if hours_raw contains ','
       assign sold_hours = 0
     endif
   endif
+
+  comment
+    Rating: the product's own first, unless the block says Mine only.
+  endcomment
+  assign rating = 0
+  assign rating_count = 0
+  if st.review_source != 'manual'
+    assign rating = product.metafields.reviews.rating.value.rating | default: product.metafields.reviews.rating.value | default: product.rating | plus: 0
+    assign rating_count = product.metafields.reviews.rating_count.value | default: product.metafields.reviews.rating_count | default: product.review_count | plus: 0
+  endif
+  assign rating_from_app = false
+  assign rating_ok = false
+  if rating > 0 and rating_count > 0
+    assign rating_ok = true
+  endif
+  unless rating_ok
+    assign rating = 0
+    assign rating_count = 0
+    if st.review_source != 'manual'
+      if product.metafields.judgeme.badge or product.metafields.spr.reviews
+        assign rating_from_app = true
+      endif
+    endif
+    unless rating_from_app
+      assign rating = st.manual_review_rating | plus: 0
+      assign rating_count = st.manual_review_count | plus: 0
+      assign count_integer = rating_count | floor
+      if rating > 5 or rating_count != count_integer
+        assign rating = 0
+      endif
+    endunless
+  endunless
+  assign show_rating = false
+  if st.show_review != false and rating > 0 and rating_count > 0
+    assign show_rating = true
+  endif
+  assign show_sold = false
+  if st.show_sold_products != false and sold_count > 0
+    assign show_sold = true
+  endif
+  assign show_app = false
+  if st.show_review != false and rating_from_app
+    assign show_app = true
+  endif
+  assign review_label = st.review_label | default: 'reviews'
+  assign rating_shown = rating | round: 1
+  assign rating_fill = rating | times: 20 | round: 1
+  assign rs_style = st.review_style | default: 'stars'
 -%}
-{%- capture review_markup -%}
-  {%- if st.show_review != false -%}
-    {%- if st.review_source == 'manual' -%}
-      {%- assign manual_rating = st.manual_review_rating | plus: 0 -%}
-      {%- assign manual_count = st.manual_review_count | plus: 0 -%}
-      {%- assign manual_integer = manual_count | floor -%}
-      {%- if manual_rating > 0 and manual_rating <= 5 and manual_count > 0 and manual_count == manual_integer -%}
-        <span class="product-reviews"><span aria-hidden="true">★</span> {{ manual_rating | round: 1 }} / 5 · {{ manual_count }} {{ st.review_label | default: 'reviews' | escape }}</span>
+{%- if show_rating or show_sold or show_app -%}
+<div
+  class="review_sold rs rs--{{ rs_style }}"
+  id="review-sold-{{ block.id }}"
+  {{ block.shopify_attributes }}
+  style="--rs-size-m: {{ st.font_size_mobile | default: 13 }}px; --rs-size-d: {{ st.font_size_desktop | default: 14 }}px; --rs-pt: {{ st.padding_top | default: 0 }}px; --rs-pb: {{ st.padding_bottom | default: 0 }}px;
+    {%- if st.star_color != blank %} --rs-star: {{ st.star_color }};{% endif -%}
+    {%- if st.text_color != blank %} --rs-text: {{ st.text_color }};{% endif -%}
+    {%- if st.live_dot_color != blank %} --rs-dot: {{ st.live_dot_color }};{% endif %}"
+>
+  {%- if show_rating -%}
+    <span class="product-reviews rs__rating">
+      {%- if rs_style == 'stars' -%}
+        <span class="rs__stars" style="--rs-fill: {{ rating_fill }}%;" aria-hidden="true"><span class="rs__stars-on">★★★★★</span>★★★★★</span>
+      {%- else -%}
+        <span class="rs__star" aria-hidden="true">★</span>
       {%- endif -%}
-    {%- else -%}{%- render 'review', product: product, review_label: st.review_label -%}{%- endif -%}
+      <span class="visually-hidden">{{ rating_shown }} / 5,</span>
+      <span class="rs__value" aria-hidden="true">{{ rating_shown }}{% if rs_style != 'stars' %} / 5{% endif %}</span>
+      <span class="rs__sep" aria-hidden="true"></span>
+      <span class="rs__count">{{ rating_count }} {{ review_label | escape }}</span>
+    </span>
+  {%- elsif show_app -%}
+    {%- render 'review', product: product, review_label: review_label -%}
   {%- endif -%}
-{%- endcapture -%}
-{%- if review_markup != blank or st.show_sold_products != false and sold_count > 0 -%}
-<div class="review_sold" id="review-sold-{{ block.id }}" {{ block.shopify_attributes }} style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;font-size:{{ st.font_size_mobile | default: 13 }}px;padding-top:{{ st.padding_top | default: 0 }}px;padding-bottom:{{ st.padding_bottom | default: 0 }}px;">
-  {{- review_markup -}}
-  {%- if st.show_sold_products != false and sold_count > 0 -%}
-    <span class="product-sold" style="display:inline-flex;align-items:center;gap:6px;">{% if st.show_live_dot != false %}<span class="product-sold__dot" aria-hidden="true" style="flex:0 0 7px;width:7px;height:7px;border-radius:50%;background:{{ st.live_dot_color | default: 'var(--color-heading, currentColor)' }};"></span>{% endif %}<span>{{ sold_count }} {{ st.sold_label | default: 'sold' | escape }}{% if sold_hours > 0 %} {{ st.sold_period_label | default: 'in the last' | escape }} {{ sold_hours }} {{ st.hours_label | default: 'hours' | escape }}{% endif %}</span></span>
+  {%- if show_sold -%}
+    <span class="product-sold rs__sold">
+      {%- if st.show_live_dot != false -%}<span class="product-sold__dot rs__dot" aria-hidden="true"></span>{%- endif -%}
+      <span>{{ sold_count }} {{ st.sold_label | default: 'sold' | escape }}{% if sold_hours > 0 %} {{ st.sold_period_label | default: 'in the last' | escape }} {{ sold_hours }} {{ st.hours_label | default: 'hours' | escape }}{% endif %}</span>
+    </span>
   {%- endif -%}
 </div>
-<style>@media(min-width:1025px){#review-sold-{{ block.id }}{font-size:{{ st.font_size_desktop | default: 14 }}px!important;}}{% comment %}{% endcomment %}</style>
-{%- elsif st.show_review != false or st.show_sold_products != false -%}
-  {%- render 'editor-block-preview', block: block, title: 'Reviews & sold counter', message: 'Reviews use this product’s actual rating data. The sold counter reads custom.sold_count, or an exact verified count set in this block. No random reviews or sales are generated.' -%}
+{%- endif -%}
+
+{%- comment -%} Builder only: what is missing, and how to fill it. {%- endcomment -%}
+{%- liquid
+  assign rs_note = ''
+  if st.show_review != false and show_rating == false and show_app == false
+    assign rs_note = 'Reviews: this product has no rating of its own yet. Type your rating and review count in this block to show them.'
+  endif
+  if st.show_sold_products != false and show_sold == false
+    if st.sold contains ','
+      assign rs_note = rs_note | append: ' Sold: “' | append: st.sold | append: '” is a list the original theme picked from at random. Type one real number, such as 34.'
+    else
+      assign rs_note = rs_note | append: ' Sold: type the number sold in this block, or give the product a custom.sold_count field.'
+    endif
+  elsif show_sold and st.hours contains ','
+    assign rs_note = rs_note | append: ' Period: “' | append: st.hours | append: '” is a list, so no period is shown. Type one number of hours, or leave it empty.'
+  endif
+  assign rs_note = rs_note | strip
+-%}
+{%- if rs_note != blank -%}
+  {%- if show_rating or show_sold or show_app -%}
+    <p class="rs__note"{% if request.design_mode %} data-editor-preview{% endif %} role="note">{{ rs_note | escape }}</p>
+  {%- else -%}
+    {%- render 'editor-block-preview', block: block, title: 'Reviews & sold counter', message: rs_note -%}
+  {%- endif -%}
+{%- endif -%}
+{%- if show_rating or show_sold or show_app or rs_note != blank -%}
+<style>
+  .rs {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px;
+    padding: var(--rs-pt) 0 var(--rs-pb);
+    font-size: var(--rs-size-m); line-height: 1.4;
+    color: var(--rs-text, var(--color-text));
+  }
+  @media (min-width: 1025px) { .rs { font-size: var(--rs-size-d); } }
+  .rs__rating, .rs__sold { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+  .rs__stars {
+    position: relative; display: inline-block; letter-spacing: 1px; line-height: 1;
+    font-size: 1.05em; color: color-mix(in srgb, var(--rs-star, var(--color-heading)) 22%, transparent);
+  }
+  .rs__stars-on {
+    position: absolute; inset: 0 auto 0 0; width: var(--rs-fill); overflow: hidden; white-space: nowrap;
+    color: var(--rs-star, var(--color-heading));
+  }
+  .rs__star { color: var(--rs-star, var(--color-heading)); line-height: 1; }
+  .rs__value { font-weight: 600; color: var(--rs-text, var(--color-heading)); }
+  .rs__sep { width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: .45; }
+  .rs__count { opacity: .85; }
+  .rs__dot {
+    position: relative; flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--rs-dot, #22c55e);
+  }
+  .rs__dot::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; background: inherit;
+    animation: rs-ping 2.4s cubic-bezier(0, 0, .2, 1) infinite;
+  }
+  @keyframes rs-ping { 0% { transform: scale(1); opacity: .55; } 70%, 100% { transform: scale(2.4); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .rs__dot::after { animation: none; display: none; } }
+  .rs__note {
+    display: none; margin: 6px 0 0; padding: 8px 10px; font-size: 12px; line-height: 1.45;
+    border: 1px dashed var(--color-border, currentColor); border-radius: var(--input-radius, 6px);
+    color: var(--color-text);
+  }
+  html.shopify-design-mode .rs__note, .rs__note[data-editor-preview] { display: block; }
+{% comment %}{% endcomment %}</style>
 {%- endif -%}
 </template>
