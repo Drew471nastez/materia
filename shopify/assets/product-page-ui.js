@@ -1007,7 +1007,7 @@
         until its end shows and sticks there (--mt-sticky-tall). Measured
         only when a column or the window changes size: nothing on scroll.
      ------------------------------------------------------------------- */
-  var STICKY = "media-gallery.sticky.top-30, .product-detail__information > .sticky.top-30, [data-mt-sticky]";
+  var STICKY = "media-gallery.sticky.top-30, .product-detail__media > .sticky.top-30, .product-detail__information > .sticky.top-30, [data-mt-sticky]";
   var wideQuery = window.matchMedia ? window.matchMedia("(min-width: 768px)") : null;
   var stickyEls = new Set();
   var stickyRo = null;
@@ -1025,9 +1025,10 @@
     var room = vh - headerTop() - 40;
     var writes = [];
     stickyEls.forEach(function (el) {
-      if (!el.isConnected) {
+      if (!el.isConnected || (el.parentElement && el.parentElement.closest(STICKY))) {
         stickyEls.delete(el);
         if (stickyRo) stickyRo.unobserve(el);
+        el.classList.remove('mt-sticky-tall');el.style.removeProperty('--mt-sticky-tall');
         return;
       }
       var h = el.offsetHeight;
@@ -1054,6 +1055,7 @@
     var found = Array.prototype.slice.call(scope.querySelectorAll(STICKY));
     if (scope.matches && scope.matches(STICKY)) found.push(scope);
     found.forEach(function (el) {
+      if(el.parentElement && el.parentElement.closest(STICKY))return;
       if (stickyEls.has(el)) return;
       stickyEls.add(el);
       if (!stickyRo && "ResizeObserver" in window) stickyRo = new ResizeObserver(scheduleSticky);
