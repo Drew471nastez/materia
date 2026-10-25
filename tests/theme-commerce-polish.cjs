@@ -19,6 +19,7 @@ const render=(file,context)=>engine.parseAndRender(clean(read('snippets/'+file+'
  const product={id:'p',metafields:{storelib:{size_chart:{value:chart}}}},block={id:'guide',type:'size_guide',settings:{size_guide_content:'Wrong chart',size_guide_label:'Size guide'}},section={id:'main',blocks:[block]},settings={size_trigger:'Size'};
  const context={product,block,section,settings,request:{design_mode:true},pages:{}};
  const guide=await render('size-guide-sheet',context);assert(guide.includes('Assigned chart'));assert(!guide.includes('Wrong chart'));checks++;
+ const legacy=await render('size-guide-sheet',{...context,product:{},block:{id:'legacy',type:'size_chart_popup',settings:{trig_text:'Sizing',sizes_content:'<p>Existing chart</p>'}}});assert(legacy.includes('Existing chart')&&legacy.includes('Sizing'));checks++;
  const duplicate=await render('size-guide-sheet',{...context,block:{id:'variants',type:'variant_picker',settings:{}}});assert(!duplicate.includes('<dialog'),'explicit chart suppresses the picker guide');checks++;
  const table=await render('size-table-render',{...context,block:{id:'table',settings:{table_data:'Wrong fallback'}}});assert(table.includes('Assigned chart'));assert(!table.includes('Wrong fallback'));checks++;
  const emptyReview=await render('review-sold-block',{...context,block:{id:'review',type:'review_and_sold',settings:{show_review:true,show_sold_products:true}},product:{metafields:{}}});assert(emptyReview.includes('materia-block-preview'));assert(!emptyReview.includes('<sold-product'));checks++;
