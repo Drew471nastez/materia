@@ -90,6 +90,65 @@ if (window.Shopify && Shopify.designMode) {
     });
   });
 }
+/* Gallery videos (snippets/product-media-layout) are written with their file
+   in data-src and preload="none": an autoplaying video with a src downloaded
+   in full as the page was read, wherever it was (a featured product far down
+   the home page took 300 KB from the first picture on a phone). The poster
+   shows; the file is given once the page has loaded and the video comes
+   within a screen of view (a slide in a gallery when it is slid in), and
+   then plays as before. Slideshow videos have their own start (SlideSection). */
+(function () {
+  const SELECTOR = "video[data-src]:not(.slideshow)";
+  let io = null;
+  const start = (video) => {
+    const src = video.getAttribute("data-src");
+    video.removeAttribute("data-src");
+    if (!src) return;
+    video.preload = "metadata";
+    video.src = src;
+  };
+  const watch = (root) => {
+    if (root.tagName !== "VIDEO" && !(root.getElementsByTagName && root.getElementsByTagName("video").length)) return;
+    const list = [];
+    if (root.matches && root.matches(SELECTOR)) list.push(root);
+    if (root.querySelectorAll) list.push(...root.querySelectorAll(SELECTOR));
+    if (!list.length) return;
+    if (!("IntersectionObserver" in window)) { list.forEach(start); return; }
+    io ||= new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        io.unobserve(entry.target);
+        start(entry.target);
+      });
+    }, { rootMargin: "200px 0px" });
+    list.forEach((video) => io.observe(video));
+  };
+  const begin = () => {
+    watch(document);
+    // Galleries drawn later (quick view, a builder redraw, the cart) are
+    // watched as they arrive.
+    if ("MutationObserver" in window) {
+      new MutationObserver((records) => {
+        for (const record of records) {
+          for (const node of record.addedNodes) if (node.nodeType === 1) watch(node);
+        }
+      }).observe(document.body, { childList: true, subtree: true });
+    }
+  };
+  // Asked for before then (a tap, its play button, a script's play()): it
+  // gets its file at once and plays.
+  const now = (e) => {
+    const video = e.target && e.target.closest && e.target.closest(SELECTOR);
+    if (!video) return;
+    if (io) io.unobserve(video);
+    start(video);
+    if (e.type === "play") { const p = video.play(); if (p && p.catch) p.catch(() => {}); }
+  };
+  document.addEventListener("play", now, true);
+  document.addEventListener("pointerdown", now, true);
+  if (document.readyState === "complete") begin();
+  else window.addEventListener("load", begin, { once: true });
+})();
 function CloseAllPopup(data) {
   publish("closeCanvas", data);
 }
@@ -280,9 +339,35 @@ class SlideSection extends HTMLElement {
   // twice. This used to build every slider of a product page at load, and on
   // the home page the rest all at once on the first mouse move or touch.
   init() {
-    if (this.classList.contains('slideshow')) { this.initSlideshow(); return; }
+    if (this.classList.contains('slideshow')) { SlideSection.afterFirstPicture(this, () => this.initSlideshow()); return; }
     if (this.classList.contains('swiper-cart-upsell') || this.classList.contains('topbar-slider')) { this.initSlide(); return; }
     SlideSection.whenNear(this, () => this.initSlide());
+  }
+
+  // The page draws a slideshow's first slide by itself (it rests on landing,
+  // nothing enters). Swiper measures the whole page and clones the slides, so
+  // while the page loads it starts only once the first slide's picture has
+  // been painted: built at once, it held that picture (the page's largest)
+  // back by a long frame. A press on the slideshow, the builder, a page that
+  // has already loaded or 1.5s start it at once.
+  static afterFirstPicture(el, start) {
+    const root = document.documentElement;
+    if (document.readyState === "complete" || root.classList.contains("shopify-design-mode") || window.Shopify?.designMode) { start(); return; }
+    let done = false;
+    const go = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => { if (el.isConnected) start(); }, 0)));
+    };
+    const timer = setTimeout(go, 1500);
+    ["pointerdown", "focusin", "keydown"].forEach((type) => el.addEventListener(type, go, { once: true, passive: true }));
+    const img = el.querySelector(":scope > .swiper-wrapper > .swiper-slide img");
+    if (!img || img.complete) go();
+    else {
+      img.addEventListener("load", go, { once: true });
+      img.addEventListener("error", go, { once: true });
+    }
   }
 
   // Runs start() once el is within a screen of the viewport (or at once
@@ -763,11 +848,21 @@ class SlideSection extends HTMLElement {
   }
 
   loadSlideshowVideos() {
-    if (this._videoObserver || !this.querySelector("video.slideshow[data-src]")) return;
-    const load = () => this.querySelectorAll("video[data-src]").forEach((video) => {
+    if (this._videoObserver || !this.querySelector(":is(video, iframe).slideshow[data-src]")) return;
+    // The poster (or the slide's picture) is what the first screen paints; the
+    // video itself starts after the page has loaded and gone quiet, so it
+    // never takes the connection from the first picture, the styles or the
+    // scripts.
+    const start = () => this.querySelectorAll(":is(video, iframe)[data-src]").forEach((video) => {
       video.src = video.dataset.src;
       video.removeAttribute("data-src");
     });
+    const load = () => {
+      const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 200));
+      const later = () => idle(start, { timeout: 1500 });
+      if (document.readyState === "complete") later();
+      else window.addEventListener("load", later, { once: true });
+    };
     if (!("IntersectionObserver" in window)) { load(); return; }
     this._videoObserver = new IntersectionObserver((entries, observer) => {
       if (!entries.some((entry) => entry.isIntersecting)) return;

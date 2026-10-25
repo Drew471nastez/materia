@@ -79,7 +79,17 @@
   {%- if image_host != blank -%}
     <link rel="preconnect" href="{{ image_host }}">
   {%- endif -%}
-  {%- if font_host != blank -%}
+  {%- comment -%}
+    A font library's stylesheet is a plain request and its font files are
+    CORS requests, and the browser keeps those on separate connections: a
+    crossorigin warm up of the stylesheet host was never used by the
+    stylesheet, which blocks the first paint. Each host gets the connection
+    it will really use.
+  {%- endcomment -%}
+  {%- if font_host == 'https://fonts.googleapis.com' -%}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  {%- elsif font_host != blank -%}
     <link rel="preconnect" href="{{ font_host }}" crossorigin>
   {%- endif -%}
   {%- assign on_home = false -%}
@@ -159,6 +169,38 @@
   function onReady(fn) {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
     else fn();
+  }
+
+  /* ---------- Faster fonts: the font library's stylesheets never hold the first paint ----------
+     Storelib writes a stylesheet link for each picked font at the end of
+     <head>; a cross-site stylesheet there held the whole first paint (and
+     every script after it) until it had arrived. Every font is
+     font-display: swap with a size-matched fallback (font-variables), so the
+     page paints in the fallback and the font swaps in when it lands. Each
+     such link is replaced, as the page is read and before anything is drawn,
+     by the same link loading as a non-blocking sheet; the request already
+     made is reused. */
+  if (s.images && 'MutationObserver' in window && document.head) {
+    var FONT_SHEET = /^https:\/\/fonts\.googleapis\.com\//;
+    var freeFont = function (l) {
+      if (l.nodeName !== 'LINK' || l.rel !== 'stylesheet' || l.hasAttribute('data-speed-font') || !FONT_SHEET.test(l.href)) return;
+      var media = l.getAttribute('media') || 'all';
+      if (media === 'print') return;
+      var n = l.cloneNode(false);
+      n.setAttribute('data-speed-font', '');
+      n.media = 'print';
+      n.onload = function () { n.onload = null; n.media = media; };
+      l.parentNode.insertBefore(n, l);
+      l.parentNode.removeChild(l);
+    };
+    var fontObserver = new MutationObserver(function (records) {
+      for (var i = 0; i < records.length; i++) {
+        var added = records[i].addedNodes;
+        for (var j = 0; j < added.length; j++) freeFont(added[j]);
+      }
+    });
+    fontObserver.observe(document.head, { childList: true });
+    onReady(function () { fontObserver.disconnect(); });
   }
 
   /* ---------- Faster images: decode off the main thread below the first screen ----------
