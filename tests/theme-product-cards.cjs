@@ -103,7 +103,7 @@ function lookup(ctx, expr) {
   if (expr === 'true') return true; if (expr === 'false') return false;
   if (expr === 'nil' || expr === 'null') return null;
   if (expr === 'blank') return BLANK; if (expr === 'empty') return EMPTY;
-  const parts = expr.replace(/\[(\d+)\]/g, '.$1').replace(/\[['"]([^'"]+)['"]\]/g, '.$1').replace(/\[([A-Za-z_]\w*)\]/g, (_, key) => '.' + ctx[key]).split('.');
+  const parts = expr.replace(/\[(\d+)\]/g, '.$1').replace(/\[['"]([^'"]+)['"]\]/g, '.$1').replace(/\[([A-Za-z_]\w*(?:\.\w+)*)\]/g, (_, key) => '.' + lookup(ctx,key)).split('.');
   let v = ctx[parts[0]];
   for (const p of parts.slice(1)) {
     if (v == null) return undefined;

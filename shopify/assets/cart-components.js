@@ -761,6 +761,8 @@ class CartNotification extends HTMLElement {
       .then(cart => {
         if (!cart || !Array.isArray(cart.items) || this._qtyBusy) return;
         this._cart = cart;
+        this._recommendationAdded = new Set(cart.items.map(item => String(item.variant_id || item.id)));
+        this.paintRecommendationStates();
         this._confirmedCount = cart.item_count;
         if (!this._desired?.size && cart.items_subtotal_price != undefined) {
           this._confirmedOrder = Number(cart.items_subtotal_price);
@@ -983,6 +985,18 @@ class CartNotification extends HTMLElement {
 
   /* "You may also like" inside the drawer: add in place, the new line opens
      and nothing else is redrawn. */
+  paintRecommendationStates() {
+    this.querySelectorAll('minicart-recommendations form, .cart-recommend form').forEach(form => {
+      const button = form.querySelector('[type="submit"]');
+      const label = button?.querySelector('.pc-atc__label, .hidden-on-load:not(svg)');
+      if (!label) return;
+      label.dataset.addLabel ??= label.textContent;
+      const id = form.querySelector('[name="id"]')?.value;
+      const added = this._recommendationAdded?.has(String(id)) || false;
+      button.dataset.added = String(added);
+      label.textContent = added ? form.closest('[data-added-text]')?.dataset.addedText || window.cartStrings?.added || 'Added' : label.dataset.addLabel;
+    });
+  }
   async addFromRecommendation(form) {
     const button = form.querySelector('[type="submit"]');
     if (button?.getAttribute("aria-disabled") === "true" || form.dataset.adding === "true") return;
@@ -1008,6 +1022,9 @@ class CartNotification extends HTMLElement {
       const state = {sections: added.sections || null, item_count: (this._cart?.item_count ?? 0) + quantityAdded};
       this._qtyBusy = false;
       await this.applyCartState(state);
+      this._recommendationAdded ||= new Set();
+      this._recommendationAdded.add(String(id));
+      this.paintRecommendationStates();
       // Counts and the free-shipping bar settle from the cart itself.
       this.ensureCartState(true);
       document.dispatchEvent(new CustomEvent("cart:refresh", {detail: {source: "drawer-recommendation"}}));

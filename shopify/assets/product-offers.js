@@ -509,6 +509,7 @@
         if (!Array.isArray(items)) return;
         this.addedVariants = new Set(items.map(item => String(item.variant_id || item.id)));
         this.cards.forEach(card => this.applyVariant(card));
+        this.updateTotal();
       }, {signal});
       this.updateTotal();
     }
@@ -532,7 +533,7 @@
         const added = this.addedVariants.has(String(variant.id));
         card.classList.toggle('is-added', added);
         button.setAttribute('aria-pressed', String(added));
-        button.disabled = !variant.available;
+        button.disabled = !variant.available || card.classList.contains('is-loading');
         const label = button.querySelector('[data-label]') || button;
         label.textContent = variant.available ? (added ? this.dataset.addedText || 'Added' : this.dataset.buttonText || label.textContent) : (this.dataset.soldoutText || label.textContent);
       }
@@ -550,7 +551,16 @@
       const countEl = this.querySelector('[data-upsell-count]');
       if (countEl) countEl.textContent = String(picked.length);
       const all = this.querySelector('[data-upsell-add-selected]');
-      if (all) all.disabled = picked.length === 0;
+      if (all) {
+        all.disabled = picked.length === 0 || all.getAttribute('aria-busy') === 'true';
+        const added = picked.length > 0 && picked.every(card => this.addedVariants.has(String(card.dataset.variantId)));
+        all.dataset.added = String(added);
+        const label = all.querySelector('[data-label]') || all.querySelector('span');
+        if (label) {
+          this.selectedLabel ||= label.textContent;
+          label.textContent = added ? this.dataset.addedText || 'Added' : this.selectedLabel;
+        }
+      }
       this.cards.forEach(card => card.toggleAttribute('data-picked', !!card.querySelector('[data-upsell-check]')?.checked));
     }
     lineOf(card, group) {
@@ -585,16 +595,20 @@
       if (message) { message.hidden = true; message.textContent = ''; }
       button.setAttribute('aria-busy', 'true');
       button.classList.add('loading');
+      button.disabled = true;
       const group = groupId('upsell');
+      const lines = picked.map(card => this.lineOf(card, group));
       try {
-        await addLines(picked.map(card => this.lineOf(card, group)), {source: 'upsell-pro'});
-        picked.forEach(card => this.addedVariants.add(String(card.dataset.variantId)));
+        await addLines(lines, {open: this.dataset.openDrawer === 'true', source: 'upsell-pro'});
+        lines.forEach(line => this.addedVariants.add(String(line.id)));
+        this.cards.forEach(card => this.applyVariant(card));
         if (message) { message.textContent = this.dataset.addedText || 'Added'; message.hidden = false; message.dataset.tone = 'success'; }
       } catch (error) {
         if (message) { message.textContent = error.userMessage || this.dataset.errorText || ''; message.hidden = !message.textContent; message.dataset.tone = 'error'; }
       } finally {
         button.removeAttribute('aria-busy');
         button.classList.remove('loading');
+        this.updateTotal();
       }
     }
   }

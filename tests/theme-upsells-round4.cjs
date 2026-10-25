@@ -161,7 +161,7 @@ for (const p of [process.env.LIQUIDJS, 'liquidjs'].filter(Boolean)) {
       tier_1_label: 'Buy 1', tier_2_label: 'Buy 2 get 1 free', tier_2_free: 1, tier_2_badge: 'Most popular', tier_2_code: 'B2G1',
       tier_3_label: 'Buy 3 get 2 free', tier_3_free: 2, tier_3_badge: 'Best value'}), kind: 'quantity_offer'})],
     ['qty-list', await engine.parseAndRender(offers, {...ctx('quantity_offer', 'q2', {style: 'list', sync_form_quantity: false, show_button: false, tier_2_discount: 10, tier_2_badge: 'Most popular'}), kind: 'quantity_offer', product_form_id: 'product-form-other'})],
-    ['up-selected', await engine.parseAndRender(upsell, ctx('upsell_pro', 'u1', {source: 'manual', manual_product_1: belt, manual_product_2: cap, add_mode: 'selected', style: 'tiles', show_variant_selector: true, heading: 'Goes well with'}))],
+    ['up-selected', await engine.parseAndRender(upsell, ctx('upsell_pro', 'u1', {source: 'manual', manual_product_1: belt, manual_product_2: cap, add_mode: 'selected', style: 'tiles', show_variant_selector: true, open_drawer_after_add: true, heading: 'Goes well with'}))],
     ['up-each', await engine.parseAndRender(upsell, ctx('upsell_pro', 'u2', {source: 'manual', manual_product_1: cap, style: 'bold', show_variant_selector: true, heading: 'Add a cap'}))],
     ['up-custom', await engine.parseAndRender(upsell, ctx('upsell_pro', 'u3', {source: 'manual', manual_product_1: belt, style: 'list', custom_style: true, button_bg: '#123456', button_text_color: '#ffffff', card_radius: 3}))],
   ];

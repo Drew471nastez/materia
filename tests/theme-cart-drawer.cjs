@@ -93,7 +93,7 @@ function renderForm(store){
     </span></div><button type="submit" class="btn-primary w-full btn-checkout" name="checkout" form="minicart">Check out</button></div></div></div>`;
 }
 const section=store=>`<div id="shopify-section-minicart-form" class="shopify-section">${renderForm(store)}</div>`;
-const recHTML=pid=>{const v=pid==='p3'?'v2':'v3',p=VARIANTS[v];return `<div class="swiper-wrapper"><div class="swiper-slide"><div class="product-item"><a class="product-item__name" href="/products/${p.product}">${p.title}</a><span class="price">${money(p.price)}</span><product-form class="product-item__product-form"><form method="post" action="/cart/add" data-type="add-to-cart-form"><input type="hidden" name="id" value="${v}"><button type="submit" name="add" class="product-item__button-submit bls-add-cart-list btn-primary">Add to Cart</button></form></product-form></div></div></div>`;};
+const recHTML=pid=>{const v=pid==='p3'?'v2':'v3',p=VARIANTS[v];return `<div class="swiper-wrapper"><div class="swiper-slide"><div class="product-item"><a class="product-item__name" href="/products/${p.product}">${p.title}</a><span class="price">${money(p.price)}</span><product-form class="product-item__product-form"><form method="post" action="/cart/add" data-type="add-to-cart-form"><input type="hidden" name="id" value="${v}"><button type="submit" name="add" class="product-item__button-submit bls-add-cart-list btn-primary"><span class="pc-atc__label hidden-on-load">Add to Cart</span></button></form></product-form></div></div></div>`;};
 
 async function serve(page,store){
   await page.route(ORIGIN+'/**',async route=>{
@@ -207,6 +207,9 @@ async function touchDrag(page,x,y,steps,{dy=12,gap=16,check}={}){
       assert(await page.$eval('#minicart__product-v3',el=>el.classList.contains('materia-row-enter')),'new row animates in');
       await page.waitForTimeout(500);
       assert.equal(store.log.filter(l=>l.kind==='add').length,1);
+      assert.equal(await page.locator('minicart-recommendations .pc-atc__label').textContent(),'Added');
+      await page.evaluate(()=>{const drawer=document.querySelector('cart-notification');drawer._recommendationAdded=new Set();drawer.paintRecommendationStates();});
+      assert.equal(await page.locator('minicart-recommendations .pc-atc__label').textContent(),'Add to Cart');
       assert(await page.evaluate(()=>keep.row===document.getElementById('minicart__product-v1')&&keep.form===document.getElementById('minicart-form')&&keep.items===document.querySelector('#minicart .items')&&keep.rec===document.querySelector('minicart-recommendations')),'drawer, rows and recommendations stay mounted');
       assert.equal(await page.evaluate(()=>formWiped),0,'no full drawer re-render');
       assert(Math.abs(await page.$eval('.minicart-scroll',el=>el.scrollTop)-await page.evaluate(()=>scroll0))<=1,'no scroll jump');
