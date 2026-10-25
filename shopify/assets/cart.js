@@ -367,7 +367,7 @@ class CartItems extends HTMLElement {
     const target = event;
     const variant_id = target.getAttribute("data-variant-id");
     const body = JSON.stringify({
-      id: Number(variant_id),
+      id: String(variant_id),
       quantity: 1,
       sections: this.getSectionsToRender().map((section) => section.section),
       sections_url: window.location.pathname,
@@ -424,7 +424,7 @@ class CartItems extends HTMLElement {
       .getAttribute("data-product-variant-id");
     
     const body = JSON.stringify({
-      id: Number(variant_id),
+      id: String(variant_id),
       quantity: 1,
       sections: CartUtils.getSectionsToRender().map((section) => section.section),
       sections_url: window.location.pathname,

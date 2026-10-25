@@ -633,7 +633,7 @@ class CartNotification extends HTMLElement {
     const variant_id = target.getAttribute("data-variant-id");
     const config = fetchConfig("json");
     config.body = JSON.stringify({
-      id: Number(variant_id),
+      id: String(variant_id),
       quantity: 1,
       sections: this.getSectionsToRender().map((section) => section.id),
       sections_url: window.location.pathname,
