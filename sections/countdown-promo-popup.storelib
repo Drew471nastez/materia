@@ -165,8 +165,12 @@
     text-transform: var(--heading-text-transform, uppercase);
     margin: 0 0 {{ section.settings.gap_after_headline | default: 22 }}px;
   }
+  .cdp-headline-{{ sid }} { font-size: clamp(min(22px, var(--cdp-h-size, 32px)), 4vw, var(--cdp-h-size, 32px)); }
   @media (max-width: 749px) {
-    .cdp-headline-{{ sid }} { font-size: clamp(20px, 6vw, 28px) !important; }
+    .cdp-headline-{{ sid }} { font-size: min(var(--cdp-h-size, 32px), clamp(20px, 6vw, 28px)); }
+    {% if section.settings.mobile_image_position != 'hidden' %}
+    .cdp-close-{{ sid }} { background: color-mix(in srgb, {% render 'scheme-color', color: section.settings.card_bg, fallback: 'var(--color-background)' %} 75%, transparent); }
+    {% endif %}
   }
 
   /* Coupon code button */
@@ -242,11 +246,11 @@
 
   /* Tighter mobile spacing override */
   @media (max-width: 749px) {
-    .cdp-eyebrow-{{ sid }} { margin-bottom: clamp(10px, 3vw, {{ section.settings.gap_after_eyebrow | default: 18 }}px); }
-    .cdp-headline-{{ sid }} { margin-bottom: clamp(12px, 3.2vw, {{ section.settings.gap_after_headline | default: 22 }}px); }
-    .cdp-coupon-{{ sid }} { margin-bottom: clamp(14px, 3.4vw, {{ section.settings.gap_after_coupon | default: 24 }}px); }
-    .cdp-countdown-{{ sid }} { margin-bottom: clamp(14px, 3.4vw, {{ section.settings.gap_after_countdown | default: 24 }}px); }
-    .cdp-cta-{{ sid }} { margin-bottom: clamp(10px, 3vw, {{ section.settings.gap_after_cta | default: 16 }}px); }
+    .cdp-eyebrow-{{ sid }} { margin-bottom: clamp(min(10px, {{ section.settings.gap_after_eyebrow | default: 18 }}px), 3vw, {{ section.settings.gap_after_eyebrow | default: 18 }}px); }
+    .cdp-headline-{{ sid }} { margin-bottom: clamp(min(12px, {{ section.settings.gap_after_headline | default: 22 }}px), 3.2vw, {{ section.settings.gap_after_headline | default: 22 }}px); }
+    .cdp-coupon-{{ sid }} { margin-bottom: clamp(min(14px, {{ section.settings.gap_after_coupon | default: 24 }}px), 3.4vw, {{ section.settings.gap_after_coupon | default: 24 }}px); }
+    .cdp-countdown-{{ sid }} { margin-bottom: clamp(min(14px, {{ section.settings.gap_after_countdown | default: 24 }}px), 3.4vw, {{ section.settings.gap_after_countdown | default: 24 }}px); }
+    .cdp-cta-{{ sid }} { margin-bottom: clamp(min(10px, {{ section.settings.gap_after_cta | default: 16 }}px), 3vw, {{ section.settings.gap_after_cta | default: 16 }}px); }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -301,7 +305,7 @@
 
         {%- if block_headline != blank and block_headline.settings.text != blank -%}
           <h2 class="cdp-headline-{{ sid }}" id="cdp-title-{{ sid }}"
-              style="font-size: clamp(22px, 4vw, {{ block_headline.settings.size | default: 32 }}px); color: {% render 'scheme-color', color: block_headline.settings.color, fallback: 'var(--color-heading)' %};"
+              style="--cdp-h-size: {{ block_headline.settings.size | default: 32 }}px; color: {% render 'scheme-color', color: block_headline.settings.color, fallback: 'var(--color-heading)' %};"
               {{ block_headline.shopify_attributes }}>{{ block_headline.settings.text }}</h2>
         {%- endif -%}
 
@@ -325,7 +329,9 @@
                data-cdp-status="{{ block_countdown.settings.completed_text | default: fb_accessibility_completed | escape }}"
                {{ block_countdown.shopify_attributes }}>
             {%- assign labels = block_countdown.settings.labels | default: 'DAYS|HOURS|MIN|SEC' | split: '|' -%}
-            {%- for piece in labels -%}
+            {%- assign cd_default_labels = 'DAYS|HOURS|MIN|SEC' | split: '|' -%}
+            {%- for i in (0..3) -%}
+              {%- assign piece = labels[i] | default: cd_default_labels[i] | strip -%}
               <div class="cdp-cd-cell-{{ sid }}">
                 <div class="cdp-cd-num-{{ sid }}" data-cdp-num="{{ forloop.index0 }}">00</div>
                 <div class="cdp-cd-label-{{ sid }}">{{ piece }}</div>
@@ -374,6 +380,7 @@
     // Countdown: counts down to the end date (the visitor's own clock and zone).
     var targetMs = cdEl ? Date.parse(cdEl.dataset.cdpEnd || '') : NaN;
     var nums = cdEl ? cdEl.querySelectorAll('[data-cdp-num]') : [];
+    if (cdEl && isNaN(targetMs)) { cdEl.style.display = 'none'; }
     function pad(n){ return n < 10 ? '0' + n : String(n); }
     function ended(){ return !isNaN(targetMs) && targetMs - Date.now() <= 0; }
     function tick(){
@@ -402,8 +409,8 @@
       design: CFG.design, preview: CFG.preview,
       trigger: Object.assign({ selector: '[data-cdp-trigger="' + SID + '"]' }, CFG.trigger),
       frequency: { mode: CFG.frequency.mode === 'every_visit' ? 'always' : CFG.frequency.mode, days: CFG.frequency.days },
-      open: function(){ root.classList.add('cdp-open'); start(); },
-      close: function(){ root.classList.remove('cdp-open'); stop(); }
+      open: function(){ root.classList.add('cdp-open'); root.setAttribute('aria-hidden', 'false'); start(); },
+      close: function(){ root.classList.remove('cdp-open'); root.setAttribute('aria-hidden', 'true'); stop(); }
     });
 
     if (codeBtn) {
@@ -486,7 +493,8 @@
       "max": 60,
       "step": 1,
       "unit": "s",
-      "default": 5
+      "default": 5,
+      "visible_if": "{{ section.settings.open_mode == 'delay' }}"
     },
     {
       "type": "range",
@@ -1059,7 +1067,8 @@
         "max": 60,
         "step": 1,
         "unit": "s",
-        "default": 5
+        "default": 5,
+        "visible_if": "{{ section.settings.open_mode == 'delay' }}"
       },
       {
         "type": "range",
