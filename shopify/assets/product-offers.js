@@ -44,29 +44,32 @@
 
   // One theme-owned label/spinner contract for legacy and Storelib offers.
   function actionLabel(button, addedText = 'Added') {
-    let label = button.querySelector('[data-label], .po-button__text');
+    let label = button.querySelector('[data-label], [data-btn-label], .po-button__text');
     if (!label) {
       label = document.createElement('span'); label.dataset.label = '';
       while (button.firstChild) label.append(button.firstChild);
       button.append(label);
     }
     button.classList.add('offer-action'); label.classList.add('hidden-on-load');
+    button.querySelectorAll(':scope > .btn-icon').forEach(icon=>icon.classList.add('hidden-on-load'));
     button.dataset.idleLabel ||= label.textContent;
     if (!button.querySelector('.offer-action__sizer')) {
       const sizer = document.createElement('span'); sizer.className = 'offer-action__sizer';
       sizer.setAttribute('aria-hidden', 'true');
       for (const text of [button.dataset.idleLabel, addedText]) { const size = document.createElement('span'); size.dataset.labelSize = text; sizer.append(size); }
       button.append(sizer);
-      const spinner = document.createElement('span'); spinner.className = 'icon-load';
-      spinner.setAttribute('aria-hidden', 'true'); button.append(spinner);
+      if (!button.querySelector(':scope > .icon-load')) {
+        const spinner = document.createElement('span'); spinner.className = 'icon-load';
+        spinner.setAttribute('aria-hidden', 'true'); button.append(spinner);
+      }
     }
     return label;
   }
   function actionBusy(button, busy, addedText) {
     actionLabel(button, addedText);
     button.classList.toggle('loading', busy);
-    if (busy) { button.setAttribute('aria-busy', 'true'); button.disabled = true; }
-    else { button.removeAttribute('aria-busy'); button.disabled = false; }
+    if (busy) { button._offerAriaLabel=button.getAttribute('aria-label');button.setAttribute('aria-label',button.dataset.loadingText||'Adding to cart');button.setAttribute('aria-busy', 'true'); button.disabled = true; }
+    else { if(button._offerAriaLabel!=null)button.setAttribute('aria-label',button._offerAriaLabel);else button.removeAttribute('aria-label');button.removeAttribute('aria-busy'); button.disabled = false; }
   }
   const selectReady = select => !!select?.value && !!select.selectedOptions[0] && !select.selectedOptions[0].disabled;
   const selectionKey = items => JSON.stringify(items.map(i => [String(i.id), Number(i.quantity)||1]).sort((a,b)=>a[0].localeCompare(b[0])));
@@ -233,7 +236,7 @@
       this.button = this.querySelector('[data-offer-add]');
       this.message = this.querySelector('[data-message]');
       this.addedText = this.dataset.addedText || 'Added';
-      if (this.button) actionLabel(this.button, this.addedText);
+      if (this.button) {actionLabel(this.button, this.addedText);this.button.dataset.loadingText=this.dataset.loadingText||'';}
       this.addEventListener('change', () => {
         this.selectionVersion = (this.selectionVersion || 0) + 1;
         if (this.button) { this.button.dataset.added = 'false'; actionLabel(this.button, this.addedText).textContent = this.button.dataset.idleLabel; }
@@ -254,8 +257,10 @@
         if (form && form.getAttribute('id') === this.dataset.formId) { this.selectionVersion = (this.selectionVersion || 0) + 1; if (this.button) { this.button.dataset.added='false'; actionLabel(this.button,this.addedText).textContent=this.button.dataset.idleLabel; } this.onVariant(String(input.value)); }
       }, {signal: this.events.signal});
       this.setup();
+      if (this.button) this.button.hidden = this.dataset.showButton === 'false' || this.dataset.purchaseAction === 'main';
+      scheduleMainOfferButtons();
     }
-    disconnectedCallback() { this.events?.abort(); }
+    disconnectedCallback() { this.events?.abort(); scheduleMainOfferButtons(); }
     form() { return this.dataset.formId ? document.getElementById(this.dataset.formId) : null; }
     formVariant() {
       const input = this.form()?.querySelector('[name="id"]');
@@ -269,14 +274,14 @@
       this.message.classList.toggle('visually-hidden', tone === 'success');
     }
     async run(items, discountCode) {
-      if (!this.button || this.button.getAttribute('aria-busy') === 'true') return;
+      if (mainBusy.has(this.form()) || !this.button || this.button.getAttribute('aria-busy') === 'true') return;
       this.say('');
       const version = this.selectionVersion || 0;
       actionBusy(this.button, true, this.addedText);
       try {
         const properties = await personalization(this.form());
         if (items[0]) items[0].properties = {...properties,...items[0].properties};
-        await addLines(items, {discountCode, source: this.localName});
+        await addLines(items, {discountCode,open:this.dataset.openDrawer!=='false', source: this.localName});
         if ((this.selectionVersion || 0) === version) {
           this._addedItems = items.map(item => ({id:String(item.id),quantity:item.quantity}));
           this.button.dataset.added = 'true';
@@ -299,7 +304,7 @@
       }, {signal: this.events.signal});
       const current = this.formVariant();
       if (current) this.onVariant(current); else this.update();
-      this.syncStorelib();
+      this.ready = this.syncStorelib();
     }
     /* A bundle the store made under Products > Upsells and bundles with exactly
        these products is the one checkout takes off: show its saving and tag
@@ -382,13 +387,13 @@
       this.shownSaving = saving;
       if (this.button) this.button.disabled = count === 0 || this.button.getAttribute('aria-busy') === 'true';
     }
-    submit() {
+    selection() {
       const group = groupId('bundle');
       const lines = this.lines.filter(line => {
         const variant = this.variantOf(line);
         return variant && variant.available && line.querySelector('[data-line-check]')?.checked;
       });
-      if (!lines.length) return;
+      if (!lines.length) return {items:[], mainIds:[]};
       const items = lines.map(line => {
         const variant = this.variantOf(line);
         const properties = this.complete ? {
@@ -406,11 +411,18 @@
         };
         return {id: variant.id, quantity: 1, properties};
       });
-      this.run(items, this.complete ? (this.dataset.discountCode || '') : '');
+      return {items, mainIds:lines.filter(line=>line.hasAttribute('data-main-line')).map(line=>this.variantOf(line).id), discountCode:this.complete ? (this.dataset.discountCode || '') : ''};
+    }
+    submit() { const selected=this.selection(); if(selected.items.length)this.run(selected.items,selected.discountCode);
     }
   }
 
   class QuantityOffer extends OfferBase {
+    selection() {
+      const variant=this.variant(),tier=this.tier();
+      if(!variant?.available || !tier)return {items:[],mainIds:[]};
+      return {items:[{id:variant.id,quantity:this.unitsOf(tier),properties:this.propertiesOf(tier,groupId('quantity'))}],mainIds:[variant.id],quantityTier:true,discountCode:tier.dataset.discountCode||''};
+    }
     setup() {
       try { this.variants = JSON.parse(this.querySelector('script[data-variants]')?.textContent || '[]'); } catch (_) { this.variants = []; }
       try { this.selected = String(JSON.parse(this.querySelector('script[data-selected]')?.textContent || '""')); } catch (_) { this.selected = ''; }
@@ -422,7 +434,7 @@
       this.selected = this.formVariant() || this.selected;
       this.update();
       this.syncForm();
-      this.syncStorelib();
+      this.ready = this.syncStorelib();
     }
     /* Quantity breaks the store set up in Storelib, when the platform lists
        them (docs/upsells-storelib.md, GET /api/offers?product=<id>). A tier
@@ -589,6 +601,8 @@
         if (all && this.contains(all)) { event.preventDefault(); this.addSelected(all); }
       }, {signal});
       this.cards.forEach(card => this.applyVariant(card));
+      this.querySelectorAll('[data-upsell-add-selected], [data-upsell-add]').forEach(button=>{button.hidden=this.dataset.showButton==='false'||this.dataset.purchaseAction==='main';});
+      scheduleMainOfferButtons();
       document.addEventListener('cart:updated', event => {
         const items = event.detail?.cart?.items;
         if (!Array.isArray(items)) return;
@@ -598,7 +612,9 @@
       }, {signal});
       this.updateTotal();
     }
-    disconnectedCallback() { this.events?.abort(); }
+    disconnectedCallback() { this.events?.abort(); scheduleMainOfferButtons(); }
+    form() { return this.dataset.formId ? document.getElementById(this.dataset.formId) : null; }
+    selection() { const group=groupId('upsell');return {items:this.selectedCards().map(card=>this.lineOf(card,group)),mainIds:[]}; }
     applyVariant(card) {
       const control = card.querySelector('[data-upsell-variant]');
       const variant = variantFrom(control);
@@ -654,7 +670,7 @@
       }};
     }
     async addOne(card, button) {
-      if (!card || card.classList.contains('is-loading') || card.hasAttribute('data-unavailable') || !card.dataset.variantId) return;
+      if (mainBusy.has(this.form()) || !card || card.classList.contains('is-loading') || card.hasAttribute('data-unavailable') || !card.dataset.variantId) return;
       const label = button.querySelector('[data-label]') || button;
       const text = this.dataset.buttonText || label.textContent;
       card.querySelector('[data-action-error]')?.remove();
@@ -677,7 +693,7 @@
     }
     async addSelected(button) {
       const picked = this.selectedCards();
-      if (!picked.length || button.getAttribute('aria-busy') === 'true') return;
+      if (mainBusy.has(this.form()) || !picked.length || button.getAttribute('aria-busy') === 'true') return;
       const message = this.querySelector('[data-message]');
       if (message) { message.hidden = true; message.textContent = ''; }
       actionBusy(button, true, this.dataset.addedText || 'Added');
@@ -713,12 +729,16 @@
       }, {signal});
       this.cards = [...this.querySelectorAll('.pw-card')];
       this.cards.forEach(card => this.applyVariant(card));
+      this.querySelectorAll('[data-add-btn]').forEach(button=>button.hidden=this.dataset.showButton==='false'||this.dataset.purchaseAction==='main');
+      scheduleMainOfferButtons();
       fetch('/cart.js', {headers: {Accept: 'application/json'}}).then(r => r.json()).then(cart => {
         const inCart = new Set((cart.items || []).map(i => String(i.variant_id || i.id)));
         this.cards.forEach(card => this.mark(card, inCart.has(String(card.dataset.variantId))));
       }).catch(() => {});
     }
-    disconnectedCallback() { this.events?.abort(); }
+    disconnectedCallback() { this.events?.abort(); scheduleMainOfferButtons(); }
+    form(){return this.dataset.formId?document.getElementById(this.dataset.formId):null;}
+    selection(){const group=groupId('pair');return {items:this.cards.filter(card=>card.querySelector('[data-pw-picked]')?.checked && variantFrom(card.querySelector('[data-variant-select]'))?.available).map(card=>({id:card.dataset.variantId,quantity:1,properties:{_sl_offer:'pair',_sl_group:group,_sl_block:this.dataset.blockId||''}})),mainIds:[]};}
     applyVariant(card) {
       if (!card) return;
       const variant = variantFrom(card.querySelector('[data-variant-select]'));
@@ -730,6 +750,7 @@
       if (compare) { compare.hidden = !(variant.compare > variant.price); compare.textContent = variant.compare > variant.price ? money(variant.compare, this.format) : ''; }
       const button = card.querySelector('[data-add-btn]');
       if (button) button.disabled = !variant.available;
+      const pick=card.querySelector('[data-pw-picked]');if(pick){pick.disabled=!variant.available;if(!variant.available)pick.checked=false;}
       this.mark(card, false);
     }
     mark(card, added) {
@@ -741,7 +762,7 @@
       label.textContent = added ? (this.dataset.addedText || 'Added') : (this.dataset.buttonText || button.dataset.idleLabel);
     }
     async toggle(card, button) {
-      if (!card || !card.dataset.variantId || button.getAttribute('aria-busy') === 'true') return;
+      if (mainBusy.has(this.form()) || !card || !card.dataset.variantId || button.getAttribute('aria-busy') === 'true') return;
       actionBusy(button, true, this.dataset.addedText || 'Added');
       try {
         if (button.classList.contains('is-added')) { await removeVariant(card.dataset.variantId); this.mark(card, false); }
@@ -776,7 +797,10 @@
       this.events?.abort(); this.events = new AbortController();
       this.instance ||= ++nativeOfferSequence;
       this.options = parse(this.dataset.options) || {};
+      this.dataset.purchaseAction=this.options.purchase_action || 'own';
+      if(this.dataset.kind==='upsell_pro' && this.dataset.purchaseAction!=='own')this.options.add_mode='selected';
       Object.keys(this.options).forEach(key=>{if(typeof this.options[key]==='string'){const text=document.createElement('textarea');text.innerHTML=this.options[key];this.options[key]=text.value;}});
+      this.addedText=this.options.added_text || this.options.added_label || 'Added';
       this.variants = (parse(this.dataset.variants) || []).map(v => ({id:String(v.id),price:Number(v.price ?? v.priceCents)||0,compare:Number(v.compare_at_price)||0,available:v.available!==false,title:v.title||v.name||''}));
       this.selected = this.dataset.selected;
       this.market = !!this.dataset.currency && !!this.dataset.storeCurrency && this.dataset.currency !== this.dataset.storeCurrency;
@@ -792,14 +816,20 @@
         this.dataset.cartProductQuantity=String(e.detail.cart.items.filter(i=>String(i.product_id)===this.dataset.productId).reduce((n,i)=>n+Number(i.quantity||0),0));
       },{signal});
       const payload=parse(this.dataset.offers);
-      if (payload && typeof payload==='object') this.draw(payload);
-      else readOffers('/api/offers?product='+encodeURIComponent(this.dataset.productId)).then(data=>{if(this.isConnected && !signal.aborted && data)this.draw(data);});
+      if (payload && typeof payload==='object') { this.draw(payload); this.ready=Promise.resolve(); }
+      else this.ready=readOffers('/api/offers?product='+encodeURIComponent(this.dataset.productId)).then(data=>{if(this.isConnected && !signal.aborted){this.offerLoadFailed=!data;if(data)this.draw(data);}});
+      scheduleMainOfferButtons();
     }
     disconnectedCallback(){
-      this.events?.abort();
+      this.events?.abort(); scheduleMainOfferButtons();
       this.form()?.querySelectorAll('[data-native-offer-owner="'+this.instance+'"]').forEach(input=>input.remove());
     }
     form(){return this.dataset.formId ? document.getElementById(this.dataset.formId) : null;}
+    selection(){
+      const entry=this.actions?.[this.dataset.kind==='bundle'?(this.selectedBundle||0):0];
+      const items=entry?.action()||[],mainIds=this.dataset.kind==='upsell_pro'?[]:items.filter(i=>this.variants.some(v=>String(v.id)===String(i.id))).map(i=>String(i.id));
+      return {items,mainIds,quantityTier:this.dataset.kind==='quantity_offer'};
+    }
     variant(){const id=this.form()?.querySelector('[name="id"]')?.value || this.selected;return this.variants.find(v=>v.id===String(id))||this.variants.find(v=>v.available)||this.variants[0];}
     amount(value){return money(value,this.dataset.moneyFormat);}
     draw(data){
@@ -827,7 +857,14 @@
       if(s.text||s.subheading)box.append(node('p',kind==='upsell_pro'?'upsell-pro__sub':'po-text',s.text||s.subheading));this.append(box);
       this.box=box;
       if(kind==='quantity_offer')this.quantity(offers[0]);
-      else if(kind==='bundle')offers.forEach(offer=>this.bundle(offer));
+      else if(kind==='bundle')offers.forEach((offer,index)=>{
+        if(this.dataset.purchaseAction!=='own' && offers.length>1){
+          const choice=node('label','po-note'),radio=node('input');radio.type='radio';radio.name='linked-bundle-'+this.instance;radio.checked=index===(this.selectedBundle||0);radio.setAttribute('aria-label',offer.title||'Bundle '+(index+1));
+          choice.append(radio,document.createTextNode(' '+(offer.title||'Bundle '+(index+1))));box.append(choice);
+          radio.addEventListener('change',()=>{this.selectedBundle=index;},{signal:this.events.signal});
+        }
+        this.bundle(offer);
+      });
       else {
         offers.slice(0,Number(s.max_products)||3).forEach(offer=>this.upsell(offer));
         if(s.add_mode==='selected'){
@@ -839,30 +876,32 @@
     }
     button(parent,label,action){
       const button=node('button','btn btn-primary po-button');const text=node('span','po-button__text hidden-on-load',label);button.append(text);button.type='button';button.dataset.themeButton='primary';button.dataset.slButton='';button.dataset.buttonRole='primary';
-      actionLabel(button, this.options.added_text || 'Added');
+      actionLabel(button, this.addedText || 'Added');
+      button.dataset.loadingText=this.options.adding_label || '';
+      button.hidden=this.options.show_button===false || this.dataset.purchaseAction==='main';
       this.actions ||= [];this.actions.push({button,text,label,action});
       const status=node('p','po-message');status.setAttribute('role','status');
       parent.append(button,status);
       button.addEventListener('click',async()=>{
-        if(button.getAttribute('aria-busy')==='true')return;
-        actionBusy(button,true,this.options.added_text || 'Added');status.textContent='';status.classList.remove('visually-hidden');
+        if(mainBusy.has(this.form()) || button.getAttribute('aria-busy')==='true')return;
+        actionBusy(button,true,this.addedText || 'Added');status.textContent='';status.classList.remove('visually-hidden');
         try{
           const lines=action();if(!lines?.length)return;
           const props=await personalization(this.form());
           const own=lines.find(line=>this.variants.some(v=>v.id===String(line.id)));
           if(own)own.properties={...props,...own.properties};
-          await addLines(lines,{open:this.dataset.kind==='upsell_pro'?safelyOpen(this.options):true,source:'storelib-offers'});
-          button._addedSelection=selectionKey(lines);button._addedRevision=this.cartRevision || 0;button.dataset.added='true';text.textContent=this.options.added_text||'Added';status.textContent=text.textContent;status.classList.add('visually-hidden');
+          await addLines(lines,{open:this.dataset.kind==='upsell_pro'?safelyOpen(this.options):this.options.open_cart_after_add!==false,source:'storelib-offers'});
+          button._addedSelection=selectionKey(lines);button._addedRevision=this.cartRevision || 0;button.dataset.added='true';text.textContent=this.addedText||'Added';status.textContent=text.textContent;status.classList.add('visually-hidden');
         }catch(error){status.textContent=error.userMessage||error.message||this.options.error_text||'';}
-        finally{actionBusy(button,false,this.options.added_text || 'Added');this.paintPrices();}
+        finally{actionBusy(button,false,this.addedText || 'Added');this.paintPrices();}
       },{signal:this.events.signal});return button;
     }
     paintButtons(){
       for(const entry of this.actions||[]){
         const lines=entry.action();entry.button.disabled=!lines?.length||entry.button.getAttribute('aria-busy')==='true';
-        if(!this.confirmedCart || entry.button._addedRevision === (this.cartRevision || 0)){const added=lines.length>0&&entry.button._addedSelection===selectionKey(lines);entry.button.dataset.added=String(added);entry.text.textContent=added?this.options.added_text||'Added':entry.label;continue;}
+        if(!this.confirmedCart || entry.button._addedRevision === (this.cartRevision || 0)){const added=lines.length>0&&entry.button._addedSelection===selectionKey(lines);entry.button.dataset.added=String(added);entry.text.textContent=added?this.addedText||'Added':entry.label;continue;}
         const added=lines.length>0&&lines.every(line=>this.confirmedCart.items.filter(i=>String(i.variant_id||i.id)===String(line.id)).reduce((n,i)=>n+Number(i.quantity||0),0)>=line.quantity);
-        entry.button.dataset.added=String(added);entry.text.textContent=added?this.options.added_text||'Added':entry.label;
+        entry.button.dataset.added=String(added);entry.text.textContent=added?this.addedText||'Added':entry.label;
       }
     }
     quantity(offer){
@@ -886,7 +925,7 @@
       if((this.dataset.compact==='true' && this.form()) || this.options.show_button===false)this.addButton.hidden=true;
     }
     syncQuantity(){
-      if(!this.chosen)return;
+      if(!this.chosen || this.options.sync_form_quantity===false)return;
       const form=this.form();if(!form)return;
       const quantity=Number(this.chosen.quantity)+Number(this.chosen.freeQuantity||0);
       let inputs=[...form.elements].filter(el=>el.name==='quantity');
@@ -945,6 +984,113 @@
       try{const url=new URL(item.imageUrl,location.href);if(!['http:','https:'].includes(url.protocol))return;const img=node('img','po-line__media');img.src=url.href;img.alt='';img.width=56;img.height=56;img.loading='lazy';img.decoding='async';parent.append(img);}catch(_){}
     }
   }
+  const linkedMode = provider => ['main','both'].includes(provider.dataset.purchaseAction || provider.options?.purchase_action);
+  const mainProviders = form => [...document.querySelectorAll('product-bundle,quantity-offer,upsell-pro,pair-with,storelib-product-offers')].filter(provider => provider.isConnected && linkedMode(provider) && provider.form?.() === form);
+  const mainBusy = new WeakSet();
+
+  let mainWireFrame=0;
+  function scheduleMainOfferButtons(){if(!mainWireFrame)mainWireFrame=requestAnimationFrame(()=>{mainWireFrame=0;wireMainOfferButtons();});}
+  function wireMainOfferButtons() {
+    const forms=new Set([...document.querySelectorAll('product-bundle,quantity-offer,upsell-pro,pair-with,storelib-product-offers')].filter(linkedMode).map(provider=>provider.form?.()).filter(Boolean));
+    document.querySelectorAll('[data-storelib-buy-now], [data-offer-buy-now]').forEach(button => {
+      const linked=forms.has(button.form);
+        // Storelib's single-product Buy now must not race the combined cart
+        // action. Restore its hook as soon as the linked block is removed.
+        if (linked) { button.dataset.offerBuyNow=''; button.removeAttribute('data-storelib-buy-now'); }
+        else { button.setAttribute('data-storelib-buy-now',''); delete button.dataset.offerBuyNow; }
+    });
+  }
+
+  function mainStatus(form, text, error = false) {
+    let message = form.parentElement.querySelector('[data-main-offer-status]');
+    if (!message) { message=document.createElement('p');message.dataset.mainOfferStatus='';message.className='po-message';message.setAttribute('role','status');form.after(message); }
+    message.textContent=text;message.hidden=!text;message.classList.toggle('visually-hidden', !error);
+    return message;
+  }
+
+  function mainSelection(form, providers) {
+    const data=new FormData(form), id=String(data.get('id')||form.querySelector('[name="id"]')?.value||''), quantity=Math.max(1,parseInt(data.get('quantity'),10)||1);
+    if (!id) throw new Error('Choose an available product variant.');
+    const selections=providers.map(provider=>({provider,...provider.selection()}));
+    const tier=selections.find(s=>s.quantityTier && s.items.length);
+    const sets=tier ? tier.items[0].quantity : quantity;
+    const replacement=selections.find(s=>!s.quantityTier && s.mainIds?.length);
+    const items=new Map(), codes=new Set();
+    function merge(line) {
+      const key=String(line.id),old=items.get(key);
+      if(old){old.quantity=Math.max(old.quantity,line.quantity);old.properties={...line.properties,...old.properties};}
+      else items.set(key,{...line,id:key,properties:{...line.properties}});
+    }
+    if (!replacement) merge({id,quantity:sets});
+    // Bundle sets replace the primary line, rather than adding it twice.
+    selections.filter(s=>!s.quantityTier).forEach(s=>{
+      s.items.forEach(item=>merge({...item,quantity:item.quantity*(s.provider.localName==='product-bundle'||s.provider.dataset.kind==='bundle'?sets:1)}));
+      if(s.discountCode)codes.add(s.discountCode);
+    });
+    if(tier){const primary=replacement?.mainIds?.[0]||id;merge({...tier.items[0],id:primary});if(tier.discountCode)codes.add(tier.discountCode);}
+    const primaryIds=new Set(replacement?.mainIds?.length?replacement.mainIds:[id]);
+    return {items:[...items.values()],primaryIds,codes:[...codes].join(','),selections};
+  }
+
+  async function continueCartCheckout(form) {
+    const cart=findCart(),checkout=cart?.querySelector('button[name="checkout"].btn-checkout');
+    if (checkout && !checkout.disabled && checkout.getAttribute('aria-disabled')!=='true') {
+      checkout.click(); // Existing Storelib cart checkout, never a made-up API.
+    } else if (checkout) {
+      await cart.open?.();
+      mainStatus(form,'Review your cart and confirm the required terms to continue.',true);
+      cart.querySelector('[data-cart-terms] input, input[name="agree"]')?.focus({preventScroll:true});
+    } else window.location.assign(window.routes?.cart_url || '/cart');
+  }
+
+  async function submitMainOffers(form, button, buyNow) {
+    if(mainBusy.has(form))return;
+    const providers=mainProviders(form);if(!providers.length)return;
+    if(providers.some(provider=>provider.querySelector('[aria-busy="true"]'))){mainStatus(form,'An add is already in progress. Please wait.',true);return;}
+    mainBusy.add(form);mainStatus(form,'');
+    const controls=[...new Set([...form.querySelectorAll('button[type="submit"],input[type="submit"]'),...providers.flatMap(provider=>[...provider.querySelectorAll('button')])])].map(el=>[el,el.disabled]);
+    controls.forEach(([el])=>el.disabled=true);
+    actionBusy(button,true);
+    try {
+      await Promise.all(providers.map(provider=>provider.ready));
+      if(!form.isConnected || providers.some(p=>!p.isConnected))throw new Error('The product selection changed. Please try again.');
+      if(providers.some(p=>p.offerLoadFailed))throw new Error('Unable to load the active offers. Please try again.');
+      const plan=mainSelection(form,providers);
+      const properties=await personalization(form);
+      if(!form.isConnected || providers.some(p=>!p.isConnected))throw new Error('The product selection changed. Please try again.');
+      plan.items.forEach(item=>{if(plan.primaryIds.has(String(item.id)))item.properties={...properties,...item.properties};});
+      await addLines(plan.items,{open:!buyNow,discountCode:plan.codes,source:'main-product-offers'});
+      plan.selections.forEach(selection=>{
+        const provider=selection.provider;
+        if(provider.addedVariants){selection.items.forEach(item=>provider.addedVariants.add(String(item.id)));provider.cards.forEach(card=>provider.applyVariant(card));provider.updateTotal();}
+        if(provider.localName==='pair-with')provider.cards.filter(card=>selection.items.some(item=>String(item.id)===String(card.dataset.variantId))).forEach(card=>provider.mark(card,true));
+        if(provider.button){provider.button.dataset.added='true';actionLabel(provider.button,provider.addedText).textContent=provider.addedText;}
+      });
+      mainStatus(form,providers[0].addedText||providers[0].dataset.addedText||'Added');
+      if(buyNow)await continueCartCheckout(form);
+    } catch(error){mainStatus(form,error.userMessage||error.message||'These items could not be added. Please try again.',true);}
+    finally {
+      actionBusy(button,false);controls.forEach(([el,disabled])=>el.disabled=disabled);
+      mainBusy.delete(form);
+    }
+  }
+
+  // Capture only explicitly linked forms; normal product/cart forms retain
+  // their existing Storelib behavior. Mouse, keyboard and requestSubmit agree.
+  window.addEventListener('click',event=>{
+    const button=event.target.closest?.('button[type="submit"],input[type="submit"],[data-storelib-buy-now],[data-offer-buy-now]');
+    const form=button?.form;
+    if(!form || button.disabled || !mainProviders(form).length)return;
+    event.preventDefault();event.stopImmediatePropagation();
+    submitMainOffers(form,button,button.hasAttribute('data-offer-buy-now')||button.hasAttribute('data-storelib-buy-now')||button.name==='checkout');
+  },true);
+  window.addEventListener('submit',event=>{
+    const form=event.target;if(!mainProviders(form).length)return;
+    const button=event.submitter||form.querySelector('button[type="submit"]');if(!button)return;
+    event.preventDefault();event.stopImmediatePropagation();
+    submitMainOffers(form,button,button.hasAttribute('data-offer-buy-now')||button.hasAttribute('data-storelib-buy-now')||button.name==='checkout');
+  },true);
+  ['DOMContentLoaded','storelib:section-load','shopify:section:load'].forEach(type=>document.addEventListener(type,scheduleMainOfferButtons));
   const safelyOpen = options => options.open_drawer_after_add === true;
   window.MateriaProductOffers = {addLines, removeVariant, money, tierPrice};
   if (!customElements.get('storelib-product-offers')) customElements.define('storelib-product-offers',StorelibProductOffers);
