@@ -31,7 +31,7 @@
     addEventListener('pageshow', e => {
       if (!e.persisted) return;
       const root = document.documentElement;
-      ['nav-open', 'open-drawer', 'open-minicart', 'open-search', 'nav-verticalmenu', 'overlay-closing']
+      ['nav-open', 'nav-closing', 'open-drawer', 'open-minicart', 'open-search', 'nav-verticalmenu', 'overlay-closing']
         .forEach(c => { if (root.classList.contains(c)) root.classList.remove(c); });
       root.style.removeProperty('padding-right');
       document.querySelectorAll('#minicart_wrapper.open, #minicart_wrapper .minicart__wrapper.open').forEach(el => el.classList.remove('open'));
@@ -45,7 +45,7 @@
   if (!window.StorelibMenuLayer && HTMLElement.prototype.showPopover) {
     const root = document.documentElement;
     const phone = matchMedia('(max-width: 1024.98px)');
-    let closeTimer;
+    let closeTimer, lastOpen;
     const drawers = () => [...document.querySelectorAll('.navigation.mobile')];
     const show = nav => {
       if (!nav.hasAttribute('popover')) nav.setAttribute('popover', 'manual');
@@ -61,8 +61,11 @@
       nav.removeAttribute('popover');
     };
     const sync = () => {
+      const open=root.classList.contains('nav-open') && phone.matches;
+      if(open===lastOpen)return;
+      lastOpen=open;
       clearTimeout(closeTimer);
-      if (root.classList.contains('nav-open') && phone.matches) {
+      if (open) {
         drawers().forEach(show);
       } else {
         const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -73,6 +76,9 @@
     };
     new MutationObserver(sync).observe(root, {attributes: true, attributeFilter: ['class']});
     phone.addEventListener?.('change', sync);
+    document.addEventListener('storelib:section-load',()=>{
+      if(root.classList.contains('nav-open') && phone.matches)drawers().forEach(show);
+    });
     document.addEventListener('keydown', e => {
       // theme.js (MateriaMenu) closes the open level first, then the drawer.
       if (window.MateriaMenu) return;

@@ -20,6 +20,17 @@
 "use-strict";
 
 (function () {
+  // Watch only recommendation containers. Platform/editor insertions can
+  // arrive after cartAction; do not observe or modify the page's own FAQ.
+  const recommendationScope='minicart-recommendations,minicart-recommendations-beside,.cart-recommend,.swiper-cart-upsell';
+  const queued=new Set();let frame=0;
+  const queue=scope=>{if(!scope)return;queued.add(scope);if(!frame)frame=requestAnimationFrame(()=>{frame=0;queued.forEach(el=>{if(el.isConnected && typeof window.materiaPruneRecommendationExtras==='function')window.materiaPruneRecommendationExtras(el);});queued.clear();});};
+  new MutationObserver(records=>records.forEach(record=>{
+    queue(record.target.closest?.(recommendationScope));
+    record.addedNodes.forEach(node=>{if(node.nodeType!==1)return;if(node.matches(recommendationScope))queue(node);node.querySelectorAll(recommendationScope).forEach(queue);});
+  })).observe(document.documentElement,{childList:true,subtree:true});
+  document.querySelectorAll(recommendationScope).forEach(queue);
+  document.addEventListener('materia:cart-tools-ready',()=>document.querySelectorAll(recommendationScope).forEach(queue));
   function findCartContainer() {
     return (
       document.querySelector("cart-notification") ||

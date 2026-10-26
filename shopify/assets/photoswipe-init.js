@@ -5,6 +5,8 @@ import PhotoSwipeLightbox from './photoswipe-lightbox.esm.min.js';
 import Photoswipe from './photoswipe.esm.min.js';
 // js gallery
 class ZoomAction extends HTMLElement {
+  static get observedAttributes() { return ['data-type','data-zoom-option']; }
+  attributeChangedCallback() { if(this.isConnected)this.refreshZoom(); }
   constructor() {
     super();
     this.type = this.dataset.type || 'no_zoom';
@@ -24,6 +26,20 @@ class ZoomAction extends HTMLElement {
   }
   connectedCallback() {
     if (!this._onResize) this.init();
+    this._zoomObserver ||= new MutationObserver(records=>{
+      if(records.some(record=>[...record.addedNodes,...record.removedNodes].some(node=>node.nodeType===1 && (node.matches('.drift-trigger,.media-gallery__image')||node.querySelector('.drift-trigger')))))this.refreshZoom();
+    });
+    this._zoomObserver.observe(this,{childList:true,subtree:true});
+  }
+  refreshZoom() {
+    if(this._zoomFrame)return;
+    this._zoomFrame=requestAnimationFrame(()=>{
+      this._zoomFrame=0;if(!this.isConnected)return;
+      this.destroyDrifts();this.lightbox?.destroy();this.lightbox=null;
+      this.type=this.dataset.type||'no_zoom';this.zoomOption=this.dataset.zoomOption||'inner-1';
+      if(!this._onResize)this.init();
+      if(this.type!=='no_zoom')this.responsive();
+    });
   }
   initLightBox() {
     if (this.lightbox !== null) return;
@@ -128,6 +144,11 @@ class ZoomAction extends HTMLElement {
     this._drifts = [];
     if (allTriggers.length != 0) {
       allTriggers.forEach( (trigger) => {
+        if (!trigger.getAttribute('data-zoom')) {
+          const source=trigger.closest('[data-mt-src]')?.dataset.mtSrc || trigger.currentSrc || trigger.getAttribute('src');
+          if(!source)return;
+          trigger.setAttribute('data-zoom',source);
+        }
         const inlineContainer = trigger.closest('[data-pane-container]') || trigger.parentElement;
         const zoomOption = this.zoomOption;
         if (zoomOption === 'inner-2') {
@@ -207,6 +228,9 @@ class ZoomAction extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._zoomObserver?.disconnect();
+    if(this._zoomFrame)cancelAnimationFrame(this._zoomFrame);
+    this._zoomFrame=0;
     this.destroyDrifts();
     this.lightbox?.destroy();
     this.lightbox = null;

@@ -7,7 +7,8 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
   const src=read('shopify/assets/cart-components.js');
   const helpers=src.slice(0,src.indexOf('// theme.js loads this file'));
   const fetcher=src.slice(src.indexOf('class BaseFetcher'),src.indexOf('class CartUpsell extends'));
-  await p.addScriptTag({content:helpers+fetcher+';customElements.define("test-recommendations",class extends BaseFetcher{});'});
+  await p.addScriptTag({type:'module',content:helpers+fetcher+';customElements.define("test-recommendations",class extends BaseFetcher{});'});
+  await p.waitForFunction(()=>!!customElements.get('test-recommendations'));
   const card='<div class="product-item"><h3>Recommended product</h3><button>Add to cart</button><section class="qx"><h3>Questions</h3><details><summary>When will my order arrive?</summary></details></section></div>';
   const response='<div class="swiper-wrapper"><div class="swiper-slide">Unrelated page slider</div></div><div data-cart-upsell-results class="cart-upsell"><div class="swiper-wrapper"><div class="swiper-slide">'+card+'</div><section class="qx">More questions</section><div class="swiper-slide"><section class="qx">FAQ-only slide</section></div></div><div class="cart-upsell-wrapper"><div class="cart-upsell-item">'+card+'</div></div></div>';
   for(const selector of ['.swiper-wrapper','.cart-upsell-wrapper']){
@@ -19,6 +20,9 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
   assert.equal(await p.locator('#page-faq').textContent(),'Page questions stay here');checks++;
   await p.locator('test-recommendations').evaluate(el=>{el.innerHTML='<section class="qx">Late FAQ</section><div class="product-item">Product</div>';materiaPruneRecommendationExtras(el);});
   assert.equal(await p.locator('test-recommendations .qx').count(),0);assert.equal(await p.locator('#page-faq').count(),1);checks++;
+  await p.addScriptTag({content:read('shopify/assets/cart-drawer-safety.js')});
+  await p.locator('test-recommendations').evaluate(el=>el.insertAdjacentHTML('beforeend','<div class="platform-questions"><h4>Questions</h4><details><summary>Delivery</summary></details><details><summary>Returns</summary></details></div>'));
+  await p.waitForTimeout(80);assert.equal(await p.locator('.platform-questions').count(),0,'late unclassified FAQ removed from recommendations');assert.equal(await p.locator('#page-faq').count(),1);checks++;
   await p.close();
  }
  console.log(checks+' recommendation-source and FAQ isolation checks passed');

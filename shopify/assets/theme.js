@@ -649,6 +649,7 @@ function HoverIntent(exitTime, elements, userConfig) {
   function open() {
     clearTimeout(settleTimer);
     settleTimer = 0;
+    html.classList.remove('nav-closing');
     if (isOpen()) return sync();
     const bar = window.getScrollBarWidth?.init?.() || 0;
     if (bar) lockTarget().style.setProperty("padding-right", bar + "px");
@@ -666,12 +667,14 @@ function HoverIntent(exitTime, elements, userConfig) {
     const wasOpen = isOpen();
     if (!wasOpen && !immediate) return sync();
     const focusInside = drawer()?.contains(document.activeElement);
+    if(wasOpen && !immediate && !reduced.matches)html.classList.add('nav-closing');
     html.classList.remove("nav-open", "nav-verticalmenu");
     sync();
     clearTimeout(settleTimer);
     const settle = () => {
       settleTimer = 0;
       if (isOpen()) return;
+      html.classList.remove('nav-closing');
       if (!otherDrawerOpen()) html.classList.remove("open-drawer");
       lockTarget().style.removeProperty("padding-right");
       resetLevels();
@@ -9103,6 +9106,8 @@ class SlideWithThumbs extends HTMLElement {
     const initSwiper = this.querySelector(".swiper-wrapper-preview");
     var _this = this;
     this.globalSlide = new Swiper(initSwiper, {
+      // Restore before the first paint after unrelated editor changes.
+      initialSlide:window.MateriaGalleryState?.initial(this.closest('media-gallery'),initSwiper?.querySelectorAll(':scope > .swiper-wrapper > .swiper-slide').length)||0,
       slidesPerView: itemMobile,
       spaceBetween: spacing >= 15 ? 15 : spacing,
       autoplay: autoplaying,
@@ -9140,6 +9145,7 @@ class SlideWithThumbs extends HTMLElement {
           slide_visibles?.forEach((slide) => {
             if (typeof slide?.initialize === "function") slide?.initialize();
           });
+          window.MateriaGalleryState?.bind(_this.closest('media-gallery'),this);
           const currentSlide = this.slides[this.activeIndex];
           if (
             currentSlide &&

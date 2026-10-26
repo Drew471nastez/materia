@@ -182,7 +182,10 @@
     refreshLocks();
   }
   function openSheet(dialog, opener) {
-    if (!dialog || dialog.open) return;
+    if (!dialog || (dialog.open && !dialog.classList.contains('is-closing'))) return;
+    var reopening=dialog.open;
+    dialog._mtCancelClose?.();
+    var version=dialog._mtSheetVersion=(dialog._mtSheetVersion||0)+1;
     dialog._mtOpener = opener || null;
     if (!dialog._mtBound) {
       dialog._mtBound = true;
@@ -199,8 +202,10 @@
     }
     lockPage(true, dialog);
     dialog.classList.remove("is-closing");
+    if(reopening)dialog.classList.add('is-open');
     requestAnimationFrame(function () {
       requestAnimationFrame(function () {
+        if(version!==dialog._mtSheetVersion || !dialog.open)return;
         dialog.classList.add("is-open");
       });
     });
@@ -208,12 +213,15 @@
   }
   function closeSheet(dialog) {
     if (!dialog || !dialog.open || dialog.classList.contains("is-closing")) return;
+    var version=dialog._mtSheetVersion=(dialog._mtSheetVersion||0)+1;
     dialog.classList.remove("is-open");
     dialog.classList.add("is-closing");
     var done = false;
     function finish() {
-      if (done) return;
+      if (done || version!==dialog._mtSheetVersion) return;
       done = true;
+      clearTimeout(closeTimer);
+      dialog._mtCancelClose=null;
       dialog.classList.remove("is-closing");
       try {
         dialog.close();
@@ -239,10 +247,11 @@
       finish();
     }
     panel.addEventListener("transitionend", onEnd);
-    setTimeout(function () {
+    var closeTimer=setTimeout(function () {
       panel.removeEventListener("transitionend", onEnd);
       finish();
     }, 420);
+    dialog._mtCancelClose=function(){clearTimeout(closeTimer);panel.removeEventListener('transitionend',onEnd);done=true;dialog._mtCancelClose=null;};
   }
 
   /* On a phone the sheet follows a finger dragged down from its top bar or
@@ -259,7 +268,7 @@
     var inHead = !!target.closest(".mt-sheet__head");
     if (!inHead && body && body.scrollTop > 0) return;
     var touch = e.touches[0];
-    drag = { panel: panel, y: touch.clientY, x: touch.clientX, dy: 0, t: now(), v: 0, moving: false };
+    drag = { panel: panel, height:panel.offsetHeight, y: touch.clientY, x: touch.clientX, dy: 0, t: now(), v: 0, moving: false };
     // Only the open sheet listens to a moving finger, so the page keeps its
     // fast scrolling everywhere else.
     if (!panel._mtDrag) {
@@ -287,18 +296,19 @@
     drag.v = (next - drag.dy) / Math.max(1, t - drag.t);
     drag.t = t;
     drag.dy = next;
-    drag.panel.style.transform = "translate3d(0," + next + "px,0)";
+    if(!drag.frame)drag.frame=requestAnimationFrame(function(){if(!drag)return;drag.frame=0;drag.panel.style.transform='translate3d(0,'+drag.dy+'px,0)';});
   }
-  function endDrag() {
+  function endDrag(event) {
     if (!drag) return;
     var d = drag;
+    if(d.frame)cancelAnimationFrame(d.frame);
     drag = null;
     if (!d.moving) return;
     var dialog = d.panel.closest("dialog");
     // Let go: carry on from where the finger left it, down and out or back.
     d.panel.getBoundingClientRect();
     d.panel.style.transition = "";
-    if (d.dy > d.panel.offsetHeight * 0.25 || d.v > 0.5) {
+    if (event?.type!=='touchcancel' && (d.dy > d.height * 0.25 || (now()-d.t<120 && d.v > 0.5))) {
       lastHandled = now();
       dialog.classList.remove("is-open");
       d.panel.style.transform = "";
@@ -1149,13 +1159,20 @@
     if (typeof holder.start === "function") holder.start();
   }
   var galleryPositions = new Map();
+  function galleryPositionKey(gallery) {
+    var section=gallery?.closest('[id^="shopify-section-"], .shopify-section');
+    var product=gallery?.getAttribute('data-mt-product-id');
+    return section?.id && product ? section.id+':'+product : '';
+  }
+  window.MateriaGalleryState={
+    initial:function(gallery,count){var saved=galleryPositions.get(galleryPositionKey(gallery));return saved!=null && saved<count ? saved : 0;},
+    bind:rememberGalleryPosition
+  };
   function rememberGalleryPosition(gallery, sw) {
     if (sw._mtPositionBound) return;
     sw._mtPositionBound = true;
-    var section = gallery.closest('[id^="shopify-section-"], .shopify-section');
-    var product = gallery.getAttribute('data-mt-product-id');
-    if (!section?.id || !product) return;
-    var key = section.id + ':' + product;
+    var key=galleryPositionKey(gallery);
+    if(!key)return;
     var saved = galleryPositions.get(key);
     if (saved != null && saved < sw.slides.length) sw.slideTo(saved, 0, false);
     var remember = function () {

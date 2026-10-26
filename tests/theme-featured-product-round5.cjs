@@ -172,7 +172,7 @@ const EMPTY = productOf('no-pics', 'No Pictures', []);
 
 const home = JSON.parse(read('templates/home.json'));
 const [FID, FSEC] = Object.entries(home.sections).find(([, s]) => s.type === 'featured-product');
-const SSEC = Object.values(home.sections).find(s => s.type === 'featured-product2');
+const SSEC = Object.values(home.sections).find(s => s.type === 'featured-product2') || {settings:{},blocks:{},block_order:[]};
 const featSchema = schemaOf(FEAT).shopify;
 const defaults = Object.fromEntries(featSchema.settings.filter(s => s.id && 'default' in s).map(s => [s.id, s.default]));
 const blockDefaults = type => { const b = featSchema.blocks.find(x => x.type === type); return b ? Object.fromEntries(b.settings.filter(s => s.id && 'default' in s).map(s => [s.id, s.default])) : {}; };
@@ -198,7 +198,9 @@ async function renderPage({ settings = {}, product = PANTS, design = false, bloc
     ctx = { ...base, product, section: { id: FID, settings: sset, blocks: list, index: 3 } };
     sectionHtml = await e.parseAndRender(clean(body(read(SPOT))), ctx, { globals: ctx });
   } else {
-    const sset = { ...defaults, ...FSEC.settings, ...settings, product };
+    // Gallery assertions below exercise the thumbnail layout, independently
+    // of the creator's currently saved home-page layout.
+    const sset = { ...defaults, ...FSEC.settings, desktop_layout:'thumbnail_bottom', ...settings, product };
     sset.color_scheme = { ...(schemes.find(s => s.id === sset.color_scheme) || schemes[0]) };
     const keep = ['title', 'price', 'variant_picker', 'variant_selector_pro', 'buy_buttons', 'short_description', 'modern_collapsible_row', 'in_stock', 'payment_badges', 'benefits_pills'];
     const list = blocks ? FSEC.block_order.map(k => ({ id: k, type: FSEC.blocks[k].type, shopify_attributes: '', settings: { ...blockDefaults(FSEC.blocks[k].type), ...FSEC.blocks[k].settings } })).filter(b => keep.includes(b.type)) : [];
@@ -236,9 +238,9 @@ if (require.main !== module) return;
     ok(!/media-gallery\s+class="block sticky/.test(off) && !/sticky top-30/.test(off), 'Sticky media off: nothing sticky');
     const legacy = { ...FSEC.settings };
     ok(!('enable_sticky_content_on_desktop' in legacy), 'the home page section was saved before the setting existed');
-    const zoom = (await renderPage({ settings: { image_zoom: 'external_zoom', mobile_slides_per_view: '1.2' } })).sectionHtml;
+    const zoom = (await renderPage({ settings: { image_zoom: 'external_zoom', desktop_layout:'thumbnail_bottom', mobile_slides_per_view: '1.2' } })).sectionHtml;
     ok(/<zoom-action[^>]*data-type="external_zoom"[^>]*data-zoom-option="external"/.test(zoom.replace(/\s+/g, ' ')), 'hover zoom in a featured product');
-    ok(zoom.includes('drift.js') && zoom.includes('photoswipe-init.js') && zoom.includes('zoom-external-area'), 'zoom code and its pane');
+    ok(read('layout/theme.storelib').includes('drift.js') && read('layout/theme.storelib').includes('photoswipe-init.js') && zoom.includes('zoom-external-area'), 'zoom code and its pane');
     ok(/data-mobile="1\.2"/.test(zoom) && /data-spacing="8"/.test(zoom), 'images per row on a phone');
     const none = (await renderPage({ product: EMPTY })).sectionHtml;
     ok(/data-mt-media-placeholder/.test(none) && !/<media-gallery/.test(none) && !/mt-media-placeholder__note/.test(none), 'no pictures: a placeholder, no note on the live site');
@@ -315,7 +317,7 @@ if (require.main !== module) return;
   try {
     /* Sticky media at 1366: the gallery stays under the header while the information scrolls on. */
     {
-      const { html } = await renderPage({ settings: { enable_image_square: true } });
+      const { html } = await renderPage({ settings: { desktop_layout:'thumbnail_bottom', enable_image_square: true } });
       const { p, ctx } = await open(1366, html.replace('</head>', '<style>.sec__featured-product .product-detail__information{min-height:2600px}</style></head>'));
       await toSection(p, -100);
       const read = () => p.evaluate(s => {
@@ -442,7 +444,7 @@ if (require.main !== module) return;
     }
     /* Images per row and dots on a phone. */
     {
-      const { html } = await renderPage({ settings: { mobile_slides_per_view: '1.2', enable_nav_dots_mobile: true } });
+      const { html } = await renderPage({ settings: { desktop_layout:'thumbnail_bottom', mobile_slides_per_view: '1.2', enable_nav_dots_mobile: true } });
       const { p, ctx } = await open(375, html);
       await toSection(p, -50);
       const r = await p.evaluate(s => { const f = document.querySelector(s + ' .swiper-wrapper-preview'); const sl = f.querySelector('.swiper-slide'); return { ratio: f.getBoundingClientRect().width / sl.getBoundingClientRect().width, dots: document.querySelectorAll(s + ' .nav-dots-row .nav-dot').length }; }, SEL);

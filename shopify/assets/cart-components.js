@@ -63,8 +63,22 @@ customElements.whenDefined('free-ship-progress-bar').then(() => {
 /* Server-confirmed removal only: pending requests keep their row and icon.
    Keep animation work local and honour reduced motion; never delay a failure. */
 function materiaPruneRecommendationExtras(root) {
-  root?.querySelectorAll('.qx, .cart-faq, .faq, .faqs, .faq-section, [data-section-type*="faq"], [data-block-type*="faq"], section:has(details)').forEach(el => el.remove());
+  root?.querySelectorAll('.qx, .gq, .cart-faq, .faq, .faqs, .faq-section, [class*="faq__"], [class*="faq-"], [class*="questions__"], [data-section-type*="faq"], [data-block-type*="faq"]').forEach(el => el.remove());
+  // Some platform renders insert an unclassified question panel inside a
+  // product card *after* the recommendations response was cleaned.
+  root?.querySelectorAll('details').forEach(details => {
+    let panel = details.parentElement;
+    while(panel && panel!==root && !panel.matches('.product-item,.swiper-slide,.cart-upsell-item')) {
+      if(panel.querySelector('h2,h3,h4,h5') && !panel.querySelector('img,form,button[type="submit"],[data-theme-button]')) { panel.remove(); return; }
+      panel=panel.parentElement;
+    }
+    details.remove();
+  });
 }
+// This file is imported as a module; the deferred safety script cannot see
+// its lexical functions. Publish this narrow helper explicitly.
+window.materiaPruneRecommendationExtras=materiaPruneRecommendationExtras;
+document.dispatchEvent(new Event('materia:cart-tools-ready'));
 
 async function materiaAnimateCartRemoval(row) {
   if (!row?.isConnected || !row.animate || materiaReduced()) return;

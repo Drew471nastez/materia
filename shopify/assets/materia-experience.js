@@ -78,9 +78,9 @@
           requestAnimationFrame(() => { if (!drag || drag.sheet !== d.sheet) clear(d.sheet); });
         });
       } else {
-        const ms = still ? 0 : 440;
+        const ms = still ? 0 : 360;
         opts.progress?.(d.sheet, 0, false, ms);
-        settleTo(d.sheet, 0, ms, 'cubic-bezier(.2,1.25,.4,1)', () => clear(d.sheet));
+        settleTo(d.sheet, 0, ms, 'cubic-bezier(.2,.8,.2,1)', () => clear(d.sheet));
       }
     };
     const scrolledToTop = (sheet, target) => {

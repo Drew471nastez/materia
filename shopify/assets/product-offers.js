@@ -845,6 +845,8 @@
       Object.entries(numeric).forEach(([key,token])=>{if(s[key]!=null && Number.isFinite(Number(s[key])))box.style.setProperty(token,Math.max(0,Number(s[key]))+'px');});
       if(s.accent_color)box.style.setProperty('--po-accent',s.accent_color);
       if(s.custom_style){
+        for(const [key,token] of Object.entries({custom_picker_height:'--offer-picker-height',custom_picker_radius:'--offer-picker-radius',custom_picker_width:'--offer-picker-width'}))if(s[key]!=null && Number.isFinite(Number(s[key])))box.style.setProperty(token,Math.max(0,Number(s[key]))+'px');
+        for(const [key,token] of Object.entries({custom_picker_bg:'--offer-picker-bg',custom_picker_text:'--offer-picker-text',custom_picker_border:'--offer-picker-border',muted_color:'--up-muted-c'}))if(s[key])box.style.setProperty(token,s[key]);
         box.dataset.customStyle='';
         if(s.show_border)box.dataset.border='';if(s.show_shadow)box.dataset.shadow='';
         const tokens=kind==='upsell_pro'?{bg_color:'--up-bg',text_color:'--up-text',card_bg:'--up-card-bg',border_color:'--up-border',button_bg:'--up-btn-bg',button_text_color:'--up-btn-ink'}:{custom_bg:'--po-c-bg',custom_text:'--po-c-text',custom_heading:'--po-c-heading',custom_border:'--po-c-border',custom_selected:'--po-c-selected',custom_save:'--po-c-save',custom_badge_bg:'--po-c-badge-bg',custom_badge_text:'--po-c-badge-text'};
@@ -866,7 +868,11 @@
         this.bundle(offer);
       });
       else {
-        offers.slice(0,Number(s.max_products)||3).forEach(offer=>this.upsell(offer));
+        offers.filter(offer=>{
+          const item=offer.product;if(!item)return false;
+          if(s.hide_current_product!==false && String(item.id)===this.dataset.productId)return false;
+          return !(s.hide_unavailable!==false && (item.available===false || (item.variants?.length && item.variants.every(v=>v.available===false))));
+        }).slice(0,Number(s.max_products)||3).forEach(offer=>this.upsell(offer));
         if(s.add_mode==='selected'){
           const footer=node('div','upsell-pro__footer');box.append(footer);
           this.button(footer,s.add_selected_label||'Add chosen items',()=>this.upsellChoices.filter(c=>c.check.checked && selectReady(c.select)).map(c=>({id:c.select.value,quantity:1,properties:{_sl_offer_id:c.offer.offerId,_sl_offer:'upsell'}})));
@@ -875,24 +881,24 @@
       this.paintPrices();
     }
     button(parent,label,action){
-      const button=node('button','btn btn-primary po-button');const text=node('span','po-button__text hidden-on-load',label);button.append(text);button.type='button';button.dataset.themeButton='primary';button.dataset.slButton='';button.dataset.buttonRole='primary';
+      const button=node('button','btn btn-primary po-button'+(this.dataset.kind==='upsell_pro'?(parent.classList.contains('upsell-pro__footer')?' upsell-pro__add':' upsell-card__btn'):''));const text=node('span','po-button__text hidden-on-load',label);button.append(text);button.type='button';button.dataset.themeButton='primary';button.dataset.slButton='';button.dataset.buttonRole='primary';
       actionLabel(button, this.addedText || 'Added');
       button.dataset.loadingText=this.options.adding_label || '';
       button.hidden=this.options.show_button===false || this.dataset.purchaseAction==='main';
       this.actions ||= [];this.actions.push({button,text,label,action});
-      const status=node('p','po-message');status.setAttribute('role','status');
+      const status=node('p','po-message'+(this.dataset.kind==='upsell_pro'?' upsell-pro__message':''));status.setAttribute('role','status');status.hidden=true;
       parent.append(button,status);
       button.addEventListener('click',async()=>{
         if(mainBusy.has(this.form()) || button.getAttribute('aria-busy')==='true')return;
-        actionBusy(button,true,this.addedText || 'Added');status.textContent='';status.classList.remove('visually-hidden');
+        actionBusy(button,true,this.addedText || 'Added');status.textContent='';status.hidden=true;status.classList.remove('visually-hidden');
         try{
           const lines=action();if(!lines?.length)return;
           const props=await personalization(this.form());
           const own=lines.find(line=>this.variants.some(v=>v.id===String(line.id)));
           if(own)own.properties={...props,...own.properties};
           await addLines(lines,{open:this.dataset.kind==='upsell_pro'?safelyOpen(this.options):this.options.open_cart_after_add!==false,source:'storelib-offers'});
-          button._addedSelection=selectionKey(lines);button._addedRevision=this.cartRevision || 0;button.dataset.added='true';text.textContent=this.addedText||'Added';status.textContent=text.textContent;status.classList.add('visually-hidden');
-        }catch(error){status.textContent=error.userMessage||error.message||this.options.error_text||'';}
+          button._addedSelection=selectionKey(lines);button._addedRevision=this.cartRevision || 0;button.dataset.added='true';text.textContent=this.addedText||'Added';status.textContent=text.textContent;status.classList.add('visually-hidden');status.hidden=false;
+        }catch(error){status.textContent=error.userMessage||error.message||this.options.error_text||'';status.hidden=false;}
         finally{actionBusy(button,false,this.addedText || 'Added');this.paintPrices();}
       },{signal:this.events.signal});return button;
     }
@@ -968,7 +974,9 @@
     }
     upsell(offer){
       const item=offer.product;if(!item)return;
-      const card=node('div','upsell-card'),info=node('div','upsell-card__info');this.image(card,item);info.append(node('span','upsell-card__title',item.title),node('span','upsell-card__sub',offer.label||''));card.append(info);this.box.append(card);
+      const card=node('div','upsell-card'),info=node('div','upsell-card__info');this.image(card,item);info.append(node('span','upsell-card__title',item.title));
+      if(this.options.show_subtitle!==false)info.append(node('span','upsell-card__sub',this.options.subtitle_source==='custom'?this.options.custom_subtitle||'':offer.label||''));
+      card.append(info);this.box.append(card);
       const variants=item.variants?.length?item.variants:[{id:item.id,name:item.title}];const select=this.variantPicker(info,variants);
       if(this.options.show_variant_selector===false || variants.length<2)select.parentElement.hidden=true;
       const price=node('span','upsell-card__price');price.textContent=!this.market?this.amount(offer.offerPriceCents):'';info.append(price);
@@ -981,7 +989,7 @@
     }
     image(parent,item){
       if(this.options.show_images===false||this.options.show_image===false||!item.imageUrl)return;
-      try{const url=new URL(item.imageUrl,location.href);if(!['http:','https:'].includes(url.protocol))return;const img=node('img','po-line__media');img.src=url.href;img.alt='';img.width=56;img.height=56;img.loading='lazy';img.decoding='async';parent.append(img);}catch(_){}
+      try{const url=new URL(item.imageUrl,location.href);if(!['http:','https:'].includes(url.protocol))return;const img=node('img');img.src=url.href;img.alt=item.title||'';img.width=56;img.height=56;img.loading='lazy';img.decoding='async';if(this.dataset.kind==='upsell_pro'){const wrap=node('span','upsell-card__media');wrap.style.borderRadius=this.options.image_shape==='square'?'0':this.options.image_shape==='rounded'?'10px':'8px';wrap.append(img);parent.append(wrap);}else{img.className='po-line__media';parent.append(img);}}catch(_){}
     }
   }
   const linkedMode = provider => ['main','both'].includes(provider.dataset.purchaseAction || provider.options?.purchase_action);
