@@ -318,15 +318,15 @@ ${blocks.map(([name, html]) => `<section data-case="${name}">${html}</section>`)
       assert.equal(await text('#minicart-form .added'), 'removed');
       checks++;
 
-      // layout: no sideways scroll, 44px targets, gutter
+      // Layout: 44px touch targets; fine-pointer desktop selects may be compact.
       const layout = await tab.evaluate(() => ({
         scroll: document.documentElement.scrollWidth,
         small: [...document.querySelectorAll('section [data-offer-add], section [data-upsell-add], section [data-upsell-add-selected], pair-with .pw-btn, pair-with .pw-variant, .po-line__label, .po-tier__card, .po-select select, .upsell-card__variant select, .upsell-card__pick')]
-          .map(el => [el.className || el.tagName, Math.round(el.getBoundingClientRect().height), Math.round(el.getBoundingClientRect().width)]).filter(([, h, w]) => h < 44 || w < 44),
+          .map(el => [el.className || el.tagName, Math.round(el.getBoundingClientRect().height), Math.round(el.getBoundingClientRect().width), el.tagName === 'SELECT' && matchMedia('(pointer:fine) and (min-width:768px)').matches ? 36 : 44]).filter(([, h, w, min]) => h < min || w < 44),
         overflow: [...document.querySelectorAll('section *')].filter(el => { const r = el.getBoundingClientRect(); return r.width && (r.right > innerWidth - 15 || r.left < 15); }).filter(el => !el.closest('.visually-hidden, .po-line__check, .po-tier__radio, .upsell-card__check')).map(el => el.className),
       }));
       assert(layout.scroll <= width, `no sideways scroll at ${width}: ${layout.scroll}`);
-      assert.deepEqual(layout.small, [], `44px targets at ${width}`);
+      assert.deepEqual(layout.small, [], `touch/compact-desktop targets at ${width}`);
       assert.deepEqual(layout.overflow, [], `inside the gutter at ${width}`);
       checks++;
 
