@@ -62,16 +62,21 @@ customElements.whenDefined('free-ship-progress-bar').then(() => {
 
 /* Server-confirmed removal only: pending requests keep their row and icon.
    Keep animation work local and honour reduced motion; never delay a failure. */
+function materiaPruneRecommendationExtras(root) {
+  root?.querySelectorAll('.qx, .cart-faq, .faq, .faqs, .faq-section, [data-section-type*="faq"], [data-block-type*="faq"], section:has(details)').forEach(el => el.remove());
+}
+
 async function materiaAnimateCartRemoval(row) {
   if (!row?.isConnected || !row.animate || materiaReduced()) return;
   const style = getComputedStyle(row);
+  const height = row.getBoundingClientRect().height;
   row.classList.add('materia-row-exit');
   row.style.minHeight = '0';
   row.style.overflow = 'hidden';
   const animation = row.animate([
-    {height:row.getBoundingClientRect().height+'px',opacity:1,transform:'translateX(0)',marginTop:style.marginTop,marginBottom:style.marginBottom,paddingTop:style.paddingTop,paddingBottom:style.paddingBottom},
+    {height:height+'px',opacity:1,transform:'translateX(0)',marginTop:style.marginTop,marginBottom:style.marginBottom,paddingTop:style.paddingTop,paddingBottom:style.paddingBottom},
     {height:'0px',opacity:0,transform:'translateX(-6px)',marginTop:'0px',marginBottom:'0px',paddingTop:'0px',paddingBottom:'0px'},
-  ], {duration:220,easing:'cubic-bezier(.22,.61,.36,1)',fill:'forwards'});
+  ], {duration:140,easing:'cubic-bezier(.2,.7,.2,1)',fill:'forwards'});
   await animation.finished.catch(() => {});
 }
 // A new line (added from recommendations or a variant change) opens into place.
@@ -366,6 +371,7 @@ class CartNotification extends HTMLElement {
   }
 
   cartAction() {
+    this.querySelectorAll(".cart-recommend").forEach(materiaPruneRecommendationExtras);
     // Another script (discount, gift wrap, editor) may have drawn new totals:
     // the next optimistic paint reads them again.
     if (!this._desired?.size) { this._confirmedSubtotal = null; this._confirmedOrder = null; }
@@ -724,7 +730,12 @@ class CartNotification extends HTMLElement {
     if (field && String(field.value) !== String(qty) && document.activeElement !== field) field.value = qty;
     this.clearLineError(key);
     this.paintOptimistic();
-    this.ensureCartState();
+    if (qty !== 0) this.ensureCartState();
+    else {
+      const remove = this.querySelector('mini-cart-remove-button[data-index="' + CSS.escape(String(key)) + '"]');
+      remove?.classList.add('loading');
+      remove?.setAttribute('aria-busy', 'true');
+    }
     clearTimeout(this._qtyTimer);
     this._qtyTimer = 0;
     if (delay > 0) this._qtyTimer = setTimeout(() => { this._qtyTimer = 0; this.pumpQuantities(); }, delay);
@@ -867,6 +878,7 @@ class CartNotification extends HTMLElement {
       this.rejectQuantity(id, quantity, window.cartStrings?.error || error.message);
     } finally {
       removeButton?.classList.remove("loading");
+      removeButton?.removeAttribute("aria-busy");
     }
   }
 
@@ -1211,7 +1223,16 @@ class BaseFetcher extends HTMLElement {
     const html = document.createElement("div");
     html.innerHTML = text;
     
-    const content = html.querySelector(sourceSelector);
+    // A recommendations response can include the surrounding page in editor
+    // previews. Never take an unrelated section's first slider/FAQ.
+    const results = html.querySelector('[data-cart-upsell-results], .cart-upsell, #shopify-section-cart-upsell');
+    const content = results?.querySelector(sourceSelector);
+    if (content) {
+      [...content.children].forEach(child => {
+        if (!child.matches('.swiper-slide, .cart-upsell-item') || !child.querySelector('.product-item')) child.remove();
+      });
+      materiaPruneRecommendationExtras(content);
+    }
     if (content?.querySelector('.swiper-slide, .cart-upsell-item')) {
       const target = this.querySelector(targetSelector);
       if (target) {

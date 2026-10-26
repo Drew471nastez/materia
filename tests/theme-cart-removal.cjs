@@ -28,6 +28,7 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
   const middle=await page.$eval('#minicart__product-a',el=>({opacity:Number(getComputedStyle(el).opacity),height:el.getBoundingClientRect().height}));
   assert(middle.opacity>0&&middle.opacity<1,'confirmed removal has intermediate opacity');
   assert(middle.height>0&&middle.height<120,'confirmed row collapses smoothly');checks++;
+  assert.equal(await page.$eval('#minicart__product-a',el=>el.getAnimations()[0].effect.getTiming().duration),140,'removal adds at most a short 140ms animation after confirmation');checks++;
   await page.waitForTimeout(220);
   assert.equal(await page.locator('.cart-item').count(),1);
   assert(await page.evaluate(()=>document.getElementById('minicart__product-b')===stableRow&&document.getElementById('image-b')===stableImage),'other rows/images must not remount');

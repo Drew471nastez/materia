@@ -93,7 +93,7 @@ function renderForm(store){
     </span></div><button type="submit" class="btn-primary w-full btn-checkout" name="checkout" form="minicart">Check out</button></div></div></div>`;
 }
 const section=store=>`<div id="shopify-section-minicart-form" class="shopify-section">${renderForm(store)}</div>`;
-const recHTML=pid=>{const v=pid==='p3'?'v2':'v3',p=VARIANTS[v];return `<div class="swiper-wrapper"><div class="swiper-slide"><div class="product-item"><a class="product-item__name" href="/products/${p.product}">${p.title}</a><span class="price">${money(p.price)}</span><product-form class="product-item__product-form"><form method="post" action="/cart/add" data-type="add-to-cart-form"><input type="hidden" name="id" value="${v}"><button type="submit" name="add" class="product-item__button-submit bls-add-cart-list btn-primary"><span class="pc-atc__label hidden-on-load">Add to Cart</span></button></form></product-form></div></div></div>`;};
+const recHTML=pid=>{const v=pid==='p3'?'v2':'v3',p=VARIANTS[v];return `<div data-cart-upsell-results class="cart-upsell"><div class="swiper-wrapper"><div class="swiper-slide"><div class="product-item"><a class="product-item__name" href="/products/${p.product}">${p.title}</a><span class="price">${money(p.price)}</span><product-form class="product-item__product-form"><form method="post" action="/cart/add" data-type="add-to-cart-form"><input type="hidden" name="id" value="${v}"><button type="submit" name="add" class="product-item__button-submit bls-add-cart-list btn-primary"><span class="pc-atc__label hidden-on-load">Add to Cart</span></button></form></product-form></div></div></div></div>`;};
 
 async function serve(page,store){
   await page.route(ORIGIN+'/**',async route=>{
