@@ -80,8 +80,8 @@ const page=(body)=>`<!doctype html><html><head><meta charset="utf-8"><meta name=
  assert(remoteHtml.includes('data-size-chart-remote="/products/pants-down"')&&remoteHtml.includes('hidden data-size-chart-await')&&!remoteHtml.includes('materia-chart-preview'),'featured: asks the product page, hidden until a chart arrives');
  const remoteTable=await table({title:'Sizes'},{id:'ft',product:featuredRaw,request:{design_mode:false,path:'/'}});
  assert(remoteTable.includes('data-size-chart-remote')&&remoteTable.includes('hidden data-size-chart-await'),'featured size table asks too');
- const dataSection=await renderFile('sections/size-chart-data.storelib',{product:charted,settings:{},pages:{}});
- const emptySection=await renderFile('sections/size-chart-data.storelib',{product:plain,settings:{},pages:{}});
+ const dataSection=await renderFile('snippets/product-size-chart-data.storelib',{product:charted,settings:{},pages:{}});
+ const emptySection=await renderFile('snippets/product-size-chart-data.storelib',{product:plain,settings:{},pages:{}});
  assert(dataSection.includes('data-assigned-chart-host')&&emptySection.includes('data-product="p2"')&&!emptySection.includes('data-assigned-chart-host'));
  checks++;
 
@@ -186,8 +186,8 @@ const page=(body)=>`<!doctype html><html><head><meta charset="utf-8"><meta name=
 
    // 5. Featured product: the chart comes from the product page
    await tab.locator('[aria-controls="SizeGuide-main-g4"]').waitFor({state:'visible',timeout:3000});
-   assert(asked.some(u=>u.startsWith('/products/pants-down?section_id=size-chart-data')),w+': asked the product page');
-   assert(!asked.some(u=>u.includes('section_id=main')),w+': the data section answered, no second request');
+   assert(asked.some(u=>u==='/products/pants-down'),w+': asked the product page');
+   assert(!asked.some(u=>u.includes('section_id=main')),w+': background product data needs no section request');
    await tap(tab.locator('[aria-controls="SizeGuide-main-g4"]'));
    const d4=tab.locator('#SizeGuide-main-g4');
    await shot('featured-sheet');

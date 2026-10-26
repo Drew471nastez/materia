@@ -2297,7 +2297,11 @@ class LocalizationForm extends HTMLElement {
 
   connectedCallback() {
     queueMicrotask(() => {
-      if (!this.isConnected || this._initialized) return;
+      if (!this.isConnected) return;
+      if (this._initialized) {
+        if (this._onResize) window.addEventListener('resize', this._onResize, {passive:true});
+        return;
+      }
       this._initialized = true;
       this.initialize();
     });
@@ -2333,8 +2337,11 @@ class LocalizationForm extends HTMLElement {
       if (item && this.elements.list.contains(item)) this.onItemClick(event, item);
     });
     this.onBodyClick = this.handleBodyClick.bind(this);
-    if (!this.ensureOptions(false)) return;
-    this.setupMobileSheet();
+    // Prepare on intent, before click, so the country DOM is not built in
+    // the sheet's first animation frame. Hidden selectors stay lazy.
+    this.elements.button.addEventListener('pointerdown', () => this.ensureOptions(), {passive:true});
+    this.elements.button.addEventListener('focus', () => this.ensureOptions());
+    if (this.ensureOptions(false)) this.setupMobileSheet();
     this._onResize = () => {
       if (!window.matchMedia('(max-width: 1024.98px)').matches && this._sheetPortaled) this.hidePanel();
     };
@@ -2464,15 +2471,20 @@ class LocalizationForm extends HTMLElement {
 
     const scroller = () => this.elements.panel;
     let startY = 0, lastY = 0, lastT = 0, velocity = 0, dy = 0;
-    let tracking = false, dragging = false;
+    let tracking = false, dragging = false, sheetHeight = 1, dragFrame = 0;
     const setDrag = (y) => {
       dy = y;
-      list.style.setProperty("--sheet-drag-y", y + "px");
-      const h = list.offsetHeight || 1;
-      bd.style.opacity = String(Math.max(0, 1 - y / h));
+      if (dragFrame) return;
+      dragFrame = requestAnimationFrame(() => {
+        dragFrame = 0;
+        list.style.setProperty('--sheet-drag-y', dy + 'px');
+        bd.style.opacity = String(Math.max(0, 1 - dy / sheetHeight));
+      });
     };
+    this._cancelSheetDrag = () => { cancelAnimationFrame(dragFrame); dragFrame=0; tracking=dragging=false; };
     const begin = (y, fromHead) => {
       if (!isMobile() || !this.elements.button.classList.contains("open")) return;
+      sheetHeight = list.offsetHeight || 1;
       tracking = true;
       dragging = fromHead;
       startY = lastY = y;
@@ -2509,10 +2521,11 @@ class LocalizationForm extends HTMLElement {
       if (!dragging) return;
       dragging = false;
       list.classList.remove("sheet-dragging");
-      if (dy > list.offsetHeight * 0.3 || velocity > 0.5) {
+      if (dy > sheetHeight * 0.3 || velocity > 0.5) {
         this.hidePanel();
       } else {
-        setDrag(0);
+        cancelAnimationFrame(dragFrame); dragFrame=0; dy=0;
+        list.style.setProperty('--sheet-drag-y', '0px');
         bd.style.removeProperty("opacity");
       }
     };
@@ -2546,8 +2559,7 @@ class LocalizationForm extends HTMLElement {
     try {
       if (show) {
         if (!el.hasAttribute("popover")) el.setAttribute("popover", "manual");
-        if (el.matches(":popover-open")) el.hidePopover();
-        el.showPopover();
+        if (!el.matches(":popover-open")) el.showPopover();
       } else if (el.hasAttribute("popover")) {
         if (el.matches(":popover-open")) el.hidePopover();
         el.removeAttribute("popover");
@@ -2589,37 +2601,43 @@ class LocalizationForm extends HTMLElement {
 
   portalMobileSheet() {
     clearTimeout(this._portalRestoreTimer);
+    cancelAnimationFrame(this._sheetOpenFrame);
     const list = this.elements.list;
     if (!list) return;
+    if (this._sheetCloseEnd) list.removeEventListener('transitionend', this._sheetCloseEnd);
     if (!this._sheetPortaled) {
-      // A fixed sheet nested inside a sticky or transformed header is clipped
-      // on iOS, so only the open panel moves to <body>.
       this.applySheetColors(list);
       list.classList.add('materia-localization-sheet');
       document.body.appendChild(list);
       this._sheetPortaled = true;
+      list.classList.remove('is-open');
+      list.style.removeProperty('height');
     }
-    list.classList.remove('is-open');
-    list.style.removeProperty('height');
     list.style.setProperty('--sheet-drag-y', '0px');
     this._backdrop?.style.removeProperty('opacity');
     this._topLayer(this._backdrop, true);
     this._topLayer(list, true);
-    list.getBoundingClientRect();
-    requestAnimationFrame(() => {
+    // Measure in the next frame, before animation begins; never resize the
+    // sheet while it slides. No forced synchronous open/close layout flush.
+    this._sheetOpenFrame = requestAnimationFrame(() => {
       if (!this._sheetPortaled || !this.elements.button?.classList.contains('open')) return;
-      this._backdrop?.classList.add('open');
-      list.classList.add('is-open');
-      // Keep the height while searching so the sheet does not jump.
-      list.style.height = list.offsetHeight + 'px';
+      const height = list.offsetHeight;
       const current = list.querySelector('[aria-current="true"]');
-      if (current && this.elements.panel) {
-        this.elements.panel.scrollTop = Math.max(0, current.offsetTop - this.elements.panel.clientHeight / 2);
-      }
+      const panel = this.elements.panel;
+      const scroll = current && panel ? Math.max(0, current.offsetTop - panel.clientHeight / 2) : 0;
+      list.style.height = height + 'px';
+      if (panel) panel.scrollTop = scroll;
+      this._sheetOpenFrame = requestAnimationFrame(() => {
+        if (!this._sheetPortaled || !this.elements.button?.classList.contains('open')) return;
+        this._backdrop?.classList.add('open');
+        list.classList.add('is-open');
+      });
     });
   }
 
   hidePanel() {
+    cancelAnimationFrame(this._sheetOpenFrame);
+    this._cancelSheetDrag?.();
     document.body.removeEventListener("click", this.onBodyClick);
     this.elements.button?.classList.remove("open");
     this.elements.button?.setAttribute("aria-expanded", "false");
@@ -2637,7 +2655,10 @@ class LocalizationForm extends HTMLElement {
       list.classList.remove('is-open', 'sheet-dragging');
       list.style.removeProperty('--sheet-drag-y');
       clearTimeout(this._portalRestoreTimer);
-      this._portalRestoreTimer = setTimeout(() => {
+      if (this._sheetCloseEnd) list.removeEventListener('transitionend', this._sheetCloseEnd);
+      const restore = () => {
+        clearTimeout(this._portalRestoreTimer);
+        list.removeEventListener('transitionend', this._sheetCloseEnd);
         if (this.elements.button?.classList.contains('open')) return;
         this._topLayer(list, false);
         if (!document.querySelector("localization-form .button-localization.open")) this._topLayer(this._backdrop, false);
@@ -2651,7 +2672,13 @@ class LocalizationForm extends HTMLElement {
           this._sheetSearch.dispatchEvent(new Event('input'));
         }
         this._sheetPortaled = false;
-      }, 420);
+      };
+      this._sheetCloseEnd = event => {
+        if (event.target === list && event.propertyName === 'transform') restore();
+      };
+      list.addEventListener('transitionend', this._sheetCloseEnd);
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      this._portalRestoreTimer = setTimeout(restore, reduced ? 0 : 350);
     }
   }
 
@@ -2684,7 +2711,6 @@ class LocalizationForm extends HTMLElement {
       // ABOVE the page backdrop regardless of header/footer z-index.
       if (window.matchMedia("(max-width: 1024.98px)").matches) {
         this.portalMobileSheet();
-        this._backdrop?.classList.add("open");
       } else if (this._sheetSearch) {
         setTimeout(() => this._sheetSearch?.focus({ preventScroll: true }), 60);
       }

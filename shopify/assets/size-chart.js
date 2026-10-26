@@ -5,7 +5,7 @@
      next to it. Values come from Storelib; never guess measurements here.
    - A product's chart only reaches its own page, so a Featured product's
      size guide asks that page for it ([data-size-chart-remote], answered by
-     sections/size-chart-data) and shows its link once a chart arrives.
+     the background product-page source) and shows its link once a chart arrives.
    - The cm / in switch is remembered, and the row for the chosen size is
      marked. */
 (() => {
@@ -99,15 +99,14 @@
 
   /* A product's chart from its own page, once per address. */
   const remote = new Map();
-  const ask = (url, section) => fetch(url + (url.includes('?') ? '&' : '?') + 'section_id=' + section, {credentials: 'same-origin'})
+  const ask = url => fetch(url, {credentials: 'same-origin'})
     .then(r => r.ok ? r.text() : '').then(html => new DOMParser().parseFromString(html || '', 'text/html')).catch(() => null);
   const chartFor = url => {
-    if (!remote.has(url)) remote.set(url, ask(url, 'size-chart-data').then(doc => {
-      const host = doc?.querySelector('[data-assigned-chart-host]');
+    if (!remote.has(url)) remote.set(url, ask(url).then(doc => {
+      const source = doc?.querySelector('[data-size-chart-data]');
+      const host = source?.querySelector('[data-assigned-chart-host]');
       if (host) return host;
-      // The data section answered for this product and it has no chart.
-      if (doc?.querySelector('[data-size-chart-data][data-product]:not([data-product=""])')) return null;
-      return ask(url, 'main').then(page => page?.querySelector('[data-assigned-chart-host]') || null);
+      return null;
     }).catch(() => null));
     return remote.get(url);
   };
