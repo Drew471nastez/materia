@@ -18,7 +18,7 @@ const render=(file,ctx)=>engine.parseAndRender(clean(read('snippets/'+file+'.sto
  }
  const ctx={product:{id:'p',metafields:{storelib:{size_chart:{value:{title:'Measurements',columns:['Size','Chest'],rows:[['S','90']]}}}}},section:{id:'main',blocks:[]},block:{id:'guide',type:'size_guide',settings:{...defaults('size_guide'),size_guide_display:'collapsible'}}};
  const guide=await render('size-guide-sheet',ctx);assert(guide.includes('<details'));assert(!guide.includes('<dialog'));assert(guide.includes('Measurements'));checks++;
- const reviews=await render('review-sold-block',{...ctx,product:{rating:'4.6',review_count:'12',metafields:{custom:{sold_count:{value:20}}}},block:{id:'reviews',settings:{...defaults('review_and_sold')}}});
+ const reviews=await render('review-sold-block',{...ctx,product:{rating:'4.6',review_count:'12',metafields:{custom:{sold_count:{value:20}}}},block:{id:'reviews',settings:{...{...defaults('product_reviews'),...defaults('sold_counter')}}}});
  assert(reviews.includes('4.6 / 5'));assert(reviews.includes('20 sold'));assert(reviews.includes('product-sold__dot'));checks++;
  const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});
  try{

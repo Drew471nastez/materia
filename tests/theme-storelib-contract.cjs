@@ -13,7 +13,7 @@ const context=(type,extra={})=>({product,page:{product},section:{id:'main'},bloc
 const render=(name,ctx)=>engine.parseAndRender(clean(read(name)),ctx,{globals:ctx});
 (async()=>{
  let checks=0;
- const html={};for(const type of ['bundle','quantity_offer','upsell_pro','review_and_sold','product_custom_field']){
+ const html={};for(const type of ['bundle','quantity_offer','upsell_pro','sold_counter','product_custom_field']){
   assert(schema('blocks/'+type+'.storelib').shopify.settings.length);
   html[type]=await render('blocks/'+type+'.storelib',context(type));
   assert(html[type].trim().length>0);checks++;
