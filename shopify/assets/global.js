@@ -475,8 +475,8 @@ class SlideSection extends HTMLElement {
       ? _this?.dataset.autoplaySpeed * 1000
       : 3000;
     var speed = _this?.dataset.speed ? _this?.dataset.speed : 400;
-    // Topbar: under reduced motion nothing turns by itself and a change is a cut.
-    const reducedTopbarMotion = _this.classList.contains("topbar-slider") &&
+    // Topbar and testimonials: reduced motion disables rotation and slide movement.
+    const reducedTopbarMotion = (_this.classList.contains("topbar-slider") || _this.classList.contains("testimonials-slider")) &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reducedTopbarMotion) {
       autoplaying = false;
