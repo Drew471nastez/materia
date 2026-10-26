@@ -42,6 +42,35 @@
   const groupId = prefix => `${prefix}-${Date.now().toString(36)}${(++groupSeq).toString(36)}`;
   const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
+  // One theme-owned label/spinner contract for legacy and Storelib offers.
+  function actionLabel(button, addedText = 'Added') {
+    let label = button.querySelector('[data-label], .po-button__text');
+    if (!label) {
+      label = document.createElement('span'); label.dataset.label = '';
+      while (button.firstChild) label.append(button.firstChild);
+      button.append(label);
+    }
+    button.classList.add('offer-action'); label.classList.add('hidden-on-load');
+    button.dataset.idleLabel ||= label.textContent;
+    if (!button.querySelector('.offer-action__sizer')) {
+      const sizer = document.createElement('span'); sizer.className = 'offer-action__sizer';
+      sizer.setAttribute('aria-hidden', 'true');
+      for (const text of [button.dataset.idleLabel, addedText]) { const size = document.createElement('span'); size.dataset.labelSize = text; sizer.append(size); }
+      button.append(sizer);
+      const spinner = document.createElement('span'); spinner.className = 'icon-load';
+      spinner.setAttribute('aria-hidden', 'true'); button.append(spinner);
+    }
+    return label;
+  }
+  function actionBusy(button, busy, addedText) {
+    actionLabel(button, addedText);
+    button.classList.toggle('loading', busy);
+    if (busy) { button.setAttribute('aria-busy', 'true'); button.disabled = true; }
+    else { button.removeAttribute('aria-busy'); button.disabled = false; }
+  }
+  const selectReady = select => !!select?.value && !!select.selectedOptions[0] && !select.selectedOptions[0].disabled;
+  const selectionKey = items => JSON.stringify(items.map(i => [String(i.id), Number(i.quantity)||1]).sort((a,b)=>a[0].localeCompare(b[0])));
+
   async function post(url, body) {
     const response = await fetch(url, {method: 'POST', headers: jsonHeaders, body: JSON.stringify(body), credentials: 'same-origin'});
     let data = null;
@@ -68,7 +97,8 @@
   }
 
   function renderDrawer(cart, data) {
-    if (!cart || !data || !data.sections) return;
+    if (!cart || !data || !data.sections) return false;
+    let rendered = false;
     sectionIds(cart).forEach(id => {
       const target = document.getElementById(id);
       const markup = data.sections[id];
@@ -76,10 +106,12 @@
       const html = new DOMParser().parseFromString(markup, 'text/html');
       const incoming = html.querySelector('#minicart-form') || html.getElementById(id);
       if (!incoming) return;
+      rendered = true;
       if (!(typeof window.materiaPatchDrawerCart === 'function' && window.materiaPatchDrawerCart(target, incoming))) target.innerHTML = incoming.innerHTML;
     });
     try { cart.cartAction?.(); } catch (_) {}
-    cart.classList.remove('is-empty');
+    if (rendered) cart.classList.remove('is-empty');
+    return rendered;
   }
 
   async function refreshCounts() {
@@ -132,14 +164,20 @@
       else refreshCounts();
       return data;
     }
-    renderDrawer(cart, data);
-    const confirmed = await refreshCounts();
-    if (!data.sections && confirmed?.items && typeof cart.applyCartState === 'function') await cart.applyCartState(confirmed);
+    const rendered = renderDrawer(cart, data);
+    // Bundled sections already contain authoritative totals and cart lines.
+    // Header counts must not delay the drawer or the button's confirmation.
+    if (rendered && options.open !== false) { try { await cart.open?.(); } catch (_) {} }
+    const counts = refreshCounts();
+    if (!rendered) {
+      const confirmed = await counts;
+      if (confirmed?.items && typeof cart.applyCartState === 'function') await cart.applyCartState(confirmed);
+    }
     /* utils.js declares publish and PUB_SUB_EVENTS as page globals. */
     if (typeof publish === 'function' && typeof PUB_SUB_EVENTS !== 'undefined') {
       try { publish(PUB_SUB_EVENTS.cartUpdate, {source: options.source || 'product-offers', cartData: data}); } catch (_) {}
     }
-    if (options.open !== false) { try { await cart.open?.(); } catch (_) {} }
+    if (!rendered && options.open !== false) { try { await cart.open?.(); } catch (_) {} }
     return data;
   }
 
@@ -194,13 +232,26 @@
       this.format = this.dataset.moneyFormat || '';
       this.button = this.querySelector('[data-offer-add]');
       this.message = this.querySelector('[data-message]');
+      this.addedText = this.dataset.addedText || 'Added';
+      if (this.button) actionLabel(this.button, this.addedText);
+      this.addEventListener('change', () => {
+        this.selectionVersion = (this.selectionVersion || 0) + 1;
+        if (this.button) { this.button.dataset.added = 'false'; actionLabel(this.button, this.addedText).textContent = this.button.dataset.idleLabel; }
+        this.say('');
+      }, {signal:this.events.signal});
       this.button?.addEventListener('click', () => this.submit(), {signal: this.events.signal});
+      document.addEventListener('cart:updated', event => {
+        const items = event.detail?.cart?.items;
+        if (!Array.isArray(items) || !this._addedItems || this.button?.dataset.added !== 'true') return;
+        const present = this._addedItems.every(line => items.filter(item => String(item.variant_id || item.id) === String(line.id)).reduce((n,item) => n + Number(item.quantity || 0), 0) >= line.quantity);
+        if (!present) { this.button.dataset.added = 'false'; actionLabel(this.button,this.addedText).textContent = this.button.dataset.idleLabel; this.say(''); }
+      }, {signal:this.events.signal});
       document.addEventListener('change', event => {
         const input = event.target;
         if (!(input instanceof HTMLInputElement || input instanceof HTMLSelectElement) || input.name !== 'id') return;
         const form = input.form || input.closest('form');
         /* form.id would be the form's own name="id" input, so read the attribute. */
-        if (form && form.getAttribute('id') === this.dataset.formId) this.onVariant(String(input.value));
+        if (form && form.getAttribute('id') === this.dataset.formId) { this.selectionVersion = (this.selectionVersion || 0) + 1; if (this.button) { this.button.dataset.added='false'; actionLabel(this.button,this.addedText).textContent=this.button.dataset.idleLabel; } this.onVariant(String(input.value)); }
       }, {signal: this.events.signal});
       this.setup();
     }
@@ -215,19 +266,26 @@
       this.message.textContent = text || '';
       this.message.hidden = !text;
       this.message.dataset.tone = tone || '';
+      this.message.classList.toggle('visually-hidden', tone === 'success');
     }
     async run(items, discountCode) {
       if (!this.button || this.button.getAttribute('aria-busy') === 'true') return;
       this.say('');
-      this.button.setAttribute('aria-busy', 'true');
-      this.button.classList.add('loading');
+      const version = this.selectionVersion || 0;
+      actionBusy(this.button, true, this.addedText);
       try {
         const properties = await personalization(this.form());
         if (items[0]) items[0].properties = {...properties,...items[0].properties};
         await addLines(items, {discountCode, source: this.localName});
+        if ((this.selectionVersion || 0) === version) {
+          this._addedItems = items.map(item => ({id:String(item.id),quantity:item.quantity}));
+          this.button.dataset.added = 'true';
+          actionLabel(this.button, this.addedText).textContent = this.addedText;
+          this.say(this.addedText, 'success');
+        }
       }
       catch (error) { this.say(error.userMessage || error.message || this.dataset.error || window.cartStrings?.error || '', 'error'); }
-      finally { this.button.removeAttribute('aria-busy'); this.button.classList.remove('loading'); }
+      finally { actionBusy(this.button, false, this.addedText); this.update(); }
     }
     setup() {}
     onVariant() {}
@@ -322,7 +380,7 @@
       if (countEl) countEl.textContent = String(count);
       this.complete = complete;
       this.shownSaving = saving;
-      if (this.button) this.button.disabled = count === 0;
+      if (this.button) this.button.disabled = count === 0 || this.button.getAttribute('aria-busy') === 'true';
     }
     submit() {
       const group = groupId('bundle');
@@ -440,11 +498,11 @@
         }
       });
       if (this.button) {
-        this.button.disabled = !variant.available;
+        this.button.disabled = !variant.available || this.button.getAttribute('aria-busy') === 'true';
         const text = this.button.querySelector('.po-button__text');
         if (text) {
           if (!this.label) this.label = text.textContent;
-          text.textContent = variant.available ? this.label : (this.dataset.soldOut || this.label);
+          text.textContent = variant.available ? (this.button.dataset.added === 'true' ? this.addedText : this.button.dataset.idleLabel || this.label) : (this.dataset.soldOut || this.label);
         }
       }
     }
@@ -512,6 +570,7 @@
       const signal = this.events.signal;
       this.format = this.dataset.moneyFormat || '';
       this.cards = [...this.querySelectorAll('[data-upsell-card]')];
+      this.querySelectorAll('[data-upsell-add], [data-upsell-add-selected]').forEach(button => actionLabel(button, this.dataset.addedText || 'Added'));
       this.addedVariants ||= new Set();
       try {
         const variants = JSON.parse(this.querySelector('[data-upsell-cart-variants]')?.textContent || '[]');
@@ -561,7 +620,7 @@
         button.setAttribute('aria-pressed', String(added));
         button.disabled = !variant.available || card.classList.contains('is-loading');
         const label = button.querySelector('[data-label]') || button;
-        label.textContent = variant.available ? (added ? this.dataset.addedText || 'Added' : this.dataset.buttonText || label.textContent) : (this.dataset.soldoutText || label.textContent);
+        label.textContent = variant.available ? (added ? this.dataset.addedText || 'Added' : this.dataset.buttonText || button.dataset.idleLabel) : (this.dataset.soldoutText || button.dataset.idleLabel);
       }
       const check = card.querySelector('[data-upsell-check]');
       if (check) { check.disabled = !variant.available; if (!variant.available) check.checked = false; }
@@ -598,19 +657,21 @@
       if (!card || card.classList.contains('is-loading') || card.hasAttribute('data-unavailable') || !card.dataset.variantId) return;
       const label = button.querySelector('[data-label]') || button;
       const text = this.dataset.buttonText || label.textContent;
+      card.querySelector('[data-action-error]')?.remove();
       const variantId = String(card.dataset.variantId);
       card.classList.add('is-loading');
-      button.setAttribute('aria-busy', 'true');
-      button.disabled = true;
+      actionBusy(button, true, this.dataset.addedText || 'Added');
       try {
         await addLines([this.lineOf(card, groupId('upsell'))], {open: this.dataset.openDrawer === 'true', source: 'upsell-pro'});
         this.addedVariants.add(variantId);
         this.applyVariant(card);
       } catch (error) {
-        label.textContent = error.userMessage || this.dataset.errorText || text;
+        let message = card.querySelector('[data-action-error]');
+        if (!message) { message = document.createElement('p'); message.dataset.actionError = ''; message.className = 'upsell-pro__message'; message.setAttribute('role','alert'); card.append(message); }
+        message.textContent = error.userMessage || this.dataset.errorText || error.message || text;
       } finally {
         card.classList.remove('is-loading');
-        button.removeAttribute('aria-busy');
+        actionBusy(button, false, this.dataset.addedText || 'Added');
         button.disabled = card.hasAttribute('data-unavailable');
       }
     }
@@ -619,21 +680,18 @@
       if (!picked.length || button.getAttribute('aria-busy') === 'true') return;
       const message = this.querySelector('[data-message]');
       if (message) { message.hidden = true; message.textContent = ''; }
-      button.setAttribute('aria-busy', 'true');
-      button.classList.add('loading');
-      button.disabled = true;
+      actionBusy(button, true, this.dataset.addedText || 'Added');
       const group = groupId('upsell');
       const lines = picked.map(card => this.lineOf(card, group));
       try {
         await addLines(lines, {open: this.dataset.openDrawer === 'true', source: 'upsell-pro'});
         lines.forEach(line => this.addedVariants.add(String(line.id)));
         this.cards.forEach(card => this.applyVariant(card));
-        if (message) { message.textContent = this.dataset.addedText || 'Added'; message.hidden = false; message.dataset.tone = 'success'; }
+        if (message) { message.textContent = this.dataset.addedText || 'Added'; message.hidden = false; message.dataset.tone = 'success'; message.classList.add('visually-hidden'); }
       } catch (error) {
-        if (message) { message.textContent = error.userMessage || this.dataset.errorText || ''; message.hidden = !message.textContent; message.dataset.tone = 'error'; }
+        if (message) { message.textContent = error.userMessage || this.dataset.errorText || ''; message.hidden = !message.textContent; message.dataset.tone = 'error'; message.classList.remove('visually-hidden'); }
       } finally {
-        button.removeAttribute('aria-busy');
-        button.classList.remove('loading');
+        actionBusy(button, false, this.dataset.addedText || 'Added');
         this.updateTotal();
       }
     }
@@ -679,11 +737,12 @@
       if (!button) return;
       button.classList.toggle('is-added', added);
       button.setAttribute('aria-pressed', added ? 'true' : 'false');
-      button.textContent = added ? (this.dataset.addedText || button.textContent) : (this.dataset.buttonText || button.textContent);
+      const label = actionLabel(button, this.dataset.addedText || 'Added');
+      label.textContent = added ? (this.dataset.addedText || 'Added') : (this.dataset.buttonText || button.dataset.idleLabel);
     }
     async toggle(card, button) {
       if (!card || !card.dataset.variantId || button.getAttribute('aria-busy') === 'true') return;
-      button.setAttribute('aria-busy', 'true');
+      actionBusy(button, true, this.dataset.addedText || 'Added');
       try {
         if (button.classList.contains('is-added')) { await removeVariant(card.dataset.variantId); this.mark(card, false); }
         else {
@@ -693,7 +752,7 @@
       } catch (_) {
         button.classList.add('is-error');
         setTimeout(() => button.classList.remove('is-error'), reduceMotion() ? 0 : 700);
-      } finally { button.removeAttribute('aria-busy'); }
+      } finally { actionBusy(button, false, this.dataset.addedText || 'Added'); button.disabled = variantFrom(card.querySelector('[data-variant-select]'))?.available === false; }
     }
   }
 
@@ -727,6 +786,7 @@
       },{signal});
       document.addEventListener('cart:updated',e=>{
         if (!Array.isArray(e.detail?.cart?.items)) return;
+        this.cartRevision = (this.cartRevision || 0) + 1;
         this.confirmedCart=e.detail.cart;
         this.paintButtons();
         this.dataset.cartProductQuantity=String(e.detail.cart.items.filter(i=>String(i.product_id)===this.dataset.productId).reduce((n,i)=>n+Number(i.quantity||0),0));
@@ -772,34 +832,35 @@
         offers.slice(0,Number(s.max_products)||3).forEach(offer=>this.upsell(offer));
         if(s.add_mode==='selected'){
           const footer=node('div','upsell-pro__footer');box.append(footer);
-          this.button(footer,s.add_selected_label||'Add chosen items',()=>this.upsellChoices.filter(c=>c.check.checked).map(c=>({id:c.select.value,quantity:1,properties:{_sl_offer_id:c.offer.offerId,_sl_offer:'upsell'}})));
+          this.button(footer,s.add_selected_label||'Add chosen items',()=>this.upsellChoices.filter(c=>c.check.checked && selectReady(c.select)).map(c=>({id:c.select.value,quantity:1,properties:{_sl_offer_id:c.offer.offerId,_sl_offer:'upsell'}})));
         }
       }
       this.paintPrices();
     }
     button(parent,label,action){
       const button=node('button','btn btn-primary po-button');const text=node('span','po-button__text hidden-on-load',label);button.append(text);button.type='button';button.dataset.themeButton='primary';button.dataset.slButton='';button.dataset.buttonRole='primary';
+      actionLabel(button, this.options.added_text || 'Added');
       this.actions ||= [];this.actions.push({button,text,label,action});
       const status=node('p','po-message');status.setAttribute('role','status');
       parent.append(button,status);
       button.addEventListener('click',async()=>{
         if(button.getAttribute('aria-busy')==='true')return;
-        button.setAttribute('aria-busy','true');button.classList.add('loading');button.disabled=true;status.textContent='';status.classList.remove('visually-hidden');
+        actionBusy(button,true,this.options.added_text || 'Added');status.textContent='';status.classList.remove('visually-hidden');
         try{
           const lines=action();if(!lines?.length)return;
           const props=await personalization(this.form());
           const own=lines.find(line=>this.variants.some(v=>v.id===String(line.id)));
           if(own)own.properties={...props,...own.properties};
           await addLines(lines,{open:this.dataset.kind==='upsell_pro'?safelyOpen(this.options):true,source:'storelib-offers'});
-          button.dataset.added='true';text.textContent=this.options.added_text||'Added';status.textContent=text.textContent;status.classList.add('visually-hidden');
+          button._addedSelection=selectionKey(lines);button._addedRevision=this.cartRevision || 0;button.dataset.added='true';text.textContent=this.options.added_text||'Added';status.textContent=text.textContent;status.classList.add('visually-hidden');
         }catch(error){status.textContent=error.userMessage||error.message||this.options.error_text||'';}
-        finally{button.removeAttribute('aria-busy');button.classList.remove('loading');button.disabled=false;this.paintPrices();}
+        finally{actionBusy(button,false,this.options.added_text || 'Added');this.paintPrices();}
       },{signal:this.events.signal});return button;
     }
     paintButtons(){
       for(const entry of this.actions||[]){
         const lines=entry.action();entry.button.disabled=!lines?.length||entry.button.getAttribute('aria-busy')==='true';
-        if(!this.confirmedCart)continue;
+        if(!this.confirmedCart || entry.button._addedRevision === (this.cartRevision || 0)){const added=lines.length>0&&entry.button._addedSelection===selectionKey(lines);entry.button.dataset.added=String(added);entry.text.textContent=added?this.options.added_text||'Added':entry.label;continue;}
         const added=lines.length>0&&lines.every(line=>this.confirmedCart.items.filter(i=>String(i.variant_id||i.id)===String(line.id)).reduce((n,i)=>n+Number(i.quantity||0),0)>=line.quantity);
         entry.button.dataset.added=String(added);entry.text.textContent=added?this.options.added_text||'Added':entry.label;
       }
@@ -845,7 +906,7 @@
     }
     paintPrices(){
       this.paintButtons();
-      const variant=this.variant();if(this.addButton)this.addButton.disabled=!variant?.available;
+      const variant=this.variant();if(this.addButton)this.addButton.disabled=!variant?.available || this.addButton.getAttribute('aria-busy')==='true';
       if(!variant)return;
       for(const row of this.rows||[]){
         const p=tierPrice(row.tier,variant), monetary=!this.market||(!['amount','percent'].includes(row.tier.discountType));
@@ -864,7 +925,7 @@
       const price=node('p','po-summary__amount'),compare=node('s','po-summary__compare'),label=node('p','po-note',offer.label||'');
       const paint=()=>{const exact=!this.market&&controls.every(c=>c.check.checked&&c.select.value===c.initial);price.textContent=exact?this.amount(offer.priceCents):'';compare.textContent=exact?this.amount(offer.fullCents):'';compare.hidden=!exact||offer.fullCents<=offer.priceCents||this.options.show_compare===false;this.paintButtons();};
       list.addEventListener('change',paint,{signal:this.events.signal});this.box.append(compare,price,label);paint();
-      this.button(this.box,this.options.button_label||'Add bundle to cart',()=>controls.filter(c=>c.check.checked).map(c=>({id:c.select.value,quantity:1,properties:{_sl_offer_id:offer.offerId,_sl_offer:'bundle'}})));
+      this.button(this.box,this.options.button_label||'Add bundle to cart',()=>controls.some(c=>c.check.checked && !selectReady(c.select))?[]:controls.filter(c=>c.check.checked).map(c=>({id:c.select.value,quantity:1,properties:{_sl_offer_id:offer.offerId,_sl_offer:'bundle'}})));
     }
     upsell(offer){
       const item=offer.product;if(!item)return;
@@ -875,9 +936,9 @@
       price.hidden=this.options.show_price===false;
       select.addEventListener('change',()=>{price.textContent='';this.paintButtons();},{signal:this.events.signal});
       if(this.options.add_mode==='selected'){
-        const label=node('label','upsell-card__pick'),check=node('input','native-up-check');check.type='checkbox';check.checked=this.options.preselect!==false;check.setAttribute('aria-label',item.title||'Product');label.append(check);card.prepend(label);this.upsellChoices.push({check,select,offer});
+        const label=node('label','upsell-card__pick'),check=node('input','native-up-check');check.type='checkbox';check.disabled=!selectReady(select);check.checked=this.options.preselect!==false && !check.disabled;check.setAttribute('aria-label',item.title||'Product');label.append(check);card.prepend(label);this.upsellChoices.push({check,select,offer});
         check.addEventListener('change',()=>{card.toggleAttribute('data-picked',check.checked);this.paintButtons();},{signal:this.events.signal});card.toggleAttribute('data-picked',check.checked);
-      }else this.button(card,this.options.upsell_button_text||'Add',()=>[{id:select.value,quantity:1,properties:{_sl_offer_id:offer.offerId,_sl_offer:'upsell'}}]);
+      }else this.button(card,this.options.upsell_button_text||'Add',()=>selectReady(select)?[{id:select.value,quantity:1,properties:{_sl_offer_id:offer.offerId,_sl_offer:'upsell'}}]:[]);
     }
     image(parent,item){
       if(this.options.show_images===false||this.options.show_image===false||!item.imageUrl)return;
