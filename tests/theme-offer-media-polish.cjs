@@ -1,0 +1,58 @@
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{chromium}=require('playwright');
+const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
+const Module=require('module'),filename=path.join(__dirname,'theme-empty-block-previews.cjs'),helper=new Module(filename,module);
+helper.filename=filename;helper.paths=module.paths;
+helper._compile(read('tests/theme-empty-block-previews.cjs').split('(async()=>{')[0]+'\nmodule.exports={engine,clean};',filename);
+const {engine,clean}=helper.exports;
+(async()=>{let checks=0;const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});try{
+ const p=await browser.newPage({viewport:{width:390,height:844}}),errors=[];p.on('pageerror',e=>errors.push(e.message));
+ await p.setContent('<div id="shopify-section-header"><nav class="navigation mobile"><button>Close</button></nav></div>');
+ await p.addStyleTag({content:read('shopify/assets/navigation.css')});
+ await p.addStyleTag({content:read('snippets/header-sticky-controller.storelib').match(/<style>([\s\S]*?)<\/style>/)[1].replaceAll('{{ section.id }}','header')});
+ await p.addScriptTag({content:read('shopify/assets/header-sticky-extras.js')});
+ await p.evaluate(()=>document.documentElement.classList.add('nav-open'));await p.waitForTimeout(620);
+ assert(await p.locator('nav').evaluate(el=>el.matches(':popover-open')));assert.equal(await p.locator('nav').evaluate(el=>getComputedStyle(el,'::backdrop').opacity),'1');checks++;
+ await p.evaluate(()=>document.documentElement.classList.remove('nav-open'));await p.waitForTimeout(180);
+ const opacity=await p.locator('nav').evaluate(el=>+getComputedStyle(el,'::backdrop').opacity);assert(opacity>0&&opacity<1,'backdrop fades during drawer close');
+ await p.waitForTimeout(440);assert(!await p.locator('nav').evaluate(el=>el.matches(':popover-open')));checks++;
+ await p.setViewportSize({width:1100,height:900});
+ const gallery=()=>'<media-gallery data-mt-product-id="p"><slide-with-thumbs><div class="swiper-wrapper-preview swiper" style="width:320px;height:220px"><div class="swiper-wrapper"><div class="swiper-slide">First</div><div class="swiper-slide">Second</div></div></div></slide-with-thumbs></media-gallery>';
+ await p.setContent('<div id="shopify-section-product">'+gallery()+'</div>');
+ await p.addStyleTag({content:read('shopify/assets/swiper-bundle.min.css')});await p.addScriptTag({content:read('shopify/assets/swiper-bundle.min.js')});
+ await p.addScriptTag({content:read('shopify/assets/product-page-ui.js')});
+ await p.evaluate(()=>{const el=document.querySelector('.swiper');new Swiper(el);MateriaProductUi.healGallery(document.querySelector('media-gallery'),true);el.swiper.slideTo(1,0);});
+ await p.locator('#shopify-section-product').evaluate((el,html)=>el.innerHTML=html,gallery());
+ await p.evaluate(()=>{new Swiper(document.querySelector('.swiper'));MateriaProductUi.healGallery(document.querySelector('media-gallery'),true);});
+ assert.equal(await p.locator('.swiper').evaluate(el=>el.swiper.activeIndex),1,'same-product builder redraw retains the chosen media');checks++;
+ await p.evaluate(()=>{document.querySelector('media-gallery').dataset.mtProductId='different';document.querySelector('.swiper').swiper.destroy();new Swiper(document.querySelector('.swiper'));MateriaProductUi.healGallery(document.querySelector('media-gallery'),true);});
+ assert.equal(await p.locator('.swiper').evaluate(el=>el.swiper.activeIndex),0,'another product starts at its own first media');checks++;
+ await p.locator('body').evaluate(el=>el.innerHTML='<media-gallery data-mt-media-viewer><div class="media-gallery__local-video" style="height:200px"><video data-src="https://example.test/movie.mp4"></video></div></media-gallery>');
+ await p.addStyleTag({content:read('shopify/assets/product-page-ui.css')});
+ await p.evaluate(()=>document.dispatchEvent(new CustomEvent('storelib:section-load')));
+ await p.locator('[data-mt-expand-video]').click();
+ assert.equal(await p.locator('.mt-lb video').getAttribute('src'),'https://example.test/movie.mp4','lazy video opens independently of image zoom setting');checks++;
+ await p.evaluate(()=>MateriaProductUi.closeLightbox());await p.waitForTimeout(400);
+ await p.setContent('<div class="shopify-section" style="display:flex;gap:20px"><zoom-action data-type="external_zoom" data-zoom-option="external"><div data-pane-container><img class="drift-trigger" width="200" height="200"><img class="drift-trigger" width="200" height="200"></div></zoom-action><div class="product-detail__information" style="width:300px;height:100px"><div class="zoom-external-area"></div>Product details</div></div>');
+ await p.evaluate(()=>document.querySelectorAll('img').forEach(img=>{img.src=img.dataset.zoom='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600"><rect width="600" height="600" fill="red"/></svg>');}));
+ await p.addStyleTag({content:read('shopify/assets/main-product.css')});await p.addStyleTag({content:read('shopify/assets/drift-basic.min.css')});
+ await p.addScriptTag({content:read('shopify/assets/drift.js')});
+ await p.addScriptTag({content:read('shopify/assets/photoswipe-init.js').replace(/^import .*;$/mg,'')});
+ await p.waitForTimeout(60);assert.equal(await p.locator('zoom-action').evaluate(el=>el._drifts.length),2);checks++;
+ await p.locator('.drift-trigger').first().hover();await p.waitForTimeout(220);
+ assert.equal(await p.locator('.product-detail__information').evaluate(el=>el.getBoundingClientRect().height),100,'external zoom does not insert space in product information');checks++;
+ await p.locator('zoom-action').evaluate(el=>{window.keptZoom=el;el.remove();});
+ assert.equal(await p.locator('.drift-zoom-pane').count(),0,'all zoom instances are released on redraw');checks++;
+ await p.locator('.shopify-section').evaluate(el=>el.prepend(window.keptZoom));await p.waitForTimeout(60);
+ assert.equal(await p.locator('zoom-action').evaluate(el=>el._drifts.length),2,'reconnected gallery restores its zoom');checks++;
+ const ctx={block:{id:'pills',settings:{pill1_enable:true,pill1_text:'Benefit',pill1_text_color:'#ff0000',pill_bg:'#ff0000',pill_font_size_desktop:40,pill1_icon_source:'none'}}};
+ async function pills(){await p.setContent('<style>:root{--color-text:rgb(30,40,50);--color-heading:rgb(10,20,30);--color-background:white;--body-font-size:17px;--body-font-weight:400}</style>'+await engine.parseAndRender(clean(read('snippets/benefits-pills.storelib')),ctx,{globals:ctx}));}
+ await pills();assert.equal(await p.locator('.bp-pill').evaluate(el=>getComputedStyle(el).color),'rgb(30, 40, 50)');assert.equal(await p.locator('.bp-pill').evaluate(el=>getComputedStyle(el).fontSize),'17px');checks++;
+ ctx.block.settings.custom_style=true;await pills();assert.equal(await p.locator('.bp-pill').evaluate(el=>getComputedStyle(el).color),'rgb(255, 0, 0)');assert.equal(await p.locator('.bp-pill').evaluate(el=>getComputedStyle(el).fontSize),'40px');checks++;
+ for(const width of [375,1200])for(const style of ['accent','editorial','contrast']){
+  await p.setViewportSize({width,height:900});await p.setContent(`<style>:root{--color-text:#222;--color-heading:#111;--color-background:white;--color-border:#bbb;--btn-primary-bg-color:#2454be}body{max-width:500px;margin:16px}</style><product-bundle class="po" data-style="${style}"><ul class="po-bundle__lines"><li class="po-line" data-excluded><label class="po-line__label"><input class="po-line__check" type="checkbox"><span class="po-check"></span><span class="po-line__title">An available item</span></label></li></ul></product-bundle><div class="upsell-pro" data-style="${style}"><div class="upsell-card" data-picked><span class="upsell-card__title">Chosen item</span></div></div>`);
+  await p.addStyleTag({content:read('shopify/assets/product-offers.css')});await p.waitForTimeout(300);
+  assert.equal(await p.locator('.po-line').evaluate(el=>getComputedStyle(el).opacity),'1');assert(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  if(style==='contrast')assert.equal(await p.locator('.upsell-card').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(17, 17, 17)');checks++;
+ }
+ assert.deepEqual(errors,[]);await p.close();console.log(`${checks} menu backdrop, redraw stability, lazy video, benefits and responsive preset checks passed`);
+}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1});

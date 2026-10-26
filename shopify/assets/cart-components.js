@@ -76,7 +76,7 @@ async function materiaAnimateCartRemoval(row) {
   const animation = row.animate([
     {height:height+'px',opacity:1,transform:'translateX(0)',marginTop:style.marginTop,marginBottom:style.marginBottom,paddingTop:style.paddingTop,paddingBottom:style.paddingBottom},
     {height:'0px',opacity:0,transform:'translateX(-6px)',marginTop:'0px',marginBottom:'0px',paddingTop:'0px',paddingBottom:'0px'},
-  ], {duration:140,easing:'cubic-bezier(.2,.7,.2,1)',fill:'forwards'});
+  ], {duration:110,easing:'cubic-bezier(.2,.7,.2,1)',fill:'forwards'});
   await animation.finished.catch(() => {});
 }
 // A new line (added from recommendations or a variant change) opens into place.
@@ -706,13 +706,13 @@ class CartNotification extends HTMLElement {
     if (input?.getAttribute?.("name") !== "updates[]" || !input.dataset.id) return;
     // +/- (the theme's synthetic change) coalesces fast taps; a typed number
     // is sent when the field is left or Enter is pressed.
-    this.setLineQuantity(input.dataset.id, input.value, {delay: event.isTrusted ? 0 : 260, input});
+    this.setLineQuantity(input.dataset.id, input.value, {delay: event.isTrusted ? 0 : 100, input});
   }
 
   onQuantityInput(event) {
     const input = event.target;
     if (input?.getAttribute?.("name") !== "updates[]" || !input.dataset.id || input.value === "") return;
-    this.setLineQuantity(input.dataset.id, input.value, {delay: 650, input});
+    this.setLineQuantity(input.dataset.id, input.value, {delay: 350, input});
   }
 
   /* One cart request at a time; the newest number for each line wins.

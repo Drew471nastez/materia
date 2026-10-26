@@ -679,7 +679,7 @@ function HoverIntent(exitTime, elements, userConfig) {
     // The drawer slides shut first, then the page unlocks and the levels go
     // back to the top, so nothing jumps while it is still on screen.
     if (immediate || reduced.matches || !wasOpen) settle();
-    else settleTimer = setTimeout(settle, 450);
+    else settleTimer = setTimeout(settle, 580);
     if (focusInside) {
       try { visibleToggle()?.focus({ preventScroll: true }); } catch (e) {}
     }
@@ -5834,6 +5834,7 @@ class SwatchFunctions extends SwatchInit {
 
   onVariantChange(e) {
     const target = e.target;
+    if (target?.closest('product-bundle, quantity-offer, upsell-pro, pair-with, storelib-product-offers')) return;
     const nestedControl=target?.closest('[data-mt-size-chart], .mt-size-chart__units, dialog');
     if (nestedControl && this.contains(nestedControl)) return;
     // Only option inputs drive a variant change (quantity, gift card and
@@ -7354,6 +7355,7 @@ class VariantGroupDetail extends VariantRadiosDetail {
   }
 
   onVariantChange(e) {
+    if (e.target?.closest('product-bundle, quantity-offer, upsell-pro, pair-with, storelib-product-offers')) return;
     this.productTarget =
       this.closest(".product__item-js") ||
       (this.dataset.section &&

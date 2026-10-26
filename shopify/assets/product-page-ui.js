@@ -484,12 +484,13 @@
   function galleryItems(gallery) {
     var seen = {};
     var list = [];
-    gallery.querySelectorAll("[data-mt-src], .media-gallery__local-video, .media-gallery__external-video").forEach(function (el) {
+    gallery.querySelectorAll("[data-mt-src], .media-gallery__image, .media-gallery__local-video, .media-gallery__external-video").forEach(function (el) {
       if (el.closest(".media-thumb-swiper, .thumbnail-slide, .swiper-slide-duplicate")) return;
       var video = el.querySelector('video');
       var frame = el.querySelector('iframe');
+      var img = el.querySelector('img');
       var kind = video ? 'video' : frame ? 'iframe' : 'image';
-      var src = kind === 'video' ? video.currentSrc || video.getAttribute('src') || video.querySelector('source')?.src : kind === 'iframe' ? frame.src : el.getAttribute('data-mt-src');
+      var src = kind === 'video' ? video.currentSrc || video.getAttribute('src') || video.dataset.src || video.querySelector('source')?.src : kind === 'iframe' ? frame.src || frame.dataset.src : el.getAttribute('data-mt-src') || img?.dataset.zoom || img?.currentSrc || img?.src;
       if (kind !== 'image' && src) {
         try {
           var url = new URL(src, location.href);
@@ -503,7 +504,6 @@
       }
       if (!src || seen[src]) return;
       seen[src] = true;
-      var img = el.querySelector("img");
       list.push({
         el: el,
         src: src,
@@ -615,7 +615,7 @@
     var expand = e.target.closest?.('[data-mt-expand-video]');
     if (expand) {
       var media = expand.closest('.media-gallery__local-video, .media-gallery__external-video');
-      var owner = expand.closest('[data-mt-lightbox]');
+      var owner = expand.closest('[data-mt-lightbox], [data-mt-media-viewer]');
       if (owner && media) { e.preventDefault(); openLightbox(owner,media); return; }
     }
     var t = e.target;
@@ -674,7 +674,7 @@
       var videoExpand = target && target.closest ? target.closest('[data-mt-expand-video]') : null;
       if (videoExpand) return function () {
         var media = videoExpand.closest('.media-gallery__local-video,.media-gallery__external-video');
-        var gallery = videoExpand.closest('[data-mt-lightbox]');
+        var gallery = videoExpand.closest('[data-mt-lightbox], [data-mt-media-viewer]');
         if (media && gallery) openLightbox(gallery,media);
       };
       var item = target && target.closest ? target.closest("[data-mt-lightbox] [data-mt-src]") : null;
@@ -874,7 +874,7 @@
     scanVideoViewers(root);
   }
   function scanVideoViewers(root) {
-    (root || document).querySelectorAll('[data-mt-lightbox] .media-gallery__local-video, [data-mt-lightbox] .media-gallery__external-video').forEach(function (media) {
+    (root || document).querySelectorAll(':is([data-mt-lightbox], [data-mt-media-viewer]) :is(.media-gallery__local-video, .media-gallery__external-video)').forEach(function (media) {
       if (media.closest('.media-thumb-swiper, .thumbnail-slide, .swiper-slide-duplicate') || !media.querySelector('video,iframe') || media.querySelector('[data-mt-expand-video]')) return;
       var button = document.createElement('button');
       button.type = 'button'; button.className = 'mt-media-expand'; button.dataset.mtExpandVideo = '';
@@ -1148,6 +1148,23 @@
     holder.thumbnailSlide = null;
     if (typeof holder.start === "function") holder.start();
   }
+  var galleryPositions = new Map();
+  function rememberGalleryPosition(gallery, sw) {
+    if (sw._mtPositionBound) return;
+    sw._mtPositionBound = true;
+    var section = gallery.closest('[id^="shopify-section-"], .shopify-section');
+    var product = gallery.getAttribute('data-mt-product-id');
+    if (!section?.id || !product) return;
+    var key = section.id + ':' + product;
+    var saved = galleryPositions.get(key);
+    if (saved != null && saved < sw.slides.length) sw.slideTo(saved, 0, false);
+    var remember = function () {
+      galleryPositions.set(key, sw.activeIndex);
+      if (galleryPositions.size > 40) galleryPositions.delete(galleryPositions.keys().next().value);
+    };
+    sw.on?.('slideChange', remember);
+    remember();
+  }
   function healSlider(gallery, inView) {
     var holder = gallery.querySelector("slide-with-thumbs");
     if (!holder || !holder.isConnected) return;
@@ -1174,6 +1191,7 @@
     var width = el.clientWidth;
     if (!same || (width && Math.abs((sw.width || 0) - width) > 1)) sw.update();
     if (!slides.length) return;
+    rememberGalleryPosition(gallery, sw);
     if (sw.activeIndex > slides.length - 1) sw.slideTo(0, 0, false);
     if (!inView || !width) return;
     // The current slide must be inside the frame.

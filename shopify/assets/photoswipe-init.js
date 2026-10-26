@@ -22,6 +22,9 @@ class ZoomAction extends HTMLElement {
     if (document.readyState === 'complete') setTimeout(() => { if (this.isConnected) this.responsive(); }, 0);
     else window.addEventListener('load', this._onResize, { once: true });
   }
+  connectedCallback() {
+    if (!this._onResize) this.init();
+  }
   initLightBox() {
     if (this.lightbox !== null) return;
     // Galleries marked data-mt-lightbox open in product-page-ui.js instead.
@@ -119,19 +122,21 @@ class ZoomAction extends HTMLElement {
    initDrift() {
     if (this.drift !== null) return;
     var allTriggers = this.querySelectorAll('.drift-trigger');
-    var paneContainer = this.closest('.sec__featured-product').querySelector(
-      '.zoom-external-area'
-    );
+    const section = this.closest('.sec__featured-product, .shopify-section, [id^="shopify-section-"]') || this.parentElement;
+    var paneContainer = section?.querySelector('.zoom-external-area');
+    if (typeof Drift !== 'function') return;
+    this._drifts = [];
     if (allTriggers.length != 0) {
       allTriggers.forEach( (trigger) => {
-        const inlineContainer = trigger.closest('[data-pane-container]');
+        const inlineContainer = trigger.closest('[data-pane-container]') || trigger.parentElement;
         const zoomOption = this.zoomOption;
         if (zoomOption === 'inner-2') {
           this.drift = new Drift(trigger, {
             inlinePane: zoomOption === 'inner-2',
             zoomFactor: 3,
-            containInline: paneContainer,
+            containInline: true,
             paneContainer: inlineContainer,
+            inlineContainer,
             hoverBoundingBox: zoomOption === 'external',
             onShow: function () {
               inlineContainer.classList.add('relative');
@@ -142,11 +147,12 @@ class ZoomAction extends HTMLElement {
           });
         } else {
           this.drift = new Drift(trigger, {
-            inlinePane: zoomOption,
+            inlinePane: zoomOption !== 'external' || !paneContainer,
             zoomFactor: 5,
             containInline: !!paneContainer,
             paneContainer:
-              zoomOption === 'external' ? paneContainer : inlineContainer,
+              zoomOption === 'external' && paneContainer ? paneContainer : inlineContainer,
+            inlineContainer,
             hoverBoundingBox: zoomOption === 'external',
             onShow: function () {
               inlineContainer.classList.add('relative');
@@ -156,6 +162,7 @@ class ZoomAction extends HTMLElement {
             },
           });
         }
+        this._drifts.push(this.drift);
       });
     }
   }
@@ -173,7 +180,7 @@ class ZoomAction extends HTMLElement {
     } else {
       if (this.type !== 'open_lightbox') {
         if (this.drift !== null) {
-          this.drift.destroy();
+          this.destroyDrifts();
           this.drift = null;
         }
         this.initLightBox();
@@ -200,9 +207,23 @@ class ZoomAction extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this.destroyDrifts();
+    this.lightbox?.destroy();
+    this.lightbox = null;
     if (!this._onResize) return;
     window.removeEventListener('resize', this._onResize);
     window.removeEventListener('load', this._onResize);
+    this._onResize = null;
+  }
+  destroyDrifts() {
+    (this._drifts || (this.drift ? [this.drift] : [])).forEach(drift => {
+      drift.destroy();
+      // Drift normally waits for its exit animation. A removed gallery has
+      // no exit surface: release its own pane immediately, not another zoom.
+      drift.zoomPane?.el?.remove();
+    });
+    this._drifts = [];
+    this.drift = null;
   }
 }
 customElements.define('zoom-action', ZoomAction);

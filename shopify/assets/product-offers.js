@@ -1014,7 +1014,9 @@
     const selections=providers.map(provider=>({provider,...provider.selection()}));
     const tier=selections.find(s=>s.quantityTier && s.items.length);
     const sets=tier ? tier.items[0].quantity : quantity;
-    const replacement=selections.find(s=>!s.quantityTier && s.mainIds?.length);
+    // A linked bundle is the purchase, even when the page product is not
+    // selected. Upsells alone still accompany the page product.
+    const replacement=selections.find(s=>!s.quantityTier && (s.provider.localName==='product-bundle'||s.provider.dataset.kind==='bundle'));
     const items=new Map(), codes=new Set();
     function merge(line) {
       const key=String(line.id),old=items.get(key);
@@ -1028,7 +1030,8 @@
       if(s.discountCode)codes.add(s.discountCode);
     });
     if(tier){const primary=replacement?.mainIds?.[0]||id;merge({...tier.items[0],id:primary});if(tier.discountCode)codes.add(tier.discountCode);}
-    const primaryIds=new Set(replacement?.mainIds?.length?replacement.mainIds:[id]);
+    if (!items.size) throw new Error('Select at least one available item.');
+    const primaryIds=new Set(replacement ? (replacement.mainIds || []) : [id]);
     return {items:[...items.values()],primaryIds,codes:[...codes].join(','),selections};
   }
 
@@ -1050,6 +1053,8 @@
     mainBusy.add(form);mainStatus(form,'');
     const controls=[...new Set([...form.querySelectorAll('button[type="submit"],input[type="submit"]'),...providers.flatMap(provider=>[...provider.querySelectorAll('button')])])].map(el=>[el,el.disabled]);
     controls.forEach(([el])=>el.disabled=true);
+    const loadingText=providers.map(provider=>provider.dataset.loadingText||provider.options?.adding_label).find(Boolean);
+    if(loadingText)button.dataset.loadingText=loadingText;
     actionBusy(button,true);
     try {
       await Promise.all(providers.map(provider=>provider.ready));
@@ -1062,6 +1067,10 @@
       await addLines(plan.items,{open:!buyNow,discountCode:plan.codes,source:'main-product-offers'});
       plan.selections.forEach(selection=>{
         const provider=selection.provider;
+        if(provider.localName==='storelib-product-offers'){
+          const entry=provider.actions?.[provider.dataset.kind==='bundle'?(provider.selectedBundle||0):0];
+          if(entry){entry.button._addedSelection=selectionKey(selection.items);entry.button._addedRevision=provider.cartRevision||0;provider.paintButtons();}
+        }
         if(provider.addedVariants){selection.items.forEach(item=>provider.addedVariants.add(String(item.id)));provider.cards.forEach(card=>provider.applyVariant(card));provider.updateTotal();}
         if(provider.localName==='pair-with')provider.cards.filter(card=>selection.items.some(item=>String(item.id)===String(card.dataset.variantId))).forEach(card=>provider.mark(card,true));
         if(provider.button){provider.button.dataset.added='true';actionLabel(provider.button,provider.addedText).textContent=provider.addedText;}

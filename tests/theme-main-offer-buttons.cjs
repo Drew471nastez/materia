@@ -1,7 +1,7 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{chromium}=require('playwright');
 const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
 const control=(id,attr)=>`<input type="hidden" ${attr} value="${id}" data-price="100" data-available="true">`;
-const form=id=>`<form id="${id}"><input name="id" value="m"><input name="quantity" type="number" min="1" value="2"><input required name="properties[Name]" value="Alex"><button type="submit" name="add" data-theme-button="primary"><span data-btn-label>Add to cart</span><svg class="icon-load"></svg></button><button type="submit" name="checkout" data-storelib-buy-now data-theme-button="secondary"><svg class="btn-icon"></svg><span data-btn-label>Buy now</span></button></form>`;
+const form=id=>`<form id="${id}"><input name="id" value="m"><input name="quantity" type="number" min="1" value="2"><input required name="properties[Name]" value="Alex"><button type="submit" name="add" data-theme-button="primary"><span data-btn-label>Add to cart</span><svg class="icon-load"></svg></button><button type="submit" name="checkout" data-storelib-buy-now data-theme-button="secondary"><svg class="btn-icon" width="18" height="18"></svg><span data-btn-label>Buy now</span></button></form>`;
 const bundle=(id,mode='main')=>`<product-bundle data-form-id="${id}" data-product-id="p" data-storelib-sync="off" data-purchase-action="${mode}"><div data-line data-main-line><input type="checkbox" data-line-check checked>${control('m','data-line-variant')}</div><div data-line><input type="checkbox" data-line-check checked>${control('a','data-line-variant')}</div><button type="button" data-offer-add><span class="po-button__text">Buy together</span></button><p data-message hidden></p></product-bundle>`;
 const upsells=id=>`<upsell-pro data-form-id="${id}" data-purchase-action="main" data-mode="selected">${['a','z'].map(v=>`<div data-upsell-card><input type="checkbox" data-upsell-check checked>${control(v,'data-upsell-variant')}</div>`).join('')}<button data-upsell-add-selected type="button"><span data-label>Add chosen</span></button></upsell-pro>`;
 const pair=id=>`<pair-with data-form-id="${id}" data-purchase-action="main"><div class="pw-card"><input type="checkbox" data-pw-picked checked>${control('q','data-variant-select')}<button type="button" data-add-btn>Add</button></div></pair-with>`;
@@ -46,6 +46,20 @@ const nativeData={quantityBreaks:[{offerId:'tier',tiers:[{quantity:2,freeQuantit
   await p.locator('product-bundle[data-form-id=main],upsell-pro,pair-with').evaluateAll(els=>els.forEach(el=>el.remove()));await p.waitForTimeout(40);
   assert(await p.locator('#main button[name=checkout]').evaluate(el=>el.hasAttribute('data-storelib-buy-now')),'restore native hook after linked blocks removed');checks++;
   assert.deepEqual(errors,[]);await p.close();
+ }
+ {
+  const {p}=await setup(form('main')+bundle('main'));
+  await p.locator('[data-main-line] [data-line-check]').uncheck();
+  await p.locator('#main button[name=add]').click();await p.waitForFunction(()=>posts.length===1);
+  assert.deepEqual(await p.evaluate(()=>posts[0].items.map(i=>i.id)),['a'],'unchecked page product must not be added as an extra line');checks++;
+  await p.locator('[data-line]:not([data-main-line]) [data-line-check]').uncheck();
+  await p.locator('#main button[name=add]').click();await p.waitForFunction(()=>document.querySelector('[data-main-offer-status]').textContent.includes('Select at least'));
+  assert.equal(await p.evaluate(()=>posts.length),1,'an empty linked bundle must not buy an unselected product');checks++;
+  await p.locator('[data-main-line] [data-line-check]').check();
+  await p.locator('#main button[name=checkout]').click();await p.waitForFunction(()=>checkouts===1&&!document.querySelector('#main button[name=checkout]').hasAttribute('aria-busy'));
+  const boxes=await p.locator('#main button[name=checkout]').evaluate(el=>{const a=el.querySelector('.btn-icon').getBoundingClientRect(),b=el.querySelector('[data-btn-label]').getBoundingClientRect();return {right:a.right,left:b.left};});
+  assert(boxes.right<=boxes.left,'button icon must not overlap its label');checks++;
+  await p.close();
  }
  for(const kind of ['bundle','quantity_offer','upsell_pro']){
   const {p,errors}=await setup(form('main')+`<storelib-product-offers data-kind="${kind}" data-form-id="main" data-product-id="p" data-selected="m"></storelib-product-offers>`);

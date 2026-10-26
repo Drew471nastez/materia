@@ -234,7 +234,7 @@ async function touchDrag(page,x,y,steps,{dy=12,gap=16,check}={}){
       assert.equal((await page.textContent('#header-count')),'9','header count is optimistic');
       await page.waitForTimeout(1400);
       const changes=store.log.filter(l=>l.kind==='change').map(l=>l.data.quantity);
-      assert(changes.length<=3&&changes.at(-1)===7,'coalesced, final wins: '+changes);
+      assert(changes.length<=4&&changes.at(-1)===7,'100ms tap window stays serialized and coalesced, final wins: '+changes);
       assert.equal(store.maxInflight,1,'serialized');
       assert.equal(store.items.find(i=>i.key==='v1').quantity,7);
       const trace=await page.evaluate(()=>{cancelAnimationFrame(traceFrame);return trace;});
