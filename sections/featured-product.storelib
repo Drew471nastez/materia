@@ -250,6 +250,243 @@
 </div>
 
 
+{%- liquid
+  assign fp_fx = false
+  for fp_b in section.blocks
+    if fp_b.type == 'bundle' or fp_b.type == 'upsell_pro' or fp_b.type == 'pair_with_upsell'
+      assign fp_fx = true
+    endif
+  endfor
+-%}
+{%- if fp_fx -%}
+<style>
+  #shopify-section-{{ section.id }} .fp-bb { transition: background-color .3s ease, color .3s ease, box-shadow .3s ease, opacity .2s ease, transform .18s cubic-bezier(.2,.7,.2,1); }
+  #shopify-section-{{ section.id }} .fp-bb:active { transform: scale(.985); }
+  #shopify-section-{{ section.id }} .fp-bb--loading { pointer-events: none; cursor: progress; opacity: .9; }
+  #shopify-section-{{ section.id }} .fp-bb--added { pointer-events: none; }
+  #shopify-section-{{ section.id }} .fp-ab--loading { pointer-events: none; cursor: progress; opacity: .6; transition: opacity .15s ease; }
+  #shopify-section-{{ section.id }} .fp-bb__inner { display: inline-flex; align-items: center; justify-content: center; gap: 8px; animation: fpBbIn .3s cubic-bezier(.2,.7,.2,1) both; }
+  #shopify-section-{{ section.id }} .fp-bb__spin { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: fpBbSpin .7s linear infinite; }
+  #shopify-section-{{ section.id }} .fp-bb__check { flex: none; width: 18px; height: 18px; }
+  #shopify-section-{{ section.id }} .fp-bb__check path { stroke-dasharray: 24; stroke-dashoffset: 24; animation: fpBbDraw .42s .08s cubic-bezier(.2,.7,.2,1) forwards; }
+  #shopify-section-{{ section.id }} .fp-bb--error { animation: fpBbShake .4s ease; }
+  @keyframes fpBbIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes fpBbSpin { to { transform: rotate(360deg); } }
+  @keyframes fpBbDraw { to { stroke-dashoffset: 0; } }
+  @keyframes fpBbShake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 50% { transform: translateX(4px); } 75% { transform: translateX(-2px); } }
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ section.id }} .fp-bb, #shopify-section-{{ section.id }} .fp-bb__inner, #shopify-section-{{ section.id }} .fp-bb--error { transition: none; animation: none; }
+    #shopify-section-{{ section.id }} .fp-bb__check path { animation: none; stroke-dashoffset: 0; }
+    #shopify-section-{{ section.id }} .fp-bb__spin { animation-duration: 1.6s; }
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var root = document.getElementById('shopify-section-{{ section.id }}');
+    if (!root || root.__fpBundleFx) return;
+    root.__fpBundleFx = true;
+    var confs = [
+{%- for fp_b in section.blocks -%}
+{%- if fp_b.type == 'bundle' -%}
+      { kind: 'full', bundle: true, label: {{ fp_b.settings.button_label | default: 'Add bundle to cart' | json }}, adding: {{ fp_b.settings.adding_label | default: 'Adding to cart' | json }}, added: {{ fp_b.settings.added_label | default: 'Added to cart' | json }}, error: {{ fp_b.settings.error_text | default: 'These could not be added. Try again.' | json }}, open: {% if fp_b.settings.open_cart_after_add == false %}false{% else %}true{% endif %} },
+{%- elsif fp_b.type == 'upsell_pro' -%}
+      { kind: 'full', label: {{ fp_b.settings.add_selected_label | default: 'Add chosen items' | json }}, adding: {{ fp_b.settings.add_selected_label | default: 'Add chosen items' | json }}, added: {{ fp_b.settings.added_text | default: 'Added' | json }}, error: {{ fp_b.settings.error_text | default: 'This could not be added. Try again.' | json }}, open: true },
+      { kind: 'light', label: {{ fp_b.settings.upsell_button_text | default: 'Add' | json }}, added: {{ fp_b.settings.added_text | default: 'Added' | json }}, open: {% if fp_b.settings.open_drawer_after_add %}true{% else %}false{% endif %} },
+{%- elsif fp_b.type == 'pair_with_upsell' -%}
+      { kind: 'light', label: {{ fp_b.settings.btn_label | default: 'Add product' | json }}, added: {{ fp_b.settings.btn_label_added | default: 'Added' | json }}, open: {% if fp_b.settings.open_drawer_after_add %}true{% else %}false{% endif %} },
+{%- endif -%}
+{%- endfor -%}
+    ];
+    var fullBundle = null;
+    for (var ci = 0; ci < confs.length; ci++) { if (confs[ci].bundle) { fullBundle = confs[ci]; break; } }
+    var WRAP = '[class*="bundle"], [data-bundle], [data-block-type="bundle"], [class*="upsell"], [class*="pair"], [data-upsell]';
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var pending = null;
+
+    if (!window.__fpCartFetchPatched && window.fetch) {
+      window.__fpCartFetchPatched = true;
+      var nativeFetch = window.fetch;
+      window.fetch = function(input, init){
+        var url = typeof input === 'string' ? input : ((input && input.url) || '');
+        var method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+        var watch = method !== 'GET' && /cart/i.test(url);
+        if (watch) document.dispatchEvent(new CustomEvent('fp:cart-start'));
+        var p = nativeFetch.apply(this, arguments);
+        if (watch) {
+          p.then(function(r){ document.dispatchEvent(new CustomEvent('fp:cart-end', { detail: { ok: !!(r && r.ok) } })); },
+                 function(){ document.dispatchEvent(new CustomEvent('fp:cart-end', { detail: { ok: false } })); });
+        }
+        return p;
+      };
+    }
+    if (!window.__fpCartXhrPatched && window.XMLHttpRequest) {
+      window.__fpCartXhrPatched = true;
+      var xo = XMLHttpRequest.prototype.open, xs = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.open = function(m, u){ this.__fpWatch = String(m || 'GET').toUpperCase() !== 'GET' && /cart/i.test(String(u || '')); return xo.apply(this, arguments); };
+      XMLHttpRequest.prototype.send = function(){
+        if (this.__fpWatch) {
+          var x = this;
+          document.dispatchEvent(new CustomEvent('fp:cart-start'));
+          x.addEventListener('loadend', function(){ document.dispatchEvent(new CustomEvent('fp:cart-end', { detail: { ok: x.status >= 200 && x.status < 300 } })); });
+        }
+        return xs.apply(this, arguments);
+      };
+    }
+    function countText(){
+      var c = document.querySelector('[data-storelib-cart-count], .cart-count-bubble, [data-cart-count]');
+      return c ? String(c.textContent || '').trim() : null;
+    }
+
+    function norm(s){ return String(s || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
+    function findBtn(t){
+      var b = t && t.closest ? t.closest('button, input[type="submit"], a') : null;
+      if (!b || !root.contains(b) || b.disabled) return null;
+      var wrap = b.closest(WRAP);
+      var txt = norm(b.value || b.textContent);
+      var i, c, l;
+      for (i = 0; i < confs.length; i++) {
+        c = confs[i]; l = norm(c.label);
+        if (c.kind === 'full' && l && txt.indexOf(l) !== -1) {
+          if (!wrap && b.closest('form[action*="/cart/add"]')) continue;
+          return { btn: b, conf: c };
+        }
+      }
+      if (!wrap) return null;
+      for (i = 0; i < confs.length; i++) {
+        c = confs[i]; l = norm(c.label);
+        if (c.kind === 'light' && l && txt.indexOf(l) === 0 && txt !== norm(c.added)) return { btn: b, conf: c };
+      }
+      var bw = b.closest('[class*="bundle"], [data-bundle], [data-block-type="bundle"]');
+      if (bw && fullBundle) {
+        var all = bw.querySelectorAll('button, input[type="submit"]');
+        if (all.length && all[all.length - 1] === b) return { btn: b, conf: fullBundle };
+      }
+      return null;
+    }
+
+    function setState(b, state, text){
+      var isInput = b.tagName === 'INPUT';
+      if (state === 'idle') {
+        if (b.__fpOrig != null) { if (isInput) b.value = b.__fpOrig; else b.innerHTML = b.__fpOrig; }
+        b.__fpOrig = null;
+        b.classList.remove('fp-bb--loading', 'fp-bb--added', 'fp-bb--error', 'fp-ab--loading');
+        b.style.minWidth = '';
+        b.removeAttribute('aria-busy');
+        return;
+      }
+      if (b.__fpOrig == null) { b.__fpOrig = isInput ? b.value : b.innerHTML; b.style.minWidth = b.offsetWidth + 'px'; }
+      b.classList.add('fp-bb');
+      b.classList.remove('fp-bb--loading', 'fp-bb--added', 'fp-bb--error');
+      b.classList.add('fp-bb--' + state);
+      if (state === 'loading') b.setAttribute('aria-busy', 'true'); else b.removeAttribute('aria-busy');
+      if (isInput) { b.value = text; return; }
+      var icon = '';
+      if (state === 'loading') icon = '<span class="fp-bb__spin" aria-hidden="true"></span>';
+      if (state === 'added') icon = '<svg class="fp-bb__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+      var span = document.createElement('span');
+      span.textContent = text;
+      b.innerHTML = '<span class="fp-bb__inner" role="status">' + icon + span.outerHTML + '</span>';
+    }
+
+    function cartIsOpen(){
+      if (document.querySelector('[data-storelib-cart][aria-expanded="true"], [data-storelib-cart-panel][open], [data-storelib-cart-panel].is-open, [data-storelib-cart-panel].active, cart-drawer[open], cart-drawer.active, .cart-drawer.active, .cart-drawer.is-open, .cart-drawer.open, #CartDrawer.active, #CartDrawer.is-open')) return true;
+      var els = document.querySelectorAll('[class*="cart"][class*="drawer"], [id*="art"][id*="rawer"]');
+      for (var i = 0; i < els.length; i++) { if (/(^|\s)(open|active|is-open|is-active|is-visible|show)(\s|$)/.test(els[i].className)) return true; }
+      return false;
+    }
+    function openCart(){
+      if (cartIsOpen()) return;
+      document.dispatchEvent(new CustomEvent('storelib:cart:open'));
+      requestAnimationFrame(function(){
+        if (cartIsOpen()) return;
+        var triggers = document.querySelectorAll('[data-storelib-cart]');
+        for (var i = 0; i < triggers.length; i++) { if (triggers[i].offsetParent !== null) { triggers[i].click(); return; } }
+      });
+    }
+
+    function finish(ok){
+      if (!pending) return;
+      var p = pending, b = p.btn, c = p.conf;
+      clearTimeout(p.guard); clearTimeout(p.settle); clearTimeout(p.early); clearInterval(p.poll);
+      pending = null;
+      if (ok) { ['storelib:cart:refresh', 'cart:refresh'].forEach(function(ev){ try { document.dispatchEvent(new CustomEvent(ev, { detail: { source: 'fp' } })); } catch (err) {} }); }
+      b.classList.remove('fp-ab--loading');
+      if (c.kind !== 'full') {
+        b.removeAttribute('aria-busy');
+        if (ok && c.open && !p.opened) openCart();
+        return;
+      }
+      if (ok) {
+        setState(b, 'added', c.added);
+        if (c.open && !p.opened) openCart();
+        setTimeout(function(){ setState(b, 'idle'); }, 2200);
+      } else {
+        setState(b, 'error', c.error);
+        setTimeout(function(){ setState(b, 'idle'); }, 2600);
+      }
+    }
+    function settleSoon(){
+      if (!pending) return;
+      if (!pending.failed && !pending.opened && pending.conf.open) { pending.opened = true; openCart(); }
+      clearTimeout(pending.settle);
+      pending.settle = setTimeout(function(){
+        if (pending && pending.inflight <= 0) finish(!pending.failed);
+      }, 20);
+    }
+
+    document.addEventListener('click', function(e){
+      var hit = findBtn(e.target);
+      if (!hit || pending) return;
+      var b = hit.btn, conf = hit.conf;
+      if (b.classList.contains('fp-bb--added')) return;
+      pending = { btn: b, conf: conf, opened: false, inflight: 0, started: false, failed: false, guard: null, settle: null, early: null, poll: null, count: countText() };
+      if (conf.open) {
+        pending.early = setTimeout(function(){
+          if (pending && pending.btn === b && !pending.opened && !pending.failed) { pending.opened = true; openCart(); }
+        }, 250);
+      }
+      pending.poll = setInterval(function(){
+        if (!pending) return;
+        if (pending.conf.open && !pending.opened && cartIsOpen()) pending.opened = true;
+        var now = countText();
+        if (pending.count !== null && now !== null && now !== pending.count && pending.inflight <= 0) { pending.started = true; settleSoon(); }
+      }, 40);
+      if (conf.kind === 'full') {
+        requestAnimationFrame(function(){ if (pending && pending.btn === b) setState(b, 'loading', conf.adding); });
+      } else {
+        b.classList.add('fp-ab--loading');
+        b.setAttribute('aria-busy', 'true');
+      }
+      pending.guard = setTimeout(function(){
+        if (!pending) return;
+        if (pending.count !== null && countText() !== pending.count) { finish(true); return; }
+        if (!pending.failed && pending.inflight <= 0) { finish(true); return; }
+        var pb = pending.btn; clearInterval(pending.poll); clearTimeout(pending.early); pending = null; setState(pb, 'idle');
+      }, 4000);
+    }, true);
+
+    document.addEventListener('fp:cart-start', function(){
+      if (!pending) return;
+      pending.started = true; pending.inflight++; clearTimeout(pending.settle);
+      if (pending.conf.open && !pending.opened) { pending.opened = true; requestAnimationFrame(openCart); }
+    });
+    document.addEventListener('fp:cart-end', function(e){
+      if (!pending) return;
+      pending.inflight = Math.max(0, pending.inflight - 1);
+      if (!e.detail || !e.detail.ok) pending.failed = true;
+      if (pending.inflight === 0) settleSoon();
+    });
+    ['cart:updated', 'cart:refresh', 'cart:change', 'storelib:cart:updated', 'storelib:cart:change', 'theme:cart:change'].forEach(function(ev){
+      document.addEventListener(ev, function(){ if (pending && pending.inflight === 0) { pending.started = true; settleSoon(); } });
+    });
+    var counts = document.querySelectorAll('[data-storelib-cart-count], .cart-count-bubble, [data-cart-count]');
+    if (counts.length && window.MutationObserver) {
+      var mo = new MutationObserver(function(){ if (pending && pending.inflight === 0) { pending.started = true; settleSoon(); } });
+      for (var i = 0; i < counts.length; i++) mo.observe(counts[i], { childList: true, characterData: true, subtree: true });
+    }
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
 </template>
 
 <schema>
@@ -13374,8 +13611,26 @@
           "default": "These could not be added. Try again."
         },
         {
+          "type": "text",
+          "id": "adding_label",
+          "label": "Button text while adding",
+          "default": "Adding to cart"
+        },
+        {
+          "type": "text",
+          "id": "added_label",
+          "label": "Button text once added",
+          "default": "Added to cart"
+        },
+        {
+          "type": "checkbox",
+          "id": "open_cart_after_add",
+          "label": "Open the cart after adding",
+          "default": true
+        },
+        {
           "type": "header",
-          "id": "hdr_29",
+          "id": "hdr_32",
           "label": "Custom style"
         },
         {
@@ -29296,6 +29551,24 @@
             "id": "error_text",
             "label": "Error message",
             "default": "These could not be added. Try again."
+          },
+          {
+            "type": "text",
+            "id": "adding_label",
+            "label": "Button text while adding",
+            "default": "Adding to cart"
+          },
+          {
+            "type": "text",
+            "id": "added_label",
+            "label": "Button text once added",
+            "default": "Added to cart"
+          },
+          {
+            "type": "checkbox",
+            "id": "open_cart_after_add",
+            "label": "Open the cart after adding",
+            "default": true
           },
           {
             "type": "header",
