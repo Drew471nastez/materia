@@ -3,6 +3,26 @@
    menu opening), moved into a cached file loaded deferred by that snippet.
    None of them can act before the theme's own deferred scripts have run. */
 (() => {
+  if(window.MateriaHeaderActions)return;
+  function handle(event){
+    if(event.type!=='click'||event.button>0||!matchMedia('(max-width:1024.98px)').matches)return false;
+    const toggle=event.target.closest?.('.nav-toggle,[data-action="toggle-nav"]');
+    const close=event.target.closest?.('.navigation.mobile close-menu');
+    if(!toggle&&!close)return false;
+    event.preventDefault();event.stopImmediatePropagation();
+    if(window.MateriaMenu){if(close)MateriaMenu.close();else MateriaMenu.toggle();}
+    else{
+      // Keep navigation usable even if an unrelated module failed to load.
+      const root=document.documentElement,on=close?false:!root.classList.contains('nav-open');
+      root.classList.toggle('nav-open',on);if(on||!root.matches('.open-minicart,.open-search'))root.classList.toggle('open-drawer',on);
+      document.querySelectorAll('.nav-toggle,[data-action="toggle-nav"]').forEach(button=>{button.classList.toggle('open',on);button.setAttribute('aria-expanded',String(on));});
+    }
+    return true;
+  }
+  window.MateriaHeaderActions={handle};
+  if(!window.__materiaSectionLinkCapture)window.addEventListener('click',handle,true);
+})();
+(() => {
   /* The announcement and top bar stay under the page dimming until it has
      faded out, so they brighten with the rest of the page, not before it. */
   if (!window.StorelibOverlayFade) {

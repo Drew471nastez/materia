@@ -2,6 +2,14 @@
 (() => {
   if (window.MateriaBlockRuntime) return;
   const badges = new Set();
+  function deadline(value) {
+    const input=String(value||'').trim().replace(/^(\d{4}-\d\d-\d\d)\s+/, '$1T');
+    const match=input.match(/^(\d{4})-(\d\d)-(\d\d)(?:T(\d\d):(\d\d)(?::(\d\d))?(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)?)?$/);
+    if(!match)return NaN;
+    const [,y,m,d,h='0',minute='0',second='0']=match;
+    if(+m<1||+m>12||+d<1||+d>new Date(Date.UTC(+y,+m,0)).getUTCDate()||+h>23||+minute>59||+second>59)return NaN;
+    return Date.parse(input);
+  }
   const put = (el, value) => {
     if (!el) return;
     const text = String(value).padStart(2, '0');
@@ -13,12 +21,12 @@
     static get observedAttributes() { return ['data-end', 'data-on-end', 'data-restart']; }
     connectedCallback() { badges.add(this); queueMicrotask(() => this.tick()); visibility?.observe(this); }
     disconnectedCallback() { badges.delete(this); visibility?.unobserve(this); }
-    attributeChangedCallback() { if (this.isConnected) queueMicrotask(() => this.tick()); }
+    attributeChangedCallback() { if (this.isConnected) { this._offscreen=false;queueMicrotask(() => this.tick()); } }
     tick() {
       if (!this.isConnected || document.hidden || this._offscreen) return;
-      const end = Date.parse(this.dataset.end || '');
+      const end = deadline(this.dataset.end);
       // Missing configuration is never turned into a fabricated sale deadline.
-      this.dataset.invalid = String(!Number.isFinite(end));
+      const invalid=String(!Number.isFinite(end));if(this.dataset.invalid!==invalid)this.dataset.invalid=invalid;
       let diff = Number.isFinite(end) ? Math.max(0, end - Date.now()) : 0;
       const repeat = Number(this.dataset.restart) * 1000;
       if (Number.isFinite(end) && end <= Date.now() && this.dataset.onEnd === 'restart' && repeat > 0) {
@@ -27,6 +35,7 @@
       const seconds = Math.floor(diff / 1000);
       [['days', Math.floor(seconds / 86400)], ['hours', Math.floor(seconds / 3600) % 24], ['mins', Math.floor(seconds / 60) % 60], ['secs', seconds % 60]].forEach(([key, n]) => put(this.querySelector('[data-cd="' + key + '"]'), n));
       const expired = Number.isFinite(end) && diff <= 0 && this.dataset.onEnd === 'ended';
+      const hide=Number.isFinite(end)&&diff<=0&&this.dataset.onEnd==='hide';if(this.hidden!==hide)this.hidden=hide;
       const ended = this.querySelector('.cd-ended'), row = this.querySelector('.cd-row');
       if (ended) ended.hidden = !expired;
       if (row) row.hidden = expired;
@@ -37,11 +46,13 @@
     connectedCallback() {
       if (this._bound) {
         this.row = this.querySelector('[data-testimonial-row]');
+        grab(this.row);
         this.row?.addEventListener('scroll', this._update, {passive:true});
         this._resize?.observe(this); this._update(); return;
       }
       this._bound = true;
       this.row = this.querySelector('[data-testimonial-row]');
+      grab(this.row);
       this._update = () => {
         if (!this.row) return;
         const end = this.row.scrollWidth - this.row.clientWidth;
@@ -62,6 +73,27 @@
       this._update();
     }
     disconnectedCallback() { this._resize?.disconnect(); }
+  }
+  const grabbed=new WeakSet();
+  function grab(row){
+    if(!row||grabbed.has(row))return;grabbed.add(row);
+    let active,frame=0,ignoreClick=false;
+    row.addEventListener('dragstart',event=>event.preventDefault());
+    row.addEventListener('pointerdown',event=>{
+      if(event.pointerType!=='mouse'||event.button!==0||event.target.closest('button,a,input,select,textarea'))return;
+      active={id:event.pointerId,x:event.clientX,start:row.scrollLeft,last:event.clientX,drag:false,snap:row.style.scrollSnapType,behavior:row.style.scrollBehavior};
+    });
+    row.addEventListener('pointermove',event=>{
+      if(!active||active.id!==event.pointerId)return;
+      active.last=event.clientX;
+      if(!active.drag&&Math.abs(event.clientX-active.x)>5){active.drag=true;row.setPointerCapture(event.pointerId);row.setAttribute('data-grabbing','');row.style.scrollSnapType='none';row.style.scrollBehavior='auto';}
+      if(!active.drag)return;event.preventDefault();
+      if(!frame)frame=requestAnimationFrame(()=>{frame=0;if(active)row.scrollLeft=active.start+active.x-active.last;});
+    });
+    const finish=()=>{if(!active)return;cancelAnimationFrame(frame);frame=0;if(active.drag){row.scrollLeft=active.start+active.x-active.last;ignoreClick=true;setTimeout(()=>ignoreClick=false,0);}row.style.scrollSnapType=active.snap;row.style.scrollBehavior=active.behavior;row.removeAttribute('data-grabbing');active=null;};
+    row.addEventListener('pointerup',finish);row.addEventListener('pointercancel',finish);row.addEventListener('lostpointercapture',finish);
+    row.addEventListener('pointerleave',()=>{if(active&&!active.drag)active=null;});
+    row.addEventListener('click',event=>{if(ignoreClick){event.preventDefault();event.stopImmediatePropagation();}},true);
   }
   if (!customElements.get('product-testimonials')) customElements.define('product-testimonials', ProductTestimonials);
   if (!customElements.get('product-countdown-badge')) customElements.define('product-countdown-badge', ProductCountdownBadge);
@@ -109,12 +141,8 @@
     if (share) {
       event.preventDefault();
       const url = new URL(share.dataset.shareUrl, location.href).href;
-      if (navigator.share) {
-        try { await navigator.share({title:share.dataset.shareTitle, url}); return; }
-        catch(error) { if (error.name === 'AbortError') return; }
-      }
       const panel = document.getElementById(share.dataset.sharePanel);
-      if (panel) { panel.querySelector('[data-share-value]').value = url; panel.showPopover(); }
+      if (panel) { panel.querySelector('[data-share-value]').value = url;if(window.MateriaProductDialogs)MateriaProductDialogs.open(panel,share);else panel.showPopover(); }
     }
     if (copy) {
       const panel = copy.closest('.mt-product-dialog'), input = panel.querySelector('[data-share-value]'), status = panel.querySelector('[data-copy-status]');

@@ -22,7 +22,10 @@
 (() => {
   if (window.materiaForms) return;
   const html = document.documentElement;
-  const design = () => html.classList.contains('shopify-design-mode') || Boolean(window.Shopify && window.Shopify.designMode);
+  const design = () => {
+    if(html.classList.contains('shopify-design-mode')||window.Shopify?.designMode)return true;
+    try{const ref=new URL(document.referrer);return self!==top&&(ref.hostname==='storelib.com'||ref.hostname.endsWith('.storelib.com'))&&ref.pathname.includes('/website-builder');}catch{return false;}
+  };
   const MIN_MS = 2000;
   const TOAST_MS = 5000;
   const FORMS = 'form[data-storelib-form="subscribe"], form[data-storelib-form="contact"], form:has(input[name="form_type"][value="customer"]), form:has(input[name="form_type"][value="contact"])';
@@ -294,6 +297,13 @@
       message.textContent=error.userMessage || say(form).errorMessage || error.message;message.hidden=false;
     } finally {pending(form,button,false);}
   };
+  const previewSubscribe = (form,button) => {
+    if(!form.reportValidity())return;
+    const label=button?.querySelector('[data-inline-label]');
+    if(button&&label){button.dataset.inlineOriginalLabel||=label.textContent;label.textContent=say(form).previewSubscribedLabel||'Subscribed (preview)';button.setAttribute('data-subscribed','preview');}
+    form.dataset.state='preview';form.dataset.subscribedEmail=emailOf(form);
+    toast(say(form).previewSuccessMessage||'Preview complete. No email was saved.',form,say(form).successMs);
+  };
 
   if (!design()) {
     addEventListener('invalid', event => {
@@ -320,6 +330,9 @@
     addEventListener('submit', event => {
       const form = event.target;
       if (!isForm(form)) return;
+      if(design()&&form.hasAttribute('data-mt-inline-subscribe')&&(form.querySelector('[data-preview-mode]')?.dataset.previewMode||form.dataset.previewSubmit)!=='live'){
+        event.preventDefault();event.stopImmediatePropagation();previewSubscribe(form,event.submitter||form.querySelector('[type=submit]'));return;
+      }
       if (form.hasAttribute('data-mt-sending') || form.hasAttribute('data-storelib-sending') || form.dataset.state === 'sending') {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -372,7 +385,15 @@
      sign-ups go, so the creator can see and time the success state. */
   window.addEventListener('submit', event => {
     const form = event.target;
-    if (!isForm(form) || ownSuccess(form) || !say(form).successMessage) return;
+    if (!isForm(form) || ownSuccess(form)) return;
+    if(form.hasAttribute('data-mt-inline-subscribe')){
+      event.preventDefault();event.stopImmediatePropagation();if(!form.reportValidity())return;
+      const button=event.submitter||form.querySelector('[type=submit]');
+      if((form.querySelector('[data-preview-mode]')?.dataset.previewMode||form.dataset.previewSubmit)==='live'){if(!form.hasAttribute('data-mt-sending'))inlineSubscribe(form,button,'',false);}
+      else previewSubscribe(form,button);
+      return;
+    }
+    if(!say(form).successMessage)return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (!form.checkValidity()) {
@@ -387,6 +408,7 @@
   addEventListener('input', event => {
     const field = event.target;
     if (field?.getAttribute?.('data-mt-error') && field.checkValidity()) clearFieldError(field);
+    const form=field?.form;if(form?.dataset.state==='preview'&&emailOf(form)!==form.dataset.subscribedEmail){const button=form.querySelector('[data-subscribed]'),label=button?.querySelector('[data-inline-label]');if(label)label.textContent=button.dataset.inlineOriginalLabel;button?.removeAttribute('data-subscribed');delete form.dataset.state;}
   }, true);
 
   /* Builder: redraw readable field colours while Forms and fields change.

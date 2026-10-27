@@ -1,8 +1,9 @@
 <template compat="shopify">
 {%- assign preview_button_label = 'products.product.add_to_cart' | t -%}
 {%- assign sample = product | default: page.product | default: collection.products.first | default: collections.all.products.first -%}
+{%- if sample.title == blank -%}{%- assign sample = collections.all.products.first -%}{%- endif -%}
 {{ 'product-offers.css' | asset_url | stylesheet_tag }}
-<div class="po po--{{ block.settings.style | default: 'cards' }}" data-offer-library-preview inert aria-hidden="true">
+<div class="po {% if block.type == 'quantity_offer' %}po-qty{% else %}po-bundle{% endif %}" data-style="{{ block.settings.style | default: 'cards' }}" data-offer-library-preview inert aria-hidden="true" style="{%- render 'offer-control-vars', controls: block.settings -%}{% if block.settings.custom_style %}--po-c-bg:{{ block.settings.custom_bg }};--po-c-text:{{ block.settings.custom_text }};--po-c-heading:{{ block.settings.custom_heading }};--po-c-border:{{ block.settings.custom_border }};--po-c-selected:{{ block.settings.custom_selected }};{% endif %}">
   <p class="po-heading">{{ block.settings.heading | default: title | escape }}</p>
   {%- if block.type == 'quantity_offer' -%}
     <div class="po-tiers">
@@ -12,13 +13,33 @@
       {%- endfor -%}
     </div>
   {%- else -%}
-    <div class="po-lines">
+    <div class="po-bundle__lines">
       {%- for i in (1..2) -%}
+        {%- liquid
+          assign picked_key = 'product_' | append: i
+          if block.type == 'upsell_pro'
+            assign picked_key = 'manual_product_' | append: i
+          endif
+          assign preview_item = block.settings[picked_key]
+          if preview_item != blank and preview_item.title == blank
+            assign preview_item = all_products[preview_item]
+          endif
+          if preview_item.title == blank
+            if i == 1
+              assign preview_item = sample
+            else
+              assign preview_item = collections.all.products[1] | default: sample
+            endif
+          endif
+        -%}
         <div class="po-line">
-          <span class="po-line__tick" style="width:20px;height:20px;border:1px solid var(--color-border);border-radius:4px;flex:none"></span>
-          {%- if sample.featured_image != blank -%}<img class="po-line__image" src="{{ sample.featured_image | image_url: width: 160 }}" width="64" height="64" alt="">
+          <span class="po-line__label">
+          <span class="po-line__tick" style="width:20px;height:20px;border:1px solid var(--color-heading);border-radius:4px;flex:none;display:grid;place-items:center;background:var(--color-heading);color:var(--color-background)">✓</span>
+          {%- if preview_item.featured_image != blank -%}<img class="po-line__image" src="{{ preview_item.featured_image | image_url: width: 160 }}" width="64" height="64" alt="">
           {%- else -%}<span class="materia-block-preview__image">{{ 'product-1' | placeholder_svg_tag }}</span>{%- endif -%}
-          <span class="po-line__info"><span class="po-line__title">{{ sample.title | default: block.settings.heading | default: title | escape }}</span>{% if sample.price != blank %}<span class="po-line__price">{{ sample.price | money }}</span>{% endif %}</span>
+          <span class="po-line__info"><span class="po-line__title">{{ preview_item.title | default: block.settings.heading | default: title | escape }}</span>{% if preview_item.selected_or_first_available_variant.title != blank and preview_item.has_only_default_variant == false %}<span class="materia-preview-variant">{{ preview_item.selected_or_first_available_variant.title | escape }} <span>⌄</span></span>{% endif %}</span>
+          </span>
+          {% if preview_item.price != blank %}<span class="po-line__price">{{ preview_item.price | money }}</span>{% endif %}
         </div>
       {%- endfor -%}
     </div>

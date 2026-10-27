@@ -13,6 +13,7 @@ const theme='<style>:root{--color-background:#151515;--color-heading:#fafafa;--c
  for(const type of ['countdown_timer','countdown_badge','infotables','lod_testimonials_block','product_addons']){
   const block=main.blocks.find(b=>b.type===type);assert.deepEqual(schema('blocks/'+type+'.storelib'),block);
   const context={...base,block:{id:'test-'+type,type,settings:defaults(block)}};
+  if(type==='countdown_badge'){context.block.settings.enable_custom_style=false;}
   if(type==='countdown_badge')context.block.settings.end_iso=new Date(Date.now()+90061000).toISOString();
   if(type==='countdown_timer')context.block.settings.end_iso=new Date(Date.now()+90061000).toISOString();
   html[type]=await render('blocks/'+type+'.storelib',context);checks++;
@@ -28,7 +29,7 @@ const theme='<style>:root{--color-background:#151515;--color-heading:#fafafa;--c
   assert.equal(await p.locator('.cd-card').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(21, 21, 21)');
   assert.equal(await p.locator('[data-cd=hours]').first().textContent(),'01');checks++;await p.screenshot({path:'/tmp/materia-countdown-preview.png',fullPage:true});
   await p.locator('product-countdown-badge').first().evaluate(el=>{el.dataset.end='2000-01-01T00:00:00Z';el.dataset.onEnd='ended';});
-  await p.waitForTimeout(50);assert(await p.locator('.cd-ended').isVisible());assert(!await p.locator('.cd-badge .cd-row').isVisible());checks++;
+  await p.waitForTimeout(50);assert(await p.locator('.cd-badge .cd-ended').isVisible());assert(!await p.locator('.cd-badge .cd-row').isVisible());checks++;
   await p.locator('product-countdown-badge').first().evaluate(el=>{el.dataset.onEnd='restart';el.dataset.restart='3600';});
   await p.waitForTimeout(50);assert(await p.locator('.cd-badge .cd-row').isVisible());checks++;
   await p.locator('product-countdown-badge').first().evaluate(el=>el.dataset.end='');await p.waitForTimeout(40);assert.equal(await p.locator('product-countdown-badge').first().getAttribute('data-invalid'),'true');checks++;
