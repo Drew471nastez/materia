@@ -87,3 +87,56 @@
     window.StorelibMenuLayer = {sync};
   }
 })();
+
+/* Fit actual translated menu text, not a fixed viewport breakpoint. A compact
+   second row is preferable to a link wrapping outside a fixed-height header.
+   Measure only after content/font changes; resizing reuses the natural width. */
+(() => {
+  if (window.MateriaHeaderFit) return;
+  const states = new Map();
+  let frame = 0;
+  const queue = () => { if (!frame) frame = requestAnimationFrame(paint); };
+  function paint() {
+    frame = 0;
+    states.forEach((state, root) => {
+      if (!root.isConnected) { state.resize?.disconnect(); state.content?.disconnect(); states.delete(root); return; }
+      if (!matchMedia('(min-width:1025px)').matches) { root.removeAttribute('data-header-stacked'); return; }
+      const list = root.querySelector('.navigation.horizontal:not(.mobile) .horizontal-list');
+      const logo = root.querySelector('.header__logo');
+      if (!list || !logo) return;
+      const first = list.querySelector(':scope > .level0 > menu-item > a');
+      if (!first) return;
+      const scale = root.getBoundingClientRect().width / root.offsetWidth || 1;
+      const style = getComputedStyle(first), grid = getComputedStyle(root);
+      const signature = [style.font, style.letterSpacing, style.textTransform, style.paddingInlineStart, style.paddingInlineEnd, getComputedStyle(list).columnGap].join('|');
+      if (state.list !== list || state.signature !== signature || state.width == null) {
+        state.content?.disconnect();
+        state.list = list; state.signature = signature;
+        list.setAttribute('data-header-measuring', '');
+        state.width = list.getBoundingClientRect().width / scale;
+        list.removeAttribute('data-header-measuring');
+        state.content = new MutationObserver(() => { state.width = null; queue(); });
+        state.content.observe(list, {subtree:true, childList:true, characterData:true});
+      }
+      const gap = parseFloat(grid.columnGap) || 0;
+      const available = Math.max(0, (root.clientWidth - logo.getBoundingClientRect().width / scale - 2 * gap) / 2);
+      root.toggleAttribute('data-header-stacked', state.width > available + 1);
+    });
+  }
+  function scan(invalidate = false) {
+    document.querySelectorAll('header.header header-inner.logo-position').forEach(root => {
+      if (!states.has(root)) {
+        const state = {width:null};
+        state.resize = new ResizeObserver(queue); state.resize.observe(root);
+        states.set(root, state);
+      } else if (invalidate) states.get(root).width = null;
+    });
+    queue();
+  }
+  ['storelib:section-load','shopify:section:load','storelib:settings-change'].forEach(name => document.addEventListener(name, () => scan(true)));
+  window.addEventListener('resize', queue, {passive:true});
+  document.fonts?.ready.then(() => scan(true));
+  document.fonts?.addEventListener('loadingdone', () => scan(true));
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => scan()); else scan();
+  window.MateriaHeaderFit = {scan};
+})();
