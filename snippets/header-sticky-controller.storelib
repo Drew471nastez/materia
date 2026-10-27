@@ -174,9 +174,9 @@
       if (written.get(html) !== px) {
         written.set(html, px);
         top = Math.max(0, offset);
-        html.style.setProperty('--storelib-header-top', px);
-        html.style.setProperty('--sl-header-offset', px);
-        html.style.setProperty('--height-bar', px);
+        /* --storelib-header-top is the live bottom of every bar still on
+           screen, written by the header pass. A sticky-only value here put
+           the header underneath bars that are not marked sticky. */
         window.StorelibHeaderSticky?.refresh();
       }
     }
@@ -288,11 +288,28 @@
           state.marker.style.height = space + 'px';
         }
         slot = state.marker.getBoundingClientRect().top;
-        const stick = slot <= barTop + 1 ? barTop : Math.round(slot);
+        /* Every bar above the header, sticky or not. The header sits on the
+           bottom edge of whichever of them is still on screen, so it never
+           slides underneath, and the page's sticky offset uses that same edge. */
+        let pinTop = 0;
+        const parent = section.parentElement;
+        if (parent) {
+          for (const el of parent.children) {
+            if (el === section || el === state.marker) break;
+            const rect = el.getBoundingClientRect();
+            if (rect.height < 1 || rect.bottom <= 0) continue;
+            pinTop = Math.max(pinTop, Math.round(rect.bottom));
+          }
+        }
+        const stick = Math.max(barTop, pinTop);
+        state.liveTop = stick;
         const pin = stick + 'px';
         if (state.pin !== pin) {
           state.pin = pin;
           section.style.setProperty('--storelib-header-pin', pin);
+          html.style.setProperty('--storelib-header-top', pin);
+          html.style.setProperty('--sl-header-offset', pin);
+          html.style.setProperty('--height-bar', pin);
         }
       } else if (pinMode) {
         slot = state.slot ?? barTop;
@@ -374,7 +391,8 @@
          (sticky announcement, plus the header while it shows). Sticky columns
          such as the product gallery sit under it. */
       if (knownHeight != null) {
-        const stickyTop = Math.round(barTop + (mode !== 'none' && !state.hidden ? knownHeight : 0)) + 'px';
+        const liveTop = typeof state.liveTop === 'number' ? state.liveTop : barTop;
+        const stickyTop = Math.round(liveTop + (mode !== 'none' && !state.hidden ? knownHeight : 0)) + 'px';
         if (state.productTop !== stickyTop) {
           state.productTop = stickyTop;
           html.style.setProperty('--product-sticky-top', stickyTop);
