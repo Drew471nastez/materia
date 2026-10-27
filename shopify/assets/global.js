@@ -1,5 +1,29 @@
 /* Materia Themes. Developed By Materia Themes. */
 "use-strict";
+/* Every slider follows the mouse one-to-one. Swiper waits 5px before it moves,
+   so a drag lagged behind the cursor. Touch still yields to a vertical scroll
+   (touchAngle). A slider that turns dragging off keeps that. */
+(() => {
+  const Native = window.Swiper;
+  if (!Native || Native.__materiaDrag) return;
+  function Swiper(el, params) {
+    const next = Object.assign({}, params);
+    if (next.allowTouchMove !== false) {
+      next.simulateTouch = true;
+      next.followFinger = true;
+      next.threshold = 0;
+      next.touchRatio = 1;
+      next.longSwipesRatio = 0.15;
+      next.longSwipesMs = 180;
+      if (next.grabCursor !== false) next.grabCursor = true;
+    }
+    return new Native(el, next);
+  }
+  Object.setPrototypeOf(Swiper, Native);
+  Swiper.prototype = Native.prototype;
+  Swiper.__materiaDrag = true;
+  window.Swiper = Swiper;
+})();
 var BlsLazyloadImg = (function () {
   return {
     init: function (scope = document) {
