@@ -26,7 +26,11 @@
     };
   };
   const connection = navigator.connection;
-  if (connection?.saveData || /2g/.test(connection?.effectiveType || '')) return;
+  const net = connection?.effectiveType || '';
+  // Save-data and 2G: do not prefetch. A second download fights the page
+  // the visitor is already waiting on.
+  if (connection?.saveData || /2g/.test(net)) return;
+  const limited = net === '3g';
   // Checkout is Storelib's own page and pays through Stripe. When a shopper
   // heads for a checkout button (or opens the cart page), the connection to
   // Stripe is opened ahead, once. The checkout page itself is never fetched
@@ -88,24 +92,27 @@
   const ready = () => {
     const idle = window.requestIdleCallback || (fn => setTimeout(fn, 150));
     idle(() => {
-      const picked = [...document.querySelectorAll('a[data-product-neighbor]')].slice(0, 2);
+      const picked = [...document.querySelectorAll('a[data-product-neighbor]')].slice(0, limited ? 1 : 2);
       // Prepare a small number of visible product destinations before the
       // shopper taps; never crawl the catalog or preload offscreen carousels.
+      // On a slow connection, one page only, so it does not crowd the current one.
       const urls = new Set();
       let inspected = 0, visible = 0;
+      const visibleCap = limited ? 1 : 4;
       for (const anchor of document.querySelectorAll('main a[href*="/products/"]')) {
         if (inspected++ === 40) break;
         if (urls.has(anchor.href)) continue;
         const rect = anchor.getBoundingClientRect();
         if (!rect.width || !rect.height || rect.bottom <= 0 || rect.top >= innerHeight || rect.right <= 0 || rect.left >= innerWidth) continue;
         urls.add(anchor.href); picked.push(anchor);
-        if (++visible === 4) break;
+        if (++visible === visibleCap) break;
       }
       // The first few visible links of the header menu (home, shop, a
       // collection): the pages most visitors open next.
       let menu = 0;
+      const menuCap = limited ? 1 : 4;
       for (const anchor of document.querySelectorAll('header nav a[href], .section-header nav a[href]')) {
-        if (menu === 4) break;
+        if (menu === menuCap) break;
         const rect = anchor.getBoundingClientRect();
         if (!rect.width || !rect.height || rect.top >= innerHeight || urls.has(anchor.href)) continue;
         urls.add(anchor.href); picked.push(anchor); menu++;
