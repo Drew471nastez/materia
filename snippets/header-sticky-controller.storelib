@@ -222,16 +222,25 @@
       own.attributes.observe(header, {attributes: true, attributeFilter: ['data-sticky', 'data-sticky-mobile', 'class']});
       /* A wrapper around the whole header group would end sticky when it
          scrolls away: it is laid out as if it were not there. */
-      const group = section.parentElement;
-      if (group && group !== document.body && group.tagName !== 'MAIN' && !group.querySelector('main') &&
-          [...group.children].some(el => el !== section && el.matches('.shopify-section, [id^="shopify-section-"]'))) {
-        group.style.setProperty('display', 'contents', 'important');
-      }
+      releaseGroup(section);
       own.marker = document.createElement('span');
       own.marker.dataset.headerAnchor = '';
       own.marker.setAttribute('aria-hidden', 'true');
       section.before(own.marker);
       return own;
+    };
+    /* The header group is only as tall as the bar. Sticky inside it dies as
+       soon as that box scrolls away. The builder redraws the group and drops
+       this, which is why sticky randomly stops in the editor. */
+    const releaseGroup = section => {
+      const group = section.parentElement;
+      if (!group || group === document.body || group.tagName === 'MAIN' || group.querySelector('main')) return;
+      const holdsBars = [...group.children].some(el => el !== section && el.nodeType === 1 && (el.matches('.shopify-section, [id^="shopify-section-"]') || el.dataset.headerAnchor != null));
+      if (!holdsBars) return;
+      if (group.style.getPropertyValue('display') !== 'contents') {
+        group.style.setProperty('display', 'contents', 'important');
+        if (state) state.markerDoc = null;
+      }
     };
     const update = () => {
       frame = null;
@@ -242,6 +251,7 @@
         if (!state) return;
       }
       if (!state.marker.isConnected) state.section.before(state.marker);
+      releaseGroup(state.section);
       const s = state, {section} = s;
       let mode = header.dataset.sticky;
       if (!['always', 'on-scroll-up'].includes(mode) || (!wide.matches && header.dataset.stickyMobile === 'false')) mode = 'none';
@@ -319,9 +329,12 @@
     // A header drawn again (a builder redraw) or added later.
     const watch = () => new MutationObserver(records => {
       for (const r of records) for (const n of [...r.addedNodes, ...r.removedNodes]) {
-        if (n.nodeType === 1 && (n.matches('header.header[data-sticky]') || n.querySelector('header.header[data-sticky]'))) return schedule();
+        if (n.nodeType === 1 && (n.matches('header.header[data-sticky], .shopify-section-group-header-group') || n.querySelector?.('header.header[data-sticky]'))) {
+          if (state) state.markerDoc = null;
+          return schedule();
+        }
       }
-    }).observe(document.body || html, {subtree: true, childList: true});
+    }).observe(html, {subtree: true, childList: true});
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { watch(); schedule(); }, {once: true});
     else watch();
     new MutationObserver(schedule).observe(html, {attributes: true, attributeFilter: ['class']});
@@ -339,7 +352,13 @@
       if (state) { state.fresh = true; state.height = 0; }
       schedule();
     });
-    document.addEventListener('storelib:settings-change', schedule);
+    const editorRedraw = () => {
+      measured = true;
+      maxScroll = Infinity;
+      if (state) { state.markerDoc = null; state.stackTop = null; }
+      schedule();
+    };
+    document.addEventListener('storelib:settings-change', editorRedraw);
     // Tabbing into the hidden bar brings it into view once; scrolling still hides it.
     let tabbing = false;
     document.addEventListener('keydown', e => { tabbing = e.key === 'Tab'; }, true);
@@ -347,7 +366,7 @@
     document.addEventListener('focusin', e => {
       if (tabbing && state?.header.contains(e.target)) { state.reveal = true; schedule(); }
     });
-    ['storelib:section-load', 'shopify:section:load', 'shopify:section:unload'].forEach(n => document.addEventListener(n, schedule));
+    ['storelib:section-load', 'shopify:section:load', 'shopify:section:unload'].forEach(n => document.addEventListener(n, editorRedraw));
     window.StorelibHeaderSticky = {register: schedule, refresh: schedule};
   }
   window.StorelibHeaderSticky.refresh();
