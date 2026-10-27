@@ -1,58 +1,38 @@
 <template compat="shopify">
 <style>
-  @property --header-hide {
-    syntax: '<length>';
-    inherits: false;
-    initial-value: 0px;
-  }
-  /* Announcement surfaces stay above the moving header. */
-  .shopify-section:has([data-sticky-announcement]) {position:relative; z-index:12; overflow-anchor:none;}
   /* One sticky engine. The bar sticks under the announcement, and "show on
      scroll up" slides the whole section. Transform stays off the header itself
      so the fixed mobile menu is never trapped inside the bar. */
   #shopify-section-{{ section.id }}[data-storelib-sticky] {
     animation: none !important;
     opacity: 1 !important;
-    overflow-anchor: none;
   }
   #shopify-section-{{ section.id }}[data-storelib-sticky="none"] {
     position: relative !important;
     top: auto !important;
     transform: none !important;
   }
-  /* Pin under the announcement. Hiding moves only --header-hide, never a
-     transform: a transform on a sticky bar jumps on the first scroll and
-     slides through the announcement. */
   #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]) {
+    position: sticky !important;
+    top: var(--storelib-header-top, 0px) !important;
     z-index: 11;
     transform: none !important;
     animation: none !important;
-    transition: transform 450ms cubic-bezier(.45, 0, .2, 1);
+    /* Coming back on scroll up: a gentle ease in and out, so the bar glides
+       in instead of jumping most of the way in the first frames. */
+    transition: transform 450ms cubic-bezier(.45, 0, .2, 1), z-index 0s 0.55s;
   }
-  #shopify-section-{{ section.id }}[data-storelib-sticky="always"] {
-    position: sticky !important;
-    top: var(--storelib-header-top, 0px) !important;
-  }
-  /* In normal flow until the bar has actually left the screen, so coming
-     back to the announcement does not shove a sticky header downward. */
+  /* Show on scroll up keeps the bar on its own layer from the start, so
+     Safari never creates one in the first frame of the slide (a snap). */
   #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"] {
-    position: relative !important;
-    top: auto !important;
+    will-change: transform;
+    backface-visibility: hidden;
   }
-  #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].header-sticky {
-    position: sticky !important;
-    top: var(--storelib-header-top, 0px) !important;
-  }
-  /* Fully off the screen, shadow included. Stopping at the header's own
-     height left its bottom edge stuck to the top of the viewport. */
-  #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].header-sticky.shopify-section-header-hidden {
-    transform: translate3d(0, calc(-1 * var(--header-hide-distance, 160px)), 0) !important;
-    z-index: 9;
+  #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].shopify-section-header-hidden {
+    transform: translate3d(0, calc(-100% - var(--storelib-header-top, 0px)), 0) !important;
     pointer-events: none;
-    transition: transform 420ms cubic-bezier(.4, 0, .2, 1);
-  }
-  #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].shopify-section-header-hidden > header.header {
-    box-shadow: none !important;
+    /* A gentle start when leaving, rather than snapping off on a small scroll. */
+    transition: transform 520ms cubic-bezier(.4, 0, .2, 1), z-index 0s 0.55s;
   }
   #shopify-section-{{ section.id }} > header.header {
     transition: box-shadow .42s ease, background-color .42s ease, color .42s ease;
@@ -61,10 +41,10 @@
     transition: opacity .42s ease, background-color .42s ease;
   }
   @media (min-width: 1025px) {
-    #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]):has(header.is-pill) { position: fixed !important; top: var(--storelib-header-top, 0px) !important; }
+    #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]):has(header.is-pill) { position: fixed !important; }
   }
   {% if pgs.header_pill_mobile %}
-    #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]):has(header.is-pill) { position: fixed !important; top: var(--storelib-header-top, 0px) !important; }
+    #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]):has(header.is-pill) { position: fixed !important; }
   {% endif %}
   /* Open menu covers the announcement and the bottom bar, and stays
      above them until the slide finishes. */
@@ -163,36 +143,28 @@
         attributes.observe(html, {attributes: true, attributeFilter: ['class']});
         for (const el of observed) attributes.observe(el, {attributes: true, attributeFilter: ['data-sticky-announcement', 'hidden', 'class']});
       }
-      /* Heights only, then scrollY. Reading each bar's screen position fed
-         the header's own top back into the next frame, so arriving at the
-         top snapped the announcement in and shoved the header down. */
-      let flow = 0, sticky = 0;
-      const y = Math.max(0, scrollY || 0);
+      let offset = 0;
       const tops = new Map();
       for (const bar of bars) {
         const root = sectionOf(bar);
         if (!root) continue;
-        const before = !header || (bar.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING);
-        if (!before) continue;
-        const style = getComputedStyle(bar);
-        if (bar.hidden || style.display === 'none' || style.visibility === 'hidden') continue;
-        const height = Math.round(heights.get(bar) || heights.get(root) || 0);
+        tops.set(root, offset);
+        if (bar.dataset.stickyAnnouncement !== 'true') continue;
+        if (header && !(bar.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+        const height = Math.round(heights.get(root) || 0);
+        // Not laid out yet, or display: none (the observer reports 0).
         if (!height) continue;
-        if (bar.dataset.stickyAnnouncement === 'true') {
-          tops.set(root, sticky);
-          sticky += height;
-        } else {
-          tops.set(root, flow);
-          flow += height;
-        }
+        if (!heights.get(bar) && !bar.getClientRects().length) continue;
+        const style = getComputedStyle(bar);
+        if (style.display === 'none' || style.visibility === 'hidden') continue;
+        offset += height;
       }
       for (const [root, value] of tops) {
         if (written.get(root) === value) continue;
         written.set(root, value);
         root.style.setProperty('--storelib-announcement-top', value + 'px');
       }
-      const offset = sticky + Math.max(0, flow - y);
-      const px = Math.max(0, Math.round(offset)) + 'px';
+      const px = Math.max(0, offset) + 'px';
       if (written.get(html) !== px) {
         written.set(html, px);
         top = Math.max(0, offset);
@@ -212,8 +184,6 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { watch(); schedule(); }, {once: true});
     else watch();
     addEventListener('resize', schedule, {passive:true});
-    addEventListener('scroll', schedule, {passive:true});
-    document.addEventListener('storelib:section-load',schedule);
     document.addEventListener('shopify:section:load', schedule);
     document.addEventListener('shopify:section:unload', schedule);
     window.StorelibStickyStack = {refresh: schedule, get top() { return top; }};
@@ -256,16 +226,13 @@
         const own = state = {header, section, lastY: 0, mode: null, hidden: false, height: null};
         own.resize = new ResizeObserver(entries => {
           if (state !== own) return;
-          for (const entry of entries) {
-            if (entry.target !== section) continue;
-            const box = entry.borderBoxSize?.[0];
-            const height = Math.round((box ? box.blockSize : section.offsetHeight) + 48);
-            if (height === own.height) return;
-            own.height = height;
-            update();
-          }
+          const box = entries[entries.length - 1].borderBoxSize?.[0];
+          const height = Math.round(box ? box.blockSize : header.offsetHeight);
+          if (height === own.height) return;
+          own.height = height;
+          update();
         });
-        own.resize.observe(section);
+        own.resize.observe(header);
         own.attributes = new MutationObserver(schedule);
         own.attributes.observe(header, {attributes: true, attributeFilter: ['data-sticky', 'data-sticky-mobile']});
       }
@@ -318,12 +285,7 @@
       section.toggleAttribute('data-sticky-always', mode === 'always');
       section.classList.toggle('scroll-up', mode === 'on-scroll-up');
       section.classList.toggle('scr-pass-header', pass);
-      const wasPinned = section.classList.contains('header-sticky');
       section.classList.toggle('header-sticky', pass);
-      if (wasPinned !== pass) {
-        section.style.transition = 'none';
-        requestAnimationFrame(() => { if (section.isConnected) section.style.transition = ''; });
-      }
       if (headerHeight != null) {
         const overlay = (header.classList.contains('transparent') && wide.matches) ||
           (header.classList.contains('transparent-mobile') && !wide.matches);
@@ -338,7 +300,6 @@
          the bar transparent for a stretch of the scroll, then snapped solid. */
       section.classList.toggle('shopify-section-header-sticky', mode !== 'none' && y > 16);
       section.classList.toggle('shopify-section-header-hidden', state.hidden);
-      if (headerHeight != null) section.style.setProperty('--header-hide-distance', headerHeight + 'px');
       /* --sticky-top: the bottom edge of what is pinned at the top right now
          (sticky announcement, plus the header while it shows). Sticky columns
          such as the product gallery sit under it. */

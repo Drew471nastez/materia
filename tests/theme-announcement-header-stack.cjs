@@ -7,9 +7,9 @@ const strip=s=>s.replace(/\{%[\s\S]*?%\}/g,'').replace(/\{\{\s*section.id\s*\}\}
  await page.addStyleTag({content:strip(source.match(/<style>([\s\S]*?)<\/style>/)[1])});
  await page.addScriptTag({content:strip(source.match(/<script>([\s\S]*?)<\/script>/)[1])});
  const offset=()=>page.evaluate(()=>parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--storelib-header-top')));
- await page.waitForFunction(()=>window.StorelibStickyStack?.top===130);assert.equal(await offset(),130);
- await page.evaluate(()=>scrollTo(0,50));await page.waitForFunction(()=>window.StorelibStickyStack?.top===80);assert.equal(await offset(),80);
- await page.evaluate(()=>scrollTo(0,180));await page.waitForFunction(()=>window.StorelibStickyStack?.top===30);assert.equal(await offset(),30);
+ await page.waitForFunction(()=>window.StorelibStickyStack?.top===30);assert.equal(await offset(),30);
+ await page.evaluate(()=>scrollTo(0,50));await page.waitForTimeout(50);assert.equal(await offset(),30);
+ await page.evaluate(()=>scrollTo(0,180));await page.waitForTimeout(50);assert.equal(await offset(),30);
  await page.evaluate(()=>document.querySelector('[data-sticky-announcement=true]').style.height='50px');await page.waitForFunction(()=>window.StorelibStickyStack?.top===50);
  assert.equal(await page.locator('#shopify-section-header').evaluate(el=>getComputedStyle(el).transitionDuration.split(',')[0]),'0.45s');
  await page.evaluate(()=>{document.querySelector('[data-sticky-announcement=true]').hidden=true;document.dispatchEvent(new CustomEvent('storelib:section-load'));});await page.waitForFunction(()=>window.StorelibStickyStack?.top===0);
