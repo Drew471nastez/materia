@@ -771,7 +771,8 @@ function HoverIntent(exitTime, elements, userConfig) {
     // A link in the drawer that leaves the page closes the drawer at once,
     // so the page it goes to (or comes back from) is never under it.
     const link = event.target.closest?.(".navigation.mobile a[href]");
-    if (link && isOpen() && !event.target.closest("open-children-toggle") && !event.defaultPrevented) {
+    const onArrow = event.target.closest?.("open-children-toggle");
+    if (link && isOpen() && !onArrow && !event.defaultPrevented) {
       const href = link.getAttribute("href") || "";
       if (href && href !== "#" && !href.startsWith("javascript:") && link.target !== "_blank") close(true);
     }
