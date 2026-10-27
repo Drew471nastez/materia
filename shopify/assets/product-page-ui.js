@@ -1122,12 +1122,15 @@
   function settle(img) {
     var frame = img._mtFrame;
     if (frame) frame.classList.remove("mt-media-loading");
+    var src = img.currentSrc || img.getAttribute("src");
+    if (src) loadedGallerySrcs.add(src);
     revealImage(img);
   }
   function healImages(gallery) {
     gallery.querySelectorAll("img").forEach(function (img) {
-      if (img.complete) {
-        if (!img.naturalWidth && !img._mtRetried && img.getAttribute("src")) onError(img);
+      var src = img.currentSrc || img.getAttribute("src");
+      if ((src && loadedGallerySrcs.has(src)) || img.complete) {
+        if (img.complete && !img.naturalWidth && !img._mtRetried && img.getAttribute("src")) onError(img);
         else settle(img);
         return;
       }
@@ -1164,8 +1167,10 @@
     var product=gallery?.getAttribute('data-mt-product-id');
     return section?.id && product ? section.id+':'+product : '';
   }
+  const loadedGallerySrcs = new Set();
   window.MateriaGalleryState={
     initial:function(gallery,count){var saved=galleryPositions.get(galleryPositionKey(gallery));return saved!=null && saved<count ? saved : 0;},
+    seen:function(gallery){return galleryPositions.has(galleryPositionKey(gallery));},
     bind:rememberGalleryPosition
   };
   function rememberGalleryPosition(gallery, sw) {
@@ -1303,7 +1308,14 @@
   document.addEventListener("storelib:settings-change", function (e) {
     var d = e && e.detail;
     if(d && !d.section && d.settings && d.settings.swatch_item_type)refreshVsp(d.settings.swatch_item_type);
+    // A slider drag only changes a value. Rebuilding the product photos here
+    // is what made the thumbnails jump on every adjustment.
     if (!d || !d.section || d.live) return;
+    var keys = d.settings ? Object.keys(d.settings) : [];
+    var touchesGallery = keys.some(function (key) {
+      return /layout|thumbnail|image|media|gallery|zoom|ratio|crop/i.test(key);
+    });
+    if (keys.length && !touchesGallery) return;
     var section = document.getElementById("shopify-section-" + d.section);
     if (section) requestAnimationFrame(function () { onRedraw({ target: section }); });
   });

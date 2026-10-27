@@ -9053,6 +9053,12 @@ class SlideWithThumbs extends HTMLElement {
     this.pauseMedia();
     this.playMedia();
     if (nothumb || !this.querySelector(".thumbnail-slide")) return;
+    const gallery = this.closest("media-gallery");
+    const seen = gallery && window.MateriaGalleryState?.seen?.(gallery);
+    if (seen) {
+      this.connectThumbs();
+      return;
+    }
     const later = window.requestIdleCallback
       ? (fn) => window.requestIdleCallback(fn, { timeout: 250 })
       : (fn) => setTimeout(fn, 0);

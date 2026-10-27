@@ -813,6 +813,11 @@
   function refreshTierImages(root){
     if(!root.isConnected)return;
     const options=parse(root.dataset.options)||{},overrides=root._tierImageOverrides||{};
+    const box=root.matches('.po')?root:root.querySelector('.po');
+    if(box){
+      box.dataset.imagePosition=options.tier_image_position||box.dataset.imagePosition||'beside';
+      if(Number.isFinite(Number(options.tier_image_size)))box.style.setProperty('--po-tier-image',Math.min(120,Math.max(40,Number(options.tier_image_size)))+'px');
+    }
     root.querySelectorAll('.po-tier[data-tier-index]').forEach(row=>{
       const index=row.dataset.tierIndex,key='tier_'+index+'_image';
       const stored=root.getAttribute('data-tier-image-'+index);
@@ -925,6 +930,7 @@
       this.upsellChoices=[];
       const s=this.options;
       const box=node('div',kind==='upsell_pro'?'upsell-pro':kind==='quantity_offer'?'po po-qty':'po po-bundle');box.dataset.style=s.style||'cards';
+      if(kind==='quantity_offer'){box.dataset.imagePosition=s.tier_image_position||'beside';if(Number.isFinite(Number(s.tier_image_size)))box.style.setProperty('--po-tier-image',Math.min(120,Math.max(40,Number(s.tier_image_size)))+'px');}
       const numeric=kind==='upsell_pro'?{padding_top:'--up-pt',padding_bottom:'--up-pb',gap:'--up-gap',image_size_px:'--up-img',heading_size:'--up-heading-size',heading_gap:'--up-heading-gap'}:{padding_top:'--po-pad-top',padding_bottom:'--po-pad-bottom'};
       Object.entries(numeric).forEach(([key,token])=>{if(s[key]!=null && Number.isFinite(Number(s[key])))box.style.setProperty(token,Math.max(0,Number(s[key]))+'px');});
       if(s.accent_color)box.style.setProperty('--po-accent',s.accent_color);
