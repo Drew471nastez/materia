@@ -61,10 +61,10 @@
   {% if pgs.header_pill_mobile %}
     #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]):has(header.is-pill) { position: fixed !important; }
   {% endif %}
-  /* Open menu covers the announcement and the bottom bar, and stays
-     above them until the slide finishes. */
-  html.nav-open #shopify-section-{{ section.id }}[data-storelib-sticky],
-  html.nav-open #shopify-section-{{ section.id }} {
+  /* Only while the drawer is still inside the bar (no top layer). Forcing
+     transform off on an open popover wiped the scroll-up hide and left the
+     bar always showing, or not showing, after the menu closed. */
+  html.nav-open #shopify-section-{{ section.id }}:not(:has(.navigation.mobile:popover-open)) {
     transform: none !important;
     z-index: 40 !important;
     pointer-events: auto;
@@ -229,9 +229,14 @@
         const own = state = {header, section, lastY: 0, mode: null, hidden: false, height: null};
         own.resize = new ResizeObserver(entries => {
           if (state !== own) return;
+          /* The open phone menu is inside the bar. Its full-screen height must
+             not become the bar's height, or sticky turns off or turns into
+             always-on when the menu closes. */
+          if (html.matches('.nav-open, .nav-closing, .open-drawer, .open-search, .open-minicart')) return;
           const box = entries[entries.length - 1].borderBoxSize?.[0];
           const height = Math.round(box ? box.blockSize : header.offsetHeight);
-          if (height === own.height) return;
+          if (!height || height === own.height) return;
+          if (own.height && own.height < 200 && height > own.height + 120) return;
           own.height = height;
           update();
         });
@@ -252,8 +257,14 @@
       const y = measured && mode !== 'none' ? Math.min(Math.max(0, scrollY), Math.max(0, html.scrollHeight - innerHeight)) : 0;
       const barTop = typeof stack?.top === 'number' ? stack.top : (parseFloat(getComputedStyle(html).getPropertyValue('--storelib-header-top')) || 0);
       const pill = header.classList.contains('is-pill');
+      /* The phone menu locks the page (overflow hidden) and reports a scroll
+         of 0. Treating that as a real scroll made "show on scroll up" stick
+         always, hide for good, or drop sticky entirely once the menu closed. */
+      const menuLock = html.matches('.nav-open, .nav-closing, .open-drawer, .open-search, .open-minicart');
+      const resume = !menuLock && !!state.menuLock;
+      if (menuLock && !state.menuLock) state.savedY = scrollY || state.lastY || 0;
       let knownHeight = headerHeight;
-      if (knownHeight == null && mode !== 'none' && !pill) {
+      if (knownHeight == null && mode !== 'none' && !pill && !menuLock) {
         knownHeight = Math.round(header.getBoundingClientRect().height);
         if (knownHeight) state.height = knownHeight;
       }
@@ -267,7 +278,7 @@
         section.before(state.marker);
       }
       let slot = barTop;
-      if (pinMode) {
+      if (pinMode && !menuLock && !resume) {
         const space = overlay ? 0 : knownHeight;
         if (state.spacerH !== space) {
           state.spacerH = space;
@@ -280,35 +291,55 @@
           state.pin = pin;
           section.style.setProperty('--storelib-header-pin', pin);
         }
+      } else if (pinMode) {
+        slot = state.slot ?? barTop;
       } else if (state.spacerH) {
         state.spacerH = 0;
         state.marker.style.height = '0px';
         state.pin = '';
         section.style.removeProperty('--storelib-header-pin');
       }
-      let pass = false;
-      if (mode === 'on-scroll-up' && y > 0 && pinMode) {
-        /* The home slot has scrolled above the stick line, so the bar is
-           pinned and may hide. Focus in the bar used to block this for good. */
-        pass = slot < barTop + 0.5;
-        const pinned = html.matches(pinsQuery) ||
-          (header.classList.contains('open-submenu') && header.matches(':hover'));
-        const delta = y - state.lastY;
-        const nearTop = slot > barTop - (knownHeight || 80);
-        if (!pass || pinned || (nearTop && delta < 0)) {
-          state.hidden = false;
-          state.lastY = y;
-        } else if (delta > 24) {
-          state.hidden = true;
-          state.lastY = y;
-        } else if (delta < -12) {
-          state.hidden = false;
-          state.lastY = y;
+      let pass = !!state.wasPass;
+      if (menuLock) {
+        state.menuLock = true;
+      } else if (resume) {
+        state.menuLock = false;
+        const saved = state.savedY;
+        state.lastY = typeof saved === 'number' ? saved : y;
+        if (typeof saved === 'number' && saved > 1 && Math.abs(y - saved) > 2) {
+          requestAnimationFrame(() => {
+            if (!html.matches('.nav-open, .nav-closing, .open-drawer, .open-search, .open-minicart') && Math.abs(scrollY - saved) > 2) {
+              scrollTo({ top: saved, behavior: 'auto' });
+            }
+          });
         }
-      } else {
+      }
+      if (!menuLock && mode === 'on-scroll-up' && pinMode) {
+        /* The home slot has scrolled above the stick line, so the bar is
+           pinned and may hide. Closing the menu is not a scroll. */
+        pass = (resume ? state.lastY : y) > 0 && slot < barTop + 0.5;
+        if (!resume) {
+          const hoveringMenu = header.classList.contains('open-submenu') && header.matches(':hover');
+          const delta = y - state.lastY;
+          const nearTop = slot > barTop - (knownHeight || 80);
+          if (!pass || hoveringMenu || (nearTop && delta < 0)) {
+            state.hidden = false;
+            state.lastY = y;
+          } else if (delta > 24) {
+            state.hidden = true;
+            state.lastY = y;
+          } else if (delta < -12) {
+            state.hidden = false;
+            state.lastY = y;
+          }
+        }
+      } else if (!menuLock) {
         state.hidden = false;
         state.lastY = y;
+        pass = false;
       }
+      state.wasPass = pass;
+      state.slot = slot;
       // Writes.
       if (changed) {
         if (classes.some(c => section.classList.contains(c))) section.classList.remove(...classes);
