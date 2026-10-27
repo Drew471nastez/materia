@@ -33,6 +33,8 @@
 - The early interaction bridge now also handles hamburger and product overlay
   controls before later editor selection handlers. Mobile toggle hit testing is
   protected, and basic navigation has a fallback if another theme module fails.
+  Password and normal layouts also forward recognized form submissions to the
+  early waitlist handler before later editor submit interception.
 
 ## Platform agent: countdown sidebar UI
 

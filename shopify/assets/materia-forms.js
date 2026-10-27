@@ -327,7 +327,7 @@
     }, true);
 
     // Window capture runs before the theme's and Storelib's document listeners.
-    addEventListener('submit', event => {
+    const onSubmit = event => {
       const form = event.target;
       if (!isForm(form)) return;
       if(design()&&form.hasAttribute('data-mt-inline-subscribe')&&(form.querySelector('[data-preview-mode]')?.dataset.previewMode||form.dataset.previewSubmit)!=='live'){
@@ -361,8 +361,9 @@
       pending(form, event.submitter || form.querySelector('[type="submit"]'), true);
       const key = typeOf(form) === 'contact' ? '' : (emailOf(form) ? hash(emailOf(form)) : '');
       watch(form, event.submitter, Boolean(key && seen().includes(key)), key);
-    }, true);
-
+    };
+    window.materiaForms.handleSubmit=onSubmit;
+    if(!window.__materiaSectionLinkCapture)addEventListener('submit',onSubmit,true);
     // A page drawn after a full post (no script on the way there) still gets the toast.
     const init = () => {
       armAll();
@@ -383,7 +384,7 @@
   /* Builder: nothing is sent. A form that carries its own success words shows
      them as the toast it would show on the live site, with a line saying where
      sign-ups go, so the creator can see and time the success state. */
-  window.addEventListener('submit', event => {
+  const onPreviewSubmit = event => {
     const form = event.target;
     if (!isForm(form) || ownSuccess(form)) return;
     if(form.hasAttribute('data-mt-inline-subscribe')){
@@ -404,8 +405,9 @@
     form.querySelectorAll('[data-mt-error]').forEach(clearFieldError);
     const preview = typeOf(form) === 'contact' ? '' : ' Sign-ups go to Subscribers on your live site.';
     toast(say(form).successMessage + preview, form, say(form).successMs);
-  }, true);
-  addEventListener('input', event => {
+  };
+  window.materiaForms.handleSubmit=onPreviewSubmit;
+  if(!window.__materiaSectionLinkCapture)window.addEventListener('submit',onPreviewSubmit,true);  addEventListener('input', event => {
     const field = event.target;
     if (field?.getAttribute?.('data-mt-error') && field.checkValidity()) clearFieldError(field);
     const form=field?.form;if(form?.dataset.state==='preview'&&emailOf(form)!==form.dataset.subscribedEmail){const button=form.querySelector('[data-subscribed]'),label=button?.querySelector('[data-inline-label]');if(label)label.textContent=button.dataset.inlineOriginalLabel;button?.removeAttribute('data-subscribed');delete form.dataset.state;}
