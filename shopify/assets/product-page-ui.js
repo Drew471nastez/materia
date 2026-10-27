@@ -1207,22 +1207,32 @@
       rebuildSlider(holder);
       return;
     }
-    var slides = el.querySelectorAll(":scope > .swiper-wrapper > .swiper-slide");
-    var same = slides.length === sw.slides.length;
-    for (var i = 0; same && i < slides.length; i++) if (slides[i] !== sw.slides[i]) same = false;
+    var slides = el.querySelectorAll(":scope > .swiper-wrapper > .swiper-slide:not(.swiper-slide-duplicate)");
+    var liveSlides = [];
+    for (var s = 0; s < sw.slides.length; s++) if (!sw.slides[s].classList.contains("swiper-slide-duplicate")) liveSlides.push(sw.slides[s]);
+    var same = slides.length === liveSlides.length;
+    for (var i = 0; same && i < slides.length; i++) if (slides[i] !== liveSlides[i]) same = false;
+    // A settings change kept this gallery. Measuring it and calling update()
+    // is what shifted the thumbnails on every slider drag.
+    if (gallery._mtHeld && same && el.classList.contains("swiper-initialized")) {
+      rememberGalleryPosition(gallery, sw);
+      return;
+    }
     var width = el.clientWidth;
-    if (!same || (width && Math.abs((sw.width || 0) - width) > 1)) sw.update();
+    if (!same || (width && Math.abs((sw.width || 0) - width) > 8)) sw.update();
     if (!slides.length) return;
     rememberGalleryPosition(gallery, sw);
     if (sw.activeIndex > slides.length - 1) sw.slideTo(0, 0, false);
     if (!inView || !width) return;
-    // The current slide must be inside the frame.
+    // The current slide must be inside the frame. A zero box is a frame
+    // mid-redraw, not a slide that left the picture.
     var active = sw.slides[sw.activeIndex];
     if (!active) return;
     var a = active.getBoundingClientRect();
     var b = el.getBoundingClientRect();
+    if (a.width < 1 || b.width < 1) return;
     var horizontal = typeof sw.isHorizontal !== "function" || sw.isHorizontal();
-    var outside = horizontal ? (a.width < 1 || a.right <= b.left + 1 || a.left >= b.right - 1) : (a.height < 1 || a.bottom <= b.top + 1 || a.top >= b.bottom - 1);
+    var outside = horizontal ? (a.right <= b.left + 1 || a.left >= b.right - 1) : (a.bottom <= b.top + 1 || a.top >= b.bottom - 1);
     if (outside) {
       sw.update();
       sw.slideTo(sw.activeIndex, 0, false);
