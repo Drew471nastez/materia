@@ -74,27 +74,7 @@
     }
     disconnectedCallback() { this._resize?.disconnect(); }
   }
-  const grabbed=new WeakSet();
-  function grab(row){
-    if(!row||grabbed.has(row))return;grabbed.add(row);
-    let active,frame=0,ignoreClick=false;
-    row.addEventListener('dragstart',event=>event.preventDefault());
-    row.addEventListener('pointerdown',event=>{
-      if(event.pointerType!=='mouse'||event.button!==0||event.target.closest('button,a,input,select,textarea'))return;
-      active={id:event.pointerId,x:event.clientX,start:row.scrollLeft,last:event.clientX,drag:false,snap:row.style.scrollSnapType,behavior:row.style.scrollBehavior};
-    });
-    row.addEventListener('pointermove',event=>{
-      if(!active||active.id!==event.pointerId)return;
-      active.last=event.clientX;
-      if(!active.drag&&Math.abs(event.clientX-active.x)>5){active.drag=true;row.setPointerCapture(event.pointerId);row.setAttribute('data-grabbing','');row.style.setProperty('scroll-snap-type','none','important');row.style.setProperty('scroll-behavior','auto','important');}
-      if(!active.drag)return;event.preventDefault();
-      if(!frame)frame=requestAnimationFrame(()=>{frame=0;if(active)row.scrollLeft=active.start+active.x-active.last;});
-    });
-    const finish=()=>{if(!active)return;cancelAnimationFrame(frame);frame=0;if(active.drag){row.scrollLeft=active.start+active.x-active.last;ignoreClick=true;setTimeout(()=>ignoreClick=false,0);}if(active.snap)row.style.scrollSnapType=active.snap;else row.style.removeProperty('scroll-snap-type');if(active.behavior)row.style.scrollBehavior=active.behavior;else row.style.removeProperty('scroll-behavior');row.removeAttribute('data-grabbing');active=null;};
-    row.addEventListener('pointerup',finish);row.addEventListener('pointercancel',finish);row.addEventListener('lostpointercapture',finish);
-    row.addEventListener('pointerleave',()=>{if(active&&!active.drag)active=null;});
-    row.addEventListener('click',event=>{if(ignoreClick){event.preventDefault();event.stopImmediatePropagation();}},true);
-  }
+  function grab(){ /* Mouse drag for these rows is one handler in global.js. */ }
   if (!customElements.get('product-testimonials')) customElements.define('product-testimonials', ProductTestimonials);
   if (!customElements.get('product-countdown-badge')) customElements.define('product-countdown-badge', ProductCountdownBadge);
   setInterval(() => { if (!document.hidden) badges.forEach(badge => badge.tick()); }, 1000);

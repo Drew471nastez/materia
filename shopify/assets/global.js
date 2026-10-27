@@ -24,6 +24,59 @@
   Swiper.__materiaDrag = true;
   window.Swiper = Swiper;
 })();
+/* Mouse drag for sideways scrollers (testimonials, product rows, and the
+   other snap tracks). Touch already scrolls them. A mouse does not, and
+   scroll-snap was pulling the row to the next card instead of following
+   the cursor. */
+(() => {
+  if (window.__materiaMouseDrag) return;
+  window.__materiaMouseDrag = true;
+  let drag = null;
+  const blocked = 'button, a, input, textarea, select, label, summary';
+  const rowOf = (node) => {
+    let el = node instanceof Element ? node : null;
+    if (!el || el.closest(blocked)) return null;
+    while (el && el !== document.documentElement) {
+      if (el.classList.contains('swiper')) return null;
+      const style = getComputedStyle(el);
+      const snap = style.scrollSnapType || '';
+      const sideways = snap.startsWith('x') || el.hasAttribute('data-testimonial-row') || el.hasAttribute('data-drag-scroll');
+      if (sideways && el.scrollWidth > el.clientWidth + 8) return el;
+      el = el.parentElement;
+    }
+    return null;
+  };
+  document.addEventListener('pointerdown', (event) => {
+    if (drag || event.pointerType !== 'mouse' || event.button !== 0) return;
+    const row = rowOf(event.target);
+    if (!row) return;
+    drag = { row, id: event.pointerId, x: event.clientX, start: row.scrollLeft, moved: false };
+    row.style.setProperty('scroll-snap-type', 'none', 'important');
+    row.style.setProperty('scroll-behavior', 'auto', 'important');
+  }, true);
+  document.addEventListener('pointermove', (event) => {
+    if (!drag || event.pointerId !== drag.id) return;
+    const dx = event.clientX - drag.x;
+    if (!drag.moved) {
+      if (Math.abs(dx) < 2) return;
+      drag.moved = true;
+      drag.row.classList.add('is-dragging');
+      drag.row.setPointerCapture?.(event.pointerId);
+    }
+    drag.row.scrollLeft = drag.start - dx;
+    event.preventDefault();
+  }, { passive: false });
+  const end = (event) => {
+    if (!drag || (event && event.pointerId != null && event.pointerId !== drag.id)) return;
+    const row = drag.row;
+    row.classList.remove('is-dragging');
+    row.style.removeProperty('scroll-snap-type');
+    row.style.removeProperty('scroll-behavior');
+    drag = null;
+  };
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
+})();
 var BlsLazyloadImg = (function () {
   return {
     init: function (scope = document) {
