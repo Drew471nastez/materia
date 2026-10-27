@@ -48,33 +48,22 @@
 <script>(function () {
   if (window.__materiaCardPress) return;
   window.__materiaCardPress = true;
-  var held = null, pending = null, since = 0, timer = 0, opts = {passive: true, capture: true};
-  function drop(el) { if (el) el.removeAttribute('data-pc-press'); }
-  function release(event) {
-    if (!held) return;
-    var el = held;
-    held = null;
-    clearTimeout(timer);
-    if (event && event.type === 'pointercancel') { drop(el); return; }
-    pending = el;
-    timer = setTimeout(function () { drop(el); pending = null; }, Math.max(0, 380 - (Date.now() - since)));
-  }
-  document.addEventListener('pointerdown', function (event) {
-    if (event.pointerType === 'mouse' || !event.isPrimary || !event.target.closest) return;
-    var el = event.target.closest('.product-item__inner.hover-effect');
-    if (!el || event.target.closest('button, button-wishlist, product-form, .pc-corner')) return;
-    clearTimeout(timer);
-    if (pending && pending !== el) drop(pending);
-    if (held && held !== el) drop(held);
-    pending = null;
-    held = el;
-    since = Date.now();
-    el.setAttribute('data-pc-press', '');
-  }, opts);
-  document.addEventListener('pointerup', release, opts);
-  document.addEventListener('pointercancel', release, opts);
-  window.addEventListener('pagehide', function () { release(); document.querySelectorAll('[data-pc-press]').forEach(drop); });
-})();</script>
+  let active, timer, startX, startY, peeked, suppress;
+  const clear = () => { clearTimeout(timer); active?.removeAttribute('data-pc-press'); active = null; };
+  document.addEventListener('pointerdown', event => {
+    if (event.pointerType === 'mouse' || !event.isPrimary || event.target.closest('button,button-wishlist,product-form,.pc-corner')) return;
+    clear(); peeked = false; suppress = null;
+    active = event.target.closest('.product-item__inner.hover-effect');
+    if (!active) return;
+    startX = event.clientX; startY = event.clientY;
+    timer = setTimeout(() => { if(active){ active.setAttribute('data-pc-press',''); peeked = true; } }, 450);
+  }, {passive:true});
+  document.addEventListener('pointermove', event => { if(active && Math.hypot(event.clientX-startX,event.clientY-startY)>10) clear(); }, {passive:true});
+  document.addEventListener('pointerup', () => { if(peeked && active) suppress = active; clear(); }, {passive:true});
+  document.addEventListener('pointercancel', clear, {passive:true});
+  document.addEventListener('click', event => { if(suppress && suppress.contains(event.target)){event.preventDefault();event.stopImmediatePropagation();} suppress=null; }, true);
+  window.addEventListener('pagehide',clear);
+})();</script>>
 {%- if settings.enable_custom_card_actions -%}
   {%- assign s = settings -%}
   <style data-pc-custom-actions>

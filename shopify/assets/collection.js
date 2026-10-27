@@ -758,11 +758,37 @@ eventCollectionShopify.init();
   class FacetsRoot extends HTMLElement {
     connectedCallback() {
       if (this._bound) {
+        document.addEventListener('pointerdown', this._dismissOutside, true);
+        document.addEventListener('click', this._dismissOutside, true);
         this.markSort();
         this.watchLayout();
         return;
       }
       this._bound = true;
+      // Manual light dismissal consumes the whole gesture. Native auto-popover
+      // dismissal can deliver its click to a product revealed underneath it.
+      const panel = this.filterPanel;
+      panel?.setAttribute('popover', 'manual');
+      this._dismissOutside = event => {
+        if (!this.isConnected) return;
+        if (event.type === 'click' && this._swallowDismiss) {
+          event.preventDefault(); event.stopImmediatePropagation(); this._swallowDismiss = false; return;
+        }
+        const panel = this.filterPanel;
+        if (!panel?.matches(':popover-open') || this.panelInline) return;
+        const rect = panel.getBoundingClientRect();
+        const outside = event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+        if (!outside) return;
+        event.preventDefault(); event.stopImmediatePropagation();
+        if (event.type === 'pointerdown') {
+          this._swallowDismiss = true;
+          clearTimeout(this._swallowTimer);
+          this._swallowTimer = setTimeout(() => { this._swallowDismiss = false; }, 800);
+        }
+        this.closeDrawer({restoreFocus:true});
+      };
+      document.addEventListener('pointerdown', this._dismissOutside, true);
+      document.addEventListener('click', this._dismissOutside, true);
       this.onClick = this.onClick.bind(this);
       this.onKeydown = this.onKeydown.bind(this);
       this.onSubmit = this.onSubmit.bind(this);
@@ -802,6 +828,9 @@ eventCollectionShopify.init();
     }
 
     disconnectedCallback() {
+      clearTimeout(this._closeTimer);
+      document.removeEventListener('pointerdown', this._dismissOutside, true);
+      document.removeEventListener('click', this._dismissOutside, true);
       this._request?.abort();
       this._request = null;
       this._pendingHref = null;
@@ -999,11 +1028,15 @@ eventCollectionShopify.init();
 
     closeDrawer({ restoreFocus = false } = {}) {
       const panel = this.filterPanel;
-      if (panel && panel.matches(':popover-open')) {
+      if (!panel || !panel.matches(':popover-open') || panel.classList.contains('is-closing')) return;
+      panel.classList.add('is-closing');
+      const finish = () => {
         try { panel.hidePopover(); } catch (error) {}
-      }
-      document.documentElement.classList.remove('facets-locked');
-      if (restoreFocus) this.querySelector('[data-facets-open]')?.focus({ preventScroll: true });
+        panel.classList.remove('is-closing');
+        document.documentElement.classList.remove('facets-locked');
+        if (restoreFocus) this.querySelector('[data-facets-open]')?.focus({preventScroll:true});
+      };
+      this._closeTimer = setTimeout(finish, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 340);
     }
 
     get sectionId() {
@@ -1016,6 +1049,10 @@ eventCollectionShopify.init();
 
     onClick(event) {
       if (event.defaultPrevented || event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const closer = event.target.closest('[popovertargetaction="hide"]');
+      if (closer && closer.getAttribute('popovertarget') === this.filterPanel?.id) {
+        event.preventDefault(); this.closeDrawer({restoreFocus:true}); return;
+      }
       const sort = event.target.closest('a[data-facets-sort]');
       if (sort && this.contains(sort)) {
         event.preventDefault();
@@ -1070,6 +1107,7 @@ eventCollectionShopify.init();
     }
 
     onKeydown(event) {
+      if (event.key === 'Escape' && this.filterPanel?.matches(':popover-open')) { event.preventDefault(); this.closeDrawer({restoreFocus:true}); return; }
       if (event.key === 'Tab' && this.trapFocus(event)) return;
       if (event.key === 'Escape' && this.dropdownRow) {
         const open = event.target.closest('details[data-facets-group][open]');

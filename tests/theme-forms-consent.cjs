@@ -283,7 +283,7 @@ const contrast=(a,b)=>{const x=lum(rgb(a))+0.05,y=lum(rgb(b))+0.05;return x>y?x/
 
     await openForms(footer(''));
     assert.equal(await fp.locator('#ContactFooter [data-mt-trap] input[name="company"]').count(),1,'trap field added');
-    assert.equal(await fp.$eval('#ContactFooter [data-mt-trap]',el=>el.getAttribute('aria-hidden')+','+el.querySelector('input').tabIndex+','+(el.getBoundingClientRect().right<0)),'true,-1,true','trap is out of sight and reach');
+    assert.equal(await fp.$eval('#ContactFooter [data-mt-trap]',el=>el.getAttribute('aria-hidden')+','+el.querySelector('input').tabIndex+','+(el.hidden||el.getBoundingClientRect().right<0)),'true,-1,true','trap is out of sight and reach, including layouts without the form stylesheet');
     await fp.fill('#NewsletterForm','ana@example.com');
     await fp.click('#Subscribe');
     const busy=await fp.evaluate(()=>({pending:document.querySelector('#Subscribe').classList.contains('materia-form-pending'),busy:document.querySelector('#ContactFooter').getAttribute('aria-busy'),sending:document.querySelector('#ContactFooter').hasAttribute('data-mt-sending')}));

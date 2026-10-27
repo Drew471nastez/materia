@@ -366,11 +366,18 @@
   var insetFrame = 0;
   function bottomInset() {
     var h = window.innerHeight, inset = 0;
-    var parts = document.querySelectorAll('mobile-navigation-bar, .mobile-navigation-bar, cookie-consent[data-open] [data-consent-panel]');
+    var parts = document.querySelectorAll('sticky-add-cart, mobile-navigation-bar, .mobile-navigation-bar, cookie-consent[data-open] [data-consent-panel]');
     for (var i = 0; i < parts.length; i++) {
       var el = parts[i];
       if (!el.getClientRects().length) continue;
       var cs = getComputedStyle(el);
+      if (el.matches('sticky-add-cart')) {
+        if (!el.classList.contains('show-sticky-cart')) continue;
+        // Reserve the final bar height before its entrance starts, so floating
+        // controls never spend an animation frame underneath the bar.
+        inset = Math.max(inset, (parseFloat(cs.bottom) || 0) + el.offsetHeight);
+        continue;
+      }
       if (cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity === 0) continue;
       var r = el.getBoundingClientRect();
       // Only what sits low on the screen: a bar or a banner, not a full-screen modal or a top bar.
@@ -397,15 +404,18 @@
   // DOMContentLoaded forced a layout of the whole page there), then whenever
   // the bar or the banner changes size: a ResizeObserver reports after
   // layout, so it never forces one (this was a second timed check at 1.2s).
+  var insetSettle = 0;
+  new MutationObserver(() => { queueInset(); clearTimeout(insetSettle); insetSettle = setTimeout(queueInset, 380); }).observe(document.documentElement, {attributes:true, attributeFilter:['class']});
   function watchInset() {
     if (typeof ResizeObserver === 'function') {
       var ro = new ResizeObserver(queueInset), seen = [];
       var watch = function () {
-        var parts = document.querySelectorAll('mobile-navigation-bar, .mobile-navigation-bar, cookie-consent [data-consent-panel]');
+        var parts = document.querySelectorAll('sticky-add-cart, mobile-navigation-bar, .mobile-navigation-bar, cookie-consent [data-consent-panel]');
         for (var i = 0; i < parts.length; i++) if (seen.indexOf(parts[i]) < 0) { seen.push(parts[i]); ro.observe(parts[i]); }
       };
       watch();
       document.addEventListener('materia:consent', watch);
+      document.addEventListener('storelib:section-load', watch);
       try { new MutationObserver(watch).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['data-open'] }); } catch (e) {}
     }
     queueInset();

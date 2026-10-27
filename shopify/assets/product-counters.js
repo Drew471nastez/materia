@@ -17,7 +17,8 @@
     if(raw==null||!/^\d+$/.test(raw.trim())){const row=root.querySelector('.rs__sold');if(row)row.hidden=true;return;}
     const count=Number(raw);if(!Number.isSafeInteger(count))return;
     const value=root.querySelector('[data-verified-sold-count]');if(value){const text=value.textContent.replace(/^\s*\d+/,String(count));if(text!==value.textContent)value.textContent=text;}
-    const row=root.querySelector('.rs__sold');if(row)row.hidden=count===0;
+    // A published zero is real data. An absent count is unknown, not zero.
+    const row=root.querySelector('.rs__sold');if(row)row.hidden=false;
   }
   const observer='IntersectionObserver'in window?new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting)update(entry.target);})):null;
   function scan(){seen.forEach(root=>{if(!root.isConnected){observer?.unobserve(root);seen.delete(root);}});document.querySelectorAll('[data-live-sold-source="product"]').forEach(root=>{if(seen.has(root))return;seen.add(root);observer?.observe(root);update(root);});}

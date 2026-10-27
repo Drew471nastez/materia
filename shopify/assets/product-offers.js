@@ -496,6 +496,8 @@
         const compare = card.querySelector('[data-tier-compare]');
         const eachEl = card.querySelector('[data-tier-each]');
         const save = card.querySelector('[data-tier-saving]');
+        const percent = card.querySelector('[data-tier-percent]');
+        if(percent){percent.hidden=!(p.percent>0);const value=percent.querySelector('[data-tier-percent-value]');if(value)value.textContent=String(p.percent);}
         if (total) total.textContent = money(p.total, this.format);
         if (eachEl) eachEl.textContent = money(p.each, this.format);
         if (compare) {

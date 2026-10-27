@@ -548,21 +548,21 @@ async function snapshot(page) {
         const point = {x: box.x + box.width / 3, y: box.y + box.height / 2};
         assert.equal(await read(), rest, `${effect}: at rest`);
         await cdp.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [point]});
-        await tp.waitForTimeout(550);
+        await tp.waitForTimeout(850);
         assert.equal(await tp.locator('[data-pc-press]').count(), 1, `${effect}: pressed while the finger is down`);
         assert.notEqual(await read(), rest, `${effect}: the effect plays on touch (${prop})`);
         if (effect === 'hover_zoom') assert.equal(await tp.$eval('.product-item__inner .secondary-image', el => getComputedStyle(el).opacity), '1', 'the second image shows on touch');
         await cdp.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
         await tp.waitForTimeout(60);
-        assert.equal(await tp.evaluate(() => window.__opens), 1, `${effect}: one tap opens the product`);
+        assert.equal(await tp.evaluate(() => window.__opens), 0, `${effect}: holding previews without navigating`);
         await tp.waitForTimeout(500);
         assert.equal(await tp.locator('[data-pc-press]').count(), 0, `${effect}: released`);
-        // A quick tap still shows it for a moment.
+        // A quick tap navigates immediately, without simulating hover.
         await cdp.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [point]});
         await cdp.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
         await tp.waitForTimeout(120);
-        assert.equal(await tp.locator('[data-pc-press]').count(), 1, `${effect}: a quick tap gives feedback`);
-        assert.equal(await tp.evaluate(() => window.__opens), 2, `${effect}: and opens once`);
+        assert.equal(await tp.locator('[data-pc-press]').count(), 0, `${effect}: a quick tap does not trigger hover`);
+        assert.equal(await tp.evaluate(() => window.__opens), 1, `${effect}: and opens once`);
         await tp.waitForTimeout(450);
         assert.equal(await tp.locator('[data-pc-press]').count(), 0);
       }

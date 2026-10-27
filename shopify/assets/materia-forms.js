@@ -45,6 +45,8 @@
     if (!isForm(form) || form.querySelector('[data-mt-trap]') || form.querySelector('[name="company"]')) return;
     const trap = document.createElement('div');
     trap.className = 'mt-trap';
+    // Remains a submitted spam-check field, even on layouts without form CSS.
+    trap.hidden = true;
     trap.setAttribute('data-mt-trap', '');
     trap.setAttribute('aria-hidden', 'true');
     const label = document.createElement('label');
