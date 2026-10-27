@@ -6,13 +6,14 @@
     initial-value: 0px;
   }
   /* Announcement surfaces stay above the moving header. */
-  .shopify-section:has([data-sticky-announcement]) {position:relative; z-index:12;}
+  .shopify-section:has([data-sticky-announcement]) {position:relative; z-index:12; overflow-anchor:none;}
   /* One sticky engine. The bar sticks under the announcement, and "show on
      scroll up" slides the whole section. Transform stays off the header itself
      so the fixed mobile menu is never trapped inside the bar. */
   #shopify-section-{{ section.id }}[data-storelib-sticky] {
     animation: none !important;
     opacity: 1 !important;
+    overflow-anchor: none;
   }
   #shopify-section-{{ section.id }}[data-storelib-sticky="none"] {
     position: relative !important;
@@ -145,36 +146,36 @@
         attributes.observe(html, {attributes: true, attributeFilter: ['class']});
         for (const el of observed) attributes.observe(el, {attributes: true, attributeFilter: ['data-sticky-announcement', 'hidden', 'class']});
       }
-      let offset = 0, visibleBottom = 0;
+      /* Heights only, then scrollY. Reading each bar's screen position fed
+         the header's own top back into the next frame, so arriving at the
+         top snapped the announcement in and shoved the header down. */
+      let flow = 0, sticky = 0;
+      const y = Math.max(0, scrollY || 0);
       const tops = new Map();
       for (const bar of bars) {
         const root = sectionOf(bar);
         if (!root) continue;
-        tops.set(root, offset);
-        if(bar.dataset.stickyAnnouncement !== 'true'){
-          if(!header || (bar.compareDocumentPosition(header)&Node.DOCUMENT_POSITION_FOLLOWING)){
-            const rect=bar.getBoundingClientRect();if(rect.height>0 && getComputedStyle(bar).visibility!=='hidden')visibleBottom=Math.max(visibleBottom,rect.bottom);
-          }
-          continue;
-        }
-        if (header && !(bar.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
-        const rect=bar.getBoundingClientRect();
-        if(rect.height>0 && getComputedStyle(bar).visibility!=='hidden')visibleBottom=Math.max(visibleBottom,rect.bottom);
-        const height = Math.round(heights.get(root) || 0);
-        // Not laid out yet, or display: none (the observer reports 0).
-        if (!height) continue;
-        if (!heights.get(bar) && !bar.getClientRects().length) continue;
+        const before = !header || (bar.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING);
+        if (!before) continue;
         const style = getComputedStyle(bar);
-        if (style.display === 'none' || style.visibility === 'hidden') continue;
-        offset += height;
+        if (bar.hidden || style.display === 'none' || style.visibility === 'hidden') continue;
+        const height = Math.round(heights.get(bar) || heights.get(root) || 0);
+        if (!height) continue;
+        if (bar.dataset.stickyAnnouncement === 'true') {
+          tops.set(root, sticky);
+          sticky += height;
+        } else {
+          tops.set(root, flow);
+          flow += height;
+        }
       }
       for (const [root, value] of tops) {
         if (written.get(root) === value) continue;
         written.set(root, value);
         root.style.setProperty('--storelib-announcement-top', value + 'px');
       }
-      offset=Math.max(offset,visibleBottom);
-      const px = Math.max(0, offset) + 'px';
+      const offset = sticky + Math.max(0, flow - y);
+      const px = Math.max(0, Math.round(offset)) + 'px';
       if (written.get(html) !== px) {
         written.set(html, px);
         top = Math.max(0, offset);
