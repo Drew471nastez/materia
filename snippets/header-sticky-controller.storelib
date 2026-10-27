@@ -1,8 +1,11 @@
 <template compat="shopify">
 <style>
-  /* One sticky engine. The bar sticks under the announcement, and "show on
-     scroll up" slides the whole section. Transform stays off the header itself
-     so the fixed mobile menu is never trapped inside the bar. */
+  /* One sticky engine, native position: sticky. The browser moves the bar
+     with the page itself, so it can never trail the scroll, overlap an
+     announcement or leave a gap. It sticks under any sticky bar above it
+     (--storelib-header-top); bars that are not sticky scroll away first.
+     "Show on scroll up" only slides the bar with a transform: its place in
+     the page never changes, so nothing below it moves. */
   #shopify-section-{{ section.id }}[data-storelib-sticky] {
     animation: none !important;
     opacity: 1 !important;
@@ -12,34 +15,25 @@
     top: auto !important;
     transform: none !important;
   }
-  /* Fixed, not sticky. The header group is only as tall as the bar, so
-     position: sticky dies as soon as that group scrolls away and scroll-up
-     can never bring the bar back. A spacer keeps its place, and its height
-     does not change while scrolling, so the page does not jump. */
   #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]):not(:has(header.is-pill)) {
-    position: fixed !important;
-    top: var(--storelib-header-pin, var(--storelib-header-top, 0px)) !important;
-    left: 0;
-    right: 0;
-    width: 100%;
+    position: sticky !important;
+    top: var(--storelib-header-top, 0px) !important;
     z-index: 11;
-    /* Not !important: the hide rule below must be able to slide the bar away.
-       An important transform here beat that rule, so "show on scroll up"
-       stayed on screen the whole time. */
     transform: none;
     animation: none !important;
-    /* One timing for hiding and coming back. The curve eases out, so a fast
-       flick up still glides the bar in instead of jumping to the end. */
-    transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
-    background: transparent !important;
-    background-image: none !important;
-    overflow-anchor: none;
+    /* Coming back: eases out, so even a fast flick up glides the bar in. */
+    transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1);
   }
-  /* Hide by sliding the bar itself. Its place in the page does not change,
-     so the content underneath never jumps. The extra offset clears a sticky
-     announcement so the bottom edge cannot sit on that bar. */
-  #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].shopify-section-header-hidden {
-    transform: translate3d(0, calc(-100% - var(--storelib-header-top, 0px) - 16px), 0) !important;
+  /* Its own layer while it can slide, so the first frame never snaps. Not
+     while the phone menu is open: a layer would trap the menu in the bar. */
+  html:not(.nav-open) #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].shopify-section-header-sticky {
+    will-change: transform;
+  }
+  /* Leaving: speeds up as it goes, under any sticky bar above it (that bar
+     draws on top), and fully off screen. */
+  #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].shopify-section-header-hidden:not(:has(header.is-pill)) {
+    transform: translate3d(0, calc(-100% - var(--storelib-header-top, 0px) - 4px), 0) !important;
+    transition: transform 320ms cubic-bezier(0.4, 0, 0.2, 1);
     pointer-events: none;
   }
   #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].shopify-section-header-hidden > header.header {
@@ -47,9 +41,10 @@
   }
   span[data-header-anchor] {
     display: block;
+    flex: 0 0 0px;
     height: 0;
+    margin: 0;
     overflow-anchor: none;
-    background: transparent;
     pointer-events: none;
   }
   #shopify-section-{{ section.id }} > header.header {
@@ -64,15 +59,13 @@
   {% if pgs.header_pill_mobile %}
     #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]):has(header.is-pill) { position: fixed !important; }
   {% endif %}
-  /* Only while the drawer is still inside the bar (no top layer). Forcing
-     transform off on an open popover wiped the scroll-up hide and left the
-     bar always showing, or not showing, after the menu closed. */
-  html.nav-open #shopify-section-{{ section.id }}:not(:has(.navigation.mobile:popover-open)) {
+  /* While the phone menu is open the bar stays put, above the page. */
+  html.nav-open #shopify-section-{{ section.id }} {
     transform: none !important;
     z-index: 40 !important;
     pointer-events: auto;
     overflow: visible !important;
-    transition: z-index 0s 0s !important;
+    transition: none !important;
   }
   @media (max-width: 1024.98px) {
     .navigation.mobile {
@@ -157,7 +150,7 @@
         tops.set(root, offset);
         if (bar.dataset.stickyAnnouncement !== 'true') continue;
         if (header && !(bar.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
-        const height = Math.round(heights.get(root) || 0);
+        const height = heights.get(root) || 0;
         // Not laid out yet, or display: none (the observer reports 0).
         if (!height) continue;
         if (!heights.get(bar) && !bar.getClientRects().length) continue;
@@ -198,237 +191,155 @@
 })();
 (() => {
   if (!window.StorelibHeaderSticky) {
-    /* One read pass, then one write pass, writing only what changed. The
-       header's height comes from a ResizeObserver (reported after the
-       browser's own layout); the scroll position is not read until the page
-       has been scrolled or has loaded, because before that it is at the top
-       and reading it would lay out a page still arriving. */
+    /* Per frame at most: one read pass (the scroll position and one marker
+       just before the header), then writes of only what changed. Heights come
+       from ResizeObservers, reported after the browser's own layout. */
     let state, frame;
+    /* The scroll position is not read until the page has been scrolled or
+       has loaded: before that it is at the top, and reading it would lay out
+       a page still arriving. */
     let measured = document.readyState === 'complete';
     const html = document.documentElement;
     const wide = matchMedia('(min-width: 1025px)');
-    const classes = ['scroll-up', 'header-sticky', 'scr-pass-header', 'animate', 'shopify-section-header-sticky', 'shopify-section-header-hidden'];
-    const stale = ['animate', 'sl-hdr-hidden', 'sl-header-snap'];
-    const pinsQuery = '.nav-open, .open-search, .open-minicart';
-    let rootPinned = html.matches(pinsQuery);
+    const LOCK = '.nav-open, .nav-closing, .open-drawer, .open-search, .open-minicart';
+    const legacy = ['animate', 'scr-pass-header', 'sl-hdr-hidden', 'sl-header-snap'];
     const findHeader = () => document.querySelector('header.header[data-sticky]');
+    const setVar = (el, name, value) => { if (el.style.getPropertyValue(name) !== value) el.style.setProperty(name, value); };
     const teardown = () => {
       state?.resize?.disconnect();
       state?.attributes?.disconnect();
       state?.marker?.remove();
     };
+    const setup = header => {
+      teardown();
+      const section = header.closest('.section-header, .shopify-section, [id^="shopify-section-"]');
+      if (!section) return null;
+      const own = {header, section, mode: null, hidden: false, height: 0, lastY: 0, turnY: 0, dir: 0, locked: false};
+      own.resize = new ResizeObserver(entries => {
+        if (state !== own) return;
+        // The open phone menu lives in the bar; its full-screen size is not the bar's.
+        if (html.matches(LOCK)) return;
+        const box = entries[entries.length - 1].borderBoxSize?.[0];
+        const height = Math.round(box ? box.blockSize : header.offsetHeight);
+        if (height && height !== own.height) { own.height = height; schedule(); }
+      });
+      own.resize.observe(header);
+      own.attributes = new MutationObserver(schedule);
+      own.attributes.observe(header, {attributes: true, attributeFilter: ['data-sticky', 'data-sticky-mobile', 'class']});
+      /* A wrapper around the whole header group is only as tall as its bars,
+         so sticky would end as soon as it scrolled away. It is laid out as if
+         it were not there (display: contents), so the bars and the header sit
+         in the page itself. A wrapper around this section alone is left. */
+      const group = section.parentElement;
+      if (group && group !== document.body && group.tagName !== 'MAIN' && !group.querySelector('main') &&
+          [...group.children].some(el => el !== section && el.matches('.shopify-section, [id^="shopify-section-"]'))) {
+        group.style.setProperty('display', 'contents', 'important');
+      }
+      own.marker = document.createElement('span');
+      own.marker.dataset.headerAnchor = '';
+      own.marker.setAttribute('aria-hidden', 'true');
+      section.before(own.marker);
+      return own;
+    };
     const update = () => {
-      if (frame != null) { cancelAnimationFrame(frame); frame = null; }
+      frame = null;
       const header = findHeader();
-      if (!header) {
-        teardown();
-        state = null;
-        return;
+      if (!header) { teardown(); state = null; return; }
+      if (!state || state.header !== header || !state.section.isConnected) {
+        state = setup(header);
+        if (!state) return;
       }
-      if (!state || state.header !== header) {
-        teardown();
-        const section = header.closest('.section-header, .shopify-section, [id^="shopify-section-"]');
-        if (!section) return;
-        const own = state = {header, section, lastY: 0, mode: null, hidden: false, height: null};
-        own.resize = new ResizeObserver(entries => {
-          if (state !== own) return;
-          /* The open phone menu is inside the bar. Its full-screen height must
-             not become the bar's height, or sticky turns off or turns into
-             always-on when the menu closes. */
-          if (html.matches('.nav-open, .nav-closing, .open-drawer, .open-search, .open-minicart')) return;
-          const box = entries[entries.length - 1].borderBoxSize?.[0];
-          const height = Math.round(box ? box.blockSize : header.offsetHeight);
-          if (!height || height === own.height) return;
-          if (own.height && own.height < 200 && height > own.height + 120) return;
-          own.height = height;
-          update();
-        });
-        own.resize.observe(header);
-        own.attributes = new MutationObserver(schedule);
-        own.attributes.observe(header, {attributes: true, attributeFilter: ['data-sticky', 'data-sticky-mobile']});
-      }
-      const {section} = state;
-      // Reads.
-      const headerHeight = state.height;
-      const stack = window.StorelibStickyStack;
+      if (!state.marker.isConnected) state.section.before(state.marker);
+      const s = state, {section} = s;
       let mode = header.dataset.sticky;
-      if (!['always', 'on-scroll-up'].includes(mode) ||
-          (!wide.matches && header.dataset.stickyMobile === 'false')) mode = 'none';
-      const changed = mode !== state.mode;
-      /* Clamped to the real scroll range: the rubber band past the top or the
-         bottom of the page on a phone is not a scroll up or down. */
-      const y = measured && mode !== 'none' ? Math.min(Math.max(0, scrollY), Math.max(0, html.scrollHeight - innerHeight)) : 0;
-      const barTop = typeof stack?.top === 'number' ? stack.top : (parseFloat(getComputedStyle(html).getPropertyValue('--storelib-header-top')) || 0);
+      if (!['always', 'on-scroll-up'].includes(mode) || (!wide.matches && header.dataset.stickyMobile === 'false')) mode = 'none';
       const pill = header.classList.contains('is-pill');
-      /* The phone menu locks the page (overflow hidden) and reports a scroll
-         of 0. Treating that as a real scroll made "show on scroll up" stick
-         always, hide for good, or drop sticky entirely once the menu closed. */
-      const menuLock = html.matches('.nav-open, .nav-closing, .open-drawer, .open-search, .open-minicart');
-      const resume = !menuLock && !!state.menuLock;
-      if (menuLock && !state.menuLock) state.savedY = scrollY || state.lastY || 0;
-      let knownHeight = headerHeight;
-      if (knownHeight == null && mode !== 'none' && !pill && !menuLock) {
-        knownHeight = Math.round(header.getBoundingClientRect().height);
-        if (knownHeight) state.height = knownHeight;
-      }
-      const overlay = knownHeight != null && ((header.classList.contains('transparent') && wide.matches) ||
-        (header.classList.contains('transparent-mobile') && !wide.matches));
-      const pinMode = mode !== 'none' && !pill && knownHeight > 0;
-      if (!state.marker?.isConnected) {
-        state.marker = document.createElement('span');
-        state.marker.dataset.headerAnchor = '';
-        state.marker.style.cssText = 'display:block;height:0;overflow-anchor:none;pointer-events:none;background:transparent;';
-        section.before(state.marker);
-      }
-      let slot = barTop;
-      if (pinMode && !menuLock && !resume) {
-        const space = overlay ? 0 : knownHeight;
-        if (state.spacerH !== space) {
-          state.spacerH = space;
-          state.marker.style.height = space + 'px';
+      const top = Math.max(0, window.StorelibStickyStack?.top || 0);
+      const locked = html.matches(LOCK);
+      // Reads.
+      const y = measured ? Math.min(Math.max(0, scrollY), Math.max(0, html.scrollHeight - innerHeight)) : 0;
+      // At the top of the page nothing needs the layout: it is not read.
+      if (!s.height && y > 0) s.height = Math.round(header.getBoundingClientRect().height);
+      const height = s.height;
+      const slot = y > 0 ? s.marker.getBoundingClientRect().top : Infinity;
+      // Decide.
+      if (locked) {
+        // A drawer, search or the phone menu holds the page: nothing moves.
+        s.locked = true;
+      } else {
+        if (s.locked) { s.locked = false; s.lastY = s.turnY = y; s.hidden = false; }
+        if (mode === 'on-scroll-up' && !pill) {
+          /* Hides only once the bar's own place has scrolled out of view,
+             and only on a real change of direction: 12px down hides, 8px up
+             shows. A finger or trackpad wobble does neither. Over an open
+             dropdown or with focus inside, it stays. */
+          const delta = y - s.lastY;
+          const dir = delta > 0 ? 1 : delta < 0 ? -1 : s.dir;
+          if (dir !== s.dir) { s.dir = dir; s.turnY = s.lastY; }
+          const away = slot + height <= top + 1;
+          const held = !!header.querySelector(':focus-visible') ||
+            (header.classList.contains('open-submenu') && header.matches(':hover'));
+          if (!away || held || y <= 0) s.hidden = false;
+          else if (dir > 0 && y - s.turnY > 12) s.hidden = true;
+          else if (dir < 0 && s.turnY - y > 8) s.hidden = false;
+        } else {
+          s.hidden = false;
         }
-        slot = state.marker.getBoundingClientRect().top;
-        /* Every bar above the header, sticky or not. The header sits on the
-           bottom edge of whichever of them is still on screen, so it never
-           slides underneath, and the page's sticky offset uses that same edge. */
-        let pinTop = 0;
-        const parent = section.parentElement;
-        if (parent) {
-          for (const el of parent.children) {
-            if (el === section || el === state.marker) break;
-            const rect = el.getBoundingClientRect();
-            if (rect.height < 1 || rect.bottom <= 0) continue;
-            pinTop = Math.max(pinTop, Math.round(rect.bottom));
-          }
-        }
-        const stick = Math.max(barTop, pinTop);
-        state.liveTop = stick;
-        const pin = stick + 'px';
-        if (state.pin !== pin) {
-          state.pin = pin;
-          section.style.setProperty('--storelib-header-pin', pin);
-          html.style.setProperty('--storelib-header-top', pin);
-          html.style.setProperty('--sl-header-offset', pin);
-          html.style.setProperty('--height-bar', pin);
-        }
-      } else if (pinMode) {
-        slot = state.slot ?? barTop;
-      } else if (state.spacerH) {
-        state.spacerH = 0;
-        state.marker.style.height = '0px';
-        state.pin = '';
-        section.style.removeProperty('--storelib-header-pin');
+        s.lastY = y;
       }
-      let pass = !!state.wasPass;
-      if (menuLock) {
-        state.menuLock = true;
-      } else if (resume) {
-        state.menuLock = false;
-        const saved = state.savedY;
-        state.lastY = typeof saved === 'number' ? saved : y;
-        if (typeof saved === 'number' && saved > 1 && Math.abs(y - saved) > 2) {
-          requestAnimationFrame(() => {
-            if (!html.matches('.nav-open, .nav-closing, .open-drawer, .open-search, .open-minicart') && Math.abs(scrollY - saved) > 2) {
-              scrollTo({ top: saved, behavior: 'auto' });
-            }
-          });
-        }
-      }
-      if (!menuLock && mode === 'on-scroll-up' && pinMode) {
-        /* The home slot has scrolled above the stick line, so the bar is
-           pinned and may hide. Closing the menu is not a scroll. */
-        pass = (resume ? state.lastY : y) > 0 && slot < barTop + 0.5;
-        if (!resume) {
-          const hoveringMenu = header.classList.contains('open-submenu') && header.matches(':hover');
-          const delta = y - state.lastY;
-          const nearTop = slot > barTop - (knownHeight || 80);
-          if (!pass || hoveringMenu || (nearTop && delta < 0)) {
-            state.hidden = false;
-            state.lastY = y;
-          } else if (delta > 24) {
-            state.hidden = true;
-            state.lastY = y;
-          } else if (delta < -12) {
-            state.hidden = false;
-            state.lastY = y;
-          }
-        }
-      } else if (!menuLock) {
-        state.hidden = false;
-        state.lastY = y;
-        pass = false;
-      }
-      state.wasPass = pass;
-      state.slot = slot;
+      const overlay = (header.classList.contains('transparent') && wide.matches) ||
+        (header.classList.contains('transparent-mobile') && !wide.matches);
       // Writes.
-      if (changed) {
-        if (classes.some(c => section.classList.contains(c))) section.classList.remove(...classes);
-        section.removeAttribute('data-sticky-always');
-        state.mode = mode;
+      if (mode !== s.mode) {
+        s.mode = mode;
+        section.classList.remove(...legacy);
+        s.hidden = false;
       }
-      const cssMode = pinMode || pill || mode === 'none' ? mode : 'none';
-      if (section.dataset.storelibSticky !== cssMode) section.dataset.storelibSticky = cssMode;
+      if (section.dataset.storelibSticky !== mode) section.dataset.storelibSticky = mode;
       section.toggleAttribute('data-sticky-always', mode === 'always');
       section.classList.toggle('scroll-up', mode === 'on-scroll-up');
-      section.classList.toggle('scr-pass-header', pass);
-      section.classList.toggle('header-sticky', pass);
-      if (knownHeight != null && !pinMode) {
-        const margin = overlay ? (-knownHeight) + 'px' : '';
-        if (state.margin !== margin) {
-          state.margin = margin;
-          if (margin) section.style.setProperty('margin-bottom', margin, 'important');
-          else section.style.removeProperty('margin-bottom');
-        }
-      } else if (state.margin) {
-        state.margin = '';
-        section.style.removeProperty('margin-bottom');
+      // Solid once the page has left the top (the transparent header fades to it).
+      const scrolled = mode !== 'none' && y > 8;
+      section.classList.toggle('shopify-section-header-sticky', scrolled);
+      section.classList.toggle('header-sticky', scrolled && slot <= top + 1);
+      section.classList.toggle('shopify-section-header-hidden', s.hidden);
+      // A transparent header lies over what follows it.
+      const margin = overlay && height ? -height + 'px' : '';
+      if (s.margin !== margin) {
+        s.margin = margin;
+        if (margin) section.style.setProperty('margin-bottom', margin, 'important');
+        else section.style.removeProperty('margin-bottom');
       }
-      /* Solid only after leaving the top. A full header-height threshold left
-         the bar transparent for a stretch of the scroll, then snapped solid. */
-      section.classList.toggle('shopify-section-header-sticky', mode !== 'none' && y > 16);
-      section.classList.toggle('shopify-section-header-hidden', state.hidden);
-      /* --sticky-top: the bottom edge of what is pinned at the top right now
-         (sticky announcement, plus the header while it shows). Sticky columns
-         such as the product gallery sit under it. */
-      if (knownHeight != null) {
-        const liveTop = typeof state.liveTop === 'number' ? state.liveTop : barTop;
-        const stickyTop = Math.round(liveTop + (mode !== 'none' && !state.hidden ? knownHeight : 0)) + 'px';
-        if (state.productTop !== stickyTop) {
-          state.productTop = stickyTop;
-          html.style.setProperty('--product-sticky-top', stickyTop);
-        }
-        if (state.stickyTop !== stickyTop) {
-          state.stickyTop = stickyTop;
-          html.style.setProperty('--sticky-top', stickyTop);
-        }
-      }
-      for (const c of stale) if (section.classList.contains(c)) section.classList.remove(c);
+      const px = top + 'px';
+      setVar(html, '--storelib-header-top', px);
+      setVar(html, '--sl-header-offset', px);
+      /* --sticky-top: the bottom edge of what is pinned at the top now (a
+         sticky bar, plus the header while it shows). Sticky columns such as
+         the product gallery sit under it. */
+      const pinned = mode !== 'none' && !s.hidden ? height : 0;
+      const stickyTop = Math.round(top + pinned) + 'px';
+      setVar(html, '--sticky-top', stickyTop);
+      setVar(html, '--product-sticky-top', stickyTop);
     };
     function schedule() { if (frame == null) frame = requestAnimationFrame(update); }
-    // A header added later (a builder redraw). Watched once the page has
-    // arrived: during parsing every inserted node would be a record.
+    // A header drawn again (a builder redraw) or added later.
     const watch = () => new MutationObserver(records => {
-      if (records.some(r => [...r.addedNodes, ...r.removedNodes].some(n =>
-        n.nodeType === 1 && (n.matches?.('header.header[data-sticky]') || n.querySelector?.('header.header[data-sticky]'))))) schedule();
-    }).observe(html, {subtree: true, childList: true});
+      for (const r of records) for (const n of [...r.addedNodes, ...r.removedNodes]) {
+        if (n.nodeType === 1 && (n.matches('header.header[data-sticky]') || n.querySelector('header.header[data-sticky]'))) return schedule();
+      }
+    }).observe(document.body || html, {subtree: true, childList: true});
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { watch(); schedule(); }, {once: true});
     else watch();
-    // Only the classes that hold the header in view matter here.
-    new MutationObserver(() => {
-      const pinned = html.matches(pinsQuery);
-      if (pinned !== rootPinned) { rootPinned = pinned; schedule(); }
-    }).observe(html, {attributes: true, attributeFilter: ['class']});
+    new MutationObserver(schedule).observe(html, {attributes: true, attributeFilter: ['class']});
     const seen = () => { measured = true; };
     addEventListener('scroll', seen, {passive: true, once: true});
     addEventListener('scroll', schedule, {passive: true});
-    document.addEventListener('scroll', schedule, {passive: true, capture: true});
     addEventListener('resize', schedule, {passive: true});
     addEventListener('pageshow', () => { seen(); schedule(); });
-    const inHeader = event => { if (state?.header.contains(event.target)) schedule(); };
-    document.addEventListener('focusin', inHeader);
-    document.addEventListener('focusout', inHeader);
-    document.addEventListener('shopify:section:load', schedule);
-    document.addEventListener('shopify:section:unload', schedule);
+    addEventListener('load', () => { seen(); schedule(); }, {once: true});
+    wide.addEventListener?.('change', schedule);
+    document.addEventListener('focusin', schedule);
+    ['storelib:section-load', 'shopify:section:load', 'shopify:section:unload'].forEach(n => document.addEventListener(n, schedule));
     window.StorelibHeaderSticky = {register: schedule, refresh: schedule};
   }
   window.StorelibHeaderSticky.refresh();
