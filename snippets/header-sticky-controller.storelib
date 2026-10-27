@@ -22,16 +22,29 @@
        in instead of jumping most of the way in the first frames. */
     transition: transform 450ms cubic-bezier(.45, 0, .2, 1), z-index 0s 0.55s;
   }
-  /* Slide the bar itself fully away, including its shadow. Do not also
-     subtract the announcement offset: that dragged the bar through the
-     announcement and left its bottom edge on screen. */
-  #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].shopify-section-header-hidden {
+  /* Once the bar has left the page it is fixed, so its old slot cannot
+     scroll back in as a blank white block. */
+  #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].header-sticky {
+    position: fixed !important;
+    top: var(--storelib-header-top, 0px) !important;
+    left: 0;
+    right: 0;
+    width: 100%;
+    background: transparent !important;
+    background-image: none !important;
+  }
+  #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].header-sticky.shopify-section-header-hidden {
     transform: translate3d(0, calc(-100% - 24px), 0) !important;
     pointer-events: none;
     transition: transform 520ms cubic-bezier(.4, 0, .2, 1);
   }
-  #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].shopify-section-header-hidden > header.header {
+  #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].header-sticky.shopify-section-header-hidden > header.header {
     box-shadow: none !important;
+  }
+  span[data-header-anchor] {
+    display: block;
+    background: transparent;
+    pointer-events: none;
   }
   #shopify-section-{{ section.id }} > header.header {
     transition: box-shadow .42s ease, background-color .42s ease, color .42s ease;
@@ -238,7 +251,8 @@
         const pinned = html.matches(pinsQuery) || header.contains(document.activeElement) ||
           (header.classList.contains('open-submenu') && header.matches(':hover'));
         const delta = y - state.lastY;
-        if (!pass || pinned) {
+        const nearTop = y < threshold + (headerHeight || 80);
+        if (!pass || pinned || (nearTop && delta < 0)) {
           state.hidden = false;
           state.lastY = y;
         } else if (delta > 24) {
@@ -261,14 +275,24 @@
       if (!state.marker?.isConnected) {
         state.marker = document.createElement('span');
         state.marker.dataset.headerAnchor = '';
-        state.marker.style.cssText = 'display:block;height:0;pointer-events:none;';
+        state.marker.style.cssText = 'display:block;height:0;pointer-events:none;background:transparent;';
         section.before(state.marker);
+      }
+      const spacerH = pass ? Math.round(state.height || section.offsetHeight || 0) : 0;
+      if (state.marker && state.spacerH !== spacerH) {
+        state.spacerH = spacerH;
+        state.marker.style.height = spacerH + 'px';
       }
       if (section.dataset.storelibSticky !== mode) section.dataset.storelibSticky = mode;
       section.toggleAttribute('data-sticky-always', mode === 'always');
       section.classList.toggle('scroll-up', mode === 'on-scroll-up');
       section.classList.toggle('scr-pass-header', pass);
+      const wasPinned = section.classList.contains('header-sticky');
       section.classList.toggle('header-sticky', pass);
+      if (wasPinned !== pass) {
+        section.style.transition = 'none';
+        requestAnimationFrame(() => { if (section.isConnected) section.style.transition = ''; });
+      }
       if (headerHeight != null) {
         const overlay = (header.classList.contains('transparent') && wide.matches) ||
           (header.classList.contains('transparent-mobile') && !wide.matches);
