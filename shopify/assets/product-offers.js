@@ -257,10 +257,11 @@
         if (form && form.getAttribute('id') === this.dataset.formId) { this.selectionVersion = (this.selectionVersion || 0) + 1; if (this.button) { this.button.dataset.added='false'; actionLabel(this.button,this.addedText).textContent=this.button.dataset.idleLabel; } this.onVariant(String(input.value)); }
       }, {signal: this.events.signal});
       this.setup();
+      if(this.localName==='quantity-offer')watchTierImages(this);
       if (this.button) this.button.hidden = this.dataset.showButton === 'false' || this.dataset.purchaseAction === 'main';
       scheduleMainOfferButtons();
     }
-    disconnectedCallback() { this.events?.abort(); scheduleMainOfferButtons(); }
+    disconnectedCallback() { this.events?.abort(); unwatchTierImages(this); scheduleMainOfferButtons(); }
     form() { return this.dataset.formId ? document.getElementById(this.dataset.formId) : null; }
     formVariant() {
       const input = this.form()?.querySelector('[name="id"]');
@@ -797,15 +798,72 @@
   const pictureUrl = value => {
     let raw = '';
     if (typeof value === 'string') raw = value;
-    else if (value && typeof value === 'object') raw = value.src || value.url || value.preview_image?.src || value.preview_image || '';
+    else if (value && typeof value === 'object') return pictureUrl(value.src || value.url || value.preview_image || value.image || '');
     raw = String(raw || '').trim();
-    if (!raw) return '';
+    if (!raw || raw.includes('[object Object]')) return '';
     try {
       const url = new URL(raw, location.href);
       if (!['http:', 'https:'].includes(url.protocol)) return '';
       return url.href;
     } catch (_) { return ''; }
   };
+  // The canvas patches attributes/children without reconnecting custom elements.
+  // Update only artwork: preserve selected tier, cart state and product gallery.
+  const tierImageWatches=new WeakMap();
+  function refreshTierImages(root){
+    if(!root.isConnected)return;
+    const options=parse(root.dataset.options)||{},overrides=root._tierImageOverrides||{};
+    root.querySelectorAll('.po-tier[data-tier-index]').forEach(row=>{
+      const index=row.dataset.tierIndex,key='tier_'+index+'_image';
+      const stored=root.getAttribute('data-tier-image-'+index);
+      const picked=Object.prototype.hasOwnProperty.call(overrides,key)?overrides[key]:stored||options[key];
+      const cleared=picked==null||picked==='';
+      let src=pictureUrl(picked);
+      if(!src&&!cleared)src=pictureUrl(root.getAttribute('data-tier-image-'+index));
+      const style=options.style||root.dataset.style||root.querySelector('.po-qty')?.dataset.style;
+      if(!src&&cleared&&style==='image_tiles')src=pictureUrl(root.dataset.image);
+      let img=row.querySelector('.po-tier__image');
+      if(!src){img?.remove();return;}
+      if(!img){img=node('img','po-tier__image');img.width=120;img.height=120;img.loading='eager';img.decoding='async';(row.querySelector('.po-tier__main')||row.querySelector('.po-tier__card')).prepend(img);}
+      if(img.getAttribute('src')!==src){img.removeAttribute('srcset');img.src=src;}
+      img.alt=(typeof picked==='object'&&picked?.alt)||options['tier_'+index+'_caption']||options['tier_'+index+'_label']||root.dataset.title||'';
+    });
+  }
+  function unwatchTierImages(root){const watch=tierImageWatches.get(root);if(watch){watch.observer.disconnect();cancelAnimationFrame(watch.frame);tierImageWatches.delete(root);}}
+  function watchTierImages(root){
+    unwatchTierImages(root);
+    const watch={frame:0},schedule=()=>{if(!watch.frame)watch.frame=requestAnimationFrame(()=>{watch.frame=0;refreshTierImages(root);});};
+    watch.observer=new MutationObserver(records=>{
+      for(const record of records)if(record.type==='attributes'&&record.target===root){
+        if(record.attributeName==='data-options'){const updated=parse(root.dataset.options)||{};root._tierImageOverrides=Object.fromEntries([1,2,3,4].map(index=>['tier_'+index+'_image',updated['tier_'+index+'_image']??null]));}
+        const match=record.attributeName.match(/^data-tier-image-([1-4])$/);
+        if(match)(root._tierImageOverrides||={})['tier_'+match[1]+'_image']=root.getAttribute(record.attributeName);
+      }
+      schedule();
+    });
+    watch.observer.observe(root,{attributes:true,attributeFilter:['data-options','data-tier-image-1','data-tier-image-2','data-tier-image-3','data-tier-image-4','data-image','data-style'],childList:true,subtree:true});
+    tierImageWatches.set(root,watch);refreshTierImages(root);
+  }
+  document.addEventListener('storelib:settings-change',event=>{
+    const detail=event.detail||{};let settings=detail.settings||{};
+    const blockId=typeof detail.block==='object'?detail.block?.id:detail.block||detail.blockId;
+    let roots=[...document.querySelectorAll('quantity-offer,storelib-product-offers[data-kind="quantity_offer"]')];
+    const sectionId=typeof detail.section==='object'?detail.section?.id:detail.section||detail.sectionId;
+    if(sectionId)roots=roots.filter(root=>{const section=root.closest('.shopify-section,[data-section-id]');return section&&(section.id==='shopify-section-'+sectionId||section.id===sectionId||section.dataset.sectionId===sectionId);});
+    if(blockId)roots=roots.filter(root=>root.dataset.blockId===blockId);
+    const target=event.target?.closest?.('quantity-offer,storelib-product-offers[data-kind="quantity_offer"]');if(target)roots=roots.filter(root=>root===target);
+    if(roots.length!==1)return; // Never apply one block's upload to another.
+    settings=settings[roots[0].dataset.blockId]?.settings||settings[roots[0].dataset.blockId]||settings;
+    const images=Object.fromEntries(Object.entries(settings).filter(([key])=>/^tier_[1-4]_image$/.test(key)));
+    if(!Object.keys(images).length)return;
+    Object.assign(roots[0]._tierImageOverrides||={},images);refreshTierImages(roots[0]);
+  });
+  document.addEventListener('storelib:section-load',event=>{
+    const scope=event.target?.querySelectorAll?event.target:document;
+    const selector='quantity-offer,storelib-product-offers[data-kind="quantity_offer"]';
+    const roots=[...scope.querySelectorAll(selector)];if(scope.matches?.(selector))roots.push(scope);
+    roots.forEach(root=>{delete root._tierImageOverrides;watchTierImages(root);});
+  });
   let nativeOfferSequence=0;
   const tierPrice = (tier, variant) => {
     const paid = Math.max(1, Number(tier.quantity) || 1), free = Math.max(0, Number(tier.freeQuantity) || 0);
@@ -842,9 +900,11 @@
       const payload=parse(this.dataset.offers);
       if (payload && typeof payload==='object') { this.draw(payload); this.ready=Promise.resolve(); }
       else this.ready=readOffers('/api/offers?product='+encodeURIComponent(this.dataset.productId)).then(data=>{if(this.isConnected && !signal.aborted){this.offerLoadFailed=!data;if(data)this.draw(data);}});
+      if(this.dataset.kind==='quantity_offer')watchTierImages(this);
       scheduleMainOfferButtons();
     }
     disconnectedCallback(){
+      unwatchTierImages(this);
       this.events?.abort(); scheduleMainOfferButtons();
       this.form()?.querySelectorAll('[data-native-offer-owner="'+this.instance+'"]').forEach(input=>input.remove());
     }
@@ -943,7 +1003,7 @@
       const uploaded=pictureUrl(picked);
       return {
         n,
-        image: uploaded || ((picked||s.style==='image_tiles') ? pictureUrl((parse(this.dataset.tierImages)||[])[n-1]) || pictureUrl(this.dataset.image) : ''),
+        image: uploaded || ((picked||s.style==='image_tiles') ? pictureUrl(this.getAttribute('data-tier-image-'+n) || (parse(this.dataset.tierImages)||[])[n-1]) || pictureUrl(this.dataset.image) : ''),
         alt: (picked && typeof picked==='object' && picked.alt) || s['tier_'+n+'_caption'] || s['tier_'+n+'_label'] || '',
         caption: s['tier_'+n+'_caption'] || '',
         badge: s['tier_'+n+'_badge'] || '',
@@ -961,6 +1021,7 @@
       tiers.forEach(({tier,index},i)=>{
         const slot=this.tierSlot(index,tier);
         const label=node('label','po-tier'),radio=node('input','po-tier__radio');radio.type='radio';radio.name='native-tier-'+this.instance;radio.checked=i===initial;radio.value=String(Number(tier.quantity)+Number(tier.freeQuantity||0));
+        label.dataset.tierIndex=String(index+1);
         const card=node('span','po-tier__card'),main=node('span','po-tier__main'),prices=node('span','po-tier__prices');
         if(slot.image){const img=node('img','po-tier__image');img.src=slot.image;img.alt=slot.alt||tier.label||this.dataset.title||'';img.width=120;img.height=120;img.loading='lazy';img.decoding='async';main.append(img);}
         main.append(node('span','po-tier__label',tier.label||slot.caption||radio.value));
