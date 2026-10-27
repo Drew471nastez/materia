@@ -12,17 +12,22 @@
     top: auto !important;
     transform: none !important;
   }
-  #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]) {
-    position: sticky !important;
-    top: var(--storelib-header-top, 0px) !important;
+  /* Fixed, not sticky. The header group is only as tall as the bar, so
+     position: sticky dies as soon as that group scrolls away and scroll-up
+     can never bring the bar back. A spacer keeps its place, and its height
+     does not change while scrolling, so the page does not jump. */
+  #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]):not(:has(header.is-pill)) {
+    position: fixed !important;
+    top: var(--storelib-header-pin, var(--storelib-header-top, 0px)) !important;
+    left: 0;
+    right: 0;
+    width: 100%;
     z-index: 11;
     transform: none !important;
     animation: none !important;
     /* One timing for hiding and coming back. The curve eases out, so a fast
        flick up still glides the bar in instead of jumping to the end. */
     transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
-    /* The bar stays in normal flow. Switching it to fixed, or growing a
-       spacer under it, is what yanked the page on every scroll. */
     background: transparent !important;
     background-image: none !important;
     overflow-anchor: none;
@@ -246,14 +251,50 @@
          bottom of the page on a phone is not a scroll up or down. */
       const y = measured && mode !== 'none' ? Math.min(Math.max(0, scrollY), Math.max(0, html.scrollHeight - innerHeight)) : 0;
       const barTop = typeof stack?.top === 'number' ? stack.top : (parseFloat(getComputedStyle(html).getPropertyValue('--storelib-header-top')) || 0);
+      const pill = header.classList.contains('is-pill');
+      let knownHeight = headerHeight;
+      if (knownHeight == null && mode !== 'none' && !pill) {
+        knownHeight = Math.round(header.getBoundingClientRect().height);
+        if (knownHeight) state.height = knownHeight;
+      }
+      const overlay = knownHeight != null && ((header.classList.contains('transparent') && wide.matches) ||
+        (header.classList.contains('transparent-mobile') && !wide.matches));
+      const pinMode = mode !== 'none' && !pill && knownHeight > 0;
+      if (!state.marker?.isConnected) {
+        state.marker = document.createElement('span');
+        state.marker.dataset.headerAnchor = '';
+        state.marker.style.cssText = 'display:block;height:0;overflow-anchor:none;pointer-events:none;background:transparent;';
+        section.before(state.marker);
+      }
+      let slot = barTop;
+      if (pinMode) {
+        const space = overlay ? 0 : knownHeight;
+        if (state.spacerH !== space) {
+          state.spacerH = space;
+          state.marker.style.height = space + 'px';
+        }
+        slot = state.marker.getBoundingClientRect().top;
+        const stick = slot <= barTop + 1 ? barTop : Math.round(slot);
+        const pin = stick + 'px';
+        if (state.pin !== pin) {
+          state.pin = pin;
+          section.style.setProperty('--storelib-header-pin', pin);
+        }
+      } else if (state.spacerH) {
+        state.spacerH = 0;
+        state.marker.style.height = '0px';
+        state.pin = '';
+        section.style.removeProperty('--storelib-header-pin');
+      }
       let pass = false;
-      if (mode === 'on-scroll-up' && y > 0 && !changed && state.marker?.isConnected) {
-        const threshold = state.marker.getBoundingClientRect().top + y + (headerHeight || 0);
-        pass = y > threshold;
-        const pinned = html.matches(pinsQuery) || header.contains(document.activeElement) ||
+      if (mode === 'on-scroll-up' && y > 0 && pinMode) {
+        /* The home slot has scrolled above the stick line, so the bar is
+           pinned and may hide. Focus in the bar used to block this for good. */
+        pass = slot < barTop + 0.5;
+        const pinned = html.matches(pinsQuery) ||
           (header.classList.contains('open-submenu') && header.matches(':hover'));
         const delta = y - state.lastY;
-        const nearTop = y < threshold + (headerHeight || 80);
+        const nearTop = slot > barTop - (knownHeight || 80);
         if (!pass || pinned || (nearTop && delta < 0)) {
           state.hidden = false;
           state.lastY = y;
@@ -274,26 +315,22 @@
         section.removeAttribute('data-sticky-always');
         state.mode = mode;
       }
-      if (!state.marker?.isConnected) {
-        state.marker = document.createElement('span');
-        state.marker.dataset.headerAnchor = '';
-        state.marker.style.cssText = 'display:block;height:0;overflow-anchor:none;pointer-events:none;background:transparent;';
-        section.before(state.marker);
-      }
-      if (section.dataset.storelibSticky !== mode) section.dataset.storelibSticky = mode;
+      const cssMode = pinMode || pill || mode === 'none' ? mode : 'none';
+      if (section.dataset.storelibSticky !== cssMode) section.dataset.storelibSticky = cssMode;
       section.toggleAttribute('data-sticky-always', mode === 'always');
       section.classList.toggle('scroll-up', mode === 'on-scroll-up');
       section.classList.toggle('scr-pass-header', pass);
       section.classList.toggle('header-sticky', pass);
-      if (headerHeight != null) {
-        const overlay = (header.classList.contains('transparent') && wide.matches) ||
-          (header.classList.contains('transparent-mobile') && !wide.matches);
-        const margin = overlay ? (-headerHeight) + 'px' : '';
+      if (knownHeight != null && !pinMode) {
+        const margin = overlay ? (-knownHeight) + 'px' : '';
         if (state.margin !== margin) {
           state.margin = margin;
           if (margin) section.style.setProperty('margin-bottom', margin, 'important');
           else section.style.removeProperty('margin-bottom');
         }
+      } else if (state.margin) {
+        state.margin = '';
+        section.style.removeProperty('margin-bottom');
       }
       /* Solid only after leaving the top. A full header-height threshold left
          the bar transparent for a stretch of the scroll, then snapped solid. */
@@ -302,8 +339,8 @@
       /* --sticky-top: the bottom edge of what is pinned at the top right now
          (sticky announcement, plus the header while it shows). Sticky columns
          such as the product gallery sit under it. */
-      if (headerHeight != null) {
-        const stickyTop = Math.round(barTop + (mode !== 'none' && !state.hidden ? headerHeight : 0)) + 'px';
+      if (knownHeight != null) {
+        const stickyTop = Math.round(barTop + (mode !== 'none' && !state.hidden ? knownHeight : 0)) + 'px';
         if (state.productTop !== stickyTop) {
           state.productTop = stickyTop;
           html.style.setProperty('--product-sticky-top', stickyTop);
@@ -332,6 +369,7 @@
     const seen = () => { measured = true; };
     addEventListener('scroll', seen, {passive: true, once: true});
     addEventListener('scroll', schedule, {passive: true});
+    document.addEventListener('scroll', schedule, {passive: true, capture: true});
     addEventListener('resize', schedule, {passive: true});
     addEventListener('pageshow', () => { seen(); schedule(); });
     const inHeader = event => { if (state?.header.contains(event.target)) schedule(); };
