@@ -16,7 +16,7 @@
    not go through) and data-success-ms (how long the toast stays).
    A section that draws no message of its own after a post marks the redrawn
    form with a hidden [data-mt-posted] or [data-mt-failed].
-   In the builder nothing is sent; there it redraws field colours live when
+   Editor inline forms send real requests unless preview-only is selected; it redraws field colours live when
    Theme settings > Forms and fields change (snippets/field-colors does the
    same at render time). */
 (() => {
@@ -271,6 +271,7 @@
   // Newsletter sections keep their form and scroll position. Use Storelib's
   // existing /contact JSON contract, not a full section redraw/navigation.
   const inlineSubscribe = async (form, button, key, already) => {
+    const contact=typeOf(form)==='contact';
     pending(form,button,true);
     const label=button?.querySelector('[data-inline-label]');
     const original=button?.dataset.inlineOriginalLabel || label?.textContent;
@@ -279,12 +280,19 @@
     if(message){message.textContent='';message.hidden=true;}
     try {
       const url=new URL(form.action || '/contact',location.href);url.hash='';
-      if(url.origin!==location.origin || !/^\/contact(?:\/|$)/.test(url.pathname))throw new Error(say(form).errorMessage || 'Unable to subscribe.');
+      if(url.origin!==location.origin)throw new Error(say(form).errorMessage || 'Unable to send.');
+      if(!/^\/contact(?:\/|$)/.test(url.pathname))url.pathname='/contact';
       const response=await fetch(url.href,{method:'POST',credentials:'same-origin',headers:{Accept:'application/json','X-Requested-With':'XMLHttpRequest'},body:new FormData(form)});
       const result=await response.json();
       if(!response.ok || result.ok!==true)throw Object.assign(new Error(result.message || say(form).errorMessage || 'Unable to subscribe.'),{userMessage:result.message});
       if(!form.isConnected)return;
-      form.dataset.state='done';if(key)remember(key);
+      form.dataset.state='done';
+      if(contact){
+        if(!message){message=document.createElement('p');message.dataset.inlineResult='';form.append(message);}
+        message.setAttribute('role','status');message.className='mt-form-success';message.textContent=thanks(form);message.hidden=false;
+        return;
+      }
+      if(key)remember(key);
       form.dataset.subscribedEmail=emailOf(form);
       if(label)label.textContent=form.querySelector('[data-subscribed-label]')?.textContent || 'Subscribed';
       button?.setAttribute('data-subscribed','true');
@@ -294,7 +302,7 @@
       if(!form.isConnected)return;
       form.dataset.state='error';if(label)label.textContent=original;
       if(!message){message=document.createElement('p');message.dataset.inlineResult='';message.className='mt-form-error';message.setAttribute('role','alert');form.append(message);}
-      message.textContent=error.userMessage || say(form).errorMessage || error.message;message.hidden=false;
+      message.setAttribute('role','alert');message.className='mt-form-error';message.textContent=error.userMessage || say(form).errorMessage || error.message;message.hidden=false;
     } finally {pending(form,button,false);}
   };
   const previewSubscribe = (form,button) => {
@@ -303,6 +311,25 @@
     if(button&&label){button.dataset.inlineOriginalLabel||=label.textContent;label.textContent=say(form).previewSubscribedLabel||'Subscribed (preview)';button.setAttribute('data-subscribed','preview');}
     form.dataset.state='preview';form.dataset.subscribedEmail=emailOf(form);
     toast(say(form).previewSuccessMessage||'Preview complete. No email was saved.',form,say(form).successMs);
+  };
+
+  // Consume inline forms before the canvas/native section submit listeners.
+  // Editor and storefront use the same confirmed /contact response contract.
+  const handleInline = event => {
+    const form=event.target;
+    if(!isForm(form)||ownSuccess(form))return false;
+    const contact=form.hasAttribute('data-mt-inline-contact');
+    const subscribe=form.hasAttribute('data-mt-inline-subscribe')||(design()&&['customer','subscribe'].includes(typeOf(form)));
+    if(!contact&&!subscribe)return false;
+    event.preventDefault();event.stopImmediatePropagation();
+    if(form.hasAttribute('data-mt-sending')||form.hasAttribute('data-storelib-sending'))return true;
+    const button=event.submitter||form.querySelector('[type=submit]');
+    if(!form.reportValidity())return true;
+    if(form.querySelector('[name=company]')?.value)return true;
+    const mode=form.querySelector('[data-preview-mode]')?.dataset.previewMode||form.dataset.previewSubmit;
+    if(design()&&subscribe&&mode==='preview'){previewSubscribe(form,button);return true;}
+    const key=subscribe&&emailOf(form)?hash(emailOf(form)):'';
+    inlineSubscribe(form,button,key,Boolean(key&&seen().includes(key)));return true;
   };
 
   if (!design()) {
@@ -328,6 +355,7 @@
 
     // Window capture runs before the theme's and Storelib's document listeners.
     const onSubmit = event => {
+      if(handleInline(event))return;
       const form = event.target;
       if (!isForm(form)) return;
       if(design()&&form.hasAttribute('data-mt-inline-subscribe')&&(form.querySelector('[data-preview-mode]')?.dataset.previewMode||form.dataset.previewSubmit)!=='live'){
@@ -385,6 +413,7 @@
      them as the toast it would show on the live site, with a line saying where
      sign-ups go, so the creator can see and time the success state. */
   const onPreviewSubmit = event => {
+    if(handleInline(event))return;
     const form = event.target;
     if (!isForm(form) || ownSuccess(form)) return;
     if(form.hasAttribute('data-mt-inline-subscribe')){

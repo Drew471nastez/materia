@@ -1,5 +1,7 @@
 <template compat="shopify">
 <style>
+  /* Announcement surfaces stay above the moving header, without changing its animation. */
+  .shopify-section:has([data-sticky-announcement]) {z-index:12;}
   /* One sticky engine. The bar sticks under the announcement, and "show on
      scroll up" slides the whole section. Transform stays off the header itself
      so the fixed mobile menu is never trapped inside the bar. */
@@ -143,14 +145,21 @@
         attributes.observe(html, {attributes: true, attributeFilter: ['class']});
         for (const el of observed) attributes.observe(el, {attributes: true, attributeFilter: ['data-sticky-announcement', 'hidden', 'class']});
       }
-      let offset = 0;
+      let offset = 0, visibleBottom = 0;
       const tops = new Map();
       for (const bar of bars) {
         const root = sectionOf(bar);
         if (!root) continue;
         tops.set(root, offset);
-        if (bar.dataset.stickyAnnouncement !== 'true') continue;
+        if(bar.dataset.stickyAnnouncement !== 'true'){
+          if(!header || (bar.compareDocumentPosition(header)&Node.DOCUMENT_POSITION_FOLLOWING)){
+            const rect=bar.getBoundingClientRect();if(rect.height>0 && getComputedStyle(bar).visibility!=='hidden')visibleBottom=Math.max(visibleBottom,rect.bottom);
+          }
+          continue;
+        }
         if (header && !(bar.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+        const rect=bar.getBoundingClientRect();
+        if(rect.height>0 && getComputedStyle(bar).visibility!=='hidden')visibleBottom=Math.max(visibleBottom,rect.bottom);
         const height = Math.round(heights.get(root) || 0);
         // Not laid out yet, or display: none (the observer reports 0).
         if (!height) continue;
@@ -164,6 +173,7 @@
         written.set(root, value);
         root.style.setProperty('--storelib-announcement-top', value + 'px');
       }
+      offset=Math.max(offset,visibleBottom);
       const px = Math.max(0, offset) + 'px';
       if (written.get(html) !== px) {
         written.set(html, px);
@@ -184,6 +194,8 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { watch(); schedule(); }, {once: true});
     else watch();
     addEventListener('resize', schedule, {passive:true});
+    addEventListener('scroll', schedule, {passive:true});
+    document.addEventListener('storelib:section-load',schedule);
     document.addEventListener('shopify:section:load', schedule);
     document.addEventListener('shopify:section:unload', schedule);
     window.StorelibStickyStack = {refresh: schedule, get top() { return top; }};
