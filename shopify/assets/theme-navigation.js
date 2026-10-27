@@ -111,11 +111,17 @@
         urls.add(anchor.href); picked.push(anchor); menu++;
       }
       if (speculation) warmList(picked); else picked.forEach(warm);
-    }, {timeout: 1200});
+    }, {timeout: 500});
   };
   if (document.readyState !== 'loading') ready();
   else document.addEventListener('DOMContentLoaded', ready, {once: true});
   if (speculation) return;
+  // A press starts the next page before the click finishes. One link, the
+  // one under the finger. Browsers with speculation rules already do this.
+  document.addEventListener('touchstart', event => {
+    const anchor = event.target.closest?.('a[href]');
+    if (anchor) warm(anchor);
+  }, {passive: true, capture: true});
   let hoverTimer = 0;
   document.addEventListener('pointerover', event => {
     if (event.pointerType && event.pointerType !== 'mouse') return;
