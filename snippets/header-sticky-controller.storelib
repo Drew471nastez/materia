@@ -53,12 +53,17 @@
     #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]):has(header.is-pill) { position: fixed !important; }
   {% endif %}
   /* While the phone menu is open the bar stays put, above the page. */
-  html.nav-open #shopify-section-{{ section.id }} {
-    transform: none !important;
-    z-index: 40 !important;
-    pointer-events: auto;
-    overflow: visible !important;
-    transition: none !important;
+  /* Phones only, and only while the open menu is still inside the bar (no
+     top layer): a slide would trap it. A menu class left on <html> on a
+     wider screen can never stop the bar sliding. */
+  @media (max-width: 1024.98px) {
+    html.nav-open #shopify-section-{{ section.id }}:not(:has(.navigation.mobile:popover-open)) {
+      transform: none !important;
+      z-index: 40 !important;
+      pointer-events: auto;
+      overflow: visible !important;
+      transition: none !important;
+    }
   }
   @media (max-width: 1024.98px) {
     .navigation.mobile {
@@ -190,7 +195,6 @@
     let measured = document.readyState === 'complete';
     const html = document.documentElement;
     const wide = matchMedia('(min-width: 1025px)');
-    const LOCK = '.nav-open, .nav-closing, .open-drawer, .open-search, .open-minicart';
     const legacy = ['animate', 'scr-pass-header', 'sl-hdr-hidden', 'sl-header-snap'];
     const findHeader = () => document.querySelector('header.header[data-sticky]');
     const setVar = (el, name, value) => { if (el.style.getPropertyValue(name) !== value) el.style.setProperty(name, value); };
@@ -203,14 +207,13 @@
       teardown();
       const section = header.closest('.section-header, .shopify-section, [id^="shopify-section-"]');
       if (!section) return null;
-      const own = {header, section, mode: null, hidden: false, height: 0, lastY: 0, turnY: 0, dir: 0, locked: false};
+      const own = {header, section, mode: null, hidden: false, height: 0, lastY: 0, turnY: 0, dir: 0};
       own.resize = new ResizeObserver(entries => {
         if (state !== own) return;
-        // The open phone menu lives in the bar; its full-screen size is not the bar's.
-        if (html.matches(LOCK)) return;
         const box = entries[entries.length - 1].borderBoxSize?.[0];
         const height = Math.round(box ? box.blockSize : header.offsetHeight);
-        if (height && height !== own.height) { own.height = height; schedule(); }
+        // An open menu drawn inside the bar is not the bar's height.
+        if (height && height !== own.height && height < innerHeight * 0.7) { own.height = height; schedule(); }
       });
       own.resize.observe(header);
       own.attributes = new MutationObserver(schedule);
@@ -242,25 +245,18 @@
       if (!['always', 'on-scroll-up'].includes(mode) || (!wide.matches && header.dataset.stickyMobile === 'false')) mode = 'none';
       const pill = header.classList.contains('is-pill');
       const top = Math.max(0, window.StorelibStickyStack?.top || 0);
-      /* A drawer or the phone menu locks the page. If the page still scrolls
-         a good way, the class was left behind and no longer holds the bar. */
-      let locked = html.matches(LOCK);
-      if (locked) {
-        if (s.lockY == null) s.lockY = scrollY;
-        else if (Math.abs(scrollY - s.lockY) > 120) locked = false;
-      } else s.lockY = null;
       // Reads.
       const y = measured ? Math.min(Math.max(0, scrollY), Math.max(0, html.scrollHeight - innerHeight)) : 0;
       // At the top of the page nothing needs the layout: it is not read.
       if (!s.height && y > 0) s.height = Math.round(header.getBoundingClientRect().height);
       const height = s.height;
       const slot = y > 0 ? s.marker.getBoundingClientRect().top : Infinity;
-      // Decide.
-      if (locked) {
-        // A drawer, search or the phone menu holds the page: nothing moves.
-        s.locked = true;
-      } else {
-        if (s.locked) { s.locked = false; s.lastY = s.turnY = y; s.hidden = false; }
+      /* Decide, from the scroll alone. No drawer, search or menu class is
+         read: a drawer locks the page, so it does not scroll and nothing
+         changes, and a class left behind by any script can never freeze the
+         bar. Crossing the desktop / phone width starts afresh. */
+      if (s.fresh) { s.fresh = false; s.lastY = s.turnY = y; s.dir = 0; s.hidden = false; }
+      {
         if (mode === 'on-scroll-up' && !pill) {
           /* Hides once its place has scrolled away, on a real change of
              direction (12px down hides, 8px up shows). */
@@ -270,7 +266,7 @@
           const away = slot + height <= top + 1;
           /* Over an open dropdown it stays. Focus never holds it: closing the
              phone menu focuses the hamburger, which froze the bar. */
-          const held = header.classList.contains('open-submenu') && header.matches(':hover');
+          const held = !!header.querySelector('.menu-parent.visible') && header.matches(':hover');
           if (s.reveal) { s.reveal = false; s.hidden = false; s.turnY = y; }
           if (!away || held || y <= 0) s.hidden = false;
           else if (dir > 0 && y - s.turnY > 12) s.hidden = true;
@@ -328,7 +324,11 @@
     addEventListener('resize', schedule, {passive: true});
     addEventListener('pageshow', () => { seen(); schedule(); });
     addEventListener('load', () => { seen(); schedule(); }, {once: true});
-    wide.addEventListener?.('change', schedule);
+    wide.addEventListener?.('change', () => {
+      if (state) { state.fresh = true; state.height = 0; }
+      schedule();
+    });
+    document.addEventListener('storelib:settings-change', schedule);
     // Tabbing into the hidden bar brings it into view once; scrolling still hides it.
     let tabbing = false;
     document.addEventListener('keydown', e => { tabbing = e.key === 'Tab'; }, true);
