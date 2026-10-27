@@ -24,18 +24,35 @@
      transform: a transform on a sticky bar jumps on the first scroll and
      slides through the announcement. */
   #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]) {
-    position: sticky !important;
-    top: calc(var(--storelib-header-top, 0px) - var(--header-hide, 0px)) !important;
     z-index: 11;
     transform: none !important;
     animation: none !important;
-    transition: --header-hide 450ms cubic-bezier(.45, 0, .2, 1);
+    transition: transform 450ms cubic-bezier(.45, 0, .2, 1);
   }
-  #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].shopify-section-header-hidden {
-    --header-hide: var(--header-hide-distance, 72px);
+  #shopify-section-{{ section.id }}[data-storelib-sticky="always"] {
+    position: sticky !important;
+    top: var(--storelib-header-top, 0px) !important;
+  }
+  /* In normal flow until the bar has actually left the screen, so coming
+     back to the announcement does not shove a sticky header downward. */
+  #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"] {
+    position: relative !important;
+    top: auto !important;
+  }
+  #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].header-sticky {
+    position: sticky !important;
+    top: var(--storelib-header-top, 0px) !important;
+  }
+  /* Fully off the screen, shadow included. Stopping at the header's own
+     height left its bottom edge stuck to the top of the viewport. */
+  #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].header-sticky.shopify-section-header-hidden {
+    transform: translate3d(0, calc(-1 * var(--header-hide-distance, 160px)), 0) !important;
     z-index: 9;
     pointer-events: none;
-    transition: --header-hide 520ms cubic-bezier(.4, 0, .2, 1);
+    transition: transform 420ms cubic-bezier(.4, 0, .2, 1);
+  }
+  #shopify-section-{{ section.id }}[data-storelib-sticky="on-scroll-up"].shopify-section-header-hidden > header.header {
+    box-shadow: none !important;
   }
   #shopify-section-{{ section.id }} > header.header {
     transition: box-shadow .42s ease, background-color .42s ease, color .42s ease;
@@ -44,10 +61,10 @@
     transition: opacity .42s ease, background-color .42s ease;
   }
   @media (min-width: 1025px) {
-    #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]):has(header.is-pill) { position: fixed !important; top: calc(var(--storelib-header-top, 0px) - var(--header-hide, 0px)) !important; }
+    #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]):has(header.is-pill) { position: fixed !important; top: var(--storelib-header-top, 0px) !important; }
   }
   {% if pgs.header_pill_mobile %}
-    #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]):has(header.is-pill) { position: fixed !important; top: calc(var(--storelib-header-top, 0px) - var(--header-hide, 0px)) !important; }
+    #shopify-section-{{ section.id }}:is([data-storelib-sticky="always"], [data-storelib-sticky="on-scroll-up"]):has(header.is-pill) { position: fixed !important; top: var(--storelib-header-top, 0px) !important; }
   {% endif %}
   /* Open menu covers the announcement and the bottom bar, and stays
      above them until the slide finishes. */
@@ -239,13 +256,16 @@
         const own = state = {header, section, lastY: 0, mode: null, hidden: false, height: null};
         own.resize = new ResizeObserver(entries => {
           if (state !== own) return;
-          const box = entries[entries.length - 1].borderBoxSize?.[0];
-          const height = Math.round(box ? box.blockSize : header.offsetHeight);
-          if (height === own.height) return;
-          own.height = height;
-          update();
+          for (const entry of entries) {
+            if (entry.target !== section) continue;
+            const box = entry.borderBoxSize?.[0];
+            const height = Math.round((box ? box.blockSize : section.offsetHeight) + 48);
+            if (height === own.height) return;
+            own.height = height;
+            update();
+          }
         });
-        own.resize.observe(header);
+        own.resize.observe(section);
         own.attributes = new MutationObserver(schedule);
         own.attributes.observe(header, {attributes: true, attributeFilter: ['data-sticky', 'data-sticky-mobile']});
       }
@@ -298,7 +318,12 @@
       section.toggleAttribute('data-sticky-always', mode === 'always');
       section.classList.toggle('scroll-up', mode === 'on-scroll-up');
       section.classList.toggle('scr-pass-header', pass);
+      const wasPinned = section.classList.contains('header-sticky');
       section.classList.toggle('header-sticky', pass);
+      if (wasPinned !== pass) {
+        section.style.transition = 'none';
+        requestAnimationFrame(() => { if (section.isConnected) section.style.transition = ''; });
+      }
       if (headerHeight != null) {
         const overlay = (header.classList.contains('transparent') && wide.matches) ||
           (header.classList.contains('transparent-mobile') && !wide.matches);
