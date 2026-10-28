@@ -23,9 +23,9 @@
   elsif use_cf and cf != blank
     assign mq_font = cf.family | append: ', ' | append: cf.fallback_families
   elsif st.base_font == 'body'
-    assign mq_font = 'var(--body-font, inherit)'
+    assign mq_font = 'var(--body-font, var(--font-body-family, var(--theme-font-body, inherit)))'
   else
-    assign mq_font = 'var(--heading-font, inherit)'
+    assign mq_font = 'var(--heading-font, var(--font-heading-family, var(--theme-font-heading, inherit)))'
   endif
 
   # Resolve text colour: custom (default black) or follow the colour scheme.
@@ -36,10 +36,39 @@
   assign mq_weight = st.font_weight | default: 'theme'
   if mq_weight == 'theme'
     if st.base_font == 'body' and use_cf != true
-      assign mq_weight = 'var(--body-weight, 400)'
+      assign mq_weight = 'var(--body-weight, var(--font-body-weight, 400))'
     else
-      assign mq_weight = 'var(--heading-weight, 700)'
+      assign mq_weight = 'var(--heading-weight, var(--font-heading-weight, 700))'
     endif
+  endif
+
+  # Separator between words.
+  assign sep = ''
+  case st.separator
+    when 'dot'
+      assign sep = '•'
+    when 'star'
+      assign sep = '✦'
+    when 'slash'
+      assign sep = '/'
+    when 'plus'
+      assign sep = '+'
+    when 'custom'
+      assign sep = st.separator_text
+  endcase
+  assign sep_color = 'var(--stm-color)'
+  if st.separator_color != blank and st.separator_color.alpha != 0
+    assign sep_color = st.separator_color
+  endif
+  assign border_color = 'color-mix(in srgb, var(--stm-color) 18%, transparent)'
+  if st.border_color != blank and st.border_color.alpha != 0
+    assign border_color = st.border_color
+  endif
+  assign lh = st.line_height | default: 105 | divided_by: 100.0
+  assign sep_scale = st.separator_size | default: 50 | divided_by: 100.0
+  assign theme_reveal = false
+  if settings.scroll_animation != blank and settings.scroll_animation != 'none'
+    assign theme_reveal = true
   endif
 -%}
 
@@ -114,8 +143,15 @@
     box-sizing: border-box !important;
   }
 
-  /* ===== Scrolling Text marquee ===== */
-  #shopify-section-{{ section.id }} {
+  /* ===== Scrolling Text marquee =====
+     Variables live on .stm (the element carrying the colour scheme class)
+     so var(--color-text) resolves to THIS section's scheme. */
+  #shopify-section-{{ section.id }} .stm {
+    --stm-lh: {{ lh }};
+    --stm-fade: {{ st.edge_fade | default: 0 }}px;
+    --stm-sep-color: {{ sep_color }};
+    --stm-sep-scale: {{ sep_scale }};
+    --stm-border-color: {{ border_color }};
     --stm-gap: {{ st.item_gap_mobile | default: 32 }}px;
     --stm-size: {{ st.text_size_mobile | default: 40 }}px;
     --stm-pt: {{ st.padding_top_mobile | default: 16 }}px;
@@ -130,7 +166,7 @@
     --stm-color: {{ mq_color }};
   }
   @media (min-width: 768px) {
-    #shopify-section-{{ section.id }} {
+    #shopify-section-{{ section.id }} .stm {
       --stm-gap: {{ st.item_gap | default: 64 }}px;
       --stm-size: {{ st.text_size | default: 80 }}px;
       --stm-pt: {{ st.padding_top | default: 24 }}px;
@@ -150,11 +186,13 @@
     gap: var(--stm-gap);
     width: max-content;
     flex-shrink: 0;
+    align-items: center;
     animation: stm-scroll-{{ section.id }} var(--stm-duration) linear infinite;
     animation-direction: var(--stm-direction);
     will-change: transform;
   }
-  #shopify-section-{{ section.id }} .stm__viewport:hover .stm__track {
+  #shopify-section-{{ section.id }} .stm__viewport:hover .stm__track,
+  #shopify-section-{{ section.id }} .stm__viewport:focus-within .stm__track {
     animation-play-state: var(--stm-pause);
   }
   @keyframes stm-scroll-{{ section.id }} {
@@ -167,7 +205,7 @@
     font-family: var(--stm-font);
     font-size: var(--stm-size);
     font-weight: var(--stm-weight);
-    line-height: 1.05;
+    line-height: var(--stm-lh, 1.05);
     letter-spacing: var(--stm-ls);
     text-transform: var(--stm-tt);
     color: var(--stm-color);
@@ -190,12 +228,47 @@
     }
   {%- endfor -%}
 
+  #shopify-section-{{ section.id }} .stm__sep {
+    flex-shrink: 0;
+    font-family: var(--stm-font);
+    font-weight: var(--stm-weight);
+    font-size: calc(var(--stm-size) * var(--stm-sep-scale));
+    line-height: 1;
+    color: var(--stm-sep-color);
+    -webkit-text-fill-color: var(--stm-sep-color);
+  }
+  {%- if st.edge_fade > 0 -%}
+    #shopify-section-{{ section.id }} .stm__viewport {
+      -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--stm-fade), #000 calc(100% - var(--stm-fade)), transparent 100%);
+      mask-image: linear-gradient(90deg, transparent 0, #000 var(--stm-fade), #000 calc(100% - var(--stm-fade)), transparent 100%);
+    }
+  {%- endif -%}
+  {%- if st.show_borders -%}
+    #shopify-section-{{ section.id }} .stm__viewport { border-block: 1px solid var(--stm-border-color); }
+  {%- endif -%}
+  {%- if st.reveal and theme_reveal == false -%}
+    @keyframes stm-reveal-{{ section.id }} {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: none; }
+    }
+    @supports (animation-timeline: view()) {
+      @media (prefers-reduced-motion: no-preference) {
+        #shopify-section-{{ section.id }} .stm {
+          animation: stm-reveal-{{ section.id }} linear both;
+          animation-timeline: view();
+          animation-range: entry 0% entry 60%;
+        }
+      }
+    }
+  {%- endif -%}
+
   @media (prefers-reduced-motion: reduce) {
     #shopify-section-{{ section.id }} .stm__track { animation: none; }
+    #shopify-section-{{ section.id }} .stm { animation: none; }
   }
   {%- case st.section_width -%}
     {%- when 'container' -%}
-      #shopify-section-{{ section.id }} .stm { max-width: calc(var(--page-width, 1300px) + 3rem); margin-inline: auto; padding-inline: 1.5rem; box-sizing: border-box; }
+      #shopify-section-{{ section.id }} .stm { max-width: calc(var(--page-width, var(--theme-page-width, 1300px)) + 3rem); margin-inline: auto; padding-inline: 1.5rem; box-sizing: border-box; }
     {%- when 'fluid_container' -%}
       #shopify-section-{{ section.id }} .stm { max-width: calc(var(--fluid-container-width, 1500px) + 3rem); margin-inline: auto; padding-inline: 1.5rem; box-sizing: border-box; }
     {%- when 'stretch_width' -%}
@@ -216,6 +289,7 @@
           {%- for block in section.blocks -%}
             {%- if block.settings.text != blank -%}
               <span class="stm__item" data-block-id="{{ block.id }}"{% if i == 1 %} {{ block.shopify_attributes }}{% endif %}>{{ block.settings.text | escape }}</span>
+              {%- if sep != blank -%}<span class="stm__sep" aria-hidden="true">{{ sep | escape }}</span>{%- endif -%}
             {%- endif -%}
           {%- endfor -%}
         </div>
@@ -382,6 +456,16 @@
       "label": "Font"
     },
     {
+      "type": "range",
+      "id": "line_height",
+      "label": "Line height",
+      "min": 80,
+      "max": 160,
+      "step": 5,
+      "unit": "%",
+      "default": 105
+    },
+    {
       "type": "select",
       "id": "base_font",
       "label": "Theme font",
@@ -424,7 +508,7 @@
     },
     {
       "type": "header",
-      "id": "hdr_17",
+      "id": "hdr_18",
       "label": "Color"
     },
     {
@@ -441,7 +525,66 @@
     },
     {
       "type": "header",
-      "id": "hdr_20",
+      "id": "hdr_21",
+      "label": "Separator"
+    },
+    {
+      "type": "select",
+      "id": "separator",
+      "label": "Between words",
+      "default": "none",
+      "options": [
+        {
+          "value": "none",
+          "label": "Nothing"
+        },
+        {
+          "value": "dot",
+          "label": "Dot •"
+        },
+        {
+          "value": "star",
+          "label": "Star ✦"
+        },
+        {
+          "value": "slash",
+          "label": "Slash /"
+        },
+        {
+          "value": "plus",
+          "label": "Plus +"
+        },
+        {
+          "value": "custom",
+          "label": "Custom"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "id": "separator_text",
+      "label": "Custom separator",
+      "default": "*",
+      "visible_if": "{{ section.settings.separator == 'custom' }}"
+    },
+    {
+      "type": "range",
+      "id": "separator_size",
+      "label": "Separator size",
+      "min": 20,
+      "max": 100,
+      "step": 5,
+      "unit": "%",
+      "default": 50
+    },
+    {
+      "type": "color",
+      "id": "separator_color",
+      "label": "Separator color (optional)"
+    },
+    {
+      "type": "header",
+      "id": "hdr_26",
       "label": "Motion"
     },
     {
@@ -508,8 +651,30 @@
     },
     {
       "type": "header",
-      "id": "hdr_27",
+      "id": "hdr_33",
       "label": "Layout & spacing"
+    },
+    {
+      "type": "range",
+      "id": "edge_fade",
+      "label": "Fade the edges",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "checkbox",
+      "id": "show_borders",
+      "label": "Lines above and below",
+      "default": false
+    },
+    {
+      "type": "color",
+      "id": "border_color",
+      "label": "Line color (optional)",
+      "visible_if": "{{ section.settings.show_borders }}"
     },
     {
       "type": "checkbox",
@@ -599,7 +764,7 @@
     },
     {
       "type": "header",
-      "id": "hdr_37",
+      "id": "hdr_46",
       "label": "Animation"
     },
     {
@@ -851,6 +1016,16 @@
         "content": "Font"
       },
       {
+        "type": "range",
+        "id": "line_height",
+        "label": "Line height",
+        "min": 80,
+        "max": 160,
+        "step": 5,
+        "unit": "%",
+        "default": 105
+      },
+      {
         "type": "select",
         "id": "base_font",
         "label": "Theme font",
@@ -906,6 +1081,64 @@
         "id": "text_color",
         "label": "Text color",
         "visible_if": "{{ section.settings.use_custom_text_color }}"
+      },
+      {
+        "type": "header",
+        "content": "Separator"
+      },
+      {
+        "type": "select",
+        "id": "separator",
+        "label": "Between words",
+        "default": "none",
+        "options": [
+          {
+            "value": "none",
+            "label": "Nothing"
+          },
+          {
+            "value": "dot",
+            "label": "Dot •"
+          },
+          {
+            "value": "star",
+            "label": "Star ✦"
+          },
+          {
+            "value": "slash",
+            "label": "Slash /"
+          },
+          {
+            "value": "plus",
+            "label": "Plus +"
+          },
+          {
+            "value": "custom",
+            "label": "Custom"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "id": "separator_text",
+        "label": "Custom separator",
+        "default": "*",
+        "visible_if": "{{ section.settings.separator == 'custom' }}"
+      },
+      {
+        "type": "range",
+        "id": "separator_size",
+        "label": "Separator size",
+        "min": 20,
+        "max": 100,
+        "step": 5,
+        "unit": "%",
+        "default": 50
+      },
+      {
+        "type": "color",
+        "id": "separator_color",
+        "label": "Separator color (optional)"
       },
       {
         "type": "header",
@@ -976,6 +1209,28 @@
       {
         "type": "header",
         "content": "Layout & spacing"
+      },
+      {
+        "type": "range",
+        "id": "edge_fade",
+        "label": "Fade the edges",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "checkbox",
+        "id": "show_borders",
+        "label": "Lines above and below",
+        "default": false
+      },
+      {
+        "type": "color",
+        "id": "border_color",
+        "label": "Line color (optional)",
+        "visible_if": "{{ section.settings.show_borders }}"
       },
       {
         "type": "checkbox",
