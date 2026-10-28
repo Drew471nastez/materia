@@ -66,7 +66,7 @@ const nativeData={quantityBreaks:[{offerId:'tier',tiers:[{quantity:2,freeQuantit
   if(kind==='bundle')await p.locator('input[name^=linked-bundle-]').nth(1).check();
   await p.locator('#main button[name=add]').click();await p.waitForFunction(()=>posts.length===1&&!document.querySelector('#main button[name=add]').hasAttribute('aria-busy'));
   const expected=kind==='bundle'?{m:2,b:2}:kind==='quantity_offer'?{m:3}:{m:2,q:1};assert.deepEqual(await p.evaluate(()=>Object.fromEntries(posts[0].items.map(i=>[i.id,i.quantity]))),expected);checks++;
-  assert.deepEqual(errors,[]);await p.close();
+  assert.deepEqual(errors,[]);assert(!(await p.locator('[data-main-offer-status]').textContent()).includes('Cannot set properties'));assert.equal(await p.locator('[data-main-offer-status]').textContent(),'Added');await p.close();
  }
  {
   const html=['quantity_offer','bundle','upsell_pro'].map(kind=>`<storelib-product-offers data-kind="${kind}" data-form-id="main" data-product-id="p" data-selected="m"></storelib-product-offers>`).join('');

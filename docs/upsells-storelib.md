@@ -12,6 +12,12 @@ Native quantity tiers display backend labels and badges. For the selected varian
 
 In a market, free-unit totals use the shown variant price. Amount/percent tiers show their label rather than subtracting a store-currency amount from a converted price. All money formatting goes through the theme's Shopify formatter / Liquid money filters, including JPY's Shopify hundredths.
 
+## Selected purchase price
+
+The shared Main/Featured product price block retains its variant-price markup for normal variant updates. When a quantity offer controls form quantity, or bundles/upsells are linked to the main purchase buttons, it shows a separate, labelled Selected total instead. The label is editable on the Price block. Price-in-button labels and sticky purchase bars read that total too. Independent upsells do not replace the page product's price.
+
+The selected total uses the same authorized tier calculations and offer selections as submission. Bundle variants without a confirmed bundle quote use known full variant prices, never a guessed discount. Market conversions, duplicate selected lines and competing primary offers are not combined into a fictional total; those combinations keep their separate quotes and need the confirmed cart. This is a purchase preview, not a promise that discounts stack at checkout.
+
 ## Cart and checkout
 
 Every mutation redraws from returned sections and/or /cart.js. Lines display final_line_price, strike original_line_price only when lower, and list actual line_level_discount_allocations. The total and shipping threshold use cart.total_price, after offers and codes. Quantity inputs/counts can respond immediately; monetary totals never extrapolate the previous unit price across a new tier.

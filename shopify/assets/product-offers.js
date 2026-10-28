@@ -415,6 +415,7 @@
       if (countEl) countEl.textContent = String(count);
       this.complete = complete;
       this.shownSaving = saving;
+      scheduleMainOfferButtons();
       if (this.button) this.button.disabled = count === 0 || this.button.getAttribute('aria-busy') === 'true';
     }
     selection() {
@@ -517,6 +518,7 @@
       return {paid, free, units, percent, total, each: Math.round(total / units), compare, saving: Math.max(0, compare - total)};
     }
     update() {
+      scheduleMainOfferButtons();
       const variant = this.variant();
       if (!variant) return;
       const showCompare = this.dataset.showCompare === 'true';
@@ -683,6 +685,7 @@
       return this.cards.filter(card => card.querySelector('[data-upsell-check]')?.checked && !card.hasAttribute('data-unavailable') && card.dataset.variantId);
     }
     updateTotal() {
+      scheduleMainOfferButtons();
       const picked = this.selectedCards();
       const total = picked.reduce((sum, card) => sum + (Number(card.dataset.price) || 0), 0);
       const totalEl = this.querySelector('[data-upsell-total]');
@@ -1102,6 +1105,7 @@
       select.addEventListener('change',()=>{if(tracksProduct){this.selected=select.value;this.paintPrices();}},{signal:this.events.signal});wrap.append(select);parent.append(wrap);return select;
     }
     paintPrices(){
+      scheduleMainOfferButtons();
       this.paintButtons();
       const variant=this.variant();if(this.addButton)this.addButton.disabled=!variant?.available || this.addButton.getAttribute('aria-busy')==='true';
       if(!variant)return;
@@ -1135,6 +1139,17 @@
       const paint=()=>{const exact=!this.market&&controls.every(c=>c.check.checked&&c.select.value===c.initial);price.textContent=exact?this.amount(offer.priceCents):'';compare.textContent=exact?this.amount(offer.fullCents):'';compare.hidden=!exact||offer.fullCents<=offer.priceCents||this.options.show_compare===false;this.paintButtons();};
       list.addEventListener('change',paint,{signal:this.events.signal});this.box.append(compare,price,label);paint();
       this.button(this.box,this.options.button_label||'Add bundle to cart',()=>controls.some(c=>c.check.checked && !selectReady(c.select))?[]:controls.filter(c=>c.check.checked).map(c=>({id:c.select.value,quantity:1,properties:{_sl_offer_id:offer.offerId,_sl_offer:'bundle'}})));
+      this.actions[this.actions.length-1].quote = () => {
+        if(this.market)return null;
+        const picked=controls.filter(c=>c.check.checked);
+        if(!picked.length || picked.some(c=>!selectReady(c.select)))return null;
+        const exact=picked.length===controls.length && controls.every(c=>c.select.value===c.initial);
+        const prices=picked.map(c=>c.item.variants?.find(v=>String(v.id)===c.select.value)?.priceCents ?? c.item.priceCents);
+        if(!exact && prices.some(v=>!Number.isFinite(Number(v))))return null;
+        const total=exact && Number.isFinite(Number(offer.priceCents))?Number(offer.priceCents):prices.reduce((sum,v)=>sum+Number(v),0);
+        const compare=exact && Number.isFinite(Number(offer.fullCents))?Number(offer.fullCents):total;
+        return {total,compare,ids:picked.map(c=>c.select.value)};
+      };
     }
     upsell(offer){
       const item=offer.product;if(!item)return;
@@ -1147,7 +1162,7 @@
       price.hidden=this.options.show_price===false;
       select.addEventListener('change',()=>{price.textContent='';this.paintButtons();},{signal:this.events.signal});
       if(this.options.add_mode==='selected'){
-        const label=node('label','upsell-card__pick'),check=node('input','native-up-check');check.type='checkbox';check.disabled=!selectReady(select);check.checked=this.options.preselect!==false && !check.disabled;check.setAttribute('aria-label',item.title||'Product');label.append(check);card.prepend(label);this.upsellChoices.push({check,select,offer});
+        const label=node('label','upsell-card__pick'),check=node('input','native-up-check');check.type='checkbox';check.disabled=!selectReady(select);check.checked=this.options.preselect!==false && !check.disabled;check.setAttribute('aria-label',item.title||'Product');label.append(check);card.prepend(label);this.upsellChoices.push({check,select,offer,initial:select.value});
         check.addEventListener('change',()=>{card.toggleAttribute('data-picked',check.checked);this.paintButtons();},{signal:this.events.signal});card.toggleAttribute('data-picked',check.checked);
       }else this.button(card,this.options.upsell_button_text||'Add',()=>selectReady(select)?[{id:select.value,quantity:1,properties:{_sl_offer_id:offer.offerId,_sl_offer:'upsell'}}]:[]);
     }
@@ -1161,7 +1176,7 @@
   const mainBusy = new WeakSet();
 
   let mainWireFrame=0;
-  function scheduleMainOfferButtons(){if(!mainWireFrame)mainWireFrame=requestAnimationFrame(()=>{mainWireFrame=0;wireMainOfferButtons();});}
+  function scheduleMainOfferButtons(){if(!mainWireFrame)mainWireFrame=requestAnimationFrame(()=>{mainWireFrame=0;wireMainOfferButtons();refreshPurchasePrices();});}
   function wireMainOfferButtons() {
     const forms=new Set([...document.querySelectorAll('product-bundle,quantity-offer,upsell-pro,pair-with,storelib-product-offers')].filter(linkedMode).map(provider=>provider.form?.()).filter(Boolean));
     document.querySelectorAll('[data-storelib-buy-now], [data-offer-buy-now]').forEach(button => {
@@ -1172,6 +1187,75 @@
         else { button.setAttribute('data-storelib-buy-now',''); delete button.dataset.offerBuyNow; }
     });
   }
+
+  // The unit/variant markup stays mounted for the real variant picker. A
+  // separate, labelled purchase total becomes prominent for linked offers.
+  // Never combine unknown prices, duplicate lines, market conversions or
+  // competing primary promotions into an invented discount.
+  function purchaseQuote(provider) {
+    if(provider.market)return null;
+    if(provider.localName==='quantity-offer') {
+      const variant=provider.variant(),tier=provider.tier();if(!variant?.available||!tier)return null;
+      const p=provider.priceOf(tier,variant);return {...p,ids:[variant.id]};
+    }
+    if(provider.dataset.kind==='quantity_offer') {
+      const variant=provider.variant();if(!variant?.available||!provider.chosen)return null;
+      return {...tierPrice(provider.chosen,variant),ids:[variant.id]};
+    }
+    if(provider.localName==='product-bundle') {
+      const picked=provider.lines.filter(line=>line.querySelector('[data-line-check]')?.checked).map(line=>provider.variantOf(line));
+      if(!picked.length||picked.some(v=>!v?.available))return null;
+      const total=picked.reduce((sum,v)=>sum+v.price,0);return {total:total-(provider.shownSaving||0),compare:total,ids:picked.map(v=>v.id)};
+    }
+    if(provider.dataset.kind==='bundle')return provider.actions?.[provider.selectedBundle||0]?.quote?.() || null;
+    if(provider.localName==='upsell-pro' || provider.localName==='pair-with') {
+      const cards=provider.localName==='upsell-pro'?provider.selectedCards():provider.cards.filter(c=>c.querySelector('[data-pw-picked]')?.checked);
+      const variants=cards.map(c=>variantFrom(c.querySelector('[data-upsell-variant], [data-variant-select]')));
+      if(variants.some(v=>!v?.available))return null;
+      return {total:variants.reduce((sum,v)=>sum+v.price,0),ids:variants.map(v=>v.id)};
+    }
+    if(provider.dataset.kind==='upsell_pro') {
+      const choices=(provider.upsellChoices||[]).filter(c=>c.check.checked);
+      const prices=choices.map(c=>c.select.value===c.initial?c.offer.offerPriceCents:c.offer.product?.variants?.find(v=>String(v.id)===c.select.value)?.priceCents);
+      if(choices.some(c=>!selectReady(c.select)) || prices.some(v=>v==null || !Number.isFinite(Number(v))))return null;
+      return {total:prices.reduce((sum,v)=>sum+Number(v),0),ids:choices.map(c=>c.select.value)};
+    }
+    return null;
+  }
+  function refreshPurchasePrices() {
+    document.querySelectorAll('[data-offer-price]').forEach(wrap=>{
+      const section=wrap.closest('.shopify-section, [id^="shopify-section-"]');
+      const roots=section?[...section.querySelectorAll('product-bundle,quantity-offer,upsell-pro,pair-with,storelib-product-offers')]:[];
+      const active=roots.filter(p=>linkedMode(p)||((p.localName==='quantity-offer'&&p.dataset.syncForm==='true')||(p.dataset.kind==='quantity_offer'&&p.options?.sync_form_quantity!==false)));
+      let summary=wrap.querySelector('[data-selected-purchase-price]');
+      const reset=()=>{delete wrap.dataset.offerPriceActive;if(summary)summary.hidden=true;};
+      if(!active.length){reset();return;}
+      const form=active[0].form?.();if(!form||active.some(p=>p.form?.()!==form)){reset();return;}
+      const primary=active.filter(p=>p.localName==='quantity-offer'||p.localName==='product-bundle'||['quantity_offer','bundle'].includes(p.dataset.kind));
+      if(primary.length>1){reset();return;}
+      const variant=(parse(wrap.dataset.productVariants)||[]).find(v=>String(v.id)===form.querySelector('[name="id"]')?.value);
+      const sets=Math.max(1,Number(form.elements.namedItem('quantity')?.value)||1);
+      const base=primary[0]?purchaseQuote(primary[0]):variant?{total:Number(variant.price)*sets,compare:Number(variant.price)*sets,ids:[String(variant.id)]}:null;
+      if(!base){reset();return;}
+      let total=base.total,compare=base.compare??base.total;
+      if(primary[0]&&(primary[0].localName==='product-bundle'||primary[0].dataset.kind==='bundle')){total*=sets;compare*=sets;}
+      const ids=new Set(base.ids.map(String));
+      for(const provider of active.filter(p=>!primary.includes(p))) {
+        const quote=purchaseQuote(provider);if(!quote||quote.ids.some(id=>ids.has(String(id)))){reset();return;}
+        total+=quote.total;compare+=quote.compare??quote.total;quote.ids.forEach(id=>ids.add(String(id)));
+      }
+      const text=money(total,active[0].format||active[0].dataset.moneyFormat);
+      if(!text||!Number.isFinite(total)){reset();return;}
+      if(!summary){summary=node('div','offer-purchase-price');summary.dataset.selectedPurchasePrice='';summary.setAttribute('aria-live','polite');summary.append(node('small','offer-purchase-price__label'),node('span','price-regular'),node('s','compare-price'));wrap.append(summary);}
+      summary.querySelector('small').textContent=wrap.dataset.selectedTotalLabel||'Selected total';
+      summary.querySelector('.price-regular').textContent=text;
+      const old=summary.querySelector('s');old.hidden=compare<=total;old.textContent=compare>total?money(compare,active[0].format||active[0].dataset.moneyFormat):'';
+      summary.hidden=false;wrap.dataset.offerPriceActive='';
+    });
+    document.querySelectorAll('sticky-add-cart').forEach(bar=>bar.syncPrice?.());
+  }
+  document.addEventListener('materia:offer-selection-change',scheduleMainOfferButtons);
+  document.addEventListener('change',event=>{if(event.target.name==='id'||event.target.name==='quantity')scheduleMainOfferButtons();});
 
   function mainStatus(form, text, error = false) {
     let message = form.parentElement.querySelector('[data-main-offer-status]');
@@ -1245,7 +1329,7 @@
         }
         if(provider.addedVariants){selection.items.forEach(item=>provider.addedVariants.add(String(item.id)));provider.cards.forEach(card=>provider.applyVariant(card));provider.updateTotal();}
         if(provider.localName==='pair-with')provider.cards.filter(card=>selection.items.some(item=>String(item.id)===String(card.dataset.variantId))).forEach(card=>provider.mark(card,true));
-        if(provider.button){provider.button.dataset.added='true';actionLabel(provider.button,provider.addedText).textContent=provider.addedText;}
+        if(provider.button instanceof HTMLElement){provider.button.dataset.added='true';actionLabel(provider.button,provider.addedText).textContent=provider.addedText;}
       });
       mainStatus(form,providers[0].addedText||providers[0].dataset.addedText||'Added');
       if(buyNow)await continueCartCheckout(form);

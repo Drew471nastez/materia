@@ -229,7 +229,8 @@ class StickyAddCart extends HTMLElement {
     if (!button) return;
     const select = this.querySelector("select");
     const opt = select && select.options[select.selectedIndex];
-    let price = opt ? opt.dataset.mtPrice || "" : "";
+    const offerTotal=this.findMain()?.querySelector("[data-selected-purchase-price]:not([hidden]) .price-regular");
+    let price = offerTotal?.textContent || (opt ? opt.dataset.mtPrice || "" : "");
     if (!price) {
       const shown = this.querySelector(".price-regular .price, .price");
       price = shown ? shown.textContent.replace(/\s+/g, " ").trim() : "";
@@ -330,7 +331,7 @@ customElements.define("sold-product", SoldProduct);
     if (!wrapper) return;
     const section = wrapper.closest(".sec__featured-product");
     if (!section) return;
-    const priceEl = section.querySelector(
+    const priceEl = section.querySelector("[data-selected-purchase-price]:not([hidden]) .price-regular") || section.querySelector(
       ".product-detail__price .price-regular .price-item--last, " +
       ".product-detail__price .price-item--last, " +
       ".product-detail__price .price-regular"
