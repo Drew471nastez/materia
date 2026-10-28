@@ -1244,9 +1244,13 @@
         const quote=purchaseQuote(provider);if(!quote||quote.ids.some(id=>ids.has(String(id)))){reset();return;}
         total+=quote.total;compare+=quote.compare??quote.total;quote.ids.forEach(id=>ids.add(String(id)));
       }
+      if(!primary.length && ids.size===base.ids.length){reset();return;}
       const text=money(total,active[0].format||active[0].dataset.moneyFormat);
       if(!text||!Number.isFinite(total)){reset();return;}
       if(!summary){summary=node('div','offer-purchase-price');summary.dataset.selectedPurchasePrice='';summary.setAttribute('aria-live','polite');summary.append(node('small','offer-purchase-price__label'),node('span','price-regular'),node('s','compare-price'));wrap.append(summary);}
+      let unitLabel=wrap.querySelector('[data-offer-unit-price-label]');
+      if(!unitLabel){unitLabel=node('small','offer-unit-price-label');unitLabel.dataset.offerUnitPriceLabel='';wrap.prepend(unitLabel);}
+      unitLabel.textContent=wrap.dataset.unitPriceLabel||'Product price (per item)';
       summary.querySelector('small').textContent=wrap.dataset.selectedTotalLabel||'Selected total';
       summary.querySelector('.price-regular').textContent=text;
       const old=summary.querySelector('s');old.hidden=compare<=total;old.textContent=compare>total?money(compare,active[0].format||active[0].dataset.moneyFormat):'';

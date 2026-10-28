@@ -14,7 +14,7 @@ In a market, free-unit totals use the shown variant price. Amount/percent tiers 
 
 ## Selected purchase price
 
-The shared Main/Featured product price block retains its variant-price markup for normal variant updates. When a quantity offer controls form quantity, or bundles/upsells are linked to the main purchase buttons, it shows a separate, labelled Selected total instead. The label is editable on the Price block. Price-in-button labels and sticky purchase bars read that total too. Independent upsells do not replace the page product's price.
+The shared Main/Featured product price block retains its variant-price markup for normal variant updates. When a quantity offer controls form quantity, or bundles/upsells are linked to the main purchase buttons, it shows a separate, labelled Selected total alongside the original Product price (per item). Both labels are editable on the Price block. The original variant price stays visible rather than being silently repurposed as a bundle or multi-item total. Price-in-button labels and sticky purchase bars read that total too. Independent upsells do not replace the page product's price.
 
 The selected total uses the same authorized tier calculations and offer selections as submission. Bundle variants without a confirmed bundle quote use known full variant prices, never a guessed discount. Market conversions, duplicate selected lines and competing primary offers are not combined into a fictional total; those combinations keep their separate quotes and need the confirmed cart. This is a purchase preview, not a promise that discounts stack at checkout.
 
