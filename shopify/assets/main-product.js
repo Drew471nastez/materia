@@ -1479,7 +1479,12 @@ var SyncQuantityInput = (() => {
         input.addEventListener("change", function () {
           const value = this.value;
           syncInputs.forEach((otherInput) => {
-            if (otherInput !== input) {
+            // Main and Featured product sections can coexist. Only the
+            // quantity controls owned by this product form are peers.
+            const sameOwner = input.form
+              ? otherInput.form === input.form
+              : !otherInput.form && otherInput.closest('.shopify-section') === input.closest('.shopify-section');
+            if (otherInput !== input && sameOwner) {
               otherInput.value = value;
             }
           });

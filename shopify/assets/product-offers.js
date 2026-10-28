@@ -230,10 +230,37 @@
     return properties;
   }
 
+  // Offer choices own their totals, not the page product's variant price.
+  // Keep native input events inside the offer; broad page/platform change
+  // handlers must not mistake a tier or an add-on variant for the main picker.
+  function isolateOfferChoices(root) {
+    const notify = event => {
+      if (!event.target.matches?.('input, select, textarea')) return;
+      event.stopPropagation();
+      if (event.type === 'change') queueMicrotask(() => {
+        if (root.isConnected) root.dispatchEvent(new CustomEvent('materia:offer-selection-change', {
+          bubbles: true, detail: {formId: root.dataset.formId || '', blockId: root.dataset.blockId || ''},
+        }));
+      });
+    };
+    ['input', 'change'].forEach(type => root.addEventListener(type, notify, {signal: root.events.signal}));
+  }
+
+  // Notify the quantity widget itself (validation and +/- state), without
+  // announcing an offer's quantity as a page-level pricing/variant change.
+  function syncOfferQuantity(input, quantity) {
+    const value = String(quantity);
+    if (input.value === value) return;
+    input.value = value;
+    input.dispatchEvent(new Event('input'));
+    input.dispatchEvent(new Event('change'));
+  }
+
   class OfferBase extends HTMLElement {
     connectedCallback() {
       this.events?.abort();
       this.events = new AbortController();
+      isolateOfferChoices(this);
       this.format = this.dataset.moneyFormat || '';
       this.button = this.querySelector('[data-offer-add]');
       this.message = this.querySelector('[data-message]');
@@ -566,12 +593,7 @@
         form.appendChild(hidden);
         inputs = [hidden];
       }
-      inputs.forEach(input => {
-        if (input.value === qty) return;
-        input.value = qty;
-        input.dispatchEvent(new Event('input', {bubbles: true}));
-        input.dispatchEvent(new Event('change', {bubbles: true}));
-      });
+      inputs.forEach(input => syncOfferQuantity(input, qty));
       form.querySelectorAll('input[data-quantity-offer-property]').forEach(el => el.remove());
       Object.entries(this.propertiesOf(tier, groupId('qty'))).forEach(([key, value]) => {
         if (value === '') return;
@@ -594,6 +616,7 @@
     connectedCallback() {
       this.events?.abort();
       this.events = new AbortController();
+      isolateOfferChoices(this);
       const signal = this.events.signal;
       this.format = this.dataset.moneyFormat || '';
       this.cards = [...this.querySelectorAll('[data-upsell-card]')];
@@ -733,6 +756,7 @@
     connectedCallback() {
       this.events?.abort();
       this.events = new AbortController();
+      isolateOfferChoices(this);
       const signal = this.events.signal;
       this.format = this.dataset.moneyFormat || '';
       this.addEventListener('change', event => {
@@ -886,6 +910,7 @@
   class StorelibProductOffers extends HTMLElement {
     connectedCallback() {
       this.events?.abort(); this.events = new AbortController();
+      isolateOfferChoices(this);
       this.instance ||= ++nativeOfferSequence;
       this.options = parse(this.dataset.options) || {};
       this.dataset.purchaseAction=this.options.purchase_action || 'own';
@@ -1063,7 +1088,7 @@
       const quantity=Number(this.chosen.quantity)+Number(this.chosen.freeQuantity||0);
       let inputs=[...form.elements].filter(el=>el.name==='quantity');
       if(!inputs.length){const input=node('input');input.type='hidden';input.name='quantity';input.dataset.nativeOfferOwner=String(this.instance);form.append(input);inputs=[input];}
-      inputs.forEach(input=>{input.value=String(quantity);input.dispatchEvent(new Event('change',{bubbles:true}));});
+      inputs.forEach(input => syncOfferQuantity(input, quantity));
       let offerInput=form.querySelector('[data-native-offer-id]');
       if(!offerInput){offerInput=node('input');offerInput.type='hidden';offerInput.name='properties[_sl_offer_id]';offerInput.dataset.nativeOfferId='';form.append(offerInput);}
       offerInput.dataset.nativeOfferOwner=String(this.instance);
