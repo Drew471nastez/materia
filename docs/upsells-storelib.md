@@ -12,11 +12,11 @@ Native quantity tiers display backend labels and badges. For the selected varian
 
 In a market, free-unit totals use the shown variant price. Amount/percent tiers show their label rather than subtracting a store-currency amount from a converted price. All money formatting goes through the theme's Shopify formatter / Liquid money filters, including JPY's Shopify hundredths.
 
-## Selected purchase price
+## Product price and offer totals
 
-The shared Main/Featured product price block retains its variant-price markup for normal variant updates. When a quantity offer controls form quantity, or bundles/upsells are linked to the main purchase buttons, it shows a separate, labelled Selected total alongside the original Product price (per item). Both labels are editable on the Price block. The original variant price stays visible rather than being silently repurposed as a bundle or multi-item total. Price-in-button labels and sticky purchase bars read that total too. Independent upsells do not replace the page product's price.
+The shared Main/Featured product price block shows only the selected product variant price. It does not append a second Product price label or a combined Selected total. Price-in-button labels and sticky bars also retain the selected variant price. A quantity tier shows its pack total and per-item price inside that tier; a bundle shows its total in the bundle block; upsells show their item prices and, in selected-items mode, their own selection total.
 
-The selected total uses the same authorized tier calculations and offer selections as submission. Bundle variants without a confirmed bundle quote use known full variant prices, never a guessed discount. Market conversions, duplicate selected lines and competing primary offers are not combined into a fictional total; those combinations keep their separate quotes and need the confirmed cart. This is a purchase preview, not a promise that discounts stack at checkout.
+Purchase-button linking still combines the chosen lines and quantities into one cart request. Display separation does not disable offer metadata, backend-authorized discounts, uploaded personalization or checkout routing. Cart and checkout display server-confirmed line prices, allocations and totals, never a theme-side sum of potentially competing promotions. Legacy summary labels remain stored but hidden from the sidebar, and stale summary DOM is removed on editor initialization/redraw.
 
 ## Cart and checkout
 
