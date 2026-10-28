@@ -1,6 +1,8 @@
 const fs=require('fs'),path=require('path'),assert=require('node:assert/strict'),{chromium}=require('playwright');
 const {engine,PANTS,renderPage}=require('./theme-featured-product-round5.cjs');
 const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
+// Mouse dragging of sideways rows lives in global.js.
+const mouseDrag=(()=>{const g=read('shopify/assets/global.js'),a=g.lastIndexOf('(() => {',g.indexOf('window.__materiaMouseDrag'));return g.slice(a,g.indexOf('\n})();',a)+5);})();
 const schema=f=>JSON.parse(read(f).match(/<schema>([\s\S]*?)<\/schema>/)[1]).shopify;
 const defaults=b=>Object.fromEntries(b.settings.filter(x=>x.id&&'default'in x).map(x=>[x.id,x.default]));
 const clean=s=>s.split('\n<schema>')[0].replace(/^<template compat="shopify">/,'').replace(/<\/template>\s*$/,'').replace(/^[ \t]*comment[ \t]*\n[\s\S]*?^[ \t]*endcomment[ \t]*$/gm,'');
@@ -15,7 +17,7 @@ const e=engine(),render=(file,ctx)=>e.parseAndRender(clean(read(file)),ctx,{glob
  const p=await browser.newPage({viewport:{width:375,height:844},isMobile:true,hasTouch:true});const errors=[];p.on('pageerror',err=>errors.push(err.message));
  await p.route('https://test.theme/**',route=>route.fulfill({body:'<html></html>',contentType:'text/html'}));await p.goto('https://test.theme/');
  const theme='<style>:root{--color-background:#111;--color-heading:#eee;--color-text:#ddd;--color-border:#555;--body-font:Arial;--body-font-size:16px}body{margin:16px}*{box-sizing:border-box}</style>';
- await p.setContent(theme+parts);await p.addStyleTag({content:read('shopify/assets/product-block-runtime.css')});await p.addScriptTag({content:read('shopify/assets/product-block-runtime.js')});
+ await p.setContent(theme+parts);await p.addStyleTag({content:read('shopify/assets/product-block-runtime.css')});await p.addScriptTag({content:read('shopify/assets/product-block-runtime.js')});await p.addScriptTag({content:mouseDrag});
  await p.locator('product-countdown-badge').evaluate(el=>el.dataset.end='2030-02-30T00:00:00Z');await p.waitForTimeout(50);assert(!await p.locator('product-countdown-badge').isVisible());checks++;
  await p.locator('product-countdown-badge').evaluate(el=>{el._offscreen=true;el.dataset.end='2030-02-28T00:00:00Z';});await p.waitForFunction(()=>document.querySelector('product-countdown-badge').dataset.invalid==='false');assert(await p.locator('product-countdown-badge').isVisible());checks++;
  await p.locator('product-countdown-badge').evaluate(el=>{el.dataset.onEnd='hide';el.dataset.end='2000-01-01T00:00:00Z';});await p.waitForTimeout(30);assert(!await p.locator('product-countdown-badge').isVisible());

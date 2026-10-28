@@ -3,6 +3,8 @@
 const fs=require('fs'),assert=require('node:assert/strict'),{chromium}=require('playwright');
 const {engine,PANTS}=require('./theme-featured-product-round5.cjs');
 const read=f=>fs.readFileSync(f,'utf8'),schema=f=>JSON.parse(read(f).split('<schema>')[1].split('</schema>')[0]).shopify;
+// Mouse dragging of sideways rows lives in global.js.
+const mouseDrag=(()=>{const g=read('shopify/assets/global.js'),a=g.lastIndexOf('(() => {',g.indexOf('window.__materiaMouseDrag'));return g.slice(a,g.indexOf('\n})();',a)+5);})();
 const defaults=s=>Object.fromEntries(s.settings.filter(x=>x.id&&'default'in x).map(x=>[x.id,x.default]));
 const clean=s=>s.split('\n<schema>')[0].replace(/^<template compat="shopify">/,'').replace(/<\/template>\s*$/,'').replace(/^[ \t]*comment[ \t]*\n[\s\S]*?^[ \t]*endcomment[ \t]*$/gm,'');
 const e=engine(),render=(file,ctx)=>e.parseAndRender(clean(read(file)),ctx,{globals:ctx});
@@ -23,7 +25,7 @@ const e=engine(),render=(file,ctx)=>e.parseAndRender(clean(read(file)),ctx,{glob
  const testimonial=schema('blocks/lod_testimonials_block.storelib');
  const tctx={...ctx,block:{id:'testimonial',type:'lod_testimonials_block',settings:{...defaults(testimonial),t1_text:'First',t2_text:'Second',t3_text:'Third'}}};
  const text=await render('blocks/lod_testimonials_block.storelib',tctx);
- await p.setContent(text);await p.addStyleTag({content:read('shopify/assets/product-block-runtime.css')});await p.addScriptTag({content:read('shopify/assets/product-block-runtime.js')});
+ await p.setContent(text);await p.addStyleTag({content:read('shopify/assets/product-block-runtime.css')});await p.addScriptTag({content:read('shopify/assets/product-block-runtime.js')});await p.addScriptTag({content:mouseDrag});
  const row=p.locator('[data-testimonial-row]');assert.equal(await row.evaluate(el=>getComputedStyle(el).overflowX),'auto');checks++;
  const box=await row.boundingBox(),cdp=await p.context().newCDPSession(p);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box.x+300,y:box.y+60}]});
  for(let i=1;i<=12;i++){await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:box.x+300-i*15,y:box.y+60}]});await p.waitForTimeout(16);}

@@ -22,6 +22,8 @@
 (function () {
   if (window.MateriaProductOffers) return;
 
+  // Writes a price, keeping the server-drawn text when no formatter has loaded.
+  const putMoney = (el, cents, format) => { const text = money(cents, format); if (el && text) el.textContent = text; };
   const money = (cents, format) => {
     const value = Math.max(0, Math.round(Number(cents) || 0));
     if (window.Shopify && typeof window.Shopify.formatMoney === 'function') {
@@ -361,7 +363,7 @@
         if (variant) {
           const price = line.querySelector('[data-line-price]');
           const compare = line.querySelector('[data-line-compare]');
-          if (price) price.textContent = money(variant.price, this.format);
+          putMoney(price, variant.price, this.format);
           if (compare) {
             const show = showCompare && variant.compare > variant.price;
             compare.hidden = !show;
@@ -638,7 +640,7 @@
       const price = card.querySelector('[data-upsell-price]');
       const compare = card.querySelector('[data-upsell-compare]');
       const badge = card.querySelector('[data-upsell-sale]');
-      if (price) price.textContent = money(variant.price, this.format);
+      putMoney(price, variant.price, this.format);
       const onSale = variant.compare > variant.price;
       if (compare) { compare.hidden = !(onSale && this.dataset.showCompare === 'true'); compare.textContent = onSale ? money(variant.compare, this.format) : ''; }
       if (badge) badge.hidden = !onSale;
@@ -759,7 +761,7 @@
       card.dataset.variantId = variant.id;
       const price = card.querySelector('.pw-price [data-price]');
       const compare = card.querySelector('.pw-price [data-compare]');
-      if (price) price.textContent = money(variant.price, this.format);
+      putMoney(price, variant.price, this.format);
       if (compare) { compare.hidden = !(variant.compare > variant.price); compare.textContent = variant.compare > variant.price ? money(variant.compare, this.format) : ''; }
       const button = card.querySelector('[data-add-btn]');
       if (button) button.disabled = !variant.available;
