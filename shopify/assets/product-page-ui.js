@@ -1199,8 +1199,14 @@
     }
     // The element was kept but its markup drawn again: the slider lost its frame.
     if (!el.classList.contains("swiper-initialized")) {
-      rebuildSlider(holder);
-      return;
+      // Canvas morphing may reset only classes/styles, not the actual slider.
+      // Restore that instance instead of tearing down both images and thumbs.
+      if(sw.wrapperEl===el.querySelector(':scope > .swiper-wrapper')){
+        var index=sw.activeIndex;el.classList.add.apply(el.classList,sw.classNames||['swiper-initialized']);
+        sw.update();sw.slideTo(index,0,false);
+        var thumb=holder.thumbnailSlide;
+        if(thumb&&!thumb.destroyed&&thumb.el?.isConnected){var thumbIndex=thumb.activeIndex;thumb.el.classList.add.apply(thumb.el.classList,thumb.classNames||['swiper-initialized']);thumb.update();thumb.slideTo(thumbIndex,0,false);sw.thumbs?.update(true);}
+      }else{rebuildSlider(holder);return;}
     }
     var slides = el.querySelectorAll(":scope > .swiper-wrapper > .swiper-slide");
     var same = slides.length === sw.slides.length;
@@ -1228,10 +1234,30 @@
     healImages(gallery);
     try { healSlider(gallery, inView); } catch (err) {}
   }
+  // Keep decoded images, Swipers, playback and thumbnail position across
+  // unrelated editor redraws. A new product/media/layout never reuses old DOM.
+  var editorGalleries=new Map();
+  function retainGallery(gallery){
+    if(!editor||!gallery?.isConnected||!gallery.firstElementChild||!gallery.hasAttribute('data-mt-gallery-config'))return gallery;
+    var key=galleryPositionKey(gallery),config=gallery.getAttribute('data-mt-gallery-config')+'|'+gallery.getAttribute('data-mt-gallery-media');
+    if(!key)return gallery;
+    var prior=editorGalleries.get(key);
+    if(prior&&prior.gallery!==gallery&&!prior.gallery.isConnected&&prior.config===config){
+      gallery.replaceWith(prior.gallery);return prior.gallery;
+    }
+    if(prior&&prior.gallery!==gallery&&!prior.gallery.isConnected){
+      var holder=prior.gallery.querySelector('slide-with-thumbs');
+      try{holder?.thumbnailSlide?.destroy(true,true);holder?.globalSlide?.destroy(true,true);}catch(err){}
+    }
+    editorGalleries.delete(key);editorGalleries.set(key,{gallery:gallery,config:config});
+    if(editorGalleries.size>24)editorGalleries.delete(editorGalleries.keys().next().value);
+    return gallery;
+  }
   var galleryIo = null;
   var galleriesSeen = typeof WeakSet === "function" ? new WeakSet() : null;
   function watchGallery(gallery) {
     if (!gallery || gallery.nodeType !== 1) return;
+    gallery=retainGallery(gallery);
     healImages(gallery);
     scanSticky(gallery);
     if (!("IntersectionObserver" in window)) { healGallery(gallery, true); return; }
@@ -1261,12 +1287,22 @@
     var root = e && e.target && e.target.querySelectorAll ? e.target : document;
     scanSticky(root);
     galleriesIn(root).forEach(function (g) {
+      g=retainGallery(g);
       watchGallery(g);
       requestAnimationFrame(function () {
         requestAnimationFrame(function () { healGallery(g, true); });
       });
     });
   }
+  if(editor)new MutationObserver(function(records){
+    records.forEach(function(record){
+      var containing=record.target.closest?.('media-gallery');if(containing)retainGallery(containing);
+      record.addedNodes.forEach(function(node){
+      if(node.nodeType!==1)return;
+      if(node.matches?.('media-gallery'))watchGallery(retainGallery(node));
+      else if(node.querySelector?.('media-gallery'))galleriesIn(node).forEach(function(g){watchGallery(retainGallery(g));});
+    });});
+  }).observe(document.documentElement,{childList:true,subtree:true});
   window.MateriaGalleryHeal = watchGallery;
   function firstScan() {
     scanSticky(document);
@@ -1304,6 +1340,8 @@
     var d = e && e.detail;
     if(d && !d.section && d.settings && d.settings.swatch_item_type)refreshVsp(d.settings.swatch_item_type);
     if (!d || !d.section || d.live) return;
+    var mediaKeys=['desktop_layout','mobile_layout','mobile_options','image_zoom','zoom_option','enable_video_autoplay','media_square','enable_image_square','image_ratio','product'];
+    if(!Object.keys(d.settings||{}).some(function(key){return mediaKeys.indexOf(key)!==-1;}))return;
     var section = document.getElementById("shopify-section-" + d.section);
     if (section) requestAnimationFrame(function () { onRedraw({ target: section }); });
   });

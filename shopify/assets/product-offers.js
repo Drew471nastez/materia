@@ -813,6 +813,12 @@
   function refreshTierImages(root){
     if(!root.isConnected)return;
     const options=parse(root.dataset.options)||{},overrides=root._tierImageOverrides||{};
+    root.dataset.tierImagePosition=options.tier_image_position||'auto';
+    root.dataset.tierImagePreset=options.style||root.dataset.style||'cards';
+    for(const [key,token,fallback]of [['tier_image_size','--tier-image-size',48],['tier_image_gap','--tier-image-gap',8],['tier_image_radius','--tier-image-radius',6]])root.style.setProperty(token,(Number.isFinite(Number(options[key]))?Number(options[key]):fallback)+'px');
+    if(!(Number(options.tier_image_size)>0))root.style.removeProperty('--tier-image-size');
+    if(!options.custom_style)root.style.setProperty('--tier-image-radius','var(--input-border-radius,var(--rounded-radius,6px))');
+    root.style.setProperty('--tier-image-fit',options.tier_image_fit==='cover'?'cover':'contain');
     root.querySelectorAll('.po-tier[data-tier-index]').forEach(row=>{
       const index=row.dataset.tierIndex,key='tier_'+index+'_image';
       const stored=root.getAttribute('data-tier-image-'+index);
@@ -854,9 +860,10 @@
     const target=event.target?.closest?.('quantity-offer,storelib-product-offers[data-kind="quantity_offer"]');if(target)roots=roots.filter(root=>root===target);
     if(roots.length!==1)return; // Never apply one block's upload to another.
     settings=settings[roots[0].dataset.blockId]?.settings||settings[roots[0].dataset.blockId]||settings;
-    const images=Object.fromEntries(Object.entries(settings).filter(([key])=>/^tier_[1-4]_image$/.test(key)));
+    const images=Object.fromEntries(Object.entries(settings).filter(([key])=>/^tier_[1-4]_image$/.test(key)||['tier_image_position','tier_image_size','tier_image_gap','tier_image_radius','tier_image_fit'].includes(key)));
     if(!Object.keys(images).length)return;
-    Object.assign(roots[0]._tierImageOverrides||={},images);refreshTierImages(roots[0]);
+    const root=roots[0];root.dataset.options=JSON.stringify({...parse(root.dataset.options),...root._tierImageOverrides,...images});
+    Object.assign(root._tierImageOverrides||={},images);refreshTierImages(root);
   });
   document.addEventListener('storelib:section-load',event=>{
     const scope=event.target?.querySelectorAll?event.target:document;
