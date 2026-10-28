@@ -1122,12 +1122,15 @@
   function settle(img) {
     var frame = img._mtFrame;
     if (frame) frame.classList.remove("mt-media-loading");
+    var src = img.currentSrc || img.getAttribute("src");
+    if (src) loadedGallerySrcs.add(src);
     revealImage(img);
   }
   function healImages(gallery) {
     gallery.querySelectorAll("img").forEach(function (img) {
-      if (img.complete) {
-        if (!img.naturalWidth && !img._mtRetried && img.getAttribute("src")) onError(img);
+      var src = img.currentSrc || img.getAttribute("src");
+      if ((src && loadedGallerySrcs.has(src)) || img.complete) {
+        if (img.complete && !img.naturalWidth && !img._mtRetried && img.getAttribute("src")) onError(img);
         else settle(img);
         return;
       }
@@ -1164,8 +1167,10 @@
     var product=gallery?.getAttribute('data-mt-product-id');
     return section?.id && product ? section.id+':'+product : '';
   }
+  const loadedGallerySrcs = new Set();
   window.MateriaGalleryState={
     initial:function(gallery,count){var saved=galleryPositions.get(galleryPositionKey(gallery));return saved!=null && saved<count ? saved : 0;},
+    seen:function(gallery){return galleryPositions.has(galleryPositionKey(gallery));},
     bind:rememberGalleryPosition
   };
   function rememberGalleryPosition(gallery, sw) {
@@ -1208,22 +1213,32 @@
         if(thumb&&!thumb.destroyed&&thumb.el?.isConnected){var thumbIndex=thumb.activeIndex;thumb.el.classList.add.apply(thumb.el.classList,thumb.classNames||['swiper-initialized']);thumb.update();thumb.slideTo(thumbIndex,0,false);sw.thumbs?.update(true);}
       }else{rebuildSlider(holder);return;}
     }
-    var slides = el.querySelectorAll(":scope > .swiper-wrapper > .swiper-slide");
-    var same = slides.length === sw.slides.length;
-    for (var i = 0; same && i < slides.length; i++) if (slides[i] !== sw.slides[i]) same = false;
+    var slides = el.querySelectorAll(":scope > .swiper-wrapper > .swiper-slide:not(.swiper-slide-duplicate)");
+    var liveSlides = [];
+    for (var s = 0; s < sw.slides.length; s++) if (!sw.slides[s].classList.contains("swiper-slide-duplicate")) liveSlides.push(sw.slides[s]);
+    var same = slides.length === liveSlides.length;
+    for (var i = 0; same && i < slides.length; i++) if (slides[i] !== liveSlides[i]) same = false;
+    // A settings change kept this gallery. Measuring it and calling update()
+    // is what shifted the thumbnails on every slider drag.
+    if (gallery._mtHeld && same && el.classList.contains("swiper-initialized")) {
+      rememberGalleryPosition(gallery, sw);
+      return;
+    }
     var width = el.clientWidth;
-    if (!same || (width && Math.abs((sw.width || 0) - width) > 1)) sw.update();
+    if (!same || (width && Math.abs((sw.width || 0) - width) > 8)) sw.update();
     if (!slides.length) return;
     rememberGalleryPosition(gallery, sw);
     if (sw.activeIndex > slides.length - 1) sw.slideTo(0, 0, false);
     if (!inView || !width) return;
-    // The current slide must be inside the frame.
+    // The current slide must be inside the frame. A zero box is a frame
+    // mid-redraw, not a slide that left the picture.
     var active = sw.slides[sw.activeIndex];
     if (!active) return;
     var a = active.getBoundingClientRect();
     var b = el.getBoundingClientRect();
+    if (a.width < 1 || b.width < 1) return;
     var horizontal = typeof sw.isHorizontal !== "function" || sw.isHorizontal();
-    var outside = horizontal ? (a.width < 1 || a.right <= b.left + 1 || a.left >= b.right - 1) : (a.height < 1 || a.bottom <= b.top + 1 || a.top >= b.bottom - 1);
+    var outside = horizontal ? (a.right <= b.left + 1 || a.left >= b.right - 1) : (a.bottom <= b.top + 1 || a.top >= b.bottom - 1);
     if (outside) {
       sw.update();
       sw.slideTo(sw.activeIndex, 0, false);
@@ -1339,8 +1354,10 @@
   document.addEventListener("storelib:settings-change", function (e) {
     var d = e && e.detail;
     if(d && !d.section && d.settings && d.settings.swatch_item_type)refreshVsp(d.settings.swatch_item_type);
+    // A slider drag only changes a value. Rebuilding the product photos here
+    // is what made the thumbnails jump on every adjustment.
     if (!d || !d.section || d.live) return;
-    var mediaKeys=['desktop_layout','mobile_layout','mobile_options','image_zoom','zoom_option','enable_video_autoplay','media_square','enable_image_square','image_ratio','product'];
+    var mediaKeys=['desktop_media_width','desktop_layout','mobile_layout','mobile_options','image_zoom','zoom_option','enable_video_autoplay','media_square','enable_image_square','image_ratio','product'];
     if(!Object.keys(d.settings||{}).some(function(key){return mediaKeys.indexOf(key)!==-1;}))return;
     var section = document.getElementById("shopify-section-" + d.section);
     if (section) requestAnimationFrame(function () { onRedraw({ target: section }); });

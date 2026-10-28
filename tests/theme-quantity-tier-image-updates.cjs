@@ -36,6 +36,19 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42
    await root.evaluate((el,style)=>{const po=el.matches('.po')?el:el.querySelector('.po');po.dataset.style=style;po.removeAttribute('data-custom-style');},style);
    assert(await image(1).isVisible(),style);assert((await image(1).boundingBox()).width>=20,style);checks++;
   }
+  for(const position of ['left','top','right','below','beside','above','hidden']){
+   await root.evaluate((el,position)=>{const s=JSON.parse(el.dataset.options);Object.assign(s,{tier_image_position:position,tier_image_size:64,tier_image_gap:8,tier_image_radius:12,tier_image_fit:'cover',custom_style:true});el.dataset.options=JSON.stringify(s);},position);
+   await page.waitForTimeout(40);
+   if(position==='hidden'){assert(!await image(1).isVisible());checks++;continue;}
+   const img=await image(1).boundingBox(),label=await root.locator('[data-tier-index="1"] .po-tier__label').boundingBox();
+   assert.equal(Math.round(img.width),64);assert.equal(Math.round(img.height),64);
+   assert.equal(await image(1).evaluate(el=>getComputedStyle(el).borderRadius),'12px');assert.equal(await image(1).evaluate(el=>getComputedStyle(el).objectFit),'cover');
+   if(['left','beside'].includes(position))assert(img.x+img.width<=label.x+1);
+   if(position==='right')assert(img.x>=label.x+label.width-1);
+   if(['top','above'].includes(position))assert(img.y+img.height<=label.y+1);
+   if(position==='below')assert(img.y>=label.y+label.height-1);
+   checks++;
+  }
   assert.deepEqual(errors,[]);await page.close();
  }
  console.log(checks+' saved tier image loading, in-place upload/replacement/removal, editor events, selection stability and preset checks passed');

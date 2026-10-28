@@ -346,7 +346,7 @@ if (require.main !== module) return;
     }
     /* A gallery taller than the screen scrolls until its end shows, then stays. */
     {
-      const { html } = await renderPage({ product: TALL });
+      const { html } = await renderPage({ product: TALL, settings: {enable_image_square:false,media_square:false} });
       const { p, ctx } = await open(1366, html.replace('</head>', '<style>.sec__featured-product .product-detail__information{min-height:3600px}</style></head>'));
       await toSection(p, 1200);
       const s = await p.evaluate(s => { const g = document.querySelector(s + ' media-gallery'); const r = g.getBoundingClientRect(); return { tall: g.classList.contains('mt-sticky-tall'), bottom: r.bottom, h: r.height }; }, SEL);

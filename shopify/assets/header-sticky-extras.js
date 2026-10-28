@@ -3,26 +3,6 @@
    menu opening), moved into a cached file loaded deferred by that snippet.
    None of them can act before the theme's own deferred scripts have run. */
 (() => {
-  if(window.MateriaHeaderActions)return;
-  function handle(event){
-    if(event.type!=='click'||event.button>0||!matchMedia('(max-width:1024.98px)').matches)return false;
-    const toggle=event.target.closest?.('.nav-toggle,[data-action="toggle-nav"]');
-    const close=event.target.closest?.('.navigation.mobile close-menu');
-    if(!toggle&&!close)return false;
-    event.preventDefault();event.stopImmediatePropagation();
-    if(window.MateriaMenu){if(close)MateriaMenu.close();else MateriaMenu.toggle();}
-    else{
-      // Keep navigation usable even if an unrelated module failed to load.
-      const root=document.documentElement,on=close?false:!root.classList.contains('nav-open');
-      root.classList.toggle('nav-open',on);if(on||!root.matches('.open-minicart,.open-search'))root.classList.toggle('open-drawer',on);
-      document.querySelectorAll('.nav-toggle,[data-action="toggle-nav"]').forEach(button=>{button.classList.toggle('open',on);button.setAttribute('aria-expanded',String(on));});
-    }
-    return true;
-  }
-  window.MateriaHeaderActions={handle};
-  if(!window.__materiaSectionLinkCapture)window.addEventListener('click',handle,true);
-})();
-(() => {
   /* The announcement and top bar stay under the page dimming until it has
      faded out, so they brighten with the rest of the page, not before it. */
   if (!window.StorelibOverlayFade) {
@@ -51,7 +31,7 @@
     addEventListener('pageshow', e => {
       if (!e.persisted) return;
       const root = document.documentElement;
-      ['nav-open', 'nav-closing', 'open-drawer', 'open-minicart', 'open-search', 'nav-verticalmenu', 'overlay-closing']
+      ['nav-open', 'open-drawer', 'open-minicart', 'open-search', 'nav-verticalmenu', 'overlay-closing']
         .forEach(c => { if (root.classList.contains(c)) root.classList.remove(c); });
       root.style.removeProperty('padding-right');
       document.querySelectorAll('#minicart_wrapper.open, #minicart_wrapper .minicart__wrapper.open').forEach(el => el.classList.remove('open'));
@@ -65,7 +45,7 @@
   if (!window.StorelibMenuLayer && HTMLElement.prototype.showPopover) {
     const root = document.documentElement;
     const phone = matchMedia('(max-width: 1024.98px)');
-    let closeTimer, lastOpen;
+    let closeTimer;
     const drawers = () => [...document.querySelectorAll('.navigation.mobile')];
     const show = nav => {
       if (!nav.hasAttribute('popover')) nav.setAttribute('popover', 'manual');
@@ -81,11 +61,8 @@
       nav.removeAttribute('popover');
     };
     const sync = () => {
-      const open=root.classList.contains('nav-open') && phone.matches;
-      if(open===lastOpen)return;
-      lastOpen=open;
       clearTimeout(closeTimer);
-      if (open) {
+      if (root.classList.contains('nav-open') && phone.matches) {
         drawers().forEach(show);
       } else {
         const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -96,9 +73,6 @@
     };
     new MutationObserver(sync).observe(root, {attributes: true, attributeFilter: ['class']});
     phone.addEventListener?.('change', sync);
-    document.addEventListener('storelib:section-load',()=>{
-      if(root.classList.contains('nav-open') && phone.matches)drawers().forEach(show);
-    });
     document.addEventListener('keydown', e => {
       // theme.js (MateriaMenu) closes the open level first, then the drawer.
       if (window.MateriaMenu) return;
@@ -106,57 +80,4 @@
     });
     window.StorelibMenuLayer = {sync};
   }
-})();
-
-/* Fit actual translated menu text, not a fixed viewport breakpoint. A compact
-   second row is preferable to a link wrapping outside a fixed-height header.
-   Measure only after content/font changes; resizing reuses the natural width. */
-(() => {
-  if (window.MateriaHeaderFit) return;
-  const states = new Map();
-  let frame = 0;
-  const queue = () => { if (!frame) frame = requestAnimationFrame(paint); };
-  function paint() {
-    frame = 0;
-    states.forEach((state, root) => {
-      if (!root.isConnected) { state.resize?.disconnect(); state.content?.disconnect(); states.delete(root); return; }
-      if (!matchMedia('(min-width:1025px)').matches) { root.removeAttribute('data-header-stacked'); return; }
-      const list = root.querySelector('.navigation.horizontal:not(.mobile) .horizontal-list');
-      const logo = root.querySelector('.header__logo');
-      if (!list || !logo) return;
-      const first = list.querySelector(':scope > .level0 > menu-item > a');
-      if (!first) return;
-      const scale = root.getBoundingClientRect().width / root.offsetWidth || 1;
-      const style = getComputedStyle(first), grid = getComputedStyle(root);
-      const signature = [style.font, style.letterSpacing, style.textTransform, style.paddingInlineStart, style.paddingInlineEnd, getComputedStyle(list).columnGap].join('|');
-      if (state.list !== list || state.signature !== signature || state.width == null) {
-        state.content?.disconnect();
-        state.list = list; state.signature = signature;
-        list.setAttribute('data-header-measuring', '');
-        state.width = list.getBoundingClientRect().width / scale;
-        list.removeAttribute('data-header-measuring');
-        state.content = new MutationObserver(() => { state.width = null; queue(); });
-        state.content.observe(list, {subtree:true, childList:true, characterData:true});
-      }
-      const gap = parseFloat(grid.columnGap) || 0;
-      const available = Math.max(0, (root.clientWidth - logo.getBoundingClientRect().width / scale - 2 * gap) / 2);
-      root.toggleAttribute('data-header-stacked', state.width > available + 1);
-    });
-  }
-  function scan(invalidate = false) {
-    document.querySelectorAll('header.header header-inner.logo-position').forEach(root => {
-      if (!states.has(root)) {
-        const state = {width:null};
-        state.resize = new ResizeObserver(queue); state.resize.observe(root);
-        states.set(root, state);
-      } else if (invalidate) states.get(root).width = null;
-    });
-    queue();
-  }
-  ['storelib:section-load','shopify:section:load','storelib:settings-change'].forEach(name => document.addEventListener(name, () => scan(true)));
-  window.addEventListener('resize', queue, {passive:true});
-  document.fonts?.ready.then(() => scan(true));
-  document.fonts?.addEventListener('loadingdone', () => scan(true));
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => scan()); else scan();
-  window.MateriaHeaderFit = {scan};
 })();

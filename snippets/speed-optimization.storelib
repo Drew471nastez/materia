@@ -135,13 +135,28 @@
     This is an atomic visual handoff, not a second navigation implementation.
   {%- endcomment -%}
   <style id="speed-page-landing">
-    html:root::view-transition-group(root) { animation:none; }
-    html:root::view-transition-old(root) { display:none; animation:none; }
-    html:root::view-transition-new(root) { animation:none; opacity:1; mix-blend-mode:normal; }
-    #shopify-section-header.section-header { view-transition-name:materia-site-header; }
-    html:root::view-transition-group(materia-site-header) { animation:none; }
-    html:root::view-transition-old(materia-site-header) { display:none; }
-    html:root::view-transition-new(materia-site-header) { animation:none; }
+    /* The old page stays painted and the new one covers it. Hiding the old
+       page first showed the background for a frame (a white flash), and a
+       separate name on the header made the bar pop loose from the page. */
+    html:root::view-transition { background: var(--color-background, Canvas); }
+    html:root::view-transition-group(root) {
+      animation-duration: 240ms;
+      animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    html:root::view-transition-old(root) {
+      animation: none;
+      opacity: 1;
+      mix-blend-mode: normal;
+    }
+    html:root::view-transition-new(root) {
+      mix-blend-mode: normal;
+      animation: materia-page-cover 240ms cubic-bezier(0.4, 0, 0.2, 1) both;
+    }
+    @keyframes materia-page-cover { from { opacity: 0; } to { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) {
+      html:root::view-transition-group(root),
+      html:root::view-transition-new(root) { animation: none; opacity: 1; }
+    }
   </style>
 {%- endif -%}
 
@@ -204,7 +219,12 @@
       }
       for (var j = 0; j < imgs.length; j++) {
         imgs[j].setAttribute('data-speed-tuned', '');
-        if (below[j]) imgs[j].decoding = 'async';
+        if (!below[j]) continue;
+        imgs[j].decoding = 'async';
+        // Below the first screen, and only when the size is already reserved,
+        // so a slow connection spends its bandwidth on the page in view and
+        // the picture does not jump in when it arrives.
+        if (!imgs[j].hasAttribute('loading') && imgs[j].getAttribute('fetchpriority') !== 'high' && (imgs[j].hasAttribute('width') || imgs[j].style.aspectRatio)) imgs[j].loading = 'lazy';
       }
     };
     onReady(function () { idle(tuneImages, { timeout: 800 }); });

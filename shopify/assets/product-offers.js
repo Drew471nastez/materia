@@ -813,7 +813,7 @@
   function refreshTierImages(root){
     if(!root.isConnected)return;
     const options=parse(root.dataset.options)||{},overrides=root._tierImageOverrides||{};
-    root.dataset.tierImagePosition=options.tier_image_position||'auto';
+    root.dataset.tierImagePosition=({beside:'left',above:'top'})[options.tier_image_position]||options.tier_image_position||'auto';
     root.dataset.tierImagePreset=options.style||root.dataset.style||'cards';
     for(const [key,token,fallback]of [['tier_image_size','--tier-image-size',48],['tier_image_gap','--tier-image-gap',8],['tier_image_radius','--tier-image-radius',6]])root.style.setProperty(token,(Number.isFinite(Number(options[key]))?Number(options[key]):fallback)+'px');
     if(!(Number(options.tier_image_size)>0))root.style.removeProperty('--tier-image-size');
@@ -932,6 +932,7 @@
       this.upsellChoices=[];
       const s=this.options;
       const box=node('div',kind==='upsell_pro'?'upsell-pro':kind==='quantity_offer'?'po po-qty':'po po-bundle');box.dataset.style=s.style||'cards';
+      if(kind==='quantity_offer'){box.dataset.imagePosition=s.tier_image_position||'beside';if(Number.isFinite(Number(s.tier_image_size)))box.style.setProperty('--po-tier-image',Math.min(120,Math.max(40,Number(s.tier_image_size)))+'px');}
       const numeric=kind==='upsell_pro'?{padding_top:'--up-pt',padding_bottom:'--up-pb',gap:'--up-gap',image_size_px:'--up-img',heading_size:'--up-heading-size',heading_gap:'--up-heading-gap'}:{padding_top:'--po-pad-top',padding_bottom:'--po-pad-bottom'};
       Object.entries(numeric).forEach(([key,token])=>{if(s[key]!=null && Number.isFinite(Number(s[key])))box.style.setProperty(token,Math.max(0,Number(s[key]))+'px');});
       if(s.accent_color)box.style.setProperty('--po-accent',s.accent_color);
