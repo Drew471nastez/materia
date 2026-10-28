@@ -313,7 +313,7 @@ const STORELIB_CHART = {name: 'Pants', unit: 'cm', columns: ['Size', 'Waist', 'H
         cart.item_count = cart.items.length;
         return route.fulfill({contentType: 'application/json', body: JSON.stringify(cart)});
       });
-      const tab = await open(ctx, 'pair', base('<span class="cart-count">0</span>' + markup));
+      const tab = await open(ctx, 'pair', base('<script src="/assets/utils.js"></script><span class="cart-count">0</span>' + markup));
       const card = tab.locator('.pw-card').nth(1);
       const before = await card.locator('.pw-price').textContent();
       assert(/137/.test(before), 'first price drawn: ' + before);
