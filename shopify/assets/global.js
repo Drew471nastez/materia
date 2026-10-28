@@ -31,51 +31,64 @@
 (() => {
   if (window.__materiaMouseDrag) return;
   window.__materiaMouseDrag = true;
-  let drag = null;
-  const blocked = 'button, a, input, textarea, select, label, summary';
+  let drag = null, suppressClick = null;
+  const blocked = 'button, input, textarea, select, label, summary, [contenteditable="true"]';
   const rowOf = (node) => {
     let el = node instanceof Element ? node : null;
     if (!el || el.closest(blocked)) return null;
     while (el && el !== document.documentElement) {
+      // Swiper owns transform tracks. Never start a second drag on them.
       if (el.classList.contains('swiper')) return null;
       const style = getComputedStyle(el);
-      const snap = style.scrollSnapType || '';
-      const sideways = snap.startsWith('x') || el.hasAttribute('data-testimonial-row') || el.hasAttribute('data-drag-scroll');
-      if (sideways && el.scrollWidth > el.clientWidth + 8) return el;
+      if ((style.scrollSnapType.startsWith('x') || el.hasAttribute('data-testimonial-row') || el.hasAttribute('data-drag-scroll')) && el.scrollWidth > el.clientWidth + 8) return el;
       el = el.parentElement;
     }
     return null;
   };
-  document.addEventListener('pointerdown', (event) => {
-    if (drag || event.pointerType !== 'mouse' || event.button !== 0) return;
-    const row = rowOf(event.target);
-    if (!row) return;
-    drag = { row, id: event.pointerId, x: event.clientX, start: row.scrollLeft, moved: false };
-    row.style.setProperty('scroll-snap-type', 'none', 'important');
-    row.style.setProperty('scroll-behavior', 'auto', 'important');
-  }, true);
-  document.addEventListener('pointermove', (event) => {
-    if (!drag || event.pointerId !== drag.id) return;
-    const dx = event.clientX - drag.x;
-    if (!drag.moved) {
-      if (Math.abs(dx) < 2) return;
-      drag.moved = true;
-      drag.row.classList.add('is-dragging');
-      drag.row.setPointerCapture?.(event.pointerId);
-    }
-    drag.row.scrollLeft = drag.start - dx;
-    event.preventDefault();
-  }, { passive: false });
-  const end = (event) => {
-    if (!drag || (event && event.pointerId != null && event.pointerId !== drag.id)) return;
-    const row = drag.row;
-    row.classList.remove('is-dragging');
-    row.style.removeProperty('scroll-snap-type');
-    row.style.removeProperty('scroll-behavior');
-    drag = null;
+  const finish = event => {
+    if (!drag || (event?.pointerId != null && event.pointerId !== drag.id)) return;
+    const current=drag;drag=null;
+    if(current.moved)suppressClick={row:current.row,until:performance.now()+400};
+    current.row.classList.toggle('is-dragging',current.wasDragging);
+    for(const [property,value,priority] of current.styles){if(value)current.row.style.setProperty(property,value,priority);else current.row.style.removeProperty(property);}
+    try{if(current.row.hasPointerCapture(current.id))current.row.releasePointerCapture(current.id);}catch(_){}
   };
-  document.addEventListener('pointerup', end);
-  document.addEventListener('pointercancel', end);
+  document.addEventListener('pointerdown', event => {
+    if (drag || event.pointerType !== 'mouse' || event.button !== 0) return;
+    const row=rowOf(event.target);if(!row)return;
+    suppressClick=null;
+    drag={row,id:event.pointerId,x:event.clientX,lastX:event.clientX,position:row.scrollLeft,rtl:getComputedStyle(row).direction==='rtl',moved:false,wasDragging:row.classList.contains('is-dragging'),styles:['scroll-snap-type','scroll-behavior','user-select'].map(p=>[p,row.style.getPropertyValue(p),row.style.getPropertyPriority(p)])};
+    row.style.setProperty('scroll-snap-type','none','important');
+    row.style.setProperty('scroll-behavior','auto','important');
+    row.style.setProperty('user-select','none','important');
+    row.scrollTo({left:row.scrollLeft,behavior:'instant'});
+  },true);
+  document.addEventListener('pointermove', event => {
+    if(!drag || event.pointerId!==drag.id)return;
+    if(!drag.row.isConnected || event.buttons===0){finish(event);return;}
+    if(!drag.moved){
+      if(Math.abs(event.clientX-drag.x)<2)return;
+      drag.moved=true;drag.row.classList.add('is-dragging');
+      try{drag.row.setPointerCapture(event.pointerId);}catch(_){}
+    }
+    // Incremental movement reverses immediately at either edge. An absolute
+    // origin accumulates overshoot and appears frozen when reversing direction.
+    const range=Math.max(0,drag.row.scrollWidth-drag.row.clientWidth);
+    drag.position=Math.min(drag.rtl?0:range,Math.max(drag.rtl?-range:0,drag.position-(event.clientX-drag.lastX)));
+    drag.row.scrollLeft=drag.position;
+    drag.lastX=event.clientX;
+    event.preventDefault();
+  },{passive:false,capture:true});
+  document.addEventListener('dragstart',event=>{if(drag && drag.row.contains(event.target))event.preventDefault();},true);
+  document.addEventListener('click',event=>{
+    if(!suppressClick || performance.now()>suppressClick.until)return;
+    if(suppressClick.row.contains(event.target)){event.preventDefault();event.stopImmediatePropagation();suppressClick=null;}
+  },true);
+  document.addEventListener('pointerup',finish,true);
+  document.addEventListener('pointercancel',finish,true);
+  document.addEventListener('lostpointercapture',finish,true);
+  window.addEventListener('blur',()=>finish());
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)finish();});
 })();
 var BlsLazyloadImg = (function () {
   return {

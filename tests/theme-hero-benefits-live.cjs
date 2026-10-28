@@ -11,9 +11,10 @@ const getStyle=(el,key)=>getComputedStyle(el)[key];
 (async()=>{let checks=0;const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});try{
  for(const width of [375,1366]){
   const page=await browser.newPage({viewport:{width,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.route('https://storelib.com/media/**',r=>r.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg"/>'}));
   await page.route('https://fonts.googleapis.com/**',route=>{const family=new URL(route.request().url()).searchParams.get('family').split(':')[0];route.fulfill({contentType:'text/css',body:'@font-face{font-family:'+JSON.stringify(family)+';font-style:normal;font-weight:100 900;font-display:swap;src:url(https://fonts.test/font.woff2) format("woff2");}'});});
   await page.route('https://fonts.test/**',route=>route.fulfill({contentType:'font/woff2',headers:{'Access-Control-Allow-Origin':'*'},body:fs.readFileSync('shopify/assets/InstrumentSans-Regular.woff2')}));
-  const section={id:'hero',settings:{...saved[1].settings},blocks:saved[1].block_order.map(id=>({id,...saved[1].blocks[id]}))};
+  const section={id:'hero',settings:{...saved[1].settings,use_content_blocks:false,enable_custom_style:false},blocks:saved[1].block_order.map(id=>({id,...saved[1].blocks[id]})).filter(b=>b.type==='benefit')};
   const render=async()=>{
    const ctx={settings:{theme_font_priority:true},request:{design_mode:true},section};const e=engine();e.registerFilter('font_face',font=>{assert.equal(typeof font,'object','Only native font objects can use font_face');return '';});
    const controls=await e.parseAndRender(clean(read('snippets/theme-controls.storelib')),ctx,{globals:ctx});
