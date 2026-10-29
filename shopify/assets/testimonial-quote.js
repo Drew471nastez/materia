@@ -34,6 +34,7 @@
     for(const [key,value,fallback]of [['--tq-bg',s.section_background,'var(--color-background)'],['--tq-text',s.text_color,'var(--color-text)'],['--tq-heading',s.text_color,'var(--color-heading)'],['--tq-quote',s.testimonial_color,'var(--tq-text)'],['--tq-author',s.author_color,'var(--tq-heading)'],['--tq-arrow',s.inactive_arrows_color,'var(--tq-heading)'],['--tq-stars',s.stars_color,'var(--tq-heading)'],['--tq-empty',s.empty_stars_color,'var(--color-border)']])set(root,key,custom?color(value,fallback):fallback);
     set(root,'--tq-card-bg',s.testimonial_box_style==='border'?'transparent':custom?color(s.testimonial_box_color,'color-mix(in srgb,var(--tq-text) 5%,var(--tq-bg))'):'color-mix(in srgb,var(--tq-text) 5%,var(--tq-bg))');
     set(root,'--tq-border',custom?color(s.testimonial_border_color,s.testimonial_box_style==='border'?'var(--color-border)':'transparent'):s.testimonial_box_style==='border'?'var(--color-border)':'transparent');
+    set(root,'background','var(--tq-bg)',true);set(root,'color','var(--tq-text)',true);
     set(root,'--tq-radius',custom?num(s.testimonial_box_corner,14)+'px':'var(--rounded-radius,8px)');
     set(root,'padding-top',num(desktop?s.top_padding_desktop:s.top_padding_mobile)+'px');set(root,'padding-bottom',num(desktop?s.bottom_padding_desktop:s.bottom_padding_mobile)+'px');set(root,'margin-block',num(desktop?s.vertical_margin:s.vertical_margin_mobile)+'px');
     root.dataset.photos=String(bool(s.enable_reviewer_photo));root.dataset.peek=String(bool(s.show_peek)&&root.querySelectorAll('.tq-card').length>num(s.testimonial_per_row,2));root.dataset.collapse=String(bool(s.truncate_quotes));
@@ -50,7 +51,7 @@
         set(el,'line-height',heading?'var(--heading-line-height,1.2)':'var(--body-line-height,1.5)',true);
         set(el,'font-weight',own&&heading?({thin:100,light:300,regular:400,semibold:600,bold:700}[b.heading_style]||600):heading?'var(--heading-weight,600)':'var(--body-weight,400)',true);
       }else{
-        set(el,'background',own?color(b.card_color,'var(--tq-card-bg)'):'var(--tq-card-bg)');
+        set(el,'background',own?color(b.card_color,'var(--tq-card-bg)'):'var(--tq-card-bg)',true);set(el,'border-color','var(--tq-border)',true);set(el,'border-radius','var(--tq-radius)',true);
         const quote=el.querySelector('.tq-quote-text');text(quote,b.testimonial_text);
         set(quote,'font-family','var(--body-font)',true);set(quote,'font-size',own?num(b.quote_size,16)+'px':custom?num(s.testimonial_text_size,16)+'px':'var(--body-font-size,16px)',true);set(quote,'font-weight','var(--body-weight,400)',true);set(quote,'line-height','var(--body-line-height,1.5)',true);set(quote,'color',own?color(b.quote_color,'var(--tq-quote)'):'var(--tq-quote)');
         text(el.querySelector('.tq-name'),b.author_name);text(el.querySelector('.tq-meta'),b.author_additional_text);

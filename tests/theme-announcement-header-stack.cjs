@@ -7,7 +7,7 @@ const strip=s=>s.replace(/\{%[\s\S]*?%\}/g,'').replace(/\{\{\s*section.id\s*\}\}
  await page.addStyleTag({content:strip(source.match(/<style>([\s\S]*?)<\/style>/)[1])});
  await page.addScriptTag({content:strip(source.match(/<script>([\s\S]*?)<\/script>/)[1])});
  const offset=()=>page.evaluate(()=>parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--storelib-header-top')));
- await page.waitForFunction(()=>window.StorelibStickyStack?.top===30);assert.equal(await offset(),30);
+ await page.waitForFunction(()=>window.StorelibStickyStack?.top===30&&parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--storelib-header-top'))===30);assert.equal(await offset(),30);
  const height=await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--height-bar'));
  await page.evaluate(()=>scrollTo(0,50));await page.waitForFunction(()=>window.StorelibStickyStack?.top===30);assert.equal(await offset(),30);
  await page.evaluate(()=>scrollTo(0,180));await page.waitForFunction(()=>window.StorelibStickyStack?.top===30);assert.equal(await offset(),30);
