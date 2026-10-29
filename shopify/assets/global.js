@@ -52,12 +52,25 @@
     current.row.classList.toggle('is-dragging',current.wasDragging);
     for(const [property,value,priority] of current.styles){if(value)current.row.style.setProperty(property,value,priority);else current.row.style.removeProperty(property);}
     try{if(current.row.hasPointerCapture(current.id))current.row.releasePointerCapture(current.id);}catch(_){}
+    if(event?.type==='pointerup' && current.moved && current.row.hasAttribute('data-testimonial-row')){
+      const card=current.row.firstElementChild,step=(card?.getBoundingClientRect().width||0)+(parseFloat(getComputedStyle(current.row).columnGap)||0);
+      const velocity=performance.now()-current.lastTime<90?current.velocity:0;
+      const distance=current.position-current.start;
+      if(step>0 && Math.abs(distance)>24 && (Math.abs(velocity)>.25 || Math.abs(distance)>=step*.15)){
+        const range=current.row.scrollWidth-current.row.clientWidth;
+        const projected=current.position+Math.max(-step*.75,Math.min(step*.75,velocity*140));
+        let snap=Math.round(projected/step);
+        if(snap===Math.round(current.start/step))snap+=Math.sign(distance);
+        const target=Math.max(current.rtl?-range:0,Math.min(current.rtl?0:range,snap*step));
+        current.row.scrollTo({left:target,behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth'});
+      }
+    }
   };
   document.addEventListener('pointerdown', event => {
     if (drag || event.pointerType !== 'mouse' || event.button !== 0) return;
     const row=rowOf(event.target);if(!row)return;
     suppressClick=null;
-    drag={row,id:event.pointerId,x:event.clientX,lastX:event.clientX,position:row.scrollLeft,rtl:getComputedStyle(row).direction==='rtl',moved:false,wasDragging:row.classList.contains('is-dragging'),styles:['scroll-snap-type','scroll-behavior','user-select'].map(p=>[p,row.style.getPropertyValue(p),row.style.getPropertyPriority(p)])};
+    drag={row,id:event.pointerId,x:event.clientX,lastX:event.clientX,position:row.scrollLeft,start:row.scrollLeft,lastTime:performance.now(),velocity:0,rtl:getComputedStyle(row).direction==='rtl',moved:false,wasDragging:row.classList.contains('is-dragging'),styles:['scroll-snap-type','scroll-behavior','user-select'].map(p=>[p,row.style.getPropertyValue(p),row.style.getPropertyPriority(p)])};
     row.style.setProperty('scroll-snap-type','none','important');
     row.style.setProperty('scroll-behavior','auto','important');
     row.style.setProperty('user-select','none','important');
@@ -74,7 +87,9 @@
     // Incremental movement reverses immediately at either edge. An absolute
     // origin accumulates overshoot and appears frozen when reversing direction.
     const range=Math.max(0,drag.row.scrollWidth-drag.row.clientWidth);
+    const previous=drag.position,now=performance.now();
     drag.position=Math.min(drag.rtl?0:range,Math.max(drag.rtl?-range:0,drag.position-(event.clientX-drag.lastX)));
+    drag.velocity=(drag.position-previous)/Math.max(1,now-drag.lastTime);drag.lastTime=now;
     drag.row.scrollLeft=drag.position;
     drag.lastX=event.clientX;
     event.preventDefault();

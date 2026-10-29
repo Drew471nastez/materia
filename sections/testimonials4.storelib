@@ -114,13 +114,21 @@
   }
   .tsp-{{ sid }} .tsp-track {
     display: flex;
-    transition: transform .55s cubic-bezier(.4,0,.2,1);
-    will-change: transform;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    overscroll-behavior-inline: contain;
+    touch-action: pan-x pan-y;
+    cursor: grab;
   }
+  .tsp-{{ sid }} .tsp-track::-webkit-scrollbar{display:none}
+  .tsp-{{ sid }} .tsp-track.is-dragging{cursor:grabbing}
   .tsp-{{ sid }} .tsp-card {
     flex: 0 0 100%;
     min-width: 0;
     padding-inline: 12px;
+    scroll-snap-align: start;
   }
   .tsp-{{ sid }} .tsp-stars {
     display: inline-flex; gap: 4px;
@@ -260,7 +268,7 @@
     {%- assign testimonial_blocks = section.blocks | where: 'type', 'testimonial' -%}
     {%- if testimonial_blocks.size > 0 -%}
       <div class="tsp-rail" data-tsp-rail>
-        <div class="tsp-track" data-tsp-track>
+        <div class="tsp-track" data-tsp-track data-testimonial-row tabindex="0">
           {%- for b in testimonial_blocks -%}
             {%- assign rating = b.settings.rating | default: 5 -%}
             <div class="tsp-card" {{ b.shopify_attributes }}>
@@ -334,13 +342,16 @@
 
   function go(i) {
     idx = (i + slides.length) % slides.length;
-    track.style.transform = 'translateX(' + (-100 * idx) + '%)';
+    track.scrollTo({left:idx*track.clientWidth*(getComputedStyle(track).direction==='rtl'?-1:1),behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth'});
     dots.forEach((d, n) => d.classList.toggle('is-active', n === idx));
   }
   if (prev) prev.addEventListener('click', () => go(idx - 1));
   if (next) next.addEventListener('click', () => go(idx + 1));
   dots.forEach((d) => d.addEventListener('click', (e) => go(parseInt(d.getAttribute('data-tsp-dot'), 10))));
 
+  let frame=0;
+  track.addEventListener('scroll',()=>{if(!frame)frame=requestAnimationFrame(()=>{frame=0;idx=Math.round(Math.abs(track.scrollLeft)/track.clientWidth);dots.forEach((d,n)=>d.classList.toggle('is-active',n===idx));});},{passive:true});
+  track.addEventListener('keydown',e=>{if(e.target!==track)return;if(e.key==='ArrowRight'||e.key==='ArrowLeft'){go(idx+(e.key==='ArrowRight'?1:-1)*(getComputedStyle(track).direction==='rtl'?-1:1));e.preventDefault();}});
   // Auto-advance
   const autoMs = {{ section.settings.autoplay_s | default: 0 }} * 1000;
   if (autoMs > 0 && slides.length > 1) {
@@ -349,9 +360,12 @@
     function stop() { if (timer) { clearInterval(timer); timer = null; } }
     function start() {
       stop();
-      if (!visible || hovered || !root.isConnected) return;
+      if (!visible || hovered || !root.isConnected || matchMedia('(prefers-reduced-motion:reduce)').matches) return;
       timer = setInterval(() => { if (!root.isConnected) { stop(); return; } go(idx + 1); }, autoMs);
     }
+    root.addEventListener('pointerdown', () => { hovered = true; stop(); });
+    root.addEventListener('pointerup', () => { hovered = false; start(); });
+    root.addEventListener('pointercancel', () => { hovered = false; start(); });
     root.addEventListener('mouseenter', () => { hovered = true; stop(); });
     root.addEventListener('mouseleave', () => { hovered = false; start(); });
     if ('IntersectionObserver' in window) {
