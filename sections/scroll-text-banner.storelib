@@ -288,13 +288,13 @@
   }
 {% comment %}{% endcomment %}</style>
 
-<scroll-text-banner class="stw-{{ uid }} color-{{ scheme }} gradient" data-offset="{{ sticky_off }}">
+<scroll-text-banner data-text-controls="scroll-text-banner" data-tx-section="{{ section.id }}" data-tx-settings="{{ section.settings | json | escape }}" data-tx-defaults='{"color_scheme":"default-color-scheme","width":"fluid_container","text_align":"left","max_width":1100,"uppercase":true,"font_size_d":40,"line_height":1.4,"bold":true,"font_style":"heading","letter_spacing":0,"enable_custom_fonts":false,"heading_font":"assistant_n4","body_font":"assistant_n4","base_opacity":15,"custom_text_color":false,"highlight_radius":6,"enable_custom_style":false,"scroll_length":250,"fit_content_d":false,"stage_height_d":100,"sticky_offset":0,"reveal_speed":0.3,"padding_top":0,"padding_bottom":0,"fit_content_m":true,"stage_height_m":100,"font_size_m":24}' data-tx-block-defaults='{"text":{"text":"&lt;p>Our collection of sleek, &lt;strong>high-performance bags&lt;/strong> embodies a perfect synergy of advanced technology, durable materials, and contemporary design.&lt;/p>","enable_custom_fonts":false,"font":"assistant_n4","enable_custom_style":false},"button":{"label":"ABOUT US","enable_custom_style":false}}' data-tx-editor="{% if request.design_mode or page.in_editor %}true{% else %}false{% endif %}" class="stw-{{ uid }} color-{{ scheme }} gradient" data-offset="{{ sticky_off }}">
   <div class="stw__viewport">
     <div class="stw__inner">
       <div class="stw__text">
         {%- for block in section.blocks -%}
           {%- if block.type == 'text' and block.settings.text != blank -%}
-            <div class="stw__p" {{ block.shopify_attributes }}>{{ block.settings.text }}</div>
+            <div class="stw__p" data-tx-block="{{ block.id }}" data-tx-type="{{ block.type }}" data-tx-settings="{{ block.settings | json | escape }}" {{ block.shopify_attributes }}>{{ block.settings.text }}</div>
           {%- endif -%}
         {%- endfor -%}
       </div>
@@ -307,9 +307,9 @@
                 assign lbl = block.settings.label | default: 'ABOUT US'
               -%}
               {%- if block.settings.link != blank -%}
-                <a class="stw__btn" data-theme-button="primary" data-sl-button data-button-local-appearance="underline" data-button-appearance="underline" href="{{ block.settings.link }}" {{ block.shopify_attributes }}>{{ lbl | escape }}</a>
+                <a class="stw__btn" data-theme-button="primary" data-sl-button data-button-local-appearance="underline" data-button-appearance="underline" href="{{ block.settings.link }}" data-tx-block="{{ block.id }}" data-tx-type="{{ block.type }}" data-tx-settings="{{ block.settings | json | escape }}" {{ block.shopify_attributes }}>{{ lbl | escape }}</a>
               {%- else -%}
-                <span class="stw__btn" {{ block.shopify_attributes }}>{{ lbl | escape }}</span>
+                <span class="stw__btn" data-tx-block="{{ block.id }}" data-tx-type="{{ block.type }}" data-tx-settings="{{ block.settings | json | escape }}" {{ block.shopify_attributes }}>{{ lbl | escape }}</span>
               {%- endif -%}
             {%- endif -%}
           {%- endfor -%}
@@ -319,486 +319,17 @@
   </div>
 </scroll-text-banner>
 
-<script>
-  (function () {
-    if (customElements.get('scroll-text-banner')) return;
-
-    class ScrollTextBanner extends HTMLElement {
-      connectedCallback() {
-        this._init();
-      }
-
-      disconnectedCallback() {
-        this._teardown();
-      }
-
-      refresh() {
-        this._teardown();
-        this._init();
-      }
-
-      _init() {
-        if (this._armed) return;
-        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-        this._textWrap = this.querySelector('.stw__text');
-        if (!this._textWrap) return;
-
-        /* Re-init safety (theme editor): restore the original, un-split HTML
-           before splitting so words are never double-wrapped. */
-        if (this._textWrap.hasAttribute('data-stw-original')) {
-          this._textWrap.innerHTML = this._textWrap.getAttribute('data-stw-original');
-        } else {
-          this._textWrap.setAttribute('data-stw-original', this._textWrap.innerHTML);
-        }
-
-        this._split();
-        if (!this._words.length) return;
-
-        this.classList.add('stw--armed');
-        this._armed = true;
-        this._count = -1;
-        this._ticking = false;
-        this._onScroll = this._onScroll || (() => {
-          if (this._ticking) return;
-          this._ticking = true;
-          requestAnimationFrame(() => {
-            this._ticking = false;
-            this._update();
-          });
-        });
-        window.addEventListener('scroll', this._onScroll, { passive: true });
-        window.addEventListener('resize', this._onScroll, { passive: true });
-
-        /* Run once immediately for mid-page reloads. */
-        this._update();
-      }
-
-      _teardown() {
-        if (this._onScroll) {
-          window.removeEventListener('scroll', this._onScroll);
-          window.removeEventListener('resize', this._onScroll);
-        }
-        this.classList.remove('stw--armed');
-        this._armed = false;
-        this._words = [];
-      }
-
-      /* Split rendered text into word spans, preserving highlight wrappers:
-         text nodes inside <strong>/<b> are split in place so each word keeps
-         the pill styling via CSS descendant selectors. */
-      _split() {
-        const walker = document.createTreeWalker(this._textWrap, NodeFilter.SHOW_TEXT, null);
-        const nodes = [];
-        while (walker.nextNode()) nodes.push(walker.currentNode);
-
-        nodes.forEach((node) => {
-          if (!/\S/.test(node.nodeValue)) return;
-          const parts = node.nodeValue.split(/(\s+)/);
-          const frag = document.createDocumentFragment();
-          parts.forEach((part) => {
-            if (!part) return;
-            if (/^\s+$/.test(part)) {
-              frag.appendChild(document.createTextNode(part));
-            } else {
-              const w = document.createElement('span');
-              w.className = 'stw__w';
-              w.textContent = part;
-              frag.appendChild(w);
-            }
-          });
-          node.parentNode.replaceChild(frag, node);
-        });
-
-        this._words = Array.prototype.slice.call(this._textWrap.querySelectorAll('.stw__w'));
-      }
-
-      _update() {
-        if (!this._armed || !this._words.length) return;
-        const rect = this.getBoundingClientRect();
-        const vh = window.innerHeight || document.documentElement.clientHeight;
-        /* Sticky top offset (px): the stage pins at `off`, not 0. The pinned
-           travel is the wrapper height minus the stage's REAL height
-           (measured, so the Banner-height sliders are automatically
-           accounted for at any breakpoint). */
-        const off = parseFloat(this.dataset.offset || '0') || 0;
-        const stage = this.querySelector('.stw__viewport');
-        const stageH = stage ? stage.offsetHeight : Math.max(vh - off, 1);
-        const range = rect.height - stageH;
-        let p = range > 0 ? (off - rect.top) / range : (rect.top <= off ? 1 : 0);
-        if (p < 0) p = 0;
-        else if (p > 1) p = 1;
-
-        const total = this._words.length;
-        const n = Math.round(p * total);
-        if (n === this._count) return;
-
-        /* Only touch the words whose state actually changed. */
-        const prev = this._count < 0 ? 0 : this._count;
-        if (n > prev) {
-          for (let i = prev; i < n; i++) this._words[i].classList.add('is-on');
-        } else {
-          for (let i = n; i < prev; i++) this._words[i].classList.remove('is-on');
-        }
-        this._count = n;
-      }
-    }
-
-    customElements.define('scroll-text-banner', ScrollTextBanner);
-
-    /* Theme editor: section:load replaces the section's DOM, which re-runs
-       connectedCallback on the fresh element. The explicit refresh below is a
-       safety net in case the editor morphs the DOM instead of replacing it. */
-    const onSectionLoad = (event) => {
-      const el = event.target && event.target.querySelector && event.target.querySelector('scroll-text-banner');
-      if (el && typeof el.refresh === 'function') el.refresh();
-    };
-    document.addEventListener('shopify:section:load', onSectionLoad);
-    document.addEventListener('storelib:section-load', onSectionLoad);
-  })();
-{% comment %}{% endcomment %}</script>
+{{ 'scroll-text-reveal.js' | asset_url | script_tag }}
 
 
 
+{% render 'text-controls-initial', section: section, kind: 'scroll-text-banner' %}
+{{ 'text-section-controls.css' | asset_url | stylesheet_tag }}
+{{ 'text-section-controls.js' | asset_url | script_tag }}
 </template>
 
 <schema>
 {
-  "type": "scroll-text-banner",
-  "name": "Scrolling Text Reveal",
-  "settings": [
-    {
-      "type": "header",
-      "id": "hdr_1",
-      "label": "Layout"
-    },
-    {
-      "type": "select",
-      "id": "width",
-      "label": "Section width",
-      "default": "fluid_container",
-      "options": [
-        {
-          "value": "container",
-          "label": "Container"
-        },
-        {
-          "value": "fluid_container",
-          "label": "Fluid container"
-        },
-        {
-          "value": "stretch_width",
-          "label": "Stretched"
-        },
-        {
-          "value": "full_width",
-          "label": "Full width"
-        }
-      ]
-    },
-    {
-      "type": "color_scheme",
-      "id": "color_scheme",
-      "label": "Color scheme",
-      "default": "default-color-scheme"
-    },
-    {
-      "type": "range",
-      "id": "scroll_length",
-      "label": "Scroll length",
-      "min": 150,
-      "max": 400,
-      "step": 10,
-      "unit": "vh",
-      "default": 250
-    },
-    {
-      "type": "checkbox",
-      "id": "fit_content_d",
-      "label": "Fit height to text (desktop)",
-      "default": false
-    },
-    {
-      "type": "range",
-      "id": "stage_height_d",
-      "label": "Banner height (desktop)",
-      "min": 40,
-      "max": 100,
-      "step": 5,
-      "unit": "vh",
-      "default": 100,
-      "visible_if": "{{ section.settings.fit_content_d == false }}"
-    },
-    {
-      "type": "checkbox",
-      "id": "fit_content_m",
-      "label": "Fit height to text (mobile)",
-      "default": true
-    },
-    {
-      "type": "range",
-      "id": "stage_height_m",
-      "label": "Banner height (mobile)",
-      "min": 40,
-      "max": 100,
-      "step": 5,
-      "unit": "vh",
-      "default": 100,
-      "visible_if": "{{ section.settings.fit_content_m == false }}"
-    },
-    {
-      "type": "range",
-      "id": "sticky_offset",
-      "label": "Sticky top offset",
-      "min": 0,
-      "max": 120,
-      "step": 4,
-      "unit": "px",
-      "default": 0,
-      "info": "Height of a sticky header"
-    },
-    {
-      "type": "header",
-      "id": "hdr_10",
-      "label": "Spacing"
-    },
-    {
-      "type": "range",
-      "id": "padding_top",
-      "label": "Top padding",
-      "min": 0,
-      "max": 120,
-      "step": 2,
-      "unit": "px",
-      "default": 0
-    },
-    {
-      "type": "range",
-      "id": "padding_bottom",
-      "label": "Bottom padding",
-      "min": 0,
-      "max": 120,
-      "step": 2,
-      "unit": "px",
-      "default": 0
-    },
-    {
-      "type": "header",
-      "id": "hdr_13",
-      "label": "Typography"
-    },
-    {
-      "type": "checkbox",
-      "id": "uppercase",
-      "label": "Uppercase text",
-      "default": true
-    },
-    {
-      "type": "range",
-      "id": "font_size_d",
-      "label": "Font size (desktop)",
-      "min": 18,
-      "max": 72,
-      "step": 1,
-      "unit": "px",
-      "default": 40
-    },
-    {
-      "type": "range",
-      "id": "font_size_m",
-      "label": "Font size (mobile)",
-      "min": 14,
-      "max": 48,
-      "step": 1,
-      "unit": "px",
-      "default": 24
-    },
-    {
-      "type": "range",
-      "id": "line_height",
-      "label": "Line height",
-      "min": 1.1,
-      "max": 1.8,
-      "step": 0.1,
-      "default": 1.4
-    },
-    {
-      "type": "checkbox",
-      "id": "bold",
-      "label": "Bold text",
-      "default": true
-    },
-    {
-      "type": "select",
-      "id": "font_style",
-      "label": "Font",
-      "default": "heading",
-      "options": [
-        {
-          "value": "heading",
-          "label": "Theme heading font"
-        },
-        {
-          "value": "mono",
-          "label": "Monospace"
-        }
-      ]
-    },
-    {
-      "type": "range",
-      "id": "letter_spacing",
-      "label": "Letter spacing",
-      "min": 0,
-      "max": 10,
-      "step": 0.5,
-      "unit": "px",
-      "default": 0
-    },
-    {
-      "type": "select",
-      "id": "text_align",
-      "label": "Text alignment",
-      "default": "left",
-      "options": [
-        {
-          "value": "left",
-          "label": "Left"
-        },
-        {
-          "value": "center",
-          "label": "Center"
-        }
-      ]
-    },
-    {
-      "type": "range",
-      "id": "max_width",
-      "label": "Text max width",
-      "min": 600,
-      "max": 1400,
-      "step": 50,
-      "unit": "px",
-      "default": 1100
-    },
-    {
-      "type": "header",
-      "id": "hdr_23",
-      "label": "Reveal"
-    },
-    {
-      "type": "range",
-      "id": "base_opacity",
-      "label": "Unrevealed opacity",
-      "min": 5,
-      "max": 50,
-      "step": 5,
-      "unit": "%",
-      "default": 15
-    },
-    {
-      "type": "range",
-      "id": "reveal_speed",
-      "label": "Reveal speed",
-      "min": 0.1,
-      "max": 0.6,
-      "step": 0.1,
-      "unit": "s",
-      "default": 0.3
-    },
-    {
-      "type": "header",
-      "id": "hdr_26",
-      "label": "Colors"
-    },
-    {
-      "type": "checkbox",
-      "id": "custom_text_color",
-      "label": "Custom text color",
-      "default": false
-    },
-    {
-      "type": "color",
-      "id": "text_color",
-      "label": "Text color",
-      "visible_if": "{{ section.settings.custom_text_color }}"
-    },
-    {
-      "type": "color",
-      "id": "reveal_dim_color",
-      "label": "Unrevealed color"
-    },
-    {
-      "type": "header",
-      "id": "hdr_30",
-      "label": "Highlight"
-    },
-    {
-      "type": "color",
-      "id": "highlight_bg",
-      "label": "Highlight background"
-    },
-    {
-      "type": "color",
-      "id": "highlight_text",
-      "label": "Highlight text"
-    },
-    {
-      "type": "range",
-      "id": "highlight_radius",
-      "label": "Highlight corner radius",
-      "min": 0,
-      "max": 30,
-      "step": 1,
-      "unit": "px",
-      "default": 6
-    }
-  ],
-  "blocks": [
-    {
-      "type": "text",
-      "name": "Text",
-      "settings": [
-        {
-          "type": "richtext",
-          "id": "text",
-          "label": "Text",
-          "default": "<p>Our collection of sleek, <strong>high-performance bags</strong> embodies a perfect synergy of advanced technology, durable materials, and contemporary design.</p>",
-          "info": "Bold phrases render as highlight pills."
-        }
-      ]
-    },
-    {
-      "type": "button",
-      "name": "Button",
-      "settings": [
-        {
-          "type": "text",
-          "id": "label",
-          "label": "Label",
-          "default": "ABOUT US"
-        },
-        {
-          "type": "url",
-          "id": "link",
-          "label": "Link"
-        }
-      ]
-    }
-  ],
-  "max_blocks": 6,
-  "presets": [
-    {
-      "name": "Scrolling Text Reveal",
-      "category": "Text",
-      "blocks": [
-        {
-          "type": "text"
-        },
-        {
-          "type": "button"
-        }
-      ]
-    }
-  ],
   "shopify": {
     "name": "Scrolling Text Reveal",
     "tag": "section",
@@ -806,7 +337,13 @@
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "select",
@@ -833,89 +370,34 @@
         ]
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
-      },
-      {
-        "type": "range",
-        "id": "scroll_length",
-        "label": "Scroll length",
-        "min": 150,
-        "max": 400,
-        "step": 10,
-        "unit": "vh",
-        "default": 250
-      },
-      {
-        "type": "checkbox",
-        "id": "fit_content_d",
-        "label": "Fit height to text (desktop)",
-        "default": false
-      },
-      {
-        "type": "range",
-        "id": "stage_height_d",
-        "label": "Banner height (desktop)",
-        "min": 40,
-        "max": 100,
-        "step": 5,
-        "unit": "vh",
-        "default": 100,
-        "visible_if": "{{ section.settings.fit_content_d == false }}"
-      },
-      {
-        "type": "checkbox",
-        "id": "fit_content_m",
-        "label": "Fit height to text (mobile)",
-        "default": true
-      },
-      {
-        "type": "range",
-        "id": "stage_height_m",
-        "label": "Banner height (mobile)",
-        "min": 40,
-        "max": 100,
-        "step": 5,
-        "unit": "vh",
-        "default": 100,
-        "visible_if": "{{ section.settings.fit_content_m == false }}"
-      },
-      {
-        "type": "range",
-        "id": "sticky_offset",
-        "label": "Sticky top offset",
-        "min": 0,
-        "max": 120,
-        "step": 4,
-        "unit": "px",
-        "default": 0,
-        "info": "Height of a sticky header"
-      },
-      {
         "type": "header",
-        "content": "Spacing"
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "text_align",
+        "label": "Text alignment",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          }
+        ]
       },
       {
         "type": "range",
-        "id": "padding_top",
-        "label": "Top padding",
-        "min": 0,
-        "max": 120,
-        "step": 2,
+        "id": "max_width",
+        "label": "Text max width",
+        "min": 600,
+        "max": 1400,
+        "step": 50,
         "unit": "px",
-        "default": 0
-      },
-      {
-        "type": "range",
-        "id": "padding_bottom",
-        "label": "Bottom padding",
-        "min": 0,
-        "max": 120,
-        "step": 2,
-        "unit": "px",
-        "default": 0
+        "default": 1100
       },
       {
         "type": "header",
@@ -936,16 +418,6 @@
         "step": 1,
         "unit": "px",
         "default": 40
-      },
-      {
-        "type": "range",
-        "id": "font_size_m",
-        "label": "Font size (mobile)",
-        "min": 14,
-        "max": 48,
-        "step": 1,
-        "unit": "px",
-        "default": 24
       },
       {
         "type": "range",
@@ -976,7 +448,8 @@
             "value": "mono",
             "label": "Monospace"
           }
-        ]
+        ],
+        "visible_if": "{{ section.settings.enable_custom_fonts == false }}"
       },
       {
         "type": "range",
@@ -989,34 +462,28 @@
         "default": 0
       },
       {
-        "type": "select",
-        "id": "text_align",
-        "label": "Text alignment",
-        "default": "left",
-        "options": [
-          {
-            "value": "left",
-            "label": "Left"
-          },
-          {
-            "value": "center",
-            "label": "Center"
-          }
-        ]
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Enable custom fonts",
+        "default": false
       },
       {
-        "type": "range",
-        "id": "max_width",
-        "label": "Text max width",
-        "min": 600,
-        "max": 1400,
-        "step": 50,
-        "unit": "px",
-        "default": 1100
+        "type": "font_picker",
+        "id": "heading_font",
+        "label": "Heading font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Body font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
       },
       {
         "type": "header",
-        "content": "Reveal"
+        "content": "Custom styling"
       },
       {
         "type": "range",
@@ -1027,20 +494,6 @@
         "step": 5,
         "unit": "%",
         "default": 15
-      },
-      {
-        "type": "range",
-        "id": "reveal_speed",
-        "label": "Reveal speed",
-        "min": 0.1,
-        "max": 0.6,
-        "step": 0.1,
-        "unit": "s",
-        "default": 0.3
-      },
-      {
-        "type": "header",
-        "content": "Colors"
       },
       {
         "type": "checkbox",
@@ -1057,21 +510,20 @@
       {
         "type": "color",
         "id": "reveal_dim_color",
-        "label": "Unrevealed color"
-      },
-      {
-        "type": "header",
-        "content": "Highlight"
+        "label": "Unrevealed color",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
       },
       {
         "type": "color",
         "id": "highlight_bg",
-        "label": "Highlight background"
+        "label": "Highlight background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
       },
       {
         "type": "color",
         "id": "highlight_text",
-        "label": "Highlight text"
+        "label": "Highlight text",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
       },
       {
         "type": "range",
@@ -1082,6 +534,130 @@
         "step": 1,
         "unit": "px",
         "default": 6
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Enable custom styling",
+        "default": false
+      },
+      {
+        "type": "color",
+        "id": "section_background",
+        "label": "Section background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "header",
+        "content": "Motion"
+      },
+      {
+        "type": "range",
+        "id": "scroll_length",
+        "label": "Scroll length",
+        "min": 150,
+        "max": 400,
+        "step": 10,
+        "unit": "vh",
+        "default": 250,
+        "info": "Full scroll distance on the storefront. The editor shows a compact, fully readable cover."
+      },
+      {
+        "type": "checkbox",
+        "id": "fit_content_d",
+        "label": "Fit height to text (desktop)",
+        "default": false,
+        "info": "Applies to the storefront scroll scene. The editor uses a compact preview."
+      },
+      {
+        "type": "range",
+        "id": "stage_height_d",
+        "label": "Banner height (desktop)",
+        "min": 40,
+        "max": 100,
+        "step": 5,
+        "unit": "vh",
+        "default": 100,
+        "visible_if": "{{ section.settings.fit_content_d == false }}",
+        "info": "Applies to the storefront scroll scene. The editor uses a compact preview."
+      },
+      {
+        "type": "range",
+        "id": "sticky_offset",
+        "label": "Sticky top offset",
+        "min": 0,
+        "max": 120,
+        "step": 4,
+        "unit": "px",
+        "default": 0,
+        "info": "Height of a sticky header"
+      },
+      {
+        "type": "range",
+        "id": "reveal_speed",
+        "label": "Reveal speed",
+        "min": 0.1,
+        "max": 0.6,
+        "step": 0.1,
+        "unit": "s",
+        "default": 0.3
+      },
+      {
+        "type": "header",
+        "content": "Spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top padding",
+        "min": 0,
+        "max": 120,
+        "step": 2,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom padding",
+        "min": 0,
+        "max": 120,
+        "step": 2,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "checkbox",
+        "id": "fit_content_m",
+        "label": "Fit height to text (mobile)",
+        "default": true,
+        "info": "Applies to the storefront scroll scene. The editor uses a compact preview."
+      },
+      {
+        "type": "range",
+        "id": "stage_height_m",
+        "label": "Banner height (mobile)",
+        "min": 40,
+        "max": 100,
+        "step": 5,
+        "unit": "vh",
+        "default": 100,
+        "visible_if": "{{ section.settings.fit_content_m == false }}",
+        "info": "Applies to the storefront scroll scene. The editor uses a compact preview."
+      },
+      {
+        "type": "range",
+        "id": "font_size_m",
+        "label": "Font size (mobile)",
+        "min": 14,
+        "max": 48,
+        "step": 1,
+        "unit": "px",
+        "default": 24
       }
     ],
     "blocks": [
@@ -1090,11 +666,48 @@
         "name": "Text",
         "settings": [
           {
+            "type": "header",
+            "content": "Content"
+          },
+          {
             "type": "richtext",
             "id": "text",
             "label": "Text",
             "default": "<p>Our collection of sleek, <strong>high-performance bags</strong> embodies a perfect synergy of advanced technology, durable materials, and contemporary design.</p>",
             "info": "Bold phrases render as highlight pills."
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom font",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
+          },
+          {
+            "type": "header",
+            "content": "Custom styling"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Text colour",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           }
         ]
       },
@@ -1102,6 +715,10 @@
         "type": "button",
         "name": "Button",
         "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
           {
             "type": "text",
             "id": "label",
@@ -1112,6 +729,28 @@
             "type": "url",
             "id": "link",
             "label": "Link"
+          },
+          {
+            "type": "header",
+            "content": "Custom styling"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "hover_color",
+            "label": "hover color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           }
         ]
       }
