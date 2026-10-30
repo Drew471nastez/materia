@@ -36,3 +36,23 @@ attribute updates. Hero regression suites cover redraw stability, entrance and
 parallax behavior. Tests use repository templates/assets with fixture data in
 Chromium; the private StoreLib canvas and every physical device are not
 accessible here. Pushes remain drafts and require creator review before Publish.
+
+## Wavy / Title & Subtitle follow-up
+
+Waves now play in both the editor and storefront. Off-screen, hidden-tab and
+reduced-motion pauses remain; changing unrelated controls does not reset the
+SVG clock. The duration control preserves the current phase when retiming.
+Tests sample the actual animated path geometry for all five shapes, not just
+the SVG's pause flag.
+
+The default panel is the same subtle theme tint before and after initialization,
+never the theme's potentially black primary/button colour. `section_bg` controls
+the panel, `wave_color` optionally overrides the waves (blank follows the panel),
+and `outer_background` controls the surrounding background. All custom colours
+remain opt-in. IDs from older saved sections are preserved.
+
+Title & Subtitle adds desktop/mobile alignment, text maximum width and per-block
+colour, font weight, letter spacing, line height, text case and spacing controls.
+Empty supporting text no longer leaves the subtitle-to-text gap behind.
+`tests/theme-wavy-title-controls.cjs` covers these controls and playback in both
+editor/visitor and desktop/mobile fixtures, including light/dark theme defaults.
