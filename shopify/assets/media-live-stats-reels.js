@@ -89,15 +89,21 @@
 
   /* ---------- shared: autoplay timer that runs only in view, tab visible, not hovered/focused ---------- */
   function ticker(el, st, enabled, delay, tick) {
-    let timer = 0, inView = false, held = false;
+    let timer = 0, every = 0, inView = false, held = false;
     const sig = {signal: st.ac.signal};
-    const run = () => { const on = inView && !held && !document.hidden && !reduce.matches && enabled(); if (on && !timer) timer = setInterval(tick, Math.max(1500, delay())); else if (!on && timer) { clearInterval(timer); timer = 0; } };
+    const stop = () => { if (timer) { clearInterval(timer); timer = 0; } };
+    /* Starts, stops or retimes the timer only when something it depends on changed. */
+    const run = () => {
+      const on = inView && !held && !document.hidden && !reduce.matches && enabled(), ms = Math.max(1500, delay());
+      if (on && timer && ms !== every) stop();
+      if (on && !timer) { every = ms; timer = setInterval(tick, ms); } else if (!on) stop();
+    };
     const io = new IntersectionObserver(es => { inView = es[es.length - 1].isIntersecting; run(); }, {threshold: 0.2});
     io.observe(el);
     for (const [n, h] of [['pointerenter', true], ['pointerleave', false], ['focusin', true], ['focusout', false]]) el.addEventListener(n, () => { held = h; run(); }, sig);
     document.addEventListener('visibilitychange', run, sig);
-    st.cleanup.push(() => { io.disconnect(); clearInterval(timer); timer = 0; });
-    return {sync: () => { if (timer) { clearInterval(timer); timer = 0; } run(); }, active: () => !!timer};
+    st.cleanup.push(() => { io.disconnect(); stop(); });
+    return {sync: run, active: () => !!timer};
   }
 
   /* ================= Image With Text Stats ================= */

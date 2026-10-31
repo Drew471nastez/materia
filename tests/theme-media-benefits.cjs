@@ -13,7 +13,7 @@ const VID = {sources: [{url: 'https://theme.test/up.mp4', mime_type: 'video/mp4'
 const VURL = 'https://theme.test/clip.mp4';
 const SVG = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><path d="M2 2h4"/></svg>';
 const FONT = {family: 'Verdana', fallback_families: 'sans-serif'};
-let checks = 0;
+let checks = 0, savedCompared = 0;
 const ok = (c, m) => { assert.ok(c, m); checks++; };
 const eq = (a, b, m) => { assert.deepEqual(a, b, m); checks++; };
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -330,15 +330,16 @@ async function carousel(browser) {
 }
 
 /* The four saved Image & Video with Text instances, with the toggles the lead adds, against the
-   section as it was before this change (git HEAD). */
+   section as it was before this change (commit e03ef3051f96). */
 async function saved(browser) {
   const name = 'image-and-video-text', toggles = (sec) => {
     const s = clone(sec); s.settings.enable_custom_style = true;
     for (const b of Object.values(s.blocks)) b.settings.enable_custom_style = true;
     return s;
   };
-  let oldRaw; try { oldRaw = execSync('git show HEAD:sections/' + name + '.storelib', {cwd: path.join(__dirname, '..'), encoding: 'utf8'}); } catch (_) { return; }
-  if (oldRaw.includes('data-mlb-root')) return;
+  /* the section as last committed before this change */
+  let oldRaw; try { oldRaw = execSync('git show e03ef3051f969105d301665d0243d326aa3a98dc:sections/' + name + '.storelib', {cwd: path.join(__dirname, '..'), encoding: 'utf8'}); } catch (_) { return; }
+  assert.ok(!oldRaw.includes('data-mlb-root'), 'previous version not found');
   const renderRaw = async (raw, sec) => {
     const e = engine(); e.registerFilter('script_tag', () => ''); e.registerFilter('img_url', v => v?.url || v || '');
     const section = {id: sec.uid, settings: sec.settings, blocks: sec.order.map(k => ({id: k, type: sec.blocks[k].type, settings: sec.blocks[k].settings}))};
@@ -375,6 +376,7 @@ async function saved(browser) {
       const was = await look(await renderRaw(oldRaw, fill(s))), now = await look(await renderRaw(newRaw, fill(toggles(s)))), plain = await look(await renderRaw(newRaw, fill(s)));
       eq(now, was, key + ' @' + width + ' looks the same with the custom styling toggles on');
       ok(plain.bg !== was.bg || plain.h[0] !== was.h[0], key + ' without the toggles it follows the theme (so the toggles are needed)');
+      savedCompared++;
     }
   }
 }
@@ -391,6 +393,6 @@ async function saved(browser) {
     await Promise.all(names.filter(n => n !== 'dual-image-with-text').map(n => video(browser, n)));
     if (names.includes('image-with-text-benefits')) await carousel(browser);
     if (names.includes('image-and-video-text')) await saved(browser);
-    console.log(checks + ' benefits media checks passed (controls covered: ' + Object.entries(covered).map(([n, c]) => n + ' ' + c).join(', ') + ')');
+    console.log(checks + ' benefits media checks passed (controls covered: ' + Object.entries(covered).map(([n, c]) => n + ' ' + c).join(', ') + (savedCompared ? '; saved instances compared with the previous version: ' + savedCompared : '') + ')');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exit(1); });
