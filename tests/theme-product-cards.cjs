@@ -253,7 +253,9 @@ function themeRoot(s) {
   html{font-size:62.5%}body{margin:0;font:14px/1.4 Arial,sans-serif}`;
 }
 const bodyAttrs = s => `data-btn-style="${s.btn_style || 'solid'}" data-btn-secondary-style="${s.btn_secondary_style || 'outline'}" data-btn-hover="${s.btn_hover_effect || 'fade'}" data-btn-shape="${s.btn_shape || 'rounded'}" data-badge-shape="${s.badges_shape}" data-badge-size="${s.badges_size}" data-badge-position="${s.badges_position}" data-badge-anim="${s.badges_animation}"`;
-const CSS = ['critical.css', 'section-isolation.css', 'animation.css', 'product-card.css', 'theme.css', 'theme-button-contract.css'].map(f => read('shopify/assets/' + f)).join('\n');
+const CSS = ['critical.css', 'section-isolation.css', 'animation.css', 'product-card.css', 'theme.css', 'theme-button-contract.css', 'collection-tab.css'].map(f => read('shopify/assets/' + f)).join('\n');
+// The collection tabs' script is a cached asset the section loads with <script defer>.
+const TABS_JS = read('shopify/assets/collection-tab.js');
 const EXPERIENCE = read('shopify/assets/materia-experience.js');
 async function draw(page, html, s, extraCss = '') {
   await page.setContent(`<!doctype html><html dir="ltr" data-badge-custom="${s.enable_custom_badges === true}"><head><style>${themeRoot(s)}</style><style>${CSS}</style><style>${extraCss}</style></head><body ${bodyAttrs(s)}>${html}</body></html>`);
@@ -510,6 +512,9 @@ const grid = cards => `<div class="container" style="padding:0 16px;box-sizing:b
         const html = renderTemplate(templateOf(section), {settings: config, section: {id: 'tabs1', settings: st, blocks}, collections: {a: colA, b: colB, c: colC}, request: {locale: {iso_code: 'en'}}}, env);
         await page.setViewportSize({width, height: 800});
         await page.setContent(`<!doctype html><html dir="ltr"><head><style>${themeRoot(config)}</style><style>${CSS}</style></head><body ${bodyAttrs(config)}><div style="height:40px"></div><div id="shopify-section-tabs1" class="shopify-section">${html}</div><div id="below" style="height:600px">Below</div></body></html>`);
+        // setContent keeps the window, so the once-per-page guard is reset for each new page.
+        await page.evaluate(() => { delete window.MateriaCollectionTabs; });
+        await page.addScriptTag({content: TABS_JS});
         await page.evaluate(() => { window.__materiaExperienceReady = false; });
         await page.addScriptTag({content: EXPERIENCE});
         await page.evaluate(() => document.fonts.ready);
@@ -590,6 +595,7 @@ const grid = cards => `<div class="container" style="padding:0 16px;box-sizing:b
         const st = {...defaults, show_load_more_button: false, tab_style: 'pill'};
         const html = renderTemplate(templateOf(section), {settings: config, section: {id: 'tabs1', settings: st, blocks}, collections: {a: colA, b: colB, c: colC}, request: {locale: {iso_code: 'en'}}}, env);
         await tp.setContent(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><style>${themeRoot(config)}</style><style>${CSS}</style></head><body ${bodyAttrs(config)}><div id="shopify-section-tabs1">${html}</div></body></html>`);
+        await tp.addScriptTag({content: TABS_JS});
         const box = await tp.$eval('.ti-tabs__nav', el => { const r = el.getBoundingClientRect(); return {x: r.x, y: r.y + r.height / 2, w: r.width}; });
         const cdp = await ctx.newCDPSession(tp);
         const swipe = async (x0, x1) => {

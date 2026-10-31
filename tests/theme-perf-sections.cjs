@@ -107,15 +107,12 @@ const frames = (page, n = 3) => page.evaluate(n => new Promise(r => { const step
       const errors = []; page.on('pageerror', e => errors.push(e.message));
       const pills = active => Array.from({length: 8}, (_, i) => `<button class="ti-tabs__btn${i === active ? ' is-active' : ''}" data-block-id="b${i}" style="flex:0 0 120px">Tab ${i + 1}</button>`).join('');
       const panels = active => Array.from({length: 8}, (_, i) => `<div class="ti-tabs__panel${i === active ? ' is-active' : ''}" data-block-id="b${i}">Panel ${i + 1}</div>`).join('');
-      const section = (sid, active) => `<div id="section-${sid}" class="section ti-tabs"><div data-ti-tabs><div class="ti-tabs__nav" style="display:flex;overflow-x:auto;width:360px">${pills(active)}</div><div class="ti-tabs__panels">${panels(active)}</div></div></div>`;
+      const section = (sid, active) => `<div id="section-${sid}" class="section ti-tabs" data-collection-tab data-ct-animation="none"><div data-ti-tabs><div class="ti-tabs__nav" style="display:flex;overflow-x:auto;width:360px">${pills(active)}</div><div class="ti-tabs__panels">${panels(active)}</div></div></div>`;
       await page.setContent(`<body style="margin:0">${section('first', 0)}${section('later', 6)}</body>`);
       await page.evaluate(countLayoutReads);
-      const js = sid => inlineScript('sections/collection-tab.storelib', 'function initTabs')
-        .split('{{ sid | json }}').join(JSON.stringify(sid)).split('{{ sid }}').join(sid).split('{{ scroll_animation }}').join('none');
-      for (const sid of ['first', 'later']) {
-        const run = await runInline(page, js(sid));
-        assert.equal(run.reads, 0, `tabs (${sid}) read no layout while they start (read ${run.stack.join(', ')})`);
-      }
+      // One cached script (shopify/assets/collection-tab.js) sets up every instance on the page.
+      const run = await runInline(page, read('shopify/assets/collection-tab.js'));
+      assert.equal(run.reads, 0, `tabs read no layout while they start (read ${run.stack.join(', ')})`);
       checks++;
       await frames(page);
       assert.equal(await page.$eval('#section-first .ti-tabs__nav', el => el.scrollLeft), 0, 'the first tab open: the row stays at its start');
@@ -277,8 +274,9 @@ const frames = (page, n = 3) => page.evaluate(n => new Promise(r => { const step
     {
       const tv = inlineScript('sections/testimonial-video.storelib', "community-stories-slider-' + sid");
       assert(!/whileHere\(window, 'resize', update\);\s*update\(\);/.test(tv) && tv.includes('new ResizeObserver'), 'testimonial video measures from a ResizeObserver');
-      const tabs = inlineScript('sections/collection-tab.storelib', 'function initTabs');
-      assert(!/\n\s*reveal\(current\(\), false\);/.test(tabs.replace(/firstSize\.disconnect\(\); reveal\(current\(\), false\);|requestAnimationFrame\(function \(\) \{ reveal\(current\(\), false\); \}\)/g, '')), 'tabs measure the row only after layout');
+      const tabs = read('shopify/assets/collection-tab.js');
+      assert(!/<script>[\s\S]*function initTabs/.test(read('sections/collection-tab.storelib')), 'the tabs script is the cached asset, not inline');
+      assert(!/[;{]\s*reveal\(/.test(tabs.replace(/function \(\) \{ reveal\(/g, '')), 'tabs measure the row only after layout (inside afterLayout), never right after a click');
       const media = inlineScript('snippets/smooth-media-load.storelib', 'function firstScan');
       assert(!between(media, 'function firstScan', '\n  }\n').includes('getBoundingClientRect'), 'smooth media load leaves measuring to an IntersectionObserver');
       checks++;

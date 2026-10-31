@@ -24,7 +24,7 @@ const render=ctx=>engine.parseAndRender(clean(read('sections/testimonials.storel
  try{
   const page=await browser.newPage({viewport:{width:375,height:850}});
   const styles='<style>:root{--body-font:Arial;--body-font-size:18px;--body-line-height:1.6;--heading-font:Arial;--heading-weight:600;--heading-font-scale:1;--responsive-rate:0;--color-text:rgb(30,40,50);--color-heading:rgb(10,20,30);--color-background:white;--color-border:#ccc}body{margin:0}.container,.fluid_container{padding:16px;box-sizing:border-box}.text-center{text-align:center}h2{font-size:32px}.swiper-wrapper{display:flex}.swiper-slide{flex:0 0 70%}</style>';
-  const set=async ctx=>page.setContent(styles+'<div id="shopify-section-grid">'+await render(ctx)+'</div>');
+  const set=async ctx=>page.setContent(styles+'<style>'+read('shopify/assets/testimonials.css')+'</style><div id="shopify-section-grid">'+await render(ctx)+'</div>'); // the section links its cached testimonials.css
   base.section.settings.card_bg='#ff0000';base.section.settings.quote_size=28;base.section.blocks[0].settings.font_size_mobile=50;
   await set(base);
   assert.equal(await page.locator('.tm-head--heading').evaluate(el=>getComputedStyle(el).fontSize),'32px');

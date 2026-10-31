@@ -233,8 +233,9 @@ checks++;
 const NEW_REVEALS = ['blur_up', 'slide_side', 'mask_reveal'];
 for (const f of ['faq', 'faq1', 'faq5', 'faq-pro', 'collection-tab', 'countdown-timer2']) {
   const { markup: own, schemaText } = parts(read(`sections/${f}.storelib`));
-  // faq-pro draws its reveals from its cached stylesheet, keyed by data-faq7-reveal.
-  const markup = f === 'faq-pro' ? own + read('shopify/assets/faq-pro.css') : own;
+  // faq-pro and collection-tab draw their reveals from their cached stylesheets (data-faq7-reveal, data-ct-reveal).
+  const markup = f === 'faq-pro' ? own + read('shopify/assets/faq-pro.css')
+    : f === 'collection-tab' ? own + read('shopify/assets/collection-tab.css').replace(/\[data-ct-reveal="([a-z_-]+)"\]/g, "when '$1'") : own;
   const setting = JSON.parse(schemaText).shopify.settings.find(s => s.id === 'scroll_animation');
   const values = setting.options.map(o => o.value);
   for (const v of NEW_REVEALS) {
