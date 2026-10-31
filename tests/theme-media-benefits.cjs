@@ -48,7 +48,7 @@ const CFG = {
   },
   'dual-image-with-text': {
     blocks: () => [...presetBlocks('dual-image-with-text'), {type: 'eyebrow'}],
-    desk: ['image_position', 'text_column_width', 'content_align'], mob: ['content_align_mobile', 'mobile_order', 'hide_on_mobile', 'size_mobile'],
+    desk: ['image_position', 'text_column_width', 'content_align', 'accent_image.size'], mob: ['content_align_mobile', 'mobile_order', 'hide_on_mobile', 'size_mobile'],
     preBlock: {fit: {image: IMG}, position_x: {image: IMG}, position_y: {image: IMG}, alt: {image: IMG}, border_color: {border_width: 6}, enable_custom_style: {border_width: 6}},
   },
 };
@@ -151,7 +151,7 @@ async function everyControl(browser, name, width) {
     const pre = {...prereq(x, c.list, bBase), ...(c.scope < 0 ? cfg.pre?.[x.id] || {} : cfg.preBlock?.[x.id] || {})};
     if (bi >= 0) Object.assign(blocks0[bi].settings, pre); else Object.assign(S, pre);
     const blockId = bi >= 0 ? 'test-b' + bi : undefined;
-    const isDesk = cfg.desk.includes(x.id) || /_desktop$/.test(x.id), isMob = cfg.mob.includes(x.id) || /_mobile$/.test(x.id);
+    const isDesk = cfg.desk.includes(x.id) || cfg.desk.includes(c.btype + '.' + x.id) || /_desktop$/.test(x.id), isMob = cfg.mob.includes(x.id) || /_mobile$/.test(x.id);
     const shows = !(isDesk && width < 900 && !(name === 'image-text-benefits' && width >= 768)) && !(isMob && width >= 900);
     await t.redraw({settings: S, blocks: blocks0});
     const fp0 = await fp(t);

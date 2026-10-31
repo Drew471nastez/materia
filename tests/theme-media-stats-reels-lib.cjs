@@ -2,7 +2,17 @@
    Image With Text Steps, Reels Wall, Shoppable Video). Used by
    tests/theme-media-stats-reels-<section>.cjs; running this file alone does nothing. */
 const assert = require('assert/strict');
-const {launch, mount, schemaOf, schemaProblems} = require('./media-fixture.cjs');
+const fixture = require('./media-fixture.cjs');
+const {launch, schemaOf, schemaProblems} = fixture;
+/* The fixture's mount, with emit and redraw also waiting for two frames, so a busy machine
+   (the controller paints in requestAnimationFrame) cannot read a value before it is painted. */
+const frames = page => page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+async function mount(browser, name, opts) {
+  const t = await fixture.mount(browser, name, opts), emit = t.emit, redraw = t.redraw;
+  t.emit = async (...a) => { await emit(...a); await frames(t.page); };
+  t.redraw = async (...a) => { const r = await redraw(...a); await frames(t.page); return r; };
+  return t;
+}
 const ASSET = 'media-live-stats-reels.js';
 const WIDTHS = [375, 1366], DESK = w => w >= 768;
 
@@ -51,6 +61,7 @@ async function controls(t, width, entries, ctx = {}) {
     n++;
   };
   const base = t.rendered[0].section;
+  await t.page.mouse.move(0, 0); /* hovering a carousel pauses its autoplay */
   for (const e of entries) {
     if (e.live === false) continue;
     const before = e.block ? base.blocks.filter(b => b.type === e.block)[e.n || 0].settings[e.id] : base.settings[e.id];
