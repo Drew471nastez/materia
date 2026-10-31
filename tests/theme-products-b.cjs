@@ -542,7 +542,7 @@ async function saved(browser) {
       await page.close();
       return r;
     };
-    const was = await look(await renderRaw(oldRaw, sec.settings)), now = await look(await renderRaw(newRaw, {...sec.settings, enable_custom_style: true})), plain = await look(await renderRaw(newRaw, sec.settings));
+    const was = await look(await renderRaw(oldRaw, sec.settings)), now = await look(await renderRaw(newRaw, {...sec.settings, enable_custom_style: true})), plain = await look(await renderRaw(newRaw, {...sec.settings, enable_custom_style: false}));
     eq(now, was, key + ' @' + width + ' looks the same with enable_custom_style on');
     ok(plain.bg !== was.bg, key + ' without the toggle it follows the theme (so the toggle is needed)');
     savedCompared++;
