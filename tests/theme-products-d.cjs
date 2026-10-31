@@ -532,7 +532,7 @@ const OWN = {
   addtocartbutton: {
     mount: {settings: {selected_product: PANTS, show_variant_picker: true}, blocks: [{type: 'heading', settings: {text: 'Add it'}}, {type: 'subheading', settings: {text: '<p>Choose a <strong>size</strong>.</p>'}}, {type: 'button'}]},
     cases: [
-      {label: 'custom fonts', on: FONTS_ON, off: {enable_custom_fonts: false}, checks: [['.pd-atc__heading', 'fontFamily', /^"Courier New"/], ['.pd-atc__sub', 'fontFamily', /^Verdana/], ['.pd-atc__sub p', 'fontFamily', /^Verdana/], ['.pd-atc__sub strong', 'fontFamily', /^Verdana/], ['.pd-atc__variant-label', 'fontFamily', /^Verdana/]], attr: ['[data-pd-root]', 'data-own-font']},
+      {label: 'custom fonts', on: FONTS_ON, off: {enable_custom_fonts: false}, checks: [['.pd-atc__heading', 'fontFamily', /^"Courier New"/], ['.pd-atc__sub', 'fontFamily', /^Verdana/], ['.pd-atc__sub p', 'fontFamily', /^Verdana/], ['.pd-atc__sub strong', 'fontFamily', /^Verdana/], ['.pd-atc__variant-label', 'fontFamily', /^Verdana/], ['.pd-atc__variant', 'fontFamily', /^Verdana/]], attr: ['[data-pd-root]', 'data-own-font']},
       {label: 'heading size', block: 'heading', on: {size_enable: true, size_desktop: 50, size_mobile: 30}, off: {size_enable: false}, checks: [['.pd-atc__heading', 'fontSize', {375: '30px', 1366: '50px'}]]},
       {label: 'text size', block: 'subheading', on: {size_enable: true, size: 23}, off: {size_enable: false}, checks: [['.pd-atc__sub', 'fontSize', '23px'], ['.pd-atc__sub p', 'fontSize', '23px'], ['.pd-atc__sub strong', 'fontSize', '23px']]},
       {label: 'button shape (bold)', on: {use_theme_button: false, button_border_radius: 30, button_border_thickness: 3, button_font_size: 22, button_font_weight: 'bold'}, off: {use_theme_button: true}, checks: [['.pd-atc__button', 'borderTopLeftRadius', '30px'], ['.pd-atc__button', 'borderTopWidth', '3px'], ['.pd-atc__button', 'fontSize', '22px'], ['.pd-atc__label', 'fontSize', '22px'], ['.pd-atc__button', 'fontWeight', '700'], ['.pd-atc__button', 'paddingTop', '15px'], ['.pd-atc__button', 'paddingLeft', '25px']], attr: ['.pd-atc__button', 'data-own-shape']},
@@ -578,8 +578,10 @@ async function ownTypo(browser, name, width, editing, priority = true) {
   const want = (w, v, b) => w instanceof RegExp ? w.test(v) : typeof w === 'function' ? w(v, b) : v === (typeof w === 'object' ? w[width] : w);
   for (const c of o.cases) {
     const base = await read(c), bid = c.block && t.blockId(c.block);
-    const expectOn = async how => { const got = await read(c); c.checks.forEach(([sel, prop, w], i) => ok(want(w, got[i], base[i]), tag + ' ' + c.label + ' ' + how + ': ' + sel + ' ' + prop + ' is ' + got[i] + ' (theme ' + base[i] + ')')); if (c.attr) eq(await hasAttr(c), true, tag + ' ' + c.label + ' ' + how + ' marks ' + c.attr.join(' ')); };
-    const expectOff = async how => { eq(await read(c), base, tag + ' ' + c.label + ' ' + how + ': theme values back'); if (c.attr) eq(await hasAttr(c), false, tag + ' ' + c.label + ' ' + how + ' attribute gone'); };
+    /* Settle: theme transitions may still be running a frame after an edit. */
+    const settle = async good => { let got; for (let i = 0; i < 12; i++) { got = await read(c); if (good(got)) break; await t.page.waitForTimeout(50); } return got; };
+    const expectOn = async how => { const got = await settle(g => c.checks.every(([, , w], i) => want(w, g[i], base[i]))); c.checks.forEach(([sel, prop, w], i) => ok(want(w, got[i], base[i]), tag + ' ' + c.label + ' ' + how + ': ' + sel + ' ' + prop + ' is ' + got[i] + ' (theme ' + base[i] + ')')); if (c.attr) eq(await hasAttr(c), true, tag + ' ' + c.label + ' ' + how + ' marks ' + c.attr.join(' ')); };
+    const expectOff = async how => { eq(await settle(g => JSON.stringify(g) === JSON.stringify(base)), base, tag + ' ' + c.label + ' ' + how + ': theme values back'); if (c.attr) eq(await hasAttr(c), false, tag + ' ' + c.label + ' ' + how + ' attribute gone'); };
     const redraw = set => bid ? t.redraw({blocks: t.rendered[0].section.blocks.map(b => ({type: b.type, settings: b.id === bid ? {...b.settings, ...set} : b.settings}))}) : t.redraw({settings: set});
     await t.emit(c.on, bid); await expectOn('live');
     await t.emit(c.off, bid); await expectOff('live off');

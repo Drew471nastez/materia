@@ -11,8 +11,9 @@ const PRODUCT = {title: 'Prime1 Tub', url: '/products/prime1', price: 2990, feat
 const perRow = t => t.page.evaluate(() => { const tr = document.querySelector('#shopify-section-test .msr-car__track'), s = tr.querySelector('.msr-car__slide'); return Math.round((tr.clientWidth + 14) / (s.getBoundingClientRect().width + 14)); });
 const head = (type, sel, d, m, weight, below) => [
   {block: type, id: 'text', v: type === 'subheading' ? '<p>Clips <em>daily</em></p>' : 'Clips <em>daily</em>', sel: sel + ' em', css: 'text', exp: 'daily'},
-  {block: type, id: 'font_size_desktop', v: 33, sel, css: 'fontSize', exp: w => DESK(w) ? '33px' : m + 'px'},
-  {block: type, id: 'font_size_mobile', v: 13, sel, css: 'fontSize', exp: w => DESK(w) ? d + 'px' : '13px'},
+  ...(type === 'heading' ? [{block: type, id: 'size_enable', v: true, sel, css: 'fontSize', exp: w => DESK(w) ? d + 'px' : m + 'px'}] : []),
+  {block: type, id: 'font_size_desktop', v: 33, ...(type === 'heading' ? {preBlock: true, pre: {size_enable: true}} : {}), sel, css: 'fontSize', exp: w => DESK(w) ? '33px' : m + 'px'},
+  {block: type, id: 'font_size_mobile', v: 13, ...(type === 'heading' ? {preBlock: true, pre: {size_enable: true}} : {}), sel, css: 'fontSize', exp: w => DESK(w) ? d + 'px' : '13px'},
   {block: type, id: 'enable_custom_weight', v: true, sel, css: 'fontWeight', exp: weight},
   {block: type, id: 'font_weight', v: '300', preBlock: true, pre: {enable_custom_weight: true}, sel, css: 'fontWeight', exp: '300'},
   {block: type, id: 'space_above', v: 11, sel, css: 'marginTop', exp: '11px'},
@@ -96,6 +97,7 @@ const TABLE = [
       await instrument(t.page); await serveVideo(t.page); await t.redraw({}); await t.page.waitForTimeout(500);
       /* Theme inheritance */
       eq(await read(t, ROOT, 'backgroundColor'), 'rgb(24, 32, 40)'); eq(await read(t, '.rw__heading', 'color'), 'rgb(255, 255, 255)'); ok(/Georgia/.test(await read(t, '.rw__heading', 'fontFamily')));
+      eq(await read(t, '.rw__heading', 'fontSize'), await t.page.evaluate(() => { const h = document.createElement('h2'); document.querySelector('#shopify-section-test').append(h); const v = getComputedStyle(h).fontSize; h.remove(); return v; }), 'heading follows the theme h2 size');
       eq(await read(t, '.rw__heading', '.tagName'), 'H2'); eq(await read(t, '.rw-content__heading', '.tagName'), 'H3');
       ok(/Arial/.test(await read(t, '.rw-content__caption', 'fontFamily')));
       eq(await read(t, '.rw-cta', 'backgroundColor'), 'rgb(18, 52, 86)'); eq(await read(t, '.rw-cta', 'borderTopLeftRadius'), '12px'); eq(await hoverBg(t, '.rw-cta', true), 'rgb(255, 0, 0)', 'theme hover');

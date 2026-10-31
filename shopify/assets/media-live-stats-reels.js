@@ -24,6 +24,8 @@
   const attr = (el, k, v) => { if (!el) return; if (v == null || v === false) { if (el.hasAttribute(k)) el.removeAttribute(k); } else if (el.getAttribute(k) !== String(v)) el.setAttribute(k, v); };
   const src = (img, next) => { if (img && next && img.getAttribute('src') !== next) { img.removeAttribute('srcset'); img.src = next; } };
   const fontVar = (el, k, on, v) => prop(el, k, on ? font(v) : '');
+  /* Theme priority opt-outs (snippets/theme-controls): present only while the element's own value is on. */
+  const flag = (el, k, on) => { if (el && el.hasAttribute(k) !== !!on) el.toggleAttribute(k, !!on); };
   const sectionId = v => String(v && typeof v === 'object' ? v.id : v || '').replace(/^shopify-section-/, '');
   const scheme = (root, s) => {
     const id = s.color_scheme && typeof s.color_scheme === 'object' ? s.color_scheme.id : s.color_scheme;
@@ -146,7 +148,7 @@
       P('--iws-media-w', num(s.media_column_width, 50) + '%');
       P('--iws-ratio', num(s.media_aspect_w, 3) + ' / ' + num(s.media_aspect_h, 4));
       for (const [k, id] of [['--iws-bg', 'section_bg'], ['--iws-text', 'text_color'], ['--iws-pct-color', 'heading_color'], ['--iws-accent', 'accent_color'], ['--iws-ring-bg', 'ring_bg'], ['--iws-divider', 'stat_divider'], ['--iws-stat-color', 'stat_text_color'], ['--iws-track', 'progress_track'], ['--iws-fill', 'progress_fill']]) cvar(root, k, c, s[id]);
-      fontVar(root, '--iws-hfont', f, s.heading_font); fontVar(root, '--iws-bfont', f, s.body_font);
+      fontVar(root, '--iws-hfont', f, s.heading_font); fontVar(root, '--iws-bfont', f, s.body_font); flag(root, 'data-own-font', f);
       /* media layout: Auto (1 single, 2 side by side, 3+ carousel) or a fixed number per row */
       const grid = root.querySelector('[data-iws-grid]'), count = grid ? grid.querySelectorAll('.iws__slot').length : 0;
       root.classList.toggle('iws--no-media', !count);
@@ -168,8 +170,13 @@
           cvar(el, '--b-color', own, b.color);
           prop(el, '--b-weight', bool(b.weight_enable) ? b.weight : '');
           if (type === 'footnote') { prop(el, '--b-size', px(b.size, 13)); prop(el, '--b-mt', px(b.margin_top)); }
-          else { prop(el, '--b-size-m', px(b.size_mobile, type === 'heading' ? 32 : 14)); prop(el, '--b-size-d', px(b.size_desktop, type === 'heading' ? 48 : 16)); }
-          if (type === 'heading') prop(el, '--b-case', bool(b.uppercase) ? 'uppercase' : '');
+          else if (type === 'heading') { const on = bool(b.size_enable); prop(el, '--b-size-m', on ? px(b.size_mobile, 32) : ''); prop(el, '--b-size-d', on ? px(b.size_desktop, 48) : ''); }
+          else { prop(el, '--b-size-m', px(b.size_mobile, 14)); prop(el, '--b-size-d', px(b.size_desktop, 16)); }
+          if (type === 'heading') {
+            /* Theme typography sets heading case from --heading-text-transform, so UPPERCASE sets that too. */
+            const up = bool(b.uppercase) ? 'uppercase' : ''; prop(el, '--b-case', up); prop(el, '--heading-text-transform', up);
+            flag(el, 'data-own-weight', bool(b.weight_enable));
+          }
         } else if (type === 'stat') {
           const pct = Math.max(0, Math.min(100, Math.round(num(b.percent, 0))));
           prop(el, '--iws-off', +(175.93 - 175.93 * pct / 100).toFixed(2));
@@ -201,7 +208,7 @@
       P('--st-line-style', ['solid', 'dashed', 'dotted'].includes(s.line_style) ? s.line_style : 'solid');
       for (const [k, id] of [['--st-bg', 'section_bg'], ['--st-mk-color', 'marker_color'], ['--st-mk-text', 'marker_text_color'], ['--st-line-color', 'line_color'], ['--st-title-color', 'step_title_color'], ['--st-desc-color', 'step_desc_color'], ['--st-img-bg', 'image_bg']]) cvar(root, k, c, s[id]);
       P('--st-title-size', c ? px(s.step_title_size, 18) : ''); P('--st-desc-size', c ? px(s.step_desc_size, 14) : '');
-      fontVar(root, '--st-hfont', f, s.heading_font); fontVar(root, '--st-bfont', f, s.body_font);
+      fontVar(root, '--st-hfont', f, s.heading_font); fontVar(root, '--st-bfont', f, s.body_font); flag(root, 'data-own-font', f);
       const img = root.querySelector('.iws__media img');
       if (img) { if (!st.placeholders.has(img)) st.placeholders.set(img, img.getAttribute('src')); src(img, url(s.image, true) || url(s.placeholder_url, true) || st.placeholders.get(img)); attr(img, 'alt', (url(s.image, true) || url(s.placeholder_url, true)) ? s.image_alt || '' : ''); }
       const style = s.step_style || 'dot';
@@ -210,7 +217,7 @@
         if (type === 'eyebrow' || type === 'heading' || type === 'subheading') {
           rich(el, b.text, st); hide(el, !plain(b.text));
           cvar(el, '--b-color', own, b.color);
-          if (type === 'heading') { attr(el, 'data-custom', own ? '' : null); prop(el, '--b-size-m', own ? px(b.size_mobile, 28) : ''); prop(el, '--b-size-d', own ? px(b.size_desktop, 40) : ''); prop(el, '--b-weight', own ? b.weight || 700 : ''); }
+          if (type === 'heading') { attr(el, 'data-custom', own ? '' : null); flag(el, 'data-own-weight', own); flag(el, 'data-own-size', own); prop(el, '--b-size-m', own ? px(b.size_mobile, 28) : ''); prop(el, '--b-size-d', own ? px(b.size_desktop, 40) : ''); prop(el, '--b-weight', own ? b.weight || 700 : ''); }
           else prop(el, '--b-size', own ? px(b.size, type === 'eyebrow' ? 12 : 15) : '');
           if (type === 'subheading') prop(el, '--b-max', px(b.max_width, 560));
         } else if (type === 'step') {
@@ -230,7 +237,8 @@
           attr(el, 'href', url(b.url) || el.dataset.msrFallback);
           const geo = s.use_theme_button === false;
           for (const [k, v] of [['--mb-bg', c ? color(s.button_bg) : ''], ['--mb-border', c ? color(s.button_bg) : ''], ['--mb-text', c ? color(s.button_color) : ''], ['--mb-hover-bg', c ? color(s.button_bg_hover) : ''], ['--mb-hover-border', c ? color(s.button_bg_hover) : ''], ['--mb-hover-text', c ? color(s.button_color) : ''],
-            ['--mb-radius', geo ? px(s.button_radius) : ''], ['--mb-padding-y', geo ? px(s.button_pad_y) : ''], ['--mb-padding-x', geo ? px(s.button_pad_x) : ''], ['--mb-font-size', geo ? px(s.button_size) : ''], ['--mb-weight', geo ? '600' : ''], ['--btn-border-width', geo ? '0px' : '']]) prop(el, k, v);
+            ['--mb-radius', geo ? px(s.button_radius) : ''], ['--mb-padding-y', geo ? px(s.button_pad_y) : ''], ['--mb-padding-x', geo ? px(s.button_pad_x) : ''], ['--mb-font-size', geo ? px(s.button_size) : ''], ['--mb-weight', geo ? '600' : ''], ['--btn-border-width', geo ? '0px' : ''], ['--mb-border-width', geo ? '0px' : '']]) prop(el, k, v);
+          flag(el, 'data-own-shape', geo); flag(el, 'data-own-weight', geo);
         }
       }
     },
@@ -320,16 +328,17 @@
       P('--rw-heading-size', px(s.custom_heading_size, 15)); P('--rw-caption-size', px(s.custom_caption_size, 12));
       cvar(root, '--rw-bg', c, color(s.custom_section_bg) || s.section_bg);
       for (const [k, id] of [['--rw-tile-bg', 'tile_bg'], ['--rw-accent', 'accent_color'], ['--rw-tile-text', 'custom_tile_text'], ['--rw-heading-color', 'custom_heading_color'], ['--rw-eyebrow-color', 'custom_eyebrow_color'], ['--mb-bg', 'custom_cta_bg'], ['--mb-border', 'custom_cta_bg'], ['--mb-text', 'custom_cta_text']]) cvar(root, k, c, s[id]);
-      fontVar(root, '--rw-hfont', f, s.heading_font); fontVar(root, '--rw-bfont', f, s.body_font);
+      fontVar(root, '--rw-hfont', f, s.heading_font); fontVar(root, '--rw-bfont', f, s.body_font); flag(root, 'data-own-font', f);
       attr(root, 'data-handle', String(bool(s.show_handle))); attr(root, 'data-actions', String(bool(s.show_actions))); attr(root, 'data-unmute', String(bool(s.show_unmute)));
       st.layout?.({mode: s.display_mode === 'grid' ? 'grid' : 'carousel', cm: num(s.columns_mobile, 1), cd: num(s.columns, 4), gap: s.column_gap, arrows: bool(s.show_arrow), dots: dotsMode(s), mobileOnly: s.carousel_pagination === 'show_dots_on_mobile', style: s.pagination_style, position: s.pagination_position});
       for (const el of root.querySelectorAll('[data-msr-block]')) {
         const b = st.block(el), type = el.dataset.msrType;
         if (type !== 'reel') {
           rich(el, b.text, st); hide(el, !plain(b.text));
-          prop(el, '--b-size-m', px(b.font_size_mobile)); prop(el, '--b-size-d', px(b.font_size_desktop));
+          const size = type !== 'heading' || bool(b.size_enable);
+          prop(el, '--b-size-m', size ? px(b.font_size_mobile) : ''); prop(el, '--b-size-d', size ? px(b.font_size_desktop) : '');
           prop(el, '--b-above', px(b.space_above)); prop(el, '--b-below', px(b.space_below));
-          prop(el, '--b-weight', bool(b.enable_custom_weight) ? b.font_weight : '');
+          prop(el, '--b-weight', bool(b.enable_custom_weight) ? b.font_weight : ''); flag(el, 'data-own-weight', bool(b.enable_custom_weight));
           continue;
         }
         const tile = el.querySelector('.rw-tile'), q = sel => tile.querySelector(sel);
@@ -373,7 +382,7 @@
       P('--sv-radius', px(s.card_radius)); P('--sv-overlay', String(num(s.overlay_opacity) / 100)); P('--sv-card-padding', px(s.custom_card_padding)); P('--sv-heading-size', px(s.custom_heading_size, 18));
       cvar(root, '--sv-bg', c, color(s.custom_section_bg) || s.section_bg);
       for (const [k, id] of [['--sv-ink', 'custom_heading_color'], ['--sv-overlay-color', 'custom_card_overlay_color'], ['--mb-bg', 'custom_cta_bg'], ['--mb-border', 'custom_cta_bg'], ['--mb-text', 'custom_cta_text']]) cvar(root, k, c, s[id]);
-      fontVar(root, '--sv-hfont', f, s.heading_font); fontVar(root, '--sv-bfont', f, s.body_font);
+      fontVar(root, '--sv-hfont', f, s.heading_font); fontVar(root, '--sv-bfont', f, s.body_font); flag(root, 'data-own-font', f);
       attr(root, 'data-controls', String(bool(s.show_controls)));
       /* Header: eyebrow, heading and subheading blocks in block order; the old section text
          settings paint only the legacy elements drawn when a type has no block. */
@@ -385,8 +394,9 @@
         cvar(el, '--b-color', bool(b.enable_custom_style), b.color);
         fontVar(el, '--b-font', bool(b.enable_custom_fonts), b.font);
         attr(el, 'data-size', String(bool(b.size_enable)));
+        flag(el, 'data-own-font', bool(b.enable_custom_fonts)); flag(el, 'data-own-size', bool(b.size_enable));
         if (type === 'heading') {
-          attr(el, 'data-weight', String(bool(b.weight_enable)));
+          attr(el, 'data-weight', String(bool(b.weight_enable))); flag(el, 'data-own-weight', bool(b.weight_enable));
           prop(el, '--b-size-d', px(b.size_desktop, 36)); prop(el, '--b-size-m', px(b.size_mobile, 28)); prop(el, '--b-lh', String(num(b.line_height, 1.2))); prop(el, '--b-weight', String(b.weight || 700));
         } else {
           prop(el, '--b-size', px(b.size, type === 'eyebrow' ? 14 : 16));

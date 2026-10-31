@@ -65,7 +65,7 @@
      button shape with !important (snippets/theme-controls). An element whose
      own switch is on carries data-own-font / -weight / -size / -shape so it
      keeps its own value; switched off, the attribute goes and the theme wins. */
-  function own(el, flags) { for (const k in flags) setAttr(el, 'data-own-' + k, flags[k] ? '' : null); }
+  function owns(el, flags) { for (const k in flags) setAttr(el, 'data-own-' + k, flags[k] ? '' : null); }
 
   /* Shared media handling: placeholders, lazy loading, autoplay videos that
      stop off screen, in a hidden tab and under reduced motion. */
@@ -150,7 +150,7 @@
         const heading = type === 'heading', own = bool(b.enable_custom_style), fonts = bool(b.enable_custom_fonts), text = el.querySelector('[data-mga-text]') || el;
         rich(state, text, heading ? init.title : init.text, heading ? b.title : b.text);
         setHidden(el, !strip(heading ? b.title : b.text));
-        own(el, {font: fonts, weight: !!b.font_weight && b.font_weight !== 'inherit'});
+        owns(el, {font: fonts, weight: !!b.font_weight && b.font_weight !== 'inherit'});
         vars(el, {
           '--mga-color': own ? color(b.color, heading ? 'var(--color-heading)' : 'var(--color-text)') : heading ? 'var(--color-heading)' : 'var(--color-text)',
           '--mga-font': fonts ? font(b.font, heading ? 'var(--heading-font)' : 'var(--body-font)') : heading ? 'var(--heading-font)' : 'var(--body-font)',
@@ -187,7 +187,7 @@
       section(root, state, s, init) {
         /* Legacy heading: only rendered when the section has no Heading block. */
         const h = root.querySelector('[data-mga-heading]');
-        if (h) { rich(state, h, init.heading_text, s.heading_text); setHidden(h, !strip(s.heading_text)); own(h, {font: bool(s.enable_custom_fonts), weight: !!s.heading_font_weight && s.heading_font_weight !== 'inherit'}); }
+        if (h) { rich(state, h, init.heading_text, s.heading_text); setHidden(h, !strip(s.heading_text)); owns(h, {font: bool(s.enable_custom_fonts), weight: !!s.heading_font_weight && s.heading_font_weight !== 'inherit'}); }
         sync(state, root, 'class', strip(init.custom_class), strip(s.custom_class), v => {
           const tokens = x => String(x || '').split(/\s+/).filter(t => /^[\w-]+$/.test(t) && !t.startsWith('mga') && !t.startsWith('color-'));
           for (const cls of state.customClasses || tokens(init.custom_class)) root.classList.remove(cls);
@@ -200,7 +200,7 @@
              over the section's (removed again when switched off). */
           const heading = type === 'heading', own = bool(b.enable_custom_style), size = bool(b.size_enable), f = bool(b.enable_custom_fonts) ? font(b.font, '') : '';
           rich(state, el, init.text, b.text); setHidden(el, !strip(b.text));
-          own(el, heading ? {font: bool(b.enable_custom_fonts) || bool(state.s.enable_custom_fonts), weight: !!state.s.heading_font_weight && state.s.heading_font_weight !== 'inherit'} : {font: bool(b.enable_custom_fonts)});
+          owns(el, heading ? {font: bool(b.enable_custom_fonts) || bool(state.s.enable_custom_fonts), weight: !!state.s.heading_font_weight && state.s.heading_font_weight !== 'inherit'} : {font: bool(b.enable_custom_fonts)});
           const ink = own ? color(b.color, '') : '';
           overrides(el, heading ? {
             '--mga-heading-color': ink || null, '--mga-heading-font': f || null,

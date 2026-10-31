@@ -69,7 +69,7 @@
   }
   const blank = v => !String(v == null ? '' : v).replace(/<[^>]*>/g, '').trim();
   const scheme = s => s.color_scheme && s.color_scheme.id || s.color_scheme;
-  const fonts = (s, root) => { const on = bool(s.enable_custom_fonts); put(root, '--pch-hf', on ? font(s.heading_font, 'var(--heading-font)') : 'var(--heading-font)'); put(root, '--pch-bf', on ? font(s.body_font, 'var(--body-font)') : 'var(--body-font)'); };
+  const fonts = (s, root) => { const on = bool(s.enable_custom_fonts); put(root, '--pch-hf', on ? font(s.heading_font, 'var(--heading-font)') : 'var(--heading-font)'); put(root, '--pch-bf', on ? font(s.body_font, 'var(--body-font)') : 'var(--body-font)'); put(root, '@data-own-font', on); };
   const pick = (own, v, f) => own ? color(v, f) : f;
   function cta(el, own, bg, text) {
     if (!el) return;
@@ -173,11 +173,11 @@
       if (st.changed.has('lazyload')) for (const el of root.querySelectorAll('.hss__img')) put(el, '@loading', s.lazyload === false || s.lazyload === 'false' ? 'eager' : 'lazy');
       texts(root, s);
       for (const el of root.querySelectorAll('.hss__btn')) cta(el, own, s.accent_color, s.button_text_color);
-      for (const el of root.querySelectorAll('.hss__btn--choose')) put(el, '--mb-weight', s.choose_text_font_weight === 'bold' ? '700' : null);
+      for (const el of root.querySelectorAll('.hss__btn--choose')) { put(el, '--mb-weight', s.choose_text_font_weight === 'bold' ? '700' : null); put(el, '@data-own-weight', s.choose_text_font_weight === 'bold'); }
       for (const el of root.querySelectorAll('.hss__head')) {
         const b = st.block(el), mine = bool(b.enable_custom_style);
         put(el, '--b-align', b.text_align || 'center'); put(el, '--b-c', pick(mine, b.heading_text_color, 'var(--pch-heading)')); put(el, '--b-c2', pick(mine, b.subheading_text_color, 'var(--pch-text)'));
-        put(el, '--b-fs', mine ? px(b.heading_font_size, 32) : null); put(el, '--b-w', bool(b.enable_custom_font_weight) ? String(b.heading_font_weight || 400) : null);
+        put(el, '--b-fs', mine ? px(b.heading_font_size, 32) : null); put(el, '--b-w', bool(b.enable_custom_font_weight) ? String(b.heading_font_weight || 400) : null); put(el.querySelector('.hss__title'), '@data-own-weight', bool(b.enable_custom_font_weight));
         for (const part of el.querySelectorAll('[data-pch-rich]')) { const v = b[part.dataset.pchRich]; put(part, 'rich', v || ''); put(part, 'hidden', blank(v)); }
         put(el, 'hidden', blank(b.heading_text) && blank(b.section_text));
       }
@@ -219,7 +219,7 @@
       for (const k in vars) put(root, k, vars[k]);
       const wrap = root.closest('.shopify-section'), wide = ctDesktop.matches ? 'desktop' : 'mobile';
       if (wrap) for (const side of ['top', 'bottom']) if (st.margins || st.changed.has('section_margin_' + side + '_desktop') || st.changed.has('section_margin_' + side + '_mobile')) { st.margins = wrap.__pcMargins = true; put(wrap, '.margin-' + side, px(s['section_margin_' + side + '_' + wide])); }
-      if (hEl) { put(hEl, 'rich', hb.heading || ''); put(hEl, 'hidden', blank(hb.heading)); }
+      if (hEl) { put(hEl, 'rich', hb.heading || ''); put(hEl, 'hidden', blank(hb.heading)); put(hEl, '@data-own-weight', !!hc); }
       if (sEl) { put(sEl, 'rich', sb.subheading || ''); put(sEl, 'hidden', blank(sb.subheading)); }
       for (const btn of root.querySelectorAll('[data-ct-type="collection"]')) {
         const b = st.block(btn), t = btn.querySelector('.ti-tabs__btn-text'), title = b.collection_title || btn.dataset.ctTitle || '';

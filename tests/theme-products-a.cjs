@@ -203,9 +203,78 @@ const PIT_BLOCKS = {
 };
 
 let BROWSER;
+/* ---------- round 3: custom typography against the real theme rules ----------
+   snippets/theme-controls (Use in every section, Use shared button size and
+   shape) is on in the fixture. Each case is switched on and off live and by a
+   redraw, at 375 and 1366, in the builder and on the storefront; on, the
+   element and the text inside it show the custom value, off, the theme value
+   is back. Featured product's blocks are drawn by the shared product blocks
+   and wait for the builder's redraw, so they are checked by redraw only.
+   Priority 'off' runs the cases once. */
+const VERDANA = {family: 'Verdana', fallback_families: 'sans-serif'};
+const fpDef = type => def(schemaOf(FP).schema.blocks.find(b => b.type === type).settings);
+const OWN = {
+  [PIB]: {
+    mount: {blocks: [{type: 'top_row', settings: {text: '<p>Free <strong>delivery</strong> over $50</p>'}}, {type: 'collapsible', settings: {title: 'Care', body: '<p>Wash <em>cold</em>.</p>', open_default: true}}, {type: 'badges'}]},
+    cases: [
+      {label: 'custom font', on: {enable_custom_fonts: true, body_font: VERDANA}, off: {enable_custom_fonts: false}, checks: [['.pib__top-text p', 'fontFamily', /^Verdana/], ['.pib__top-text strong', 'fontFamily', /^Verdana/], ['.pib__summary-text', 'fontFamily', /^Verdana/], ['.pib__answer p', 'fontFamily', /^Verdana/], ['.pib__answer em', 'fontFamily', /^Verdana/]], attr: ['[data-pa-root]', 'data-own-font']},
+      {label: 'text sizes', on: {message_size: 20, title_size: 19, body_size: 17}, off: {message_size: 15, title_size: 15, body_size: 14}, checks: [['.pib__top-text p', 'fontSize', '20px'], ['.pib__top-text strong', 'fontSize', '20px'], ['.pib__summary-text', 'fontSize', '19px'], ['.pib__answer p', 'fontSize', '17px']]},
+    ],
+  },
+  [PIT]: {
+    mount: {globals: PIT_G, blocks: [{type: 'description', settings: {title: 'Description'}}, {type: 'custom_tab', settings: {title: 'Care', content_rich: '<p>Wash cold.</p>'}}]},
+    cases: [{label: 'tab text size', on: {tab_size: 22}, off: {tab_size: 16}, checks: [['.pit__tab', 'fontSize', '22px']]}],
+  },
+  [FP]: {
+    mount: {settings: FP_BASE, blocks: [{type: 'title'}, {type: 'price'}]},
+    cases: [
+      {label: 'title block size', block: 'title', redrawOnly: true, on: {title_font_size_desktop: 40, title_font_size_mobile: 30}, off: {title_font_size_desktop: fpDef('title').title_font_size_desktop, title_font_size_mobile: fpDef('title').title_font_size_mobile}, checks: [['.product-detail__title', 'fontSize', {375: '30px', 1366: '40px'}]]},
+      {label: 'price block size and weight', block: 'price', redrawOnly: true, on: {price_font_size_desktop: 30, price_font_size_mobile: 26, price_font_weight: '800'}, off: {price_font_size_desktop: 20, price_font_size_mobile: 18, price_font_weight: '600'}, checks: [['.product-detail__price .price-item--last, .product-detail__price .price-regular', 'fontSize', {375: '26px', 1366: '30px'}], ['.product-detail__price .price-item--last, .product-detail__price .price-regular', 'fontWeight', '800']]},
+    ],
+  },
+};
+async function ownTypo(name, width, editing, priority = true) {
+  const o = OWN[name];
+  const tag = name + ' @' + width + (editing ? ' editor' : ' storefront') + (priority === 'off' ? ' priority off' : '');
+  const t = await mount(BROWSER, name, {width, editing, priority, settings: {...(o.mount.settings || {})}, blocks: JSON.parse(JSON.stringify(o.mount.blocks || [])), globals: o.mount.globals || {}, assets: ASSETS});
+  const read = async c => { const out = []; for (const [sel, prop] of c.checks) out.push(await t.css(sel, prop)); return out; };
+  const hasAttr = c => t.page.locator('#shopify-section-test ' + c.attr[0]).first().evaluate((e, a) => e.hasAttribute(a), c.attr[1]);
+  const want = (w, v, b) => w instanceof RegExp ? w.test(v) : v === (typeof w === 'object' ? w[width] : w);
+  for (const c of o.cases) {
+    const base = await read(c), bid = c.block && t.blockId(c.block);
+    const settle = async good => { let got; for (let i = 0; i < 12; i++) { got = await read(c); if (good(got)) break; await t.page.waitForTimeout(50); } return got; };
+    const expectOn = async how => { const got = await settle(g => c.checks.every(([, , w], i) => want(w, g[i], base[i]))); c.checks.forEach(([sel, prop, w], i) => ok(want(w, got[i], base[i]), tag + ' ' + c.label + ' ' + how + ': ' + sel + ' ' + prop + ' is ' + got[i] + ' (theme ' + base[i] + ')')); if (c.attr) eq(await hasAttr(c), true, tag + ' ' + c.label + ' ' + how + ' marks ' + c.attr.join(' ')); };
+    const expectOff = async how => { eq(await settle(g => JSON.stringify(g) === JSON.stringify(base)), base, tag + ' ' + c.label + ' ' + how + ': theme values back'); if (c.attr) eq(await hasAttr(c), false, tag + ' ' + c.label + ' ' + how + ' attribute gone'); };
+    const redraw = set => bid ? t.redraw({blocks: t.rendered[0].section.blocks.map(b => ({type: b.type, settings: b.id === bid ? {...b.settings, ...set} : b.settings}))}) : t.redraw({settings: set});
+    if (!c.redrawOnly) { await t.emit(c.on, bid); await expectOn('live'); await t.emit(c.off, bid); await expectOff('live off'); }
+    await redraw(c.on); await expectOn('redraw');
+    await redraw(c.off); await expectOff('redraw off');
+    if (!c.redrawOnly) { await redraw(c.on); await t.emit(c.off, bid); await expectOff('redraw on, live off'); await t.emit(c.on, bid); await expectOn('live on again'); await redraw(c.off); }
+  }
+  ok(await t.noOverflow(), tag + ' custom typography no sideways scroll');
+  eq(t.errors, [], tag + ' custom typography errors');
+  await t.page.close();
+}
+async function ownAll() {
+  for (const name of [PIB, PIT, FP]) {
+    for (const w of [375, 1366]) for (const e of [true, false]) await ownTypo(name, w, e);
+    await ownTypo(name, 1366, true, 'off');
+    /* Theme inheritance with both priorities off. */
+    const t = await mount(BROWSER, name, {width: 1366, editing: true, priority: 'off', settings: {...(OWN[name].mount.settings || {})}, blocks: OWN[name].mount.blocks, globals: OWN[name].mount.globals || {}, assets: ASSETS});
+    const [sel, h] = {[PIB]: ['.pib__top-text p', null], [PIT]: ['.pit__content', '.pit__tab'], [FP]: ['.product-detail__price', '.product-detail__title']}[name];
+    ok(/^Arial/.test(await t.css(sel, 'fontFamily')), name + ' priority off: body font');
+    if (h && name === FP) ok(/^Georgia/.test(await t.css(h, 'fontFamily')), name + ' priority off: heading font');
+    eq(await t.css(name === PIB ? '.pib' : name === PIT ? '.pit' : fpRoot, 'backgroundColor'), name === FP ? await t.css(fpRoot, 'backgroundColor') : BG, name + ' priority off: scheme background');
+    eq(t.errors, [], name + ' priority off errors');
+    await t.page.close();
+  }
+}
+
 (async () => {
   BROWSER = await launch();
   try {
+    /* OWN_ONLY=1: only the round 3 custom typography cases. */
+    if (process.env.OWN_ONLY) { await ownAll(); console.log(pass + ' products-a custom typography checks passed'); return; }
     /* 1. schema */
     for (const [name, specs] of [[FP, FP_SPECS], [PIB, PIB_SPECS], [PIT, PIT_SPECS]]) {
       eq(schemaProblems(name), [], `${name}: schema problems`);

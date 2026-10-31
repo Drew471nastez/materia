@@ -71,8 +71,9 @@ const TABLE = [
   {block: 'heading', id: 'uppercase', v: false, sel: '.iws__heading', css: 'textTransform', exp: 'none'},
   {block: 'heading', id: 'weight_enable', v: true, sel: '.iws__heading', css: 'fontWeight', exp: '800'},
   {block: 'heading', id: 'weight', v: '300', preBlock: true, pre: {weight_enable: true}, sel: '.iws__heading', css: 'fontWeight', exp: '300'},
-  {block: 'heading', id: 'size_desktop', v: 60, sel: '.iws__heading', css: 'fontSize', exp: w => DESK(w) ? '60px' : '32px'},
-  {block: 'heading', id: 'size_mobile', v: 22, sel: '.iws__heading', css: 'fontSize', exp: w => DESK(w) ? '48px' : '22px'},
+  {block: 'heading', id: 'size_enable', v: true, sel: '.iws__heading', css: 'fontSize', exp: w => DESK(w) ? '48px' : '32px'},
+  {block: 'heading', id: 'size_desktop', v: 60, preBlock: true, pre: {size_enable: true}, sel: '.iws__heading', css: 'fontSize', exp: w => DESK(w) ? '60px' : '32px'},
+  {block: 'heading', id: 'size_mobile', v: 22, preBlock: true, pre: {size_enable: true}, sel: '.iws__heading', css: 'fontSize', exp: w => DESK(w) ? '48px' : '22px'},
   {block: 'subheading', id: 'text', v: '<p>Made <em>daily</em></p>', sel: '.iws__subheading em', css: 'text', exp: 'daily'},
   {block: 'subheading', id: 'enable_custom_style', v: true, preBlock: true, pre: {color: '#00cc00'}, sel: '.iws__subheading', css: 'color', exp: 'rgb(0, 204, 0)'},
   {block: 'subheading', id: 'color', v: '#00cc00', ...BC, sel: '.iws__subheading', css: 'color', exp: 'rgb(0, 204, 0)'},
@@ -119,6 +120,7 @@ const TABLE = [
       eq(await read(t, '.iws__stat-ring-fill', 'stroke'), 'rgb(51, 102, 153)', 'ring follows primary');
       eq(await read(t, '.iws__stat', 'borderTopColor'), 'rgb(68, 85, 102)', 'dividers follow border');
       eq(await read(t, '.iws__heading', '.tagName'), 'H2', 'heading is h2');
+      eq(await read(t, '.iws__heading', 'fontSize'), await t.page.evaluate(() => { const h = document.createElement('h2'); document.querySelector('#shopify-section-test').append(h); const v = getComputedStyle(h).fontSize; h.remove(); return v; }), 'heading follows the theme h2 size ' + tag);
       /* 3. Colour scheme live and after redraw */
       await t.emit({color_scheme: 'alt-scheme'}); eq(await read(t, '.iws', 'backgroundColor'), 'rgb(250, 250, 250)'); eq(await read(t, '.iws__heading', 'color'), 'rgb(16, 16, 16)');
       await t.redraw({settings: {color_scheme: 'alt-scheme'}}); eq(await read(t, '.iws', 'backgroundColor'), 'rgb(250, 250, 250)');
