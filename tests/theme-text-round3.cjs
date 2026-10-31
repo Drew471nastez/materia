@@ -70,6 +70,27 @@ const CASES = {
     {label: 'buttons own shape', on: {blocks: {buttons: {use_theme_button: false, primary_button_corner: 3, button_font_weight: '300'}}}, off: {blocks: {buttons: {use_theme_button: true}}},
       checks: [['.LoudzTextButtonButtons__Primary', 'borderRadius', '3px', BTN.borderRadius], ['.LoudzTextButtonButtons__Primary', 'fontWeight', '300', BTN.fontWeight], ['.LoudzTextButtonButtons__Primary', 'fontSize', '14px', BTN.fontSize], ['.LoudzTextButtonButtons__Primary', 'padding', '16px 20px', BTN.padding], ['.LoudzTextButtonButtons__Primary', 'attr:data-own-shape', true, false]]},
   ],
+  'inline-image-heading': [
+    {label: 'section custom fonts', on: {section: {enable_custom_fonts: true, heading_font: F('Courier New'), body_font: F('Verdana')}}, off: {section: {enable_custom_fonts: false}},
+      checks: [['.iih__heading', 'fontFamily', COURIER, HEAD], ['.iih__text', 'fontFamily', COURIER, HEAD], ['.iih__eyebrow', 'fontFamily', VERDANA, BODY], ['.iih__heading', 'attr:data-own-font', true, false]]},
+    {label: 'heading weight', on: {section: {heading_weight: 'body_weight'}}, off: {section: {heading_weight: 'heading_weight'}}, checks: [['.iih__heading', 'fontWeight', '400', '700'], ['.iih__heading', 'attr:data-own-weight', true, false]]},
+    {label: 'custom line height and spacing', on: {section: {enable_custom_size: true, heading_line_height: '1.4', heading_letter_spacing: 3}}, off: {section: {enable_custom_size: false}},
+      checks: [['.iih__heading', 'letterSpacing', '3px', 'normal'], ['.iih__heading', 'lineHeight', l => /^(42|78\.4)px$/.test(l), l => /^(36|67\.2)px$/.test(l)], ['.iih__text', 'letterSpacing', '3px', 'normal']]},
+    {label: 'eyebrow block font, weight and case', on: {blocks: {eyebrow: {enable_custom_fonts: true, font: F('Tahoma'), weight: '600', uppercase: true}}}, off: {blocks: {eyebrow: {enable_custom_fonts: false, weight: 'theme', uppercase: false}}},
+      checks: [['.iih__eyebrow', 'fontFamily', TAHOMA, BODY], ['.iih__eyebrow', 'fontWeight', '600', '400'], ['.iih__eyebrow', 'textTransform', 'uppercase', 'none']]},
+  ],
+  quotebanner: [
+    {label: 'section custom fonts', on: {section: {enable_custom_fonts: true, heading_font: F('Courier New'), body_font: F('Verdana')}}, off: {section: {enable_custom_fonts: false}},
+      checks: [['.qb-quote', 'fontFamily', COURIER, HEAD], ['.qb-author-name', 'fontFamily', VERDANA, BODY]]},
+    {label: 'quote block font and weight', on: {blocks: {quote: {enable_custom_fonts: true, font: F('Tahoma'), quote_weight: '300'}}}, off: {blocks: {quote: {enable_custom_fonts: false, quote_weight: 'theme'}}},
+      checks: [['.qb-quote', 'fontFamily', TAHOMA, HEAD], ['.qb-quote', 'fontWeight', '300', '700'], ['.qb-quote', 'attr:data-own-font', true, false]]},
+  ],
+  'scrolling-text': [
+    {label: 'custom font', on: {section: {use_custom_font: true, custom_font: F('Tahoma')}}, off: {section: {use_custom_font: false}},
+      checks: [['.stm__item', 'fontFamily', TAHOMA, HEAD], ['.stm', 'attr:data-own-font', true, false]]},
+    {label: 'body font, weight, spacing, case', on: {section: {base_font: 'body', font_weight: '300', letter_spacing: 4, text_transform: 'uppercase', line_height: 150}}, off: {section: {base_font: 'heading', font_weight: 'theme', letter_spacing: 0, text_transform: 'none', line_height: 105}},
+      checks: [['.stm__item', 'fontFamily', BODY, HEAD], ['.stm__item', 'fontWeight', '300', '700'], ['.stm__item', 'letterSpacing', '4px', 'normal'], ['.stm__item', 'textTransform', 'uppercase', 'none'], ['.stm__item', 'lineHeight', l => /^(60|120)px$/.test(l), l => /^(42|84)px$/.test(l)]]},
+  ],
 };
 CASES.richtext1 = CASES.richtext2 = rich.map(c => c.label === 'description block font' ? {...c, on: {blocks: {description: {...c.on.blocks.description, ...descText}}}, off: {blocks: {description: {...c.off.blocks.description, ...descText}}}} : c.label === 'section custom fonts' ? {...c, on: {...c.on, blocks: {description: descText}}, off: {...c.off, blocks: {description: descText}}} : c);
 
@@ -82,6 +103,9 @@ const THEME = {
   wavyrichtextbanner: [['[data-tx-type=heading]', 'fontFamily', HEAD], ['[data-tx-type=caption]', 'fontFamily', BODY], ['.LoudzTextButtonButtons__Primary', 'borderRadius', BTN.borderRadius]],
 };
 THEME.richtext2 = THEME.richtext1;
+THEME['inline-image-heading'] = [['.iih__heading', 'fontFamily', HEAD], ['.iih__eyebrow', 'fontFamily', BODY], ['.iih', 'backgroundColor', 'rgb(24, 32, 40)'], ['.iih__heading', 'color', 'rgb(255, 255, 255)']];
+THEME.quotebanner = [['.qb-quote', 'fontFamily', HEAD], ['.qb-author-name', 'fontFamily', BODY], ['.qb-card', 'backgroundColor', 'rgb(255, 255, 255)'], ['.qb-quote', 'color', 'rgb(24, 32, 40)']];
+THEME['scrolling-text'] = [['.stm__item', 'fontFamily', HEAD], ['.stm__item', 'color', 'rgb(204, 204, 204)']];
 
 /* Settings a select needs before its options can show (gradient on, etc.). */
 const NEEDS = {
