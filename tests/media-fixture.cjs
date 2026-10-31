@@ -41,10 +41,21 @@ async function render(name, {editing = true, uid = 'test', settings = {}, blocks
   return {html, scripts, schema: s, section};
 }
 
+
+/* The layout's theme-controls snippet (font and button priority), rendered with the saved Theme settings, as every real page prints it. */
+let controlsCss = null;
+async function themeControls() {
+  if (controlsCss !== null) return controlsCss;
+  const e = engine(), settings = JSON.parse(read('config/settings.json')).shopify || {};
+  const out = await e.parseAndRender("{% render 'theme-controls' %}", {settings}, {globals: {settings}});
+  controlsCss = (out.match(/<style[^>]*>([\s\S]*?)<\/style>/g) || []).map(x => x.replace(/^<style[^>]*>|<\/style>$/g, '')).join('\n');
+  return controlsCss;
+}
+
 async function launch() { return chromium.launch({executablePath: fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined, args: ['--no-sandbox']}); }
 
 /* instances: [{uid, settings, blocks, extraBlocks}] to mount several copies. assets: extra shopify/assets files (.css/.js) to load. inlineScripts: also run the section's own inline <script> bodies. */
-async function mount(browser, name, {width = 1366, height = 900, editing = true, settings = {}, blocks, extraBlocks = [], instances, assets = [], theme = {}, globals = {}, inlineScripts = true, reducedMotion = 'no-preference'} = {}) {
+async function mount(browser, name, {width = 1366, height = 900, editing = true, settings = {}, blocks, extraBlocks = [], instances, assets = [], theme = {}, globals = {}, inlineScripts = true, reducedMotion = 'no-preference', priority = true} = {}) {
   const page = await browser.newPage({viewport: {width, height}, reducedMotion});
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -55,6 +66,8 @@ async function mount(browser, name, {width = 1366, height = 900, editing = true,
   const rendered = [];
   for (const inst of list) rendered.push(await render(name, {editing, theme, globals, ...inst, uid: inst.uid || 'test'}));
   await page.evaluate(({vars, editing}) => { const s = document.createElement('style'); s.textContent = vars; document.head.append(s); if (editing) { document.documentElement.classList.add('shopify-design-mode'); document.body.classList.add('shopify-design-mode'); window.Shopify = {designMode: true}; } }, {vars: THEME_VARS, editing});
+  if (priority) { await page.addStyleTag({content: await themeControls()}); await page.addStyleTag({content: THEME_VARS.replace(/body\{[^}]*\}/, '')}); }
+  if (priority === 'off') await page.evaluate(() => { document.documentElement.dataset.fontPriority = 'off'; document.documentElement.dataset.buttonPriority = 'off'; });
   for (const f of BASE_CSS.concat(assets.filter(a => a.endsWith('.css')))) if (fs.existsSync(path.join(__dirname, '..', 'shopify/assets', f))) await page.addStyleTag({content: read('shopify/assets/' + f)});
   await page.evaluate(parts => { for (const p of parts) { const w = document.createElement('div'); w.id = 'shopify-section-' + p.uid; w.className = 'shopify-section'; w.innerHTML = p.html; document.body.append(w); } }, rendered.map((r, i) => ({uid: r.section.id, html: r.html})));
   for (const f of BASE_JS.concat(assets.filter(a => a.endsWith('.js')))) await page.addScriptTag({content: read('shopify/assets/' + f)});
@@ -97,4 +110,4 @@ function schemaProblems(name) {
   return out;
 }
 
-module.exports = {render, launch, mount, schemaOf, schemaProblems, THEME_VARS, PANTS, OTHER, TALL, EMPTY};
+module.exports = {themeControls, render, launch, mount, schemaOf, schemaProblems, THEME_VARS, PANTS, OTHER, TALL, EMPTY};
