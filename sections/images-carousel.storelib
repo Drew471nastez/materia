@@ -19,679 +19,159 @@
   })();
 {% comment %}{% endcomment %}</script>
 {%- endif -%}
-<style data-rs-bulletproof>
-  {%- if section.settings.reset_spacing -%}
-    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
-    #shopify-section-{{ section.id }},
-    #shopify-section-{{ section.id }} > .section,
-    #shopify-section-{{ section.id }} > section,
-    #shopify-section-{{ section.id }} > div,
-    #shopify-section-{{ section.id }} > div > .section {
-      margin-top: 0 !important;
-      margin-bottom: 0 !important;
-    }
-    #shopify-section-{{ section.id }} + .shopify-section,
-    #shopify-section-{{ section.id }} + section,
-    .shopify-section + #shopify-section-{{ section.id }} {
-      margin-top: 0 !important;
-    }
-  {%- endif -%}
-{% comment %}{% endcomment %}</style>
 {%- comment -%}
-  Section background colour wiring. Painted on the section wrapper so
-  the colour fills edge-to-edge regardless of inner section width.
+  Materia Themes. Gallery Scrolling Logos: one or two rows of images that
+  scroll in a continuous loop. Each row repeats its group of images enough
+  times to cover a 2560px wide row, and the track moves by exactly one
+  group per loop, so the wrap point lines up to the pixel. The number of
+  copies is worked out here from the settings (no measuring), and again by
+  media-live-galleries-b.js when a size or gap changes in the editor.
+  Under reduced motion the strip stops and the images wrap in place.
 {%- endcomment -%}
-{%- if section.settings.section_bg != blank and section.settings.section_bg.alpha != 0 -%}
-  <style>
-    #shopify-section-{{ section.id }} {
-      background-color: {{ section.settings.section_bg }};
-    }
-{% comment %}{% endcomment %}  </style>
-{%- endif -%}
 {%- liquid
-  assign __ti_scroll_animation = settings.scroll_animation | default: 'none'
-  assign __ti_reveal = section.settings.reveal
+  assign st = section.settings
+  assign sid = section.id
+  assign placeholder = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22%3E%3Cg fill=%22%23808080%22 fill-opacity=%220.45%22%3E%3Ccircle cx=%22172%22 cy=%22124%22 r=%2214%22/%3E%3Cpath d=%22M140 192l40-46 25 28 20-18 35 36z%22/%3E%3C/g%3E%3C/svg%3E'
+  assign custom = st.enable_custom_style
+  if st.make_images_square
+    assign w_base = 200
+    assign h_base = 200
+  else
+    assign w_base = st.image_width | default: 170
+    assign h_base = st.image_height | default: 110
+  endif
+  assign scale_d = st.slider_scale | default: 1 | times: 1.0
+  assign scale_m = st.overall_size_mobile | default: 0.9 | times: 1.0
+  assign gap_d = st.item_gap | default: 0 | at_least: 0
+  assign gap_m = st.item_gap_mobile | default: 0 | at_least: 0
+  assign unit_d = w_base | times: scale_d | plus: gap_d | at_least: 1
+  assign unit_m = w_base | times: scale_m | plus: gap_m | at_least: 1
+  assign total = section.blocks.size
+  assign rows = 1
+  assign first_count = total
+  if st.enable_second_scrolling and total > 1
+    assign rows = 2
+    assign first_count = total | plus: 1 | divided_by: 2
+  endif
+  assign second_count = total | minus: first_count
 -%}
 <style>
-  /* Section isolation — prevent CSS/JS bleed between sections */
-  #shopify-section-{{ section.id }} {
-    isolation: isolate;
+  #shopify-section-{{ sid }} { isolation: isolate; position: relative; }
+  #shopify-section-{{ sid }} *, #shopify-section-{{ sid }} *::before, #shopify-section-{{ sid }} *::after { box-sizing: border-box; }
+  #shopify-section-{{ sid }}#shopify-section-{{ sid }} { margin-top: var(--mgb-mt-m, {{ st.section_margin_top_mobile | default: 0 }}px) !important; margin-bottom: var(--mgb-mb-m, {{ st.section_margin_bottom_mobile | default: 0 }}px) !important; }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }}#shopify-section-{{ sid }} { margin-top: var(--mgb-mt-d, {{ st.section_margin_top_desktop | default: 0 }}px) !important; margin-bottom: var(--mgb-mb-d, {{ st.section_margin_bottom_desktop | default: 0 }}px) !important; }
+  }
+  #shopify-section-{{ sid }}:has(> [data-mgb-reset='true']) { padding-top: 0 !important; padding-bottom: 0 !important; }
+  #shopify-section-{{ sid }}:has(> [data-mgb-reset='true']) + .shopify-section { margin-top: 0 !important; }
+  #shopify-section-{{ sid }} .mq {
+    --mq-bg: {% if custom %}{% render 'scheme-color', color: st.section_bg, fallback: 'var(--color-background)' %}{% else %}var(--color-background){% endif %};
+    --mq-wb: {{ w_base }}px;
+    --mq-hb: {{ h_base }}px;
+    --mq-scale-d: {{ scale_d }};
+    --mq-scale-m: {{ scale_m }};
+    --mq-gap-d: {{ gap_d }}px;
+    --mq-gap-m: {{ gap_m }}px;
+    --mq-radius: {{ st.image_border_radius | default: 0 }}px;
+    --mq-fit: {{ st.image_fit | default: 'cover' }};
+    --mq-dur1-d: {{ st.speed | default: 0 }}s;
+    --mq-dur1-m: {{ st.speed_mobile | default: 0 }}s;
+    --mq-dur2: {{ st.speed_second_scrolling | default: 0 }}s;
+    --mq-row-gap: {{ st.scroll_gap | default: 0 }}px;
+    --mq-pt: {{ st.padding_top | default: 0 }}px;
+    --mq-pb: {{ st.padding_bottom | default: 0 }}px;
+    --mq-scale: var(--mq-scale-m); --mq-gap: var(--mq-gap-m); --mq-dur1: var(--mq-dur1-m);
+    display: block;
     position: relative;
-  }
-  /* Aggressive theme typography */
-  :where(#shopify-section-{{ section.id }}) {
-    font-family: var(--body-font, inherit);
-  }
-  :where(#shopify-section-{{ section.id }}) :where(button, input, textarea, select, optgroup) {
-    font-family: inherit;
-  }
-  /* Theme font-weight inheritance — sections inherit theme weights by default.
-     Specific font-weight rules in section CSS still override these. */
-  #shopify-section-{{ section.id }} {
-    font-weight: var(--body-weight, inherit);
-  }
-  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
-    font-weight: var(--heading-weight, inherit);
-  }
-  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
-    font-family: var(--heading-font, inherit);
-  }
-  /* Section margin sliders (mobile-first) */
-  #shopify-section-{{ section.id }} {
-    margin-top: {{ section.settings.section_margin_top_mobile | default: 0 }}px;
-    margin-bottom: {{ section.settings.section_margin_bottom_mobile | default: 0 }}px;
+    background: var(--mq-bg);
+    color: var(--color-text);
+    padding-top: var(--mq-pt);
+    padding-bottom: var(--mq-pb);
   }
   @media (min-width: 768px) {
-    #shopify-section-{{ section.id }} {
-      margin-top: {{ section.settings.section_margin_top_desktop | default: 0 }}px;
-      margin-bottom: {{ section.settings.section_margin_bottom_desktop | default: 0 }}px;
-    }
+    #shopify-section-{{ sid }} .mq { --mq-scale: var(--mq-scale-d); --mq-gap: var(--mq-gap-d); --mq-dur1: var(--mq-dur1-d); }
   }
-  /* Section wrapper spans its parent's full width without breaking out of
-     the editor preview. The section + first child span 100% so backgrounds
-     reach edge-to-edge but the editor inspector outline stays inside the
-     iframe viewport. */
-  #shopify-section-{{ section.id }} {
-    max-width: none !important;
-    width: 100% !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-    position: relative !important;
-    box-sizing: border-box !important;
-  }
-  #shopify-section-{{ section.id }} > :where(div, section, header, footer, aside, main, article):first-child {
-    max-width: none !important;
-    width: 100% !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    box-sizing: border-box !important;
-  }
-
-  /* Section width — universal selector that works regardless of inner
-     markup. Targets both:
-       1) Theme container classes (.container/.fluid_container/etc.) — for
-          sections that have an inner wrapper with that class
-       2) The section's first-child div — for sections that don't have a
-          named inner wrapper. The padding-inline sets the max content
-          area while the wrapper itself stays 100% wide so any background
-          stays edge-to-edge. */
-  {%- case section.settings.section_width -%}
-    {%- when 'container' -%}
-      #shopify-section-{{ section.id }} .container,
-      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
-        max-width: calc(var(--page-width, 1300px) + 3rem) !important;
-        margin-inline: auto !important;
-        box-sizing: border-box !important;
-      }
-    {%- when 'fluid_container' -%}
-      #shopify-section-{{ section.id }} .fluid_container,
-      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
-        max-width: calc(var(--fluid-container-width, 1500px) + 3rem) !important;
-        margin-inline: auto !important;
-        box-sizing: border-box !important;
-      }
-    {%- when 'stretch_width' -%}
-      /* Stretched: no max-width; tighter side padding handled below */
-      @media (min-width: 1200px) {
-        #shopify-section-{{ section.id }} .stretch_width,
-        #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
-          padding-inline: 3rem;
-        }
-      }
-    {%- when 'full_width' -%}
-      /* full bleed — no constraints */
-  {%- endcase -%}
-  /* Reset spacing */
-  {%- if section.settings.reset_spacing -%}
-    #shopify-section-{{ section.id }} { margin-bottom: 0 !important; margin-top: 0 !important; }
-    #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
-  {%- endif -%}
-{% comment %}{% endcomment %}</style>
-<!-- ti-theme:start -->
-{%- comment -%}
-  Materia Themes. Developed By Materia Themes.
-{%- endcomment -%}
-
-
-{% liquid
-  assign container = section.settings.container
-  if container == 'w-full'
-    assign container = 'container-full'
-  endif
-
-  assign classes = 'section m-section m-scrolling-image-section'
-
-  if section.settings.padding_top < 30
-    assign classes = classes | append: ' pt-min'
-  endif
-  if section.settings.padding_bottom < 30
-    assign classes = classes | append: ' pb-min'
-  endif
-
-  if section.settings.make_images_square
-    assign classes = classes | append: ' make-images-square'
-  endif
-%}
-
-{%- comment -%} An @import only works first in its stylesheet, so the font gets a style of its own. {%- endcomment -%}
-{% if section.settings.enable_custom_font and section.settings.font_family != blank %}
-  {% assign first_font = section.settings.font_family | split: ',' | first | strip | remove: "'" | remove: '"' | replace: ' ', '+' %}
-<style>
-  @import url('https://fonts.googleapis.com/css2?family={{ first_font }}&display=swap');
-{% comment %}{% endcomment %}</style>
-{% endif %}
-<style>
-
-  /* Scoped CSS: All styles are prefixed with the unique section ID */
-  #m-section--{{ section.id }} {
-    /* CSS Variables */
-    --section-padding-top: {{ section.settings.padding_top }}px;
-    --section-padding-bottom: {{ section.settings.padding_bottom }}px;
-    --item-gap: {{ section.settings.item_gap }}px;
-    --item-gap-mobile: {{ section.settings.item_gap_mobile }}px;
-    --duration: {{ section.settings.speed }}s;
-    --duration_second: {{ section.settings.speed_second_scrolling }}s; /* Added for second scrolling */
-    --slider-scale: {{ section.settings.slider_scale }};
-    --image-border-radius: {{ section.settings.image_border_radius }}px !important;
-    --slider-scale-mobile: {{ section.settings.overall_size_mobile }};
-    --duration-mobile: {{ section.settings.speed_mobile }}s;
-    --duration-second-mobile: {{ section.settings.speed_second_scrolling_mobile | default: section.settings.speed_second_scrolling }}s; /* Added for second scrolling mobile */
-    --scroll-gap: {{ section.settings.scroll_gap }}px; /* New CSS variable for gap between scrollings */
-
-    /* Font Family Handling */
-    {% if section.settings.enable_custom_font and section.settings.font_family != blank %}
-      --font-family: "{{ section.settings.font_family }}";
-      font-family: var(--font-family);
-    {% endif %}
-
-    padding-top: var(--section-padding-top);
-    padding-bottom: var(--section-padding-bottom);
-    width: 100%; /* Ensure full width */
-    box-sizing: border-box;
-    text-align: center; /* Center content by default */
-    position: relative; /* Needed for fading panels */
-  }
-
-  /* Container for the scrolling image section */
-  #m-section--{{ section.id }} .m-scrolling-image {
-    display: flex; /* Aligns items horizontally */
-    border-radius: var(--image-border-radius, 10px) !important; /* Default is 10px */
-    align-items: center; /* Vertically centers the items */
-    overflow: hidden; /* Hides content that overflows the container */
-    position: relative; /* Ensure fading panels are positioned correctly */
-    transform: scale(var(--slider-scale));
-  }
-
-  /* Apply margin between scrolling images if second scrolling is enabled */
-  #m-section--{{ section.id }} .m-scrolling-image + .m-scrolling-image {
-    margin-top: var(--scroll-gap);
-    border-radius: var(--image-border-radius, 10px) !important; /* Default is 10px */
-  }
-
-  /* Removed Headline Title and Subheading Styles */
-
-  /* Responsive Adjustments for Headline and Subheading Sizes */
-  /* Removed related media queries */
-
-  /* Applies scrolling animation to the image items based on scroll direction */
-  #m-section--{{ section.id }} .m-scrolling-image--left .m-image--animated {
-    animation-name: scrolling-left-{{ section.id }}; /* Uses the unique keyframe animation */
-    animation-duration: var(--duration); /* Desktop speed */
-  }
-
-  #m-section--{{ section.id }} .m-scrolling-image--right .m-image--animated {
-    animation-name: scrolling-right-{{ section.id }}; /* Uses the unique keyframe animation */
-    animation-duration: var(--duration); /* Desktop speed */
-  }
-
-  /* Second Scrolling Image Animation */
-  #m-section--{{ section.id }} .m-scrolling-image-second--left .m-image--animated {
-    animation-name: scrolling-left-{{ section.id }}; /* Uses the unique keyframe animation */
-    animation-duration: var(--duration_second); /* Desktop speed for second scrolling */
-  }
-
-  #m-section--{{ section.id }} .m-scrolling-image-second--right .m-image--animated {
-    animation-name: scrolling-right-{{ section.id }}; /* Uses the unique keyframe animation */
-    animation-duration: var(--duration_second); /* Desktop speed for second scrolling */
-  }
-
-  /* Controls animation play state based on hover and paused state */
-  #m-section--{{ section.id }} .m-scrolling-image--pause-on-hover:hover .m-image--animated {
-    animation-play-state: paused; /* Pauses animation on hover if enabled */
-  }
-
-  #m-section--{{ section.id }} .m-scrolling-image--paused .m-image--animated {
-    animation-play-state: paused; /* Pauses animation when manually paused */
-  }
-
-  /* Keeps animation running continuously when not paused */
-  #m-section--{{ section.id }} .m-scrolling-image .m-image--animated {
-    animation-play-state: running;
-  }
-
-  /* Removes padding for the full container inside the scrolling image section */
-  #m-section--{{ section.id }} .container-full {
-    padding-left: 0;
-    padding-right: 0;
-  }
-
-  /* Image container styles */
-  #m-section--{{ section.id }} .m-image-container {
-    display: flex;
-    border-radius: var(--image-border-radius, 10px) !important; /* Default is 10px */
-    gap: var(--item-gap, 50px); /* Desktop gap */
-  }
-
-  /* Styles for individual image items */
-  #m-section--{{ section.id }} .m-image__item {
-    width: {{ section.settings.image_width | default: 340 }}px;
-    height: {{ section.settings.image_height | default: 250 }}px;
-    display: flex; /* Aligns items horizontally */
-    box-sizing: border-box;
-    padding: 20px;
-    border-radius: var(--image-border-radius, 10px) !important;
-    margin: 0 calc(var(--item-gap) / 2); /* Adds consistent spacing */
-  }
-
-  /* Image styling */
-  #m-section--{{ section.id }} .m-image__item img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: var(--image-border-radius, 10px) !important;
-    transition: transform var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease-in-out); /* Smooth transition for zoom effect */
-    margin: 0px calc(var(--item-gap) / 2); /* Adds consistent spacing */
-  }
-
-  /* Media query: Adjusts styles for mobile devices */
-  @media screen and (max-width: 749px) {
-    #m-section--{{ section.id }} .m-image-container {
-      gap: var(--item-gap-mobile, 20px); /* Mobile item gap */
-    }
-
-    #m-section--{{ section.id }} .m-image__item {
-      width: calc({{ section.settings.image_width }}px * var(--slider-scale-mobile));
-      height: calc({{ section.settings.image_height }}px * var(--slider-scale-mobile));
-      margin: 0 calc(var(--item-gap-mobile) / 2); /* Adjusts margin based on mobile gap */
-    }
-
-    /* Adjust image size based on the slider */
-    #m-section--{{ section.id }} .m-image__item img {
-      transform: scale(var(--image_scale_mobile, 1)); /* Applies mobile scaling */
-    }
-
-    /* Animation duration for mobile */
-    #m-section--{{ section.id }} .m-image--animated {
-      animation-duration: var(--duration-mobile) !important;
-    }
-
-    /* Second Scrolling Image Animation for Mobile */
-    #m-section--{{ section.id }} .m-scrolling-image-second--left .m-image--animated,
-    #m-section--{{ section.id }} .m-scrolling-image-second--right .m-image--animated {
-      animation-duration: var(--duration-second-mobile) !important;
-    }
-
-    /* If Make Images Square is enabled, override mobile image sizes */
-    #m-section--{{ section.id }}.make-images-square .m-image__item {
-      width: calc(200px * var(--slider-scale-mobile));
-      height: calc(200px * var(--slider-scale-mobile));
-    }
-  }
-
-  /* Animation properties for animated image items */
-  #m-section--{{ section.id }} .m-image--animated {
-    animation-iteration-count: infinite; /* Animation repeats indefinitely */
-    animation-timing-function: linear; /* Creates a smooth animation */
-    animation-duration: var(--duration); /* Sets animation duration */
-    animation-play-state: running; /* Keeps animation running */
-    width: max-content; /* Adjusts width based on content */
-    will-change: transform, width; /* Optimizes animation performance */
-    display: flex;
-    gap: var(--item-gap, 50px); /* Ensures gap consistency */
-  }
-
-  /* Keyframe animation for scrolling left */
-  @keyframes scrolling-left-{{ section.id }} {
-    0% {
-      transform: translate3d(0, 0, 0); /* Starts at original position */
-      visibility: visible; /* Ensures visibility */
-    }
-    100% {
-      transform: translate3d(-100%, 0, 0); /* Moves the content left by 100% */
-    }
-  }
-
-  /* Keyframe animation for scrolling right */
-  @keyframes scrolling-right-{{ section.id }} {
-    0% {
-      transform: translate3d(-100%, 0, 0); /* Starts off-screen to the left */
-      visibility: visible; /* Ensures visibility */
-    }
-    100% {
-      transform: translate3d(0, 0, 0); /* Moves the content right to its original position */
-    }
-  }
-
-  /* Image Format Styles */
-  /* Original - No restrictions, no specific styles */
-  #m-section--{{ section.id }} .image-format-original {
-    /* No changes */
-  }
-
-  /* 200x300 */
-  #m-section--{{ section.id }} .image-format-200x300 {
-    width: 200px;
-    height: 300px;
-  }
-
-  /* Square (1:1 Ratio) */
-  #m-section--{{ section.id }} .image-format-square {
-    aspect-ratio: 1 / 1;
-  }
-
-  /* Circle */
-  #m-section--{{ section.id }} .image-format-circle {
-    border-radius: 50%;
-  }
-
-  /* Full-Width */
-  #m-section--{{ section.id }} .image-format-full-width {
-    width: 100%;
-    height: auto;
-  }
-
-  /* Contain */
-  #m-section--{{ section.id }} .image-format-contain {
-    object-fit: contain;
-  }
-
-  /* Cover */
-  #m-section--{{ section.id }} .image-format-cover {
-    object-fit: cover;
-  }
-
-  /* Landscape (16:9) */
-  #m-section--{{ section.id }} .image-format-landscape {
-    aspect-ratio: 16 / 9;
-  }
-
-  /* Portrait (4:5) */
-  #m-section--{{ section.id }} .image-format-portrait {
-    aspect-ratio: 4 / 5;
-  }
-
-  /* Thumbnail (150x150) */
-  #m-section--{{ section.id }} .image-format-thumbnail {
-    width: 150px;
-    height: 150px;
-  }
-
-  /* Wide (4:3 Ratio) */
-  #m-section--{{ section.id }} .image-format-wide {
-    aspect-ratio: 4 / 3;
-  }
-
-  /* Tall (3:4 Ratio) */
-  #m-section--{{ section.id }} .image-format-tall {
-    aspect-ratio: 3 / 4;
-  }
-
-  /* Hexagon */
-  #m-section--{{ section.id }} .image-format-hexagon {
-    clip-path: polygon(
-      25% 5%,
-      75% 5%,
-      100% 50%,
-      75% 95%,
-      25% 95%,
-      0% 50%
-    );
-  }
-
-  /* Rounded Corners */
-  #m-section--{{ section.id }} .image-format-rounded-corners {
-    border-radius: 15px;
-  }
-
-  /* Hover Flip */
-  #m-section--{{ section.id }} .image-format-hover-flip {
-    transition: transform 0.6s;
-    transform-style: preserve-3d;
-  }
-
-  #m-section--{{ section.id }} .image-format-hover-flip:hover {
-    transform: rotateY(180deg);
-  }
-
+  #shopify-section-{{ sid }} .mq__inner { width: 100%; margin-inline: auto; position: relative; }
+  #shopify-section-{{ sid }} .mq[data-width='container'] .mq__inner { max-width: calc(var(--page-width, 1300px) + 3rem); }
+  #shopify-section-{{ sid }} .mq[data-width='fluid_container'] .mq__inner { max-width: calc(var(--fluid-container-width, 1500px) + 3rem); }
+  @media (min-width: 1200px) { #shopify-section-{{ sid }} .mq[data-width='stretch_width'] .mq__inner { padding-inline: 3rem; } }
+  #shopify-section-{{ sid }} .mq__row { overflow: hidden; width: 100%; }
+  #shopify-section-{{ sid }} .mq__row + .mq__row { margin-top: var(--mq-row-gap); }
+  #shopify-section-{{ sid }} .mq__track { display: flex; width: max-content; will-change: transform; animation: mgb-mq-{{ sid }} var(--mq-dur1) linear infinite; animation-direction: normal; }
+  #shopify-section-{{ sid }} .mq__row[data-mq-row='2'] .mq__track { animation-duration: var(--mq-dur2); }
+  #shopify-section-{{ sid }} .mq__row[data-dir='right'] .mq__track { animation-direction: reverse; }
+  #shopify-section-{{ sid }} .mq[data-static1='true'] .mq__row[data-mq-row='1'] .mq__track,
+  #shopify-section-{{ sid }} .mq[data-static2='true'] .mq__row[data-mq-row='2'] .mq__track { animation-play-state: paused; }
+  #shopify-section-{{ sid }} .mq[data-pause-hover='true'] .mq__row:hover .mq__track,
+  #shopify-section-{{ sid }} .mq[data-paused='true'] .mq__track,
+  #shopify-section-{{ sid }} .mq[data-offscreen='true'] .mq__track { animation-play-state: paused; }
+  @keyframes mgb-mq-{{ sid }} { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(calc(-100% / var(--mq-k, 2)), 0, 0); } }
+  #shopify-section-{{ sid }} .mq__group { display: flex; flex: 0 0 auto; align-items: center; gap: var(--mq-gap); padding-inline-end: var(--mq-gap); margin: 0; }
+  #shopify-section-{{ sid }} .mq__item { flex: 0 0 auto; width: calc(var(--mq-wb) * var(--mq-scale)); height: calc(var(--mq-hb) * var(--mq-scale)); border-radius: var(--mq-radius); overflow: hidden; margin: 0; }
+  #shopify-section-{{ sid }} .mq__item img { display: block; width: 100%; height: 100%; margin: 0; object-fit: var(--mq-fit); border-radius: inherit; }
+  #shopify-section-{{ sid }} .mq__item img[data-mgb-placeholder] { object-fit: contain; background: color-mix(in srgb, var(--color-text) 8%, var(--mq-bg)); }
+  #shopify-section-{{ sid }} .mq__pause { position: absolute; right: 8px; bottom: 8px; z-index: 2; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; margin: 0; border: 1px solid var(--color-border); border-radius: 50%; background: var(--mq-bg); color: var(--color-heading); cursor: pointer; }
+  #shopify-section-{{ sid }} .mq__pause:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+  #shopify-section-{{ sid }} .mq__pause svg { width: 16px; height: 16px; }
+  #shopify-section-{{ sid }} .mq__pause [data-icon='play'], #shopify-section-{{ sid }} .mq[data-paused='true'] .mq__pause [data-icon='pause'] { display: none; }
+  #shopify-section-{{ sid }} .mq[data-paused='true'] .mq__pause [data-icon='play'] { display: block; }
+  #shopify-section-{{ sid }} .mq[data-pause-button='false'] .mq__pause { display: none; }
   @media (prefers-reduced-motion: reduce) {
-    #m-section--{{ section.id }} .m-image--animated { animation-play-state: paused !important; }
-    #m-section--{{ section.id }} .image-format-hover-flip { transition: none; }
-  }
-
-  /* Make Images Square Styles */
-  #m-section--{{ section.id }}.make-images-square .m-image__item {
-    width: 200px;
-    height: 200px;
-  }
-
-  #m-section--{{ section.id }}.make-images-square .m-image__item img {
-    width: 100%;
-    border-radius: var(--image-border-radius, 10px); /* Default is 10px */
-    height: 100%;
-    object-fit: cover;
-  }
-
-  #m-section--{{ section.id }}.make-images-square .m-image__item {
-    width: calc(200px * var(--slider-scale));
-    height: calc(200px * var(--slider-scale));
-    border-radius: var(--image-border-radius, 10px); /* Default is 10px */
-  }
-
-  @media screen and (max-width: 749px) {
-    #m-section--{{ section.id }}.make-images-square .m-image__item {
-      width: calc(200px * var(--slider-scale-mobile));
-      height: calc(200px * var(--slider-scale-mobile));
-      border-radius: var(--image-border-radius, 10px); /* Default is 10px */
-    }
+    #shopify-section-{{ sid }} .mq__track { animation: none !important; transform: none !important; width: auto; justify-content: center; }
+    #shopify-section-{{ sid }} .mq__group { flex-wrap: wrap; justify-content: center; flex: 1 1 auto; padding-inline: var(--mq-gap); row-gap: var(--mq-gap); }
+    #shopify-section-{{ sid }} .mq__group[aria-hidden='true'] { display: none; }
+    #shopify-section-{{ sid }} .mq__pause { display: none; }
   }
 {% comment %}{% endcomment %}</style>
 
-<section
-  id="m-section--{{ section.id }}"
-  class="{{ classes }} color-{{ color_scheme }} gradient"
-  data-section-type="scrolling-image"
-  data-section-id="{{ section.id }}"
-  data-pause-on-hover="{{ section.settings.pause_on_hover }}"
->
-  <div class="{{ container }} m-section-py">
-    <!-- Headline Title Removed -->
-    <!-- Subheading Removed -->
-
-    <!-- First Scrolling Image -->
-    <m-scrolling-image
-      class="m-scrolling-image m-scrolling-image--{{ section.settings.direction }}{% if section.settings.pause_on_hover %} m-scrolling-image--pause-on-hover{% endif %}"
-      data-pause-on-hover="{{ section.settings.pause_on_hover }}"
-    >
-      <div class="m-image-container">
-        {% assign first_limit = section.settings.enable_second_scrolling %}
-        {% if section.settings.enable_second_scrolling %}
-          {% assign first_limit = 5 %}
-        {% else %}
-          {% assign first_limit = section.blocks.size %}
-        {% endif %}
-
-        {% for block in section.blocks limit: first_limit %}
-          {%- case block.type -%}
-            {%- when 'image_block' -%}
-              <div class="m-image__item">
-                {% if block.settings.image %}
-                  <img
-                    class="image-format-{{ section.settings.image_format | handleize }}"
-                    src="{{ block.settings.image | img_url: '800x600' }}"
-                    alt="{{ 'accessibility.scrolling_image' | t }}"
-                  >
-                {% else %}
-                  <img
-                    class="image-format-{{ section.settings.image_format | handleize }}"
-                    src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22%3E%3Crect width=%22400%22 height=%22300%22 fill=%22%23efefef%22/%3E%3Ccircle cx=%22172%22 cy=%22124%22 r=%2214%22 fill=%22%23cfcfcf%22/%3E%3Cpath d=%22M140 192l40-46 25 28 20-18 35 36z%22 fill=%22%23cfcfcf%22/%3E%3C/svg%3E"
-                    alt="{{ 'accessibility.placeholder_image' | t }}"
-                  >
-                {% endif %}
-              </div>
-          {%- endcase -%}
-        {% endfor %}
-      </div>
-    </m-scrolling-image>
-
-    <!-- Second Scrolling Image (if enabled) -->
-    {% if section.settings.enable_second_scrolling %}
-      <m-scrolling-image
-        class="m-scrolling-image m-scrolling-image--{{ section.settings.second_direction }} m-scrolling-image-second m-scrolling-image-second--{{ section.settings.second_direction }}{% if section.settings.pause_on_hover %} m-scrolling-image--pause-on-hover{% endif %}"
-        data-pause-on-hover="{{ section.settings.pause_on_hover }}"
-      >
-        <div class="m-image-container">
-          {% assign second_limit = 5 %}
-          {% assign second_offset = 5 %}
-          {% for block in section.blocks offset: second_offset limit: second_limit %}
-            {%- case block.type -%}
-              {%- when 'image_block' -%}
-                <div class="m-image__item">
-                  {% if block.settings.image %}
-                    <img
-                      class="image-format-{{ section.settings.image_format | handleize }}"
-                      src="{{ block.settings.image | img_url: '800x600' }}"
-                      alt="{{ 'accessibility.scrolling_image' | t }}"
-                    >
-                  {% else %}
-                    <img
-                      class="image-format-{{ section.settings.image_format | handleize }}"
-                      src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22%3E%3Crect width=%22400%22 height=%22300%22 fill=%22%23efefef%22/%3E%3Ccircle cx=%22172%22 cy=%22124%22 r=%2214%22 fill=%22%23cfcfcf%22/%3E%3Cpath d=%22M140 192l40-46 25 28 20-18 35 36z%22 fill=%22%23cfcfcf%22/%3E%3C/svg%3E"
-                      alt="{{ 'accessibility.placeholder_image' | t }}"
-                    >
-                  {% endif %}
+<section id="m-section--{{ sid }}" class="mq m-section m-scrolling-image-section color-{{ color_scheme }} gradient" data-mgb="images-carousel" data-mgb-section="{{ sid }}" data-mgb-reset="{{ st.reset_spacing }}" data-mgb-anim="{{ settings.scroll_animation | default: 'none' }}" data-width="{{ st.section_width | default: 'full_width' }}" data-pause-hover="{{ st.pause_on_hover }}" data-pause-button="{{ st.show_pause_button }}" data-static1="{% if st.speed > 0 %}false{% else %}true{% endif %}" data-static2="{% if st.speed_second_scrolling > 0 %}false{% else %}true{% endif %}" data-mgb-placeholder-src="{{ placeholder }}" data-mgb-settings="{{ st | json | escape }}" data-mgb-defaults="{&quot;color_scheme&quot;:&quot;default-color-scheme&quot;,&quot;section_width&quot;:&quot;full_width&quot;,&quot;reset_spacing&quot;:true,&quot;make_images_square&quot;:false,&quot;image_width&quot;:170,&quot;image_height&quot;:110,&quot;image_fit&quot;:&quot;cover&quot;,&quot;image_border_radius&quot;:10,&quot;slider_scale&quot;:1,&quot;direction&quot;:&quot;right&quot;,&quot;speed&quot;:176,&quot;pause_on_hover&quot;:true,&quot;show_pause_button&quot;:true,&quot;enable_second_scrolling&quot;:false,&quot;second_direction&quot;:&quot;left&quot;,&quot;speed_second_scrolling&quot;:47,&quot;scroll_gap&quot;:20,&quot;enable_custom_style&quot;:false,&quot;enable_custom_font&quot;:false,&quot;reveal&quot;:true,&quot;item_gap&quot;:20,&quot;padding_top&quot;:30,&quot;padding_bottom&quot;:30,&quot;section_margin_top_desktop&quot;:0,&quot;section_margin_bottom_desktop&quot;:0,&quot;overall_size_mobile&quot;:0.9,&quot;speed_mobile&quot;:26,&quot;item_gap_mobile&quot;:16,&quot;section_margin_top_mobile&quot;:0,&quot;section_margin_bottom_mobile&quot;:0}" data-mgb-block-defaults="{&quot;image_block&quot;:{}}" aria-label="Logos">
+  <div class="mq__inner">
+    {%- for row in (1..rows) -%}
+      {%- liquid
+        if row == 1
+          assign count = first_count
+          assign offset = 0
+          assign dir = st.direction | default: 'left'
+        else
+          assign count = second_count
+          assign offset = first_count
+          assign dir = st.second_direction | default: 'left'
+        endif
+        assign group_d = unit_d | times: count
+        assign group_m = unit_m | times: count
+        assign k_d = 2560.0 | divided_by: group_d | ceil | plus: 1
+        assign k_m = 768.0 | divided_by: group_m | ceil | plus: 1
+        assign copies = k_d
+        if k_m > copies
+          assign copies = k_m
+        endif
+        assign copies = copies | at_least: 2 | at_most: 30
+      -%}
+      <div class="mq__row m-scrolling-image" data-mq-row="{{ row }}" data-dir="{{ dir }}">
+        <div class="mq__track" style="--mq-k: {{ copies }};">
+          {%- for copy in (1..copies) -%}
+            <div class="mq__group"{% if copy > 1 %} aria-hidden="true" data-mq-clone{% else %} role="list"{% endif %}>
+              {%- for block in section.blocks offset: offset limit: count -%}
+                {%- assign b = block.settings -%}
+                <div class="mq__item" data-mgb-block="{{ block.id }}" data-mgb-type="{{ block.type }}"{% if copy == 1 %} role="listitem" data-mgb-settings="{{ b | json | escape }}" {{ block.shopify_attributes }}{% endif %}>
+                  {%- if b.image != blank -%}
+                    <img src="{{ b.image | image_url: width: 800 }}" width="{{ w_base }}" height="{{ h_base }}" alt="{% if copy == 1 %}{{ b.image_alt | default: b.image.alt | escape }}{% endif %}" loading="lazy" decoding="async" draggable="false">
+                  {%- else -%}
+                    <img src="{{ placeholder }}" data-mgb-placeholder width="{{ w_base }}" height="{{ h_base }}" alt="" loading="lazy" decoding="async" draggable="false">
+                  {%- endif -%}
                 </div>
-            {%- endcase -%}
-          {% endfor %}
+              {%- endfor -%}
+            </div>
+          {%- endfor -%}
         </div>
-      </m-scrolling-image>
-    {% endif %}
-
-    <!-- Fading Panels Removed -->
+      </div>
+    {%- endfor -%}
   </div>
+  <button class="mq__pause" type="button" data-mq-pause aria-pressed="false" aria-label="Pause scrolling">
+    <svg data-icon="pause" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" focusable="false"><rect x="3" y="2" width="3.5" height="12" rx="1"/><rect x="9.5" y="2" width="3.5" height="12" rx="1"/></svg>
+    <svg data-icon="play" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" focusable="false"><path d="M4 2.5v11a.8.8 0 0 0 1.2.7l9-5.5a.8.8 0 0 0 0-1.4l-9-5.5A.8.8 0 0 0 4 2.5z"/></svg>
+  </button>
 </section>
-
-<script>
-  // Scoped JavaScript: Ensures scripts target only elements within this section
-  (function() {
-    const sectionId = "{{ section.id }}";
-    const section = document.getElementById("m-section--" + sectionId);
-
-    if (!section) return;
-
-    // Check if the custom element "m-scrolling-image" is already defined
-    if (!customElements.get("m-scrolling-image")) {
-
-      /**
-       * Class definition for the custom HTML element <m-scrolling-image>.
-       */
-      class MScrollingImage extends HTMLElement {
-
-        // Constructor for the MScrollingImage class
-        constructor() {
-          super();
-        }
-
-        /**
-         * Called when the element is connected to the DOM.
-         * Initializes the image element and its functionality.
-         */
-        connectedCallback() {
-          if (this.dataset.ready === '1') return;
-          this.dataset.ready = '1';
-          this.imageContainer = this.querySelector(".m-image-container");
-          this.pauseOnHover = this.getAttribute('data-pause-on-hover') === 'true';
-          this.init();
-        }
-
-        /**
-         * Initializes the image element.
-         * If there is only one child element, it adds multiple clones
-         * to create a continuous scrolling effect.
-         */
-        init() {
-          if (this.imageContainer && this.imageContainer.children.length > 0) {
-            // Add a class to start animation on the image container
-            this.imageContainer.classList.add("m-image--animated");
-
-            // Create multiple clones of the image container for smooth scrolling
-            this.createClones();
-
-            // Setup pause on hover functionality if enabled
-            if (this.pauseOnHover) {
-              this.setupPauseOnHover();
-            }
-
-            // Start scrolling the image container
-            this.scrollingPlay();
-          }
-        }
-
-        /**
-         * Creates multiple clones of the image container to ensure continuous scrolling.
-         */
-        createClones() {
-          const cloneCount = 10; // Adjust the number of clones as needed
-          for (let index = 0; index < cloneCount; index++) {
-            // Clone the image container
-            const clone = this.imageContainer.cloneNode(true);
-
-            // Mark the clone as hidden for accessibility purposes
-            clone.setAttribute("aria-hidden", true);
-
-            // Append the clone to the image container
-            this.appendChild(clone);
-          }
-        }
-
-        /**
-         * Keeps the scrolling functionality always active by removing any paused state.
-         */
-        scrollingPlay() {
-          this.classList.remove("m-scrolling-image--paused");
-        }
-
-        /**
-         * A placeholder function for pausing scrolling.
-         * It is intentionally left empty to prevent pausing.
-         */
-        scrollingPause() {
-          // This function is intentionally empty
-        }
-
-        /**
-         * Sets up event listeners to pause and resume scrolling on hover.
-         */
-        setupPauseOnHover() {
-          this.addEventListener('mouseenter', () => {
-            this.classList.add('m-scrolling-image--paused');
-          });
-
-          this.addEventListener('mouseleave', () => {
-            this.classList.remove('m-scrolling-image--paused');
-          });
-        }
-      }
-
-      // Define the custom HTML element <m-scrolling-image> with the MScrollingImage class
-      if (!customElements.get("m-scrolling-image")) customElements.define("m-scrolling-image", MScrollingImage);
-    }
-  })();
-{% comment %}{% endcomment %}</script>
-
-
-
 </template>
 
 <schema>
@@ -1055,7 +535,13 @@
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "select",
@@ -1082,41 +568,21 @@
         ]
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
-      },
-      {
-        "type": "color",
-        "id": "section_bg",
-        "label": "Background"
-      },
-      {
         "type": "checkbox",
         "id": "reset_spacing",
-        "label": "Remove space between sections",
+        "label": "Remove section spacing",
         "default": true
       },
       {
         "type": "header",
-        "content": "Typography"
+        "content": "Images"
       },
       {
         "type": "checkbox",
-        "id": "enable_custom_font",
-        "label": "Override theme font",
-        "default": false
-      },
-      {
-        "type": "text",
-        "id": "font_family",
-        "label": "Google font family",
-        "visible_if": "{{ section.settings.enable_custom_font }}"
-      },
-      {
-        "type": "header",
-        "content": "Images"
+        "id": "make_images_square",
+        "label": "Square images",
+        "default": false,
+        "info": "200 by 200 pixels, before scale."
       },
       {
         "type": "range",
@@ -1126,7 +592,8 @@
         "min": 100,
         "max": 800,
         "step": 10,
-        "unit": "px"
+        "unit": "px",
+        "visible_if": "{{ section.settings.make_images_square == false }}"
       },
       {
         "type": "range",
@@ -1136,7 +603,25 @@
         "min": 100,
         "max": 800,
         "step": 10,
-        "unit": "px"
+        "unit": "px",
+        "visible_if": "{{ section.settings.make_images_square == false }}"
+      },
+      {
+        "type": "select",
+        "id": "image_fit",
+        "label": "Image fit",
+        "default": "cover",
+        "options": [
+          {
+            "value": "cover",
+            "label": "Fill"
+          },
+          {
+            "value": "contain",
+            "label": "Fit"
+          }
+        ],
+        "info": "Fit shows the whole logo."
       },
       {
         "type": "range",
@@ -1149,12 +634,6 @@
         "unit": "px"
       },
       {
-        "type": "checkbox",
-        "id": "make_images_square",
-        "label": "Square images",
-        "default": false
-      },
-      {
         "type": "range",
         "id": "slider_scale",
         "label": "Image scale (desktop)",
@@ -1164,17 +643,35 @@
         "step": 0.1
       },
       {
-        "type": "range",
-        "id": "overall_size_mobile",
-        "label": "Image scale (mobile)",
-        "min": 0.5,
-        "max": 2,
-        "step": 0.1,
-        "default": 0.9
+        "type": "header",
+        "content": "Scrolling"
       },
       {
-        "type": "header",
-        "content": "Carousel"
+        "type": "select",
+        "id": "direction",
+        "label": "Direction",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ],
+        "default": "right"
+      },
+      {
+        "type": "range",
+        "id": "speed",
+        "label": "Loop time (desktop)",
+        "min": 0,
+        "max": 200,
+        "unit": "s",
+        "step": 2,
+        "default": 176,
+        "info": "Seconds for one full loop. Higher is slower; 0 stops the row."
       },
       {
         "type": "checkbox",
@@ -1183,51 +680,40 @@
         "default": true
       },
       {
-        "type": "range",
-        "id": "speed",
-        "label": "Speed (desktop)",
-        "min": 0,
-        "max": 200,
-        "unit": "s",
-        "step": 2,
-        "default": 176
-      },
-      {
-        "type": "range",
-        "id": "speed_mobile",
-        "label": "Speed (mobile)",
-        "min": 0,
-        "max": 200,
-        "unit": "s",
-        "step": 2,
-        "default": 26
-      },
-      {
-        "type": "select",
-        "id": "direction",
-        "label": "Direction",
-        "options": [
-          {
-            "label": "Left direction",
-            "value": "left"
-          },
-          {
-            "label": "Right direction",
-            "value": "right"
-          }
-        ],
-        "default": "right"
+        "type": "checkbox",
+        "id": "show_pause_button",
+        "label": "Show pause button",
+        "default": true,
+        "info": "Lets visitors stop the movement."
       },
       {
         "type": "checkbox",
         "id": "enable_second_scrolling",
         "label": "Second row",
-        "default": false
+        "default": false,
+        "info": "Splits the images into two rows."
+      },
+      {
+        "type": "select",
+        "id": "second_direction",
+        "label": "Second row direction",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ],
+        "default": "left",
+        "visible_if": "{{ section.settings.enable_second_scrolling }}"
       },
       {
         "type": "range",
         "id": "speed_second_scrolling",
-        "label": "Second row speed",
+        "label": "Second row loop time",
         "min": 1,
         "max": 100,
         "unit": "s",
@@ -1236,32 +722,46 @@
         "visible_if": "{{ section.settings.enable_second_scrolling }}"
       },
       {
-        "type": "select",
-        "id": "second_direction",
-        "label": "Second row direction",
-        "options": [
-          {
-            "label": "Left direction",
-            "value": "left"
-          },
-          {
-            "label": "Right direction",
-            "value": "right"
-          }
-        ],
-        "default": "left",
-        "visible_if": "{{ section.settings.enable_second_scrolling }}"
-      },
-      {
         "type": "range",
         "id": "scroll_gap",
         "label": "Gap between rows",
-        "min": -50,
+        "min": 0,
         "max": 100,
         "step": 10,
         "unit": "px",
-        "default": -20,
+        "default": 20,
         "visible_if": "{{ section.settings.enable_second_scrolling }}"
+      },
+      {
+        "type": "header",
+        "content": "Appearance"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Enable custom styling",
+        "default": false
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_font",
+        "label": "Override theme font (legacy)",
+        "default": false,
+        "hidden": true,
+        "info": "Kept for saved sections. This section shows no text."
+      },
+      {
+        "type": "text",
+        "id": "font_family",
+        "label": "Google font family (legacy)",
+        "hidden": true,
+        "info": "Kept for saved sections. This section shows no text."
       },
       {
         "type": "header",
@@ -1271,18 +771,19 @@
         "type": "checkbox",
         "id": "reveal",
         "label": "Reveal on scroll",
-        "default": true
+        "default": true,
+        "info": "Uses the theme animation from Theme settings."
       },
       {
         "type": "header",
-        "content": "Spacing"
+        "content": "Desktop spacing"
       },
       {
         "type": "range",
         "id": "item_gap",
-        "label": "Item gap (desktop)",
+        "label": "Gap between images (desktop)",
         "default": 20,
-        "min": -20,
+        "min": 0,
         "max": 180,
         "step": 2,
         "unit": "px"
@@ -1310,20 +811,22 @@
       {
         "type": "range",
         "id": "section_margin_top_desktop",
-        "label": "Top margin (desktop)",
+        "label": "Top margin",
         "min": 0,
         "max": 300,
         "step": 4,
-        "default": 0
+        "default": 0,
+        "unit": "px"
       },
       {
         "type": "range",
         "id": "section_margin_bottom_desktop",
-        "label": "Bottom margin (desktop)",
+        "label": "Bottom margin",
         "min": 0,
         "max": 300,
         "step": 4,
-        "default": 0
+        "default": 0,
+        "unit": "px"
       },
       {
         "type": "header",
@@ -1331,10 +834,30 @@
       },
       {
         "type": "range",
+        "id": "overall_size_mobile",
+        "label": "Image scale (mobile)",
+        "min": 0.5,
+        "max": 2,
+        "step": 0.1,
+        "default": 0.9
+      },
+      {
+        "type": "range",
+        "id": "speed_mobile",
+        "label": "Loop time (mobile)",
+        "min": 0,
+        "max": 200,
+        "unit": "s",
+        "step": 2,
+        "default": 26,
+        "info": "Seconds for one full loop of the first row."
+      },
+      {
+        "type": "range",
         "id": "item_gap_mobile",
-        "label": "Item gap (mobile)",
-        "default": -20,
-        "min": -40,
+        "label": "Gap between images (mobile)",
+        "default": 16,
+        "min": 0,
         "max": 50,
         "step": 2,
         "unit": "px"
@@ -1342,20 +865,22 @@
       {
         "type": "range",
         "id": "section_margin_top_mobile",
-        "label": "Top margin (mobile)",
+        "label": "Top margin",
         "min": 0,
         "max": 300,
         "step": 4,
-        "default": 0
+        "default": 0,
+        "unit": "px"
       },
       {
         "type": "range",
         "id": "section_margin_bottom_mobile",
-        "label": "Bottom margin (mobile)",
+        "label": "Bottom margin",
         "min": 0,
         "max": 300,
         "step": 4,
-        "default": 0
+        "default": 0,
+        "unit": "px"
       }
     ],
     "blocks": [
@@ -1367,6 +892,12 @@
             "type": "image_picker",
             "id": "image",
             "label": "Image"
+          },
+          {
+            "type": "text",
+            "id": "image_alt",
+            "label": "Image alt text",
+            "info": "For example the brand name. Leave empty to use the alt text saved with the image."
           }
         ]
       }
