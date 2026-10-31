@@ -72,7 +72,7 @@ const CFG = {
     root: '.psh-root', heading: '.psh__heading', text: '.psh__sub', button: '.psh__cta',
     settings: () => ({product: PANTS}),
     blocks: () => [...presetBlocks('featured-product2'), {type: 'subheading'}].map(b => b.type === 'rating' ? {...b, settings: {show: true, rating: '4.5', reviews_count: '12'}} : b.type === 'buttons' ? {...b, settings: {primary_label: 'Shop now', secondary_label: 'Details'}} : b),
-    desk: ['image_position', 'image_width_pct', 'column_valign'], mob: [],
+    desk: ['image_position', 'image_width_pct', 'column_valign'], mob: [], any: ['enable_sticky_content_on_desktop'],
     structural: ['product', 'enable_sticky_content_on_desktop', 'use_product_description', 'truncate_chars', 'primary_action', 'reset_spacing'],
     pre: {placeholder_url: {}},
     vals: {truncate_chars: [60], product: [OTHER], primary_action: ['add_to_cart']},
