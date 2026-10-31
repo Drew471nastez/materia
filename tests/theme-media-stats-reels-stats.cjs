@@ -183,7 +183,7 @@ const TABLE = [
       await two.emit({enable_custom_style: true, section_bg: '#abcdef', ring_size: 99}, undefined, 'a');
       await two.emit({text: 'Only A'}, two.blockId('heading', 0, 'a'), 'a');
       eq(await read(two, '.iws', 'backgroundColor', 'a'), 'rgb(171, 205, 239)'); eq(await read(two, '.iws', 'backgroundColor', 'b'), 'rgb(24, 32, 40)', 'b untouched');
-      eq(await read(two, '.iws__stat-ring', 'width', 'b'), '70px'); eq(await read(two, '.iws__heading', 'text', 'b'), 'INCREDIBLE RESULTS');
+      eq(await read(two, '.iws__stat-ring', 'width', 'b'), '70px'); eq(await read(two, '.iws__heading', 'text', 'b'), 'Results');
       await two.page.close();
       /* 12. Reduced motion: rings full and numbers shown at once, no carousel autoplay */
       const rm = await L.mount(browser, NAME, {width, editing, reducedMotion: 'reduce', settings: {carousel_autoplay: true}, assets: [ASSET]});
