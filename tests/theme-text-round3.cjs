@@ -122,6 +122,8 @@ const NEEDS = {
   second_text_font_weight: {section: {enable_second_text: true, second_text: 'Two'}},
   'title.font_weight': {blocks: {title: {enable_custom_style: true}}}, 'title.text_case': {blocks: {title: {enable_custom_style: true}}},
   'subtitle.font_weight': {blocks: {subtitle: {enable_custom_style: true}}}, 'subtitle.text_case': {blocks: {subtitle: {enable_custom_style: true}}},
+  heading_line_height: {section: {enable_custom_size: true}},
+  'author.signature_position': {blocks: {author: {enable_signature: true, signature_image: 'https://cdn.test/signature.png'}}},
   separator_size: {}, 'heading.heading_weight': {}, 'caption.caption_weight': {},
 };
 /* Desktop-only and mobile-only selects are compared at their own width. */

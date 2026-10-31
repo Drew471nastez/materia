@@ -34,10 +34,15 @@
     set(wrapper, '--' + prefix + '-mobile-display', s.show_on_mobile === false ? 'none' : 'block');
   };
   const widths = {container: 'calc(var(--page-width, 1300px) + 3rem)', fluid_container: 'calc(var(--fluid-container-width, 1500px) + 3rem)', narrow: '1040px'};
-  function image(holder, value, cls, alt) {
+  function image(holder, value, cls, alt, placeholder) {
     let img = holder.querySelector('img');
     const url = src(value);
-    if (!url) return img;
+    if (!url) {
+      if (img) img.remove();
+      /* The Inline Image Heading keeps a round placeholder where no picture is chosen. */
+      if (placeholder && !holder.querySelector('svg')) { const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', placeholder); svg.setAttribute('viewBox', '0 0 525 525'); svg.setAttribute('aria-hidden', 'true'); svg.dataset.placeholder = 'image'; holder.append(svg); }
+      return null;
+    }
     if (!img) { img = document.createElement('img'); img.className = cls; img.loading = 'lazy'; img.decoding = 'async'; img.width = 220; img.height = 220; holder.querySelector('svg')?.remove(); holder.append(img); }
     if (img.getAttribute('src') !== url) { img.removeAttribute('srcset'); img.src = url; }
     if (alt != null && img.alt !== alt) img.alt = alt;
@@ -90,7 +95,7 @@
         if (link && !a) { a = document.createElement('a'); a.className = 'iih__link'; a.append(...el.childNodes); el.append(a); }
         if (!link && a) a.replaceWith(...a.childNodes), a = null;
         if (a) { if (a.getAttribute('href') !== link) a.href = link; a.setAttribute('aria-label', collection?.title || ''); }
-        image(a || el, b.image || collection?.image || collection?.featured_image, 'iih__img', b.image?.alt || collection?.title || '');
+        image(a || el, b.image || collection?.image || collection?.featured_image, 'iih__img', b.image?.alt || collection?.title || '', 'iih__img iih__placeholder');
       }
     }
   }
@@ -134,7 +139,7 @@
         const avatar = el.querySelector('.qb-avatar'); hide(avatar, !src(b.avatar)); const face = image(avatar, b.avatar, '', b.author_name || '');
         if (face) { face.width = num(b.avatar_size, 44); face.height = num(b.avatar_size, 44); }
         const signed = bool(b.enable_signature) && !!src(b.signature_image);
-        for (const holder of [el.querySelector('.qb-signature--inline'), root.querySelector('[data-lt-signature-below]')]) { if (!holder) continue; hide(holder, !signed); if (signed) image(holder, b.signature_image, '', holder.querySelector('img')?.alt || 'Signature'); }
+        for (const holder of [el.querySelector('.qb-signature--inline'), root.querySelector('[data-lt-signature-below]')]) { if (!holder) continue; set(holder, '--qb-sig-d', px(b.signature_size_desktop, 150)); set(holder, '--qb-sig-m', px(b.signature_size_mobile, 100)); hide(holder, !signed); if (signed) image(holder, b.signature_image, '', holder.querySelector('img')?.alt || 'Signature'); else holder.querySelector('img')?.remove(); }
       }
     }
   }
