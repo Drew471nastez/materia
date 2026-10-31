@@ -8,6 +8,9 @@
      are painted once per frame. Values are CSS variables, data attributes,
      text and image sources, written only when they change, so an edit never
      reloads an image, rebuilds the slider or moves the handle.
+   - The Slider's heading, text and button are blocks (data-bam-block);
+     its old section text settings paint only the legacy elements the
+     server draws when the section has no block of that type.
    - The slider handle is a focusable role="slider": drag it with a pointer
      or touch, click the picture, or use the arrow keys, Page Up/Down, Home
      and End. Its position survives a server redraw of the section. */
@@ -218,12 +221,12 @@
     for (const k in vars) put(state, root, k, vars[k]);
     if (once(state, root, 'bg-image', s.section_background_image)) root.style.setProperty('--bas-bg-image', bg ? 'url("' + bg.replace(/"/g, '%22') + '")' : 'none');
     data(root, 'show', s.show_on_device || 'all'); data(root, 'location', s.media_location || 'bottom'); data(root, 'shadow', s.image_shadow || 'none');
-    const heading = q('.bas__heading'), content = q('.bas__content');
-    rich(state, heading, s.headline); hide(heading, !filled(s.headline));
-    rich(state, content, s.content); hide(content, !filled(s.content));
-    const showButton = bool(s.enable_button) && filled(s.link_text);
-    hide(q('.bas__actions'), !showButton); hide(q('.bas__text'), !(filled(s.headline) || filled(s.content) || showButton));
-    let cta = q('[data-bam-cta]');
+    /* Legacy section text: drawn only while the section has no block of that type. */
+    const heading = q('[data-bam-text="headline"]'), content = q('[data-bam-text="content"]'), legacyButton = q('[data-bam-legacy-button]');
+    if (heading) { rich(state, heading, s.headline); hide(heading, !filled(s.headline)); }
+    if (content) { rich(state, content, s.content); hide(content, !filled(s.content)); }
+    let cta = legacyButton?.querySelector('[data-bam-cta]');
+    if (legacyButton) hide(legacyButton, !(bool(s.enable_button) && filled(s.link_text)));
     if (cta) {
       cta = retag(cta, api()?.url(s.link) || (filled(s.link) && !api() ? s.link : ''));
       rich(state, cta, s.link_text);
@@ -231,6 +234,29 @@
       buttonVars(cta, custom, {bg: s.button_background_color, text: s.button_text_color}, own ? {radius: px(s.button_border_radius), 'padding-y': px(s.button_padding_tb), 'padding-x': px(s.button_padding_lr), 'font-size': px(s.button_text_size)} : null);
       attr(cta, 'data-hover-anim', own && s.button_hover_animation && s.button_hover_animation !== 'none' ? s.button_hover_animation : null);
     }
+    /* Heading, subheading and button blocks, in the order the server drew them. */
+    for (let [el, b] of blocks(root, state)) {
+      const type = el.dataset.bamType, own = bool(b.enable_custom_style), bf = bool(b.enable_custom_fonts);
+      if (type === 'heading' || type === 'subheading') {
+        const isHead = type === 'heading';
+        rich(state, el, b.text); hide(el, !filled(b.text));
+        data(el, 'size', bool(b.size_enable)); data(el, 'weight', bool(b.weight_enable));
+        put(state, el, '--bas-c', col(own, b.color, isHead ? 'var(--bas-heading-color)' : 'var(--bas-text-color)'));
+        put(state, el, '--bas-font', fam(bf, b.font, isHead ? 'var(--bas-heading-font)' : 'var(--bas-body-font)'));
+        put(state, el, '--bas-w', b.weight || (isHead ? 700 : 400));
+        put(state, el, '--bas-lh', num(b.line_height, isHead ? 1.1 : 1.4));
+        if (isHead) { put(state, el, '--bas-size-d', px(b.size_desktop, 36)); put(state, el, '--bas-size-m', px(b.size_mobile, 30)); put(state, el, '--bas-track', px(b.tracking)); }
+        else put(state, el, '--bas-size', px(b.size, 17));
+      } else if (type === 'button') {
+        const wrap = el.closest('[data-bam-button-wrap]');
+        el = retag(el, api()?.url(b.link) || '');
+        text(state, el, b.text || ''); hide(wrap, !filled(b.text));
+        const shape = b.use_theme_button === false ? {radius: px(b.radius), 'padding-y': px(b.pad_y), 'padding-x': px(b.pad_x), 'font-size': px(b.size), weight: bool(b.weight_enable) ? b.weight : '', border: px(b.border_width)} : null;
+        buttonVars(el, own, {bg: b.bg, text: b.color, border: b.border_color, hoverBg: b.bg_hover, hoverText: b.color_hover}, shape);
+      }
+    }
+    const textBox = q('.bas__text');
+    if (textBox) hide(textBox, ![...textBox.children].some(c => !c.hidden));
     const box = state.box;
     if (box) {
       data(box, 'bar', s.show_bar === false ? 'false' : 'true'); data(box, 'circle', s.show_circle === false ? 'false' : 'true');

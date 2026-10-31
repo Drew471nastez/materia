@@ -58,10 +58,15 @@
   #shopify-section-{{ section.id }} { isolation: isolate; position: relative; }
 {% comment %}{% endcomment %}</style>
 {%- comment -%}
-  Materia Themes. Developed By Materia Themes.
+  Materia Themes. Product information tabs: one tab per block, in block
+  order. The product is the page's product. A tab with nothing to show is
+  left out on the storefront and drawn with a short note in the builder.
+  Tabs (click, arrow keys, Home and End) and every live edit in the builder
+  are shopify/assets/live-products-a.js.
 {%- endcomment -%}
 {%- liquid
   assign st = section.settings
+  assign own = st.enable_custom_style
   assign pit_product = product
   if pit_product == blank
     assign pit_product = page.product
@@ -71,100 +76,131 @@
   if st.reset_spacing
     assign reset_spacing = ' remove_spacing'
   endif
+  assign pit_design = request.design_mode
+  comment
+    The tabs that have something to show, as ,id, so one id never matches part of another.
+  endcomment
+  assign pit_ids = ','
+  for block in section.blocks
+    assign bk_st = block.settings
+    assign show = pit_design
+    case block.type
+      when '@app', 'review'
+        assign show = true
+      when 'description'
+        if pit_product.description != blank
+          assign show = true
+        endif
+      when 'custom_tab'
+        assign tab_content = bk_st.tab_content | default: 'content'
+        if tab_content == 'content' and bk_st.content_rich != blank
+          assign show = true
+        elsif tab_content == 'content_page' and bk_st.page != blank
+          assign show = true
+        elsif tab_content == 'content_custom'
+          if infomation_meta.value.information_text != blank or infomation_meta.value.information_in_page != blank
+            assign show = true
+          endif
+        endif
+    endcase
+    if show
+      assign pit_ids = pit_ids | append: block.id | append: ','
+    endif
+  endfor
+  assign pit_first = ''
+  for block in section.blocks
+    assign key = ',' | append: block.id | append: ','
+    if pit_ids contains key
+      assign pit_first = block.id
+      break
+    endif
+  endfor
 -%}
-{%- if section.blocks.size > 0 -%}
+{%- if pit_first != blank -%}
   <div
     id="{{ section.id }}"
-    class="section color-{{ color_scheme }} gradient {{ reset_spacing }} bls__product-tabs "
+    class="section color-{{ color_scheme }} gradient {{ reset_spacing }} bls__product-tabs pit{% if st.padding_top < 30 %} pt-min{% endif %}{% if st.padding_bottom < 30 %} pb-min{% endif %}"
     {% unless st.reveal %}data-ti-no-reveal{% endunless %}
     data-section-type="tabs"
     data-section-id="{{ section.id }}"
+    data-pa-root="product-information-tab" data-pa-section="{{ section.id }}" data-pa-settings="{{ st | json | escape }}"
+    data-align="{{ st.tab_alignment | default: 'left' }}"
+    style="--section-pt: {{ st.padding_top | default: 0 }};--section-pb: {{ st.padding_bottom | default: 0 }};--pit-tab: {% if own %}{% render 'scheme-color', color: st.tab_color, fallback: 'color-mix(in srgb, var(--color-heading) 60%, transparent)' %}{% else %}color-mix(in srgb, var(--color-heading) 60%, transparent){% endif %};--pit-tab-active: {% if own %}{% render 'scheme-color', color: st.tab_active_color, fallback: 'var(--color-heading)' %}{% else %}var(--color-heading){% endif %};--pit-text: {% if own %}{% render 'scheme-color', color: st.text_color, fallback: 'var(--color-text)' %}{% else %}var(--color-text){% endif %};--pit-tab-fs: {{ st.tab_size | default: 16 }}px;--pit-gap-d: {{ st.tab_gap | default: 60 }}px;--pit-gap-m: {{ st.tab_gap_mobile | default: 30 }}px;"
   >
-    <div class="{{ st.section_width }} section-full">
+    <div class="{{ st.section_width }} section-full" data-pit-width>
       <div class="product info detailed">
         <div class="product data items">
-          <ul
-            class="nav nav-tabs list-none text-center gap-30 gap-xl-60 p-0 flex  justify-content-start mb-big mt-0"
-            style="--space-bottom: 40;--height: 2px;"
-          >
+          <ul class="nav nav-tabs list-none p-0 flex mt-0 pit__tabs" role="tablist">
             {%- for block in section.blocks %}
-              {% liquid
-                assign bk_st = block.settings
-                assign hidden = ''
-                if block.type == 'custom_tab' and bk_st.tab_content == 'content_custom'
-                  assign hidden = 'hidden'
-                  if infomation_meta.value.information_text != blank or infomation_meta.value.information_in_page != blank
-                    assign hidden = ''
-                  endif
-                endif
-              %}
-              <li class="data {{ hidden }} item{% if forloop.first %} active{% endif %}">
+              {%- assign key = ',' | append: block.id | append: ',' -%}
+              {%- unless pit_ids contains key -%}{%- continue -%}{%- endunless -%}
+              {%- assign bk_st = block.settings -%}
+              {%- assign active = false -%}
+              {%- if block.id == pit_first -%}{%- assign active = true -%}{%- endif -%}
+              <li class="data item{% if active %} active{% endif %}" role="presentation" data-pa-block="{{ block.id }}" data-pa-type="{{ block.type | replace: '@', 'app' }}" data-pa-settings="{{ bk_st | json | escape }}" {{ block.shopify_attributes }}>
                 <a
-                  class="is-nav-tabs heading-weight relative whitespace-nowrap heading-color py-15 inline-block border-animation"
-                  href="#{{ block.id }}"
+                  class="is-nav-tabs heading-weight relative whitespace-nowrap heading-color py-15 inline-block border-animation pit__tab"
+                  href="#proTabs{{ block.id }}"
+                  id="pit-tab-{{ block.id }}"
+                  role="tab"
+                  aria-selected="{{ active }}"
+                  aria-controls="proTabs{{ block.id }}"
+                  tabindex="{% if active %}0{% else %}-1{% endif %}"
                   data-block-id="proTabs{{ block.id }}"
-                  {%- if block.type == 'review' -%}
-                    tab-review
-                  {%- endif -%}
-                  {%- if block.type == '@app' -%}
-                    tab-review-app
-                  {%- endif -%}
+                  {%- if block.type == 'review' %} tab-review{% endif -%}
+                  {%- if block.type == '@app' %} tab-review-app{% endif -%}
                 >
-                  {%- if block.type == 'description' and bk_st.title == blank -%}
-                    Description
-                  {%- else -%}
-                    {{- bk_st.title -}}
-                  {%- endif -%}
                   {%- if block.type == '@app' -%}
                     {{ 'products.product.review_app' | t }}
+                  {%- elsif block.type == 'description' and bk_st.title == blank -%}
+                    Description
+                  {%- else -%}
+                    {{- bk_st.title | escape -}}
                   {%- endif -%}
                 </a>
               </li>
             {%- endfor -%}
           </ul>
-          <div class="tab-content">
+          <div class="tab-content pit__content">
             {%- for block in section.blocks %}
-              {% assign bk_st = block.settings %}
-              <div
-                id="proTabs{{ block.id }}"
-                class="tab-item transition{% if forloop.first  %} active{% endif %}"
-              >
-                <div
-                  class="tab-panel"
-                  {% if forloop.first %}
-                    style="display: block;"
-                  {% else %}
-                    style="display: none;"
-                  {% endif %}
-                >
+              {%- assign key = ',' | append: block.id | append: ',' -%}
+              {%- unless pit_ids contains key -%}{%- continue -%}{%- endunless -%}
+              {%- assign bk_st = block.settings -%}
+              <div id="proTabs{{ block.id }}" class="tab-item transition{% if block.id == pit_first %} active{% endif %}" role="tabpanel" aria-labelledby="pit-tab-{{ block.id }}" tabindex="0"{% unless block.id == pit_first %} hidden{% endunless %}>
+                <div class="tab-panel"{% if block.id == pit_first %} style="display: block;"{% else %} style="display: none;"{% endif %}>
                   {%- case block.type -%}
                     {%- when '@app' -%}
                       {% render block %}
                     {%- when 'description' -%}
-                      <div class="rte">{{ pit_product.description }}</div>
+                      {%- if pit_product.description != blank -%}
+                        <div class="rte">{{ pit_product.description }}</div>
+                      {%- else -%}
+                        <p class="pit__note">The product's description shows here on a product page.</p>
+                      {%- endif -%}
                     {%- when 'review' -%}
                       <div id="shopify-product-reviews" data-id="{{ pit_product.id }}">
                         {{ pit_product.metafields.spr.reviews }}
                       </div>
                     {%- when 'custom_tab' -%}
-                      {% assign tab_content = bk_st.tab_content %}
+                      {%- assign tab_content = bk_st.tab_content | default: 'content' -%}
                       {%- case tab_content -%}
                         {%- when 'content' -%}
-                          {% if bk_st.content_rich == blank %}
-                            No content available.
-                          {% else %}
-                            {{ bk_st.content_rich }}
-                          {% endif %}
+                          <div class="rte" data-pit-rich>{{ bk_st.content_rich }}</div>
+                          {%- if bk_st.content_rich == blank -%}<p class="pit__note" data-pit-empty>Add this tab's text in its settings.</p>{%- endif -%}
                         {%- when 'content_page' -%}
                           {%- if bk_st.page != blank -%}
-                            {{ pages[bk_st.page].content }}
+                            <div class="rte">{{ pages[bk_st.page].content | default: bk_st.page.content }}</div>
+                          {%- else -%}
+                            <p class="pit__note">Choose the page this tab shows.</p>
                           {%- endif -%}
-                        {% when 'content_custom' %}
-                          {% if infomation_meta.value.information_text != blank %}
-                            {{ infomation_meta.value.information_text }}
-                          {% elsif infomation_meta.value.information_in_page != blank %}
-                            {{ pages[infomation_meta.value.information_in_page].content }}
-                          {% endif %}
+                        {%- when 'content_custom' -%}
+                          {%- if infomation_meta.value.information_text != blank -%}
+                            <div class="rte">{{ infomation_meta.value.information_text }}</div>
+                          {%- elsif infomation_meta.value.information_in_page != blank -%}
+                            <div class="rte">{{ pages[infomation_meta.value.information_in_page].content }}</div>
+                          {%- else -%}
+                            <p class="pit__note">Shows the product's Information tab field when it has one.</p>
+                          {%- endif -%}
                       {%- endcase -%}
                   {%- endcase -%}
                 </div>
@@ -175,44 +211,50 @@
       </div>
     </div>
   </div>
+<style>
+  #shopify-section-{{ section.id }} .pit__tabs {
+    gap: var(--pit-gap-m);
+    justify-content: flex-start;
+    margin-bottom: 40px;
+    --height: 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    border-bottom: 1px solid var(--color-border);
+  }
+  #shopify-section-{{ section.id }} .pit__tabs::-webkit-scrollbar { display: none; }
+  #shopify-section-{{ section.id }} .pit[data-align="center"] .pit__tabs { justify-content: safe center; }
+  #shopify-section-{{ section.id }} .pit[data-align="right"] .pit__tabs { justify-content: safe flex-end; }
+  #shopify-section-{{ section.id }} .pit__tabs > li { flex: 0 0 auto; }
+  #shopify-section-{{ section.id }} .pit__tab {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    font-size: var(--pit-tab-fs);
+    color: var(--pit-tab);
+    background-image: linear-gradient(to right, var(--pit-tab-active) 0%, var(--pit-tab-active) 98%);
+    text-decoration: none;
+  }
+  #shopify-section-{{ section.id }} .data.item.active .pit__tab,
+  #shopify-section-{{ section.id }} .pit__tab:hover { color: var(--pit-tab-active); background-size: 100% var(--height, 2px); }
+  #shopify-section-{{ section.id }} .pit__tab:focus-visible { outline: 2px solid var(--pit-tab-active); outline-offset: 2px; }
+  #shopify-section-{{ section.id }} .pit__content { color: var(--pit-text); }
+  #shopify-section-{{ section.id }} .tab-item:focus-visible { outline: 2px solid var(--pit-tab-active); outline-offset: 4px; }
+  #shopify-section-{{ section.id }} .pit__content .rte { overflow-wrap: anywhere; }
+  #shopify-section-{{ section.id }} .pit__content .rte:empty { display: none; }
+  #shopify-section-{{ section.id }} .pit__note { margin: 0; opacity: .7; font-style: italic; }
+  @media (max-width: 767px) {
+    #shopify-section-{{ section.id }} .pit__tabs { margin-bottom: 24px; }
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ section.id }} .pit__tabs { gap: var(--pit-gap-d); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ section.id }} .pit__tab { transition: none; }
+  }
+{% comment %}{% endcomment %}</style>
 {%- endif -%}
-
-<script src="{{ 'product_tab.js' | asset_url }}" defer></script>
-<script>
-  (function () {
-    /* product_tab.js binds once on load; a section redrawn in the builder binds its own tabs here. */
-    function bindTabs(root) {
-      if (!root || root.__pitTabs) return;
-      root.__pitTabs = true;
-      root.addEventListener('click', function (e) {
-        var a = e.target.closest('.nav-tabs a[data-block-id]');
-        if (!a || !root.contains(a)) return;
-        e.preventDefault();
-        var li = a.closest('.data.item');
-        if (li && li.classList.contains('active')) return;
-        root.querySelectorAll('.nav-tabs .data.item').forEach(function (it) { it.classList.remove('active'); });
-        root.querySelectorAll('.tab-content .tab-item').forEach(function (it) {
-          it.classList.remove('active');
-          var p = it.querySelector('.tab-panel'); if (p) p.style.display = 'none';
-        });
-        var panel = root.querySelector('#' + a.getAttribute('data-block-id'));
-        if (panel) {
-          panel.classList.add('active');
-          var pp = panel.querySelector('.tab-panel'); if (pp) pp.style.display = 'block';
-        }
-        if (li) li.classList.add('active');
-      });
-    }
-    if (window.__pitListen) return;
-    window.__pitListen = true;
-    document.addEventListener('storelib:section-load', function (e) {
-      var sec = e.target && e.target.closest ? e.target.closest('.shopify-section') : null;
-      if (!sec && e.detail && e.detail.sectionId) sec = document.getElementById('shopify-section-' + e.detail.sectionId);
-      if (sec && sec.querySelector('.bls__product-tabs')) bindTabs(sec.querySelector('.bls__product-tabs'));
-    });
-  })();
-{% comment %}{% endcomment %}</script>
-
 
 </template>
 
@@ -375,7 +417,13 @@
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "select",
@@ -402,26 +450,136 @@
         ]
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
-      },
-      {
         "type": "checkbox",
         "id": "reset_spacing",
-        "label": "Remove default space between sections",
+        "label": "Remove space between sections",
         "default": true
       },
       {
         "type": "header",
-        "content": "Animation & Behavior"
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "tab_alignment",
+        "label": "Tab alignment",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Appearance"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Enable custom styling",
+        "default": false,
+        "info": "Off: tabs and text use the colour scheme."
+      },
+      {
+        "type": "color",
+        "id": "tab_color",
+        "label": "Tab",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "tab_active_color",
+        "label": "Open tab and underline",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "text_color",
+        "label": "Panel text",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "range",
+        "id": "tab_size",
+        "label": "Tab title size",
+        "min": 12,
+        "max": 28,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "header",
+        "content": "Animation"
       },
       {
         "type": "checkbox",
         "id": "reveal",
         "label": "Reveal on scroll",
         "default": true
+      },
+      {
+        "type": "header",
+        "content": "Spacing"
+      },
+      {
+        "type": "range",
+        "id": "tab_gap",
+        "label": "Gap between tabs (desktop)",
+        "min": 8,
+        "max": 100,
+        "step": 2,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top padding",
+        "min": 0,
+        "max": 160,
+        "step": 4,
+        "unit": "px",
+        "default": 40,
+        "info": "A little less on a phone."
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom padding",
+        "min": 0,
+        "max": 160,
+        "step": 4,
+        "unit": "px",
+        "default": 40
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "range",
+        "id": "tab_gap_mobile",
+        "label": "Gap between tabs (mobile)",
+        "min": 8,
+        "max": 60,
+        "step": 2,
+        "unit": "px",
+        "default": 30
       }
     ],
     "blocks": [
@@ -430,72 +588,62 @@
       },
       {
         "type": "description",
-        "name": "t:sections.product-information-tabs.settings.description",
+        "name": "Description",
         "limit": 1,
         "settings": [
           {
-            "type": "header",
-            "content": "Section Header"
-          },
-          {
             "type": "text",
             "id": "title",
-            "label": "Tab title"
+            "label": "Tab title",
+            "placeholder": "Description",
+            "info": "Shows the product's description."
           }
         ]
       },
       {
         "type": "custom_tab",
-        "name": "t:sections.product-information-tabs.blocks.custom_tab.name",
+        "name": "Custom tab",
         "limit": 4,
         "settings": [
           {
-            "type": "header",
-            "content": "Section Header"
-          },
-          {
             "type": "text",
             "id": "title",
-            "label": "t:sections.product-information-tabs.blocks.custom_tab.settings.title.label",
+            "label": "Tab title",
             "default": "Custom tab"
-          },
-          {
-            "type": "header",
-            "content": "Content"
-          },
-          {
-            "type": "richtext",
-            "id": "content_rich",
-            "label": "t:sections.product-information-tabs.blocks.custom_tab.settings.content.label",
-            "default": "<p>abd</p>"
-          },
-          {
-            "type": "page",
-            "id": "page",
-            "label": "t:sections.product-information-tabs.blocks.custom_tab.settings.page.label"
-          },
-          {
-            "type": "header",
-            "content": "Advanced"
           },
           {
             "type": "select",
             "id": "tab_content",
-            "label": "t:sections.product-information-tabs.blocks.custom_tab.settings.tab_content.label",
+            "label": "Content",
             "options": [
               {
                 "value": "content",
-                "label": "t:sections.product-information-tabs.blocks.custom_tab.settings.tab_content.options__1.label"
+                "label": "Text"
               },
               {
                 "value": "content_page",
-                "label": "t:sections.product-information-tabs.blocks.custom_tab.settings.tab_content.options__2.label"
+                "label": "A page"
               },
               {
                 "value": "content_custom",
-                "label": "t:sections.product-information-tabs.blocks.custom_tab.settings.tab_content.options__3.label"
+                "label": "Product field"
               }
-            ]
+            ],
+            "default": "content",
+            "info": "Product field: the product's Information tab field."
+          },
+          {
+            "type": "richtext",
+            "id": "content_rich",
+            "label": "Text",
+            "default": "<p>Add care notes, sizing or shipping details for this product.</p>",
+            "visible_if": "{{ block.settings.tab_content == 'content' }}"
+          },
+          {
+            "type": "page",
+            "id": "page",
+            "label": "Page",
+            "visible_if": "{{ block.settings.tab_content == 'content_page' }}"
           }
         ]
       }

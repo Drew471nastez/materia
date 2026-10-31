@@ -375,11 +375,27 @@
       for (const [k, id] of [['--sv-ink', 'custom_heading_color'], ['--sv-overlay-color', 'custom_card_overlay_color'], ['--mb-bg', 'custom_cta_bg'], ['--mb-border', 'custom_cta_bg'], ['--mb-text', 'custom_cta_text']]) cvar(root, k, c, s[id]);
       fontVar(root, '--sv-hfont', f, s.heading_font); fontVar(root, '--sv-bfont', f, s.body_font);
       attr(root, 'data-controls', String(bool(s.show_controls)));
+      /* Header: eyebrow, heading and subheading blocks in block order; the old section text
+         settings paint only the legacy elements drawn when a type has no block. */
       const head = root.querySelector('.sv__header');
       for (const [sel, v] of [['[data-sv-eyebrow]', s.subheading], ['[data-sv-heading]', s.heading], ['[data-sv-desc]', s.description]]) { const el = root.querySelector(sel); rich(el, v, st); hide(el, !plain(v)); }
-      hide(head, !plain(s.subheading) && !plain(s.heading) && !plain(s.description));
+      for (const el of head ? head.querySelectorAll('[data-msr-block]') : []) {
+        const b = st.block(el), type = el.dataset.msrType;
+        rich(el, b.text, st); hide(el, !plain(b.text));
+        cvar(el, '--b-color', bool(b.enable_custom_style), b.color);
+        fontVar(el, '--b-font', bool(b.enable_custom_fonts), b.font);
+        attr(el, 'data-size', String(bool(b.size_enable)));
+        if (type === 'heading') {
+          attr(el, 'data-weight', String(bool(b.weight_enable)));
+          prop(el, '--b-size-d', px(b.size_desktop, 36)); prop(el, '--b-size-m', px(b.size_mobile, 28)); prop(el, '--b-lh', String(num(b.line_height, 1.2))); prop(el, '--b-weight', String(b.weight || 700));
+        } else {
+          prop(el, '--b-size', px(b.size, type === 'eyebrow' ? 14 : 16));
+          if (type === 'subheading') prop(el, '--b-lh', String(num(b.line_height, 1.5)));
+        }
+      }
+      if (head) hide(head, ![...head.children].some(c => !c.hidden));
       st.layout?.({mode: 'carousel', cm: num(s.columns_mobile, 1), cd: num(s.columns, 4), gap: s.column_gap, arrows: bool(s.show_arrow), dots: dotsMode(s, true), mobileOnly: s.carousel_pagination === 'show_dots_on_mobile', style: s.pagination_style, position: s.pagination_position});
-      for (const el of root.querySelectorAll('[data-msr-block]')) {
+      for (const el of root.querySelectorAll('[data-msr-block][data-msr-type="video"]')) {
         const b = st.block(el), card = el.querySelector('.sv-card'), q = sel => card.querySelector(sel);
         const href = url(b.cta_link) || productUrl(b.product), has = !!(b.heading || b.cta_label);
         hide(q('.sv-card__overlay'), !has); hide(q('.sv-card__content'), !has);

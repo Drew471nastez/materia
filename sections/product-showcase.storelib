@@ -1,30 +1,20 @@
 <template compat="shopify">
 {% render 'theme-type' %}
 {%- liquid
-  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+  assign s = section.settings
+  assign sid = section.id
+  assign color_scheme = s.color_scheme.id | default: s.color_scheme | default: 'default-color-scheme'
 -%}
 {%- comment -%}
-  Product Showcase — a scoped, block-driven product carousel.
-
-  Architecture (mirrors Materia's Hero Pro 1 conventions):
-   • Everything is scoped to #shopify-section-{{ section.id }} so multiple
-     instances on one page never collide and no other section can bleed
-     styles or JS into this one. `isolation: isolate` creates its own
-     stacking context.
-   • Content lives in repeatable "Slide" blocks (one product each). The
-     arrows page between slides.
-   • Every style setting is emitted as a LITERAL value into a scoped
-     <style> block (no CSS-var indirection) so each control applies
-     reliably and updates live in the editor.
-   • Typography is connected to the theme. Headings use --heading-font,
-     body text uses --body-font, the button uses --btn-font. Font WEIGHT
-     follows the theme by default (--heading-weight / --body-weight). The
-     heading weight only changes when "Use custom heading font weight" is
-     toggled on, then the section weight applies instead.
-   • Connected to the theme's scroll-animation and speed settings, same as
-     Hero Pro 1.
+  Materia Themes. Product Showcase: one slide per product (Slide blocks),
+  arrows, swipe and keyboard to move between them. A slide with a product
+  picked takes its picture, title, price and link from the product; its own
+  heading, text, picture and link replace them. Colours follow the colour
+  scheme until Enable custom styling is on; fonts follow Theme settings >
+  Typography until Enable custom fonts is on; the button is a theme button.
+  The slider and the live builder updates are in live-products-b.js (loaded
+  on every page), so a redraw in the builder starts it once.
 {%- endcomment -%}
-
 {%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
 <style>
   #shopify-section-{{ section.id }}.scroll-trigger {
@@ -40,530 +30,239 @@
   })();
 {% comment %}{% endcomment %}</script>
 {%- endif -%}
-
-{%- comment -%} Section-level style locals {%- endcomment -%}
-{%- assign s = section.settings -%}
 {%- liquid
-  assign ps_custom = false
-  if s.use_theme_button == false
-    assign ps_custom = true
-  endif
--%}
-{%- capture ps_bg -%}{% render 'scheme-color', color: s.background_color, fallback: 'var(--color-background)' %}{%- endcapture -%}
-
-{%- comment -%}
-  Heading weight: off by default. When the toggle is off we inherit the
-  theme's heading weight; only when it's on do we apply the section value.
-{%- endcomment -%}
-{%- if s.heading_use_custom_weight -%}
-  {%- assign ps_heading_weight = s.heading_weight -%}
-{%- else -%}
-  {%- assign ps_heading_weight = 'var(--heading-weight, 700)' -%}
-{%- endif -%}
-
-{%- comment -%} Speed: honour the theme's global performance settings. {%- endcomment -%}
-{%- liquid
-  assign sp_quality = 'balanced'
-  if sp_quality == 'max'
-    assign ps_img_max = 1800
-  elsif sp_quality == 'fast'
-    assign ps_img_max = 1000
-  else
-    assign ps_img_max = 1400
-  endif
+  assign own = s.enable_custom_style
   assign sp_lazy = settings.perf_images
-  # The first picture loads first only when the section opens the page;
-  # lower down it would hold back the hero picture.
   assign sp_preload = false
   if settings.perf_images and section.index != blank and section.index <= 2
     assign sp_preload = true
   endif
-  assign sp_decode = settings.perf_images
+  assign slide_count = section.blocks.size
 -%}
-
-{%- comment -%} Selectable benefit/check icon (rendered once, reused per benefit). {%- endcomment -%}
-{%- capture ps_check_svg -%}
-  {%- case s.check_icon_style -%}
-    {%- when 'check_circle' -%}
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="16.5 8.8 10.5 15.2 7.5 12.2"/></svg>
-    {%- when 'check_circle_filled' -%}
-      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="11"/><path d="M17 8.5 L10.4 15.4 L7 12.1" fill="none" style="stroke: {{ ps_bg }}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    {%- when 'arrow' -%}
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-    {%- when 'star' -%}
-      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 14.7 8.6 21.8 9.2 16.4 13.9 18.1 20.8 12 17.1 5.9 20.8 7.6 13.9 2.2 9.2 9.3 8.6"/></svg>
-    {%- when 'plus' -%}
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-    {%- else -%}
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-  {%- endcase -%}
+{%- capture pb_json -%}{"color_scheme":{{ section.settings.color_scheme.id | default: section.settings.color_scheme | append: '' | json }},"section_width":{{ section.settings.section_width | append: '' | json }},"content_max_width":{{ section.settings.content_max_width | default: 0 | json }},"left_vertical_align":{{ section.settings.left_vertical_align | append: '' | json }},"image_max_height":{{ section.settings.image_max_height | default: 0 | json }},"image_border_radius":{{ section.settings.image_border_radius | default: 0 | json }},"show_arrows":{% if section.settings.show_arrows %}true{% else %}false{% endif %},"arrow_size":{{ section.settings.arrow_size | default: 0 | json }},"autoplay":{% if section.settings.autoplay %}true{% else %}false{% endif %},"autoplay_speed":{{ section.settings.autoplay_speed | default: 0 | json }},"enable_custom_style":{% if section.settings.enable_custom_style %}true{% else %}false{% endif %},"background_color":{{ section.settings.background_color | append: '' | json }},"enable_gradient":{% if section.settings.enable_gradient %}true{% else %}false{% endif %},"gradient_color_1":{{ section.settings.gradient_color_1 | append: '' | json }},"gradient_color_2":{{ section.settings.gradient_color_2 | append: '' | json }},"gradient_degrees":{{ section.settings.gradient_degrees | append: '' | json }},"heading_color":{{ section.settings.heading_color | append: '' | json }},"description_color":{{ section.settings.description_color | append: '' | json }},"star_filled_color":{{ section.settings.star_filled_color | append: '' | json }},"star_unfilled_color":{{ section.settings.star_unfilled_color | append: '' | json }},"reviews_color":{{ section.settings.reviews_color | append: '' | json }},"benefit_color":{{ section.settings.benefit_color | append: '' | json }},"check_color":{{ section.settings.check_color | append: '' | json }},"arrow_color":{{ section.settings.arrow_color | append: '' | json }},"arrow_border_color":{{ section.settings.arrow_border_color | append: '' | json }},"button_bg_color":{{ section.settings.button_bg_color | append: '' | json }},"button_text_color":{{ section.settings.button_text_color | append: '' | json }},"button_bg_hover_color":{{ section.settings.button_bg_hover_color | append: '' | json }},"button_text_hover_color":{{ section.settings.button_text_hover_color | append: '' | json }},"check_icon_style":{{ section.settings.check_icon_style | append: '' | json }},"use_theme_button":{% if section.settings.use_theme_button %}true{% else %}false{% endif %},"button_radius":{{ section.settings.button_radius | default: 0 | json }},"button_padding_v":{{ section.settings.button_padding_v | default: 0 | json }},"button_padding_h":{{ section.settings.button_padding_h | default: 0 | json }},"button_font_size":{{ section.settings.button_font_size | default: 0 | json }},"enable_custom_fonts":{% if section.settings.enable_custom_fonts %}true{% else %}false{% endif %},"heading_font":{"family":{{ section.settings.heading_font.family | append: '' | json }},"fallback_families":{{ section.settings.heading_font.fallback_families | append: '' | json }}},"body_font":{"family":{{ section.settings.body_font.family | append: '' | json }},"fallback_families":{{ section.settings.body_font.fallback_families | append: '' | json }}},"heading_size_desktop":{{ section.settings.heading_size_desktop | default: 0 | json }},"heading_use_custom_weight":{% if section.settings.heading_use_custom_weight %}true{% else %}false{% endif %},"heading_weight":{{ section.settings.heading_weight | append: '' | json }},"heading_letter_spacing":{{ section.settings.heading_letter_spacing | default: 0 | json }},"heading_uppercase":{{ section.settings.heading_uppercase | append: '' | json }},"description_size_desktop":{{ section.settings.description_size_desktop | default: 0 | json }},"star_size":{{ section.settings.star_size | default: 0 | json }},"reviews_size":{{ section.settings.reviews_size | default: 0 | json }},"benefit_size":{{ section.settings.benefit_size | default: 0 | json }},"padding_top":{{ section.settings.padding_top | default: 0 | json }},"padding_bottom":{{ section.settings.padding_bottom | default: 0 | json }},"heading_size_mobile":{{ section.settings.heading_size_mobile | default: 0 | json }},"description_size_mobile":{{ section.settings.description_size_mobile | default: 0 | json }},"padding_top_mobile":{{ section.settings.padding_top_mobile | default: 0 | json }},"padding_bottom_mobile":{{ section.settings.padding_bottom_mobile | default: 0 | json }}}{%- endcapture -%}
+{%- capture ps_check_svg -%}{%- case s.check_icon_style -%}{%- when 'check_circle' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><polyline points="16.5 8.8 10.5 15.2 7.5 12.2"/></svg>{%- when 'check_circle_filled' -%}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="11"/><path class="ps-check-cut" d="M17 8.5 L10.4 15.4 L7 12.1" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>{%- when 'arrow' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><line x1="4" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>{%- when 'star' -%}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><polygon points="12 2 14.7 8.6 21.8 9.2 16.4 13.9 18.1 20.8 12 17.1 5.9 20.8 7.6 13.9 2.2 9.2 9.3 8.6"/></svg>{%- when 'plus' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" focusable="false"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>{%- else -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="20 6 9 17 4 12"/></svg>{%- endcase -%}{%- endcapture -%}
+{%- capture ps_vars -%}
+  --ps-pt: {{ s.padding_top | default: 0 }}px;--ps-pb: {{ s.padding_bottom | default: 0 }}px;--ps-pt-m: {{ s.padding_top_mobile | default: 0 }}px;--ps-pb-m: {{ s.padding_bottom_mobile | default: 0 }}px;
+  --ps-maxw: {% case s.section_width %}{% when 'container' %}calc(var(--page-width, 1300px) + 3rem){% when 'fluid_container' %}calc(var(--fluid-container-width, 1500px) + 3rem){% when 'custom' %}{{ s.content_max_width | default: 1300 }}px{% else %}none{% endcase %};
+  --ps-img-h: {{ s.image_max_height | default: 560 }}px;--ps-img-r: {{ s.image_border_radius | default: 0 }}px;--ps-valign: {{ s.left_vertical_align | default: 'center' }};
+  --ps-h-d: {{ s.heading_size_desktop | default: 56 }}px;--ps-h-m: {{ s.heading_size_mobile | default: 34 }}px;--ps-h-ls: {{ s.heading_letter_spacing | default: 0 }}px;--ps-h-tt: {{ s.heading_uppercase | default: 'none' }};{% if s.heading_use_custom_weight %}--ps-h-w: {{ s.heading_weight }};{% endif %}
+  --ps-d-d: {{ s.description_size_desktop | default: 19 }}px;--ps-d-m: {{ s.description_size_mobile | default: 16 }}px;
+  --ps-star-s: {{ s.star_size | default: 26 }}px;--ps-rev-s: {{ s.reviews_size | default: 17 }}px;--ps-ben-s: {{ s.benefit_size | default: 18 }}px;--ps-arrow-s: {{ s.arrow_size | default: 48 }}px;
+  {%- if own -%}
+    --pb-bg: {% if s.enable_gradient %}linear-gradient({{ s.gradient_degrees | default: '135deg' }}, {% render 'scheme-color', color: s.gradient_color_1, fallback: 'var(--color-background)' %}, {% render 'scheme-color', color: s.gradient_color_2, fallback: 'var(--color-background)' %}){% else %}{% render 'scheme-color', color: s.background_color, fallback: 'var(--color-background)' %}{% endif %};
+    --ps-bg-solid: {% render 'scheme-color', color: s.background_color, fallback: 'var(--color-background)' %};
+    --ps-h-c: {% render 'scheme-color', color: s.heading_color, fallback: 'var(--color-heading)' %};
+    --ps-d-c: {% render 'scheme-color', color: s.description_color, fallback: 'var(--color-text)' %};
+    --ps-star-on: {% render 'scheme-color', color: s.star_filled_color, fallback: 'var(--color-primary)' %};
+    --ps-star-off: {% render 'scheme-color', color: s.star_unfilled_color, fallback: 'var(--color-border)' %};
+    --ps-rev-c: {% render 'scheme-color', color: s.reviews_color, fallback: 'var(--color-text)' %};
+    --ps-ben-c: {% render 'scheme-color', color: s.benefit_color, fallback: 'var(--color-text)' %};
+    --ps-check-c: {% render 'scheme-color', color: s.check_color, fallback: 'var(--color-heading)' %};
+    --ps-arrow-c: {% render 'scheme-color', color: s.arrow_color, fallback: 'var(--color-heading)' %};
+    --ps-arrow-b: {% render 'scheme-color', color: s.arrow_border_color, fallback: 'var(--color-border)' %};
+    {%- render 'button-overrides', bg: s.button_bg_color, text: s.button_text_color, hover_bg: s.button_bg_hover_color, hover_text: s.button_text_hover_color -%}
+  {%- endif -%}
+  {%- if s.use_theme_button == false -%}--mb-radius: {{ s.button_radius | default: 0 }}px;--mb-padding-y: {{ s.button_padding_v | default: 0 }}px;--mb-padding-x: {{ s.button_padding_h | default: 0 }}px;--mb-font-size: {{ s.button_font_size | default: 16 }}px;--btn-border-width: 0px;{%- endif -%}
+  {%- if s.enable_custom_fonts and s.heading_font.family != blank -%}--heading-font: {{ s.heading_font.family }}, {{ s.heading_font.fallback_families | default: 'sans-serif' }};{%- endif -%}
+  {%- if s.enable_custom_fonts and s.body_font.family != blank -%}--body-font: {{ s.body_font.family }}, {{ s.body_font.fallback_families | default: 'sans-serif' }};{%- endif -%}
 {%- endcapture -%}
 
 <style>
-  /* ============================================================
-     SCOPING — every rule is prefixed with the section wrapper id.
-     ============================================================ */
-  #shopify-section-{{ section.id }} {
-    isolation: isolate;
-    position: relative;
-    z-index: 0;
-  }
-  #shopify-section-{{ section.id }} .ps-section {
+  #shopify-section-{{ sid }} { isolation: isolate; position: relative; z-index: 0; }
+  {%- if s.enable_custom_fonts -%}
+    {{ s.heading_font | font_face: font_display: 'swap' }}
+    {{ s.body_font | font_face: font_display: 'swap' }}
+  {%- endif -%}
+  #shopify-section-{{ sid }} .ps-section {
     font-family: var(--body-font, inherit);
-    box-sizing: border-box;
-    position: relative;
-    width: 100%;
-    padding-top: {{ s.padding_top }}px;
-    padding-bottom: {{ s.padding_bottom }}px;
-    {% if s.enable_gradient %}
-      background: linear-gradient({{ s.gradient_degrees }}, {% render 'scheme-color', color: s.gradient_color_1, fallback: 'var(--color-background)' %}, {% render 'scheme-color', color: s.gradient_color_2, fallback: 'var(--color-background)' %});
-    {% else %}
-      background-color: {{ ps_bg }};
-    {% endif %}
+    box-sizing: border-box; position: relative; width: 100%;
+    padding-top: var(--ps-pt-m); padding-bottom: var(--ps-pb-m);
+    background: var(--pb-bg, var(--gradient-background, var(--color-background)));
+    color: var(--color-text);
   }
-  #shopify-section-{{ section.id }} .ps-section *,
-  #shopify-section-{{ section.id }} .ps-section *::before,
-  #shopify-section-{{ section.id }} .ps-section *::after { box-sizing: border-box; }
-
-  /* Width container */
-  #shopify-section-{{ section.id }} .ps-inner {
-    {% case s.section_width %}
-      {% when 'container' %}max-width: calc(var(--page-width, 1300px) + 3rem);
-      {% when 'fluid_container' %}max-width: calc(var(--fluid-container-width, 1500px) + 3rem);
-      {% when 'stretch_width' %}max-width: none; padding-inline: 3rem;
-      {% when 'full_width' %}max-width: none;
-      {% else %}max-width: {{ s.content_max_width }}px;
-    {% endcase %}
-    margin-inline: auto;
-    padding-inline: 24px;
+  #shopify-section-{{ sid }} .ps-section *, #shopify-section-{{ sid }} .ps-section *::before, #shopify-section-{{ sid }} .ps-section *::after { box-sizing: border-box; }
+  #shopify-section-{{ sid }} .ps-inner { max-width: var(--ps-maxw); margin-inline: auto; padding-inline: 20px; }
+  #shopify-section-{{ sid }} .ps-section[data-width='stretch_width'] .ps-inner { padding-inline: 3rem; }
+  #shopify-section-{{ sid }} .ps-viewport { overflow: hidden; width: 100%; touch-action: pan-y; }
+  #shopify-section-{{ sid }} .ps-track { display: flex; width: 100%; transition: transform .55s cubic-bezier(.4, 0, .2, 1); }
+  #shopify-section-{{ sid }} .ps-track.is-dragging { transition: none; }
+  #shopify-section-{{ sid }} .ps-slide {
+    flex: 0 0 100%; min-width: 0;
+    display: grid; grid-template-columns: 1fr; gap: 22px; text-align: center; align-items: center;
   }
-
-  /* Viewport + sliding track */
-  #shopify-section-{{ section.id }} .ps-viewport { overflow: hidden; width: 100%; }
-  #shopify-section-{{ section.id }} .ps-track {
-    display: flex;
-    width: 100%;
-    transition: transform .55s cubic-bezier(.4, 0, .2, 1);
-    will-change: transform;
+  #shopify-section-{{ sid }} .ps-col-left { display: flex; flex-direction: column; align-items: center; gap: 18px; order: 2; }
+  #shopify-section-{{ sid }} .ps-col-center { display: flex; justify-content: center; align-items: center; order: 1; }
+  #shopify-section-{{ sid }} .ps-col-right { display: flex; flex-direction: column; align-items: center; gap: 18px; order: 3; }
+  #shopify-section-{{ sid }} .ps-heading {
+    margin: 0; font-family: var(--heading-font, inherit);
+    color: var(--ps-h-c, var(--color-heading));
+    font-size: var(--ps-h-m); font-weight: var(--ps-h-w, var(--heading-weight, 700));
+    line-height: 1.05; letter-spacing: var(--ps-h-ls); text-transform: var(--ps-h-tt);
   }
-  #shopify-section-{{ section.id }} .ps-slide {
-    flex: 0 0 100%;
-    min-width: 0;
-    display: grid;
-    grid-template-columns: 1.05fr 0.95fr 1.05fr;
-    gap: 48px;
-    align-items: center;
+  #shopify-section-{{ sid }} .ps-desc { margin: 0; color: var(--ps-d-c, var(--color-text)); font-size: var(--ps-d-m); line-height: 1.55; }
+  #shopify-section-{{ sid }} .ps-price { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; justify-content: center; font-size: calc(var(--ps-d-m) * 1.1); color: var(--ps-h-c, var(--color-heading)); font-weight: 600; }
+  #shopify-section-{{ sid }} .ps-price s { color: var(--ps-d-c, var(--color-text)); font-weight: 400; opacity: .7; }
+  #shopify-section-{{ sid }} .ps-price__tag { font-size: .7em; text-transform: uppercase; letter-spacing: .08em; padding: 3px 8px; border: 1px solid currentColor; border-radius: var(--rounded-radius, 4px); }
+  #shopify-section-{{ sid }} .ps-arrows { display: flex; gap: 14px; justify-content: center; }
+  #shopify-section-{{ sid }} .ps-arrow {
+    width: max(44px, var(--ps-arrow-s)); height: max(44px, var(--ps-arrow-s));
+    border-radius: 9999px; padding: 0; cursor: pointer;
+    border: 1.5px solid var(--ps-arrow-b, var(--color-border));
+    background: transparent; color: var(--ps-arrow-c, var(--color-heading));
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background-color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease);
   }
-
-  /* Columns */
-  #shopify-section-{{ section.id }} .ps-col-left {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 22px;
-    min-height: 100%;
-    align-self: {{ s.left_vertical_align }};
+  #shopify-section-{{ sid }} .ps-arrow:hover { background-color: var(--ps-arrow-c, var(--color-heading)); color: var(--ps-bg-solid, var(--color-background)); }
+  #shopify-section-{{ sid }} .ps-arrow:focus-visible { outline: 2px solid var(--ps-arrow-c, var(--color-heading)); outline-offset: 3px; }
+  #shopify-section-{{ sid }} .ps-arrow svg { width: 45%; height: 45%; display: block; }
+  #shopify-section-{{ sid }} .ps-image { width: 100%; display: flex; justify-content: center; }
+  #shopify-section-{{ sid }} .ps-image img {
+    max-width: 100%; max-height: var(--ps-img-h); height: auto; width: auto;
+    object-fit: contain; display: block; border-radius: var(--ps-img-r);
   }
-  #shopify-section-{{ section.id }} .ps-col-center { display: flex; justify-content: center; align-items: center; }
-  #shopify-section-{{ section.id }} .ps-col-right { display: flex; flex-direction: column; gap: 18px; }
-
-  /* Heading + description — typography connected to the theme.
-     Family always follows the theme. Weight follows the theme unless the
-     "Use custom heading font weight" toggle is on. */
-  #shopify-section-{{ section.id }} .ps-heading {
-    font-family: var(--heading-font, var(--body-font, inherit));
-    margin: 0;
-    color: {% render 'scheme-color', color: s.heading_color, fallback: 'var(--color-heading)' %};
-    font-size: {{ s.heading_size_desktop }}px;
-    font-weight: {{ ps_heading_weight }};
-    line-height: 1.05;
-    letter-spacing: {{ s.heading_letter_spacing }}px;
-    text-transform: {{ s.heading_uppercase }};
+  #shopify-section-{{ sid }} .ps-ph { display: block; width: 100%; max-width: 460px; aspect-ratio: 4 / 3; border-radius: var(--ps-img-r); background: color-mix(in srgb, var(--color-text) 10%, var(--color-background)); color: color-mix(in srgb, var(--color-text) 35%, transparent); }
+  #shopify-section-{{ sid }} .ps-rating { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; }
+  #shopify-section-{{ sid }} .ps-stars { position: relative; display: inline-block; line-height: 1; font-size: var(--ps-star-s); white-space: nowrap; }
+  #shopify-section-{{ sid }} .ps-stars-base, #shopify-section-{{ sid }} .ps-stars-fill { letter-spacing: 2px; }
+  #shopify-section-{{ sid }} .ps-stars-base { color: var(--ps-star-off, var(--color-border)); }
+  #shopify-section-{{ sid }} .ps-stars-fill { color: var(--ps-star-on, var(--color-primary)); position: absolute; top: 0; left: 0; overflow: hidden; }
+  #shopify-section-{{ sid }} .ps-reviews { color: var(--ps-rev-c, var(--color-text)); font-size: var(--ps-rev-s); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+  #shopify-section-{{ sid }} a.ps-reviews { display: inline-flex; align-items: center; min-height: 44px; }
+  #shopify-section-{{ sid }} a.ps-reviews:hover { opacity: .8; }
+  #shopify-section-{{ sid }} .ps-benefits { display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 0; list-style: none; }
+  #shopify-section-{{ sid }} .ps-benefit { display: flex; align-items: center; gap: 12px; text-align: left; color: var(--ps-ben-c, var(--color-text)); font-size: var(--ps-ben-s); font-weight: 700; line-height: 1.3; }
+  #shopify-section-{{ sid }} .ps-check { flex: 0 0 auto; width: calc(var(--ps-ben-s) + 6px); height: calc(var(--ps-ben-s) + 6px); color: var(--ps-check-c, var(--color-heading)); }
+  #shopify-section-{{ sid }} .ps-check svg { width: 100%; height: 100%; display: block; }
+  #shopify-section-{{ sid }} .ps-check-cut { stroke: var(--ps-bg-solid, var(--color-background)); }
+  #shopify-section-{{ sid }} .ps-btn { align-self: center; margin-top: 6px; cursor: pointer; }
+  #shopify-section-{{ sid }} [hidden]:is(.ps-heading, .ps-desc, .ps-rating, .ps-stars, .ps-reviews, .ps-benefits, .ps-benefit, .ps-btn, .ps-arrows, .ps-price) { display: none !important; }
+  #shopify-section-{{ sid }} .ps-slide.is-entering :is(.ps-col-left, .ps-col-center, .ps-col-right) { animation: ps-fade-{{ sid }} .6s ease both; }
+  @keyframes ps-fade-{{ sid }} { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  @media (min-width: 750px) {
+    #shopify-section-{{ sid }} .ps-section { padding-top: var(--ps-pt); padding-bottom: var(--ps-pb); }
+    #shopify-section-{{ sid }} .ps-inner { padding-inline: 24px; }
+    #shopify-section-{{ sid }} .ps-slide { grid-template-columns: 1.05fr 0.95fr 1.05fr; gap: 48px; text-align: left; }
+    #shopify-section-{{ sid }} .ps-col-left { order: 0; align-items: flex-start; gap: 22px; min-height: 100%; align-self: var(--ps-valign); }
+    #shopify-section-{{ sid }} .ps-col-center, #shopify-section-{{ sid }} .ps-col-right { order: 0; }
+    #shopify-section-{{ sid }} .ps-col-right { align-items: stretch; }
+    #shopify-section-{{ sid }} .ps-arrows { margin-top: auto; padding-top: 8px; justify-content: flex-start; }
+    #shopify-section-{{ sid }} .ps-rating, #shopify-section-{{ sid }} .ps-price { justify-content: flex-start; }
+    #shopify-section-{{ sid }} .ps-btn { align-self: flex-start; }
+    #shopify-section-{{ sid }} .ps-heading { font-size: var(--ps-h-d); }
+    #shopify-section-{{ sid }} .ps-desc { font-size: var(--ps-d-d); }
+    #shopify-section-{{ sid }} .ps-price { font-size: calc(var(--ps-d-d) * 1.1); }
   }
-  #shopify-section-{{ section.id }} .ps-desc {
-    font-family: var(--body-font, inherit);
-    margin: 0;
-    color: {% render 'scheme-color', color: s.description_color, fallback: 'var(--color-text)' %};
-    font-size: {{ s.description_size_desktop }}px;
-    font-weight: var(--body-weight, 400);
-    line-height: 1.55;
-  }
-
-  /* Arrows */
-  #shopify-section-{{ section.id }} .ps-arrows { display: flex; gap: 14px; margin-top: auto; padding-top: 8px; }
-  #shopify-section-{{ section.id }} .ps-arrow {
-    width: {{ s.arrow_size }}px;
-    height: {{ s.arrow_size }}px;
-    border-radius: 9999px;
-    border: 1.5px solid {% render 'scheme-color', color: s.arrow_border_color, fallback: 'var(--color-border)' %};
-    background: transparent;
-    color: {% render 'scheme-color', color: s.arrow_color, fallback: 'var(--color-heading)' %};
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    padding: 0;
-    transition: background-color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), border-color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), box-shadow var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), transform var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), opacity var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease);
-  }
-  #shopify-section-{{ section.id }} .ps-arrow:hover { background-color: {% render 'scheme-color', color: s.arrow_color, fallback: 'var(--color-heading)' %}; color: {{ ps_bg }}; transform: translateY(-1px); }
-  #shopify-section-{{ section.id }} .ps-arrow svg { width: 45%; height: 45%; display: block; }
-
-  /* Product image */
-  #shopify-section-{{ section.id }} .ps-image { width: 100%; display: flex; justify-content: center; }
-  #shopify-section-{{ section.id }} .ps-image img {
-    max-width: 100%;
-    max-height: {{ s.image_max_height }}px;
-    height: auto;
-    width: auto;
-    object-fit: contain;
-    display: block;
-    border-radius: {{ s.image_border_radius }}px;
-  }
-  /* Placeholder shows as a 4:3 framed image (Instagram-ish) until a
-     real product image is uploaded. */
-  #shopify-section-{{ section.id }} .ps-image img.ps-placeholder-img {
-    width: 100%;
-    max-width: 460px;
-    aspect-ratio: 4 / 3;
-    max-height: none;
-    object-fit: cover;
-  }
-
-  /* Rating + reviews */
-  #shopify-section-{{ section.id }} .ps-rating { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-  #shopify-section-{{ section.id }} .ps-stars {
-    position: relative;
-    display: inline-block;
-    line-height: 1;
-    font-size: {{ s.star_size }}px;
-    white-space: nowrap;
-  }
-  #shopify-section-{{ section.id }} .ps-stars .ps-stars-base,
-  #shopify-section-{{ section.id }} .ps-stars .ps-stars-fill { letter-spacing: 2px; }
-  #shopify-section-{{ section.id }} .ps-stars .ps-stars-base { color: {% render 'scheme-color', color: s.star_unfilled_color, fallback: 'var(--color-border)' %}; }
-  #shopify-section-{{ section.id }} .ps-stars .ps-stars-fill {
-    color: {% render 'scheme-color', color: s.star_filled_color, fallback: 'var(--color-primary)' %};
-    position: absolute; top: 0; left: 0; overflow: hidden;
-  }
-  #shopify-section-{{ section.id }} .ps-reviews {
-    font-family: var(--body-font, inherit);
-    color: {% render 'scheme-color', color: s.reviews_color, fallback: 'var(--color-text)' %};
-    font-size: {{ s.reviews_size }}px;
-    font-weight: 600;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
-  #shopify-section-{{ section.id }} a.ps-reviews { opacity: 1; transition: background-color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), border-color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), box-shadow var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), transform var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), opacity var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease); }
-  #shopify-section-{{ section.id }} a.ps-reviews:hover { opacity: .8; }
-
-  /* Benefits */
-  #shopify-section-{{ section.id }} .ps-benefits { display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 0; list-style: none; }
-  #shopify-section-{{ section.id }} .ps-benefit {
-    font-family: var(--body-font, inherit);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: {% render 'scheme-color', color: s.benefit_color, fallback: 'var(--color-text)' %};
-    font-size: {{ s.benefit_size }}px;
-    font-weight: 700;
-    line-height: 1.3;
-  }
-  #shopify-section-{{ section.id }} .ps-check {
-    flex: 0 0 auto;
-    width: {{ s.benefit_size | plus: 6 }}px;
-    height: {{ s.benefit_size | plus: 6 }}px;
-    color: {% render 'scheme-color', color: s.check_color, fallback: 'var(--color-heading)' %};
-  }
-  #shopify-section-{{ section.id }} .ps-check svg { width: 100%; height: 100%; display: block; }
-
-  /* The button is a theme button (theme-button-contract.css): Theme settings >
-     Buttons draw it; colours set here, and the shape when the theme style is
-     off, are passed as tokens by the button-overrides snippet. */
-  #shopify-section-{{ section.id }} .ps-btn {
-    align-self: flex-start;
-    margin-top: 6px;
-    cursor: pointer;
-  }
-
-  /* Reveal (uses theme scroll-trigger if present; gentle local fallback) */
-  #shopify-section-{{ section.id }} .ps-slide.is-active .ps-col-left,
-  #shopify-section-{{ section.id }} .ps-slide.is-active .ps-col-center,
-  #shopify-section-{{ section.id }} .ps-slide.is-active .ps-col-right { animation: ps-fade-{{ section.id }} .6s ease both; }
-  @keyframes ps-fade-{{ section.id }} { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
-
-  /* ===================== MOBILE ===================== */
-  @media (max-width: 749px) {
-    #shopify-section-{{ section.id }} .ps-section {
-      padding-top: {{ s.padding_top_mobile }}px;
-      padding-bottom: {{ s.padding_bottom_mobile }}px;
-    }
-    #shopify-section-{{ section.id }} .ps-slide {
-      grid-template-columns: 1fr;
-      gap: 22px;
-      text-align: center;
-    }
-    #shopify-section-{{ section.id }} .ps-col-center { order: 1; }
-    #shopify-section-{{ section.id }} .ps-col-left { order: 2; align-items: center; }
-    #shopify-section-{{ section.id }} .ps-col-right { order: 3; align-items: center; }
-    #shopify-section-{{ section.id }} .ps-rating,
-    #shopify-section-{{ section.id }} .ps-arrows { justify-content: center; }
-    #shopify-section-{{ section.id }} .ps-btn { align-self: center; }
-    #shopify-section-{{ section.id }} .ps-benefit { text-align: left; }
-    #shopify-section-{{ section.id }} .ps-heading { font-size: {{ s.heading_size_mobile }}px; }
-    #shopify-section-{{ section.id }} .ps-desc { font-size: {{ s.description_size_mobile }}px; }
-  }
-
   @media (prefers-reduced-motion: reduce) {
-    #shopify-section-{{ section.id }} .ps-track,
-    #shopify-section-{{ section.id }} .ps-arrow { transition: none; }
-    #shopify-section-{{ section.id }} .ps-arrow:hover { transform: none; }
-    #shopify-section-{{ section.id }} .ps-slide.is-active .ps-col-left,
-    #shopify-section-{{ section.id }} .ps-slide.is-active .ps-col-center,
-    #shopify-section-{{ section.id }} .ps-slide.is-active .ps-col-right { animation: none; }
+    #shopify-section-{{ sid }} .ps-track, #shopify-section-{{ sid }} .ps-arrow { transition: none; }
+    #shopify-section-{{ sid }} .ps-slide.is-entering :is(.ps-col-left, .ps-col-center, .ps-col-right) { animation: none; }
   }
 {% comment %}{% endcomment %}</style>
 
-<div class="ps-section color-{{ color_scheme }} gradient">
+<div class="ps-section color-{{ color_scheme }} gradient" data-pb-root="product-showcase" data-pb-section="{{ sid }}" data-pb-settings="{{ pb_json | escape }}" data-pb-defaults='{"color_scheme":"default-color-scheme","section_width":"fluid_container","content_max_width":1300,"left_vertical_align":"center","image_max_height":560,"image_border_radius":12,"show_arrows":true,"arrow_size":48,"autoplay":false,"autoplay_speed":6,"enable_custom_style":false,"enable_gradient":false,"gradient_degrees":"135deg","check_icon_style":"check","use_theme_button":true,"button_radius":8,"button_padding_v":18,"button_padding_h":44,"button_font_size":17,"enable_custom_fonts":false,"heading_font":"assistant_n4","body_font":"assistant_n4","heading_size_desktop":56,"heading_use_custom_weight":false,"heading_weight":"800","heading_letter_spacing":0,"heading_uppercase":"none","description_size_desktop":19,"star_size":26,"reviews_size":17,"benefit_size":18,"padding_top":80,"padding_bottom":80,"heading_size_mobile":34,"description_size_mobile":16,"padding_top_mobile":48,"padding_bottom_mobile":48}' data-pb-block-defaults='{"slide":{"heading":"Your Product Name","description":"Describe your product in a sentence or two. Highlight what makes it different and why customers keep coming back for it.","button_text":"Shop Now","benefit_1":"Benefit number one","benefit_2":"Benefit number two","benefit_3":"Benefit number three","benefit_4":"Benefit number four","star_rating":0}}' data-pb-fallback-href="{{ routes.all_products_collection_url | default: '/collections/all' }}" data-width="{{ s.section_width | default: 'fluid_container' }}" data-autoplay="{% if s.autoplay %}true{% else %}false{% endif %}" data-autoplay-speed="{{ s.autoplay_speed | default: 6 }}" style="{{ ps_vars | strip_newlines | strip }}">
+  <template data-pb-icon="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="20 6 9 17 4 12"/></svg></template><template data-pb-icon="check_circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><polyline points="16.5 8.8 10.5 15.2 7.5 12.2"/></svg></template><template data-pb-icon="check_circle_filled"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="11"/><path class="ps-check-cut" d="M17 8.5 L10.4 15.4 L7 12.1" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></template><template data-pb-icon="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><line x1="4" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></template><template data-pb-icon="star"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><polygon points="12 2 14.7 8.6 21.8 9.2 16.4 13.9 18.1 20.8 12 17.1 5.9 20.8 7.6 13.9 2.2 9.2 9.3 8.6"/></svg></template><template data-pb-icon="plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" focusable="false"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></template>
   <div class="ps-inner">
-    <div class="ps-viewport">
+    <div class="ps-viewport" role="region" aria-roledescription="carousel" aria-label="{{ 'general.slider' | t | default: 'Products' }}" data-ps-viewport>
       <div class="ps-track" data-ps-track>
         {%- for block in section.blocks -%}
-          {%- assign b = block.settings -%}
-          <div class="ps-slide{% if forloop.first %} is-active{% endif %}" data-ps-slide {{ block.shopify_attributes }}>
-
-            {%- comment -%} LEFT: heading, description, arrows {%- endcomment -%}
+          {%- liquid
+            assign b = block.settings
+            assign p = b.product
+            assign title = b.heading
+            if title == blank and p != blank
+              assign title = p.title | escape
+            endif
+            assign desc = b.description
+            if desc == blank and p != blank
+              assign desc = p.description | strip_html | strip_newlines | truncatewords: 30
+            endif
+            assign img = b.image
+            if img == blank and p != blank
+              assign img = p.featured_media.preview_image | default: p.featured_image
+            endif
+            assign href = b.button_link
+            if href == blank and p != blank
+              assign href = p.url
+            endif
+            assign has_benefit = false
+            for i in (1..5)
+              assign key = 'benefit_' | append: i
+              if b[key] != blank
+                assign has_benefit = true
+              endif
+            endfor
+          -%}
+          {%- capture pb_bjson -%}{%- case block.type -%}{%- when 'slide' -%}{"image":{% if block.settings.image != blank %}{{ block.settings.image | image_url: width: 1600 | json }}{% else %}""{% endif %},"heading":{{ block.settings.heading | append: '' | json }},"description":{{ block.settings.description | append: '' | json }},"button_text":{{ block.settings.button_text | append: '' | json }},"button_link":{{ block.settings.button_link | append: '' | json }},"benefit_1":{{ block.settings.benefit_1 | append: '' | json }},"benefit_2":{{ block.settings.benefit_2 | append: '' | json }},"benefit_3":{{ block.settings.benefit_3 | append: '' | json }},"benefit_4":{{ block.settings.benefit_4 | append: '' | json }},"benefit_5":{{ block.settings.benefit_5 | append: '' | json }},"star_rating":{{ block.settings.star_rating | default: 0 | json }},"reviews_text":{{ block.settings.reviews_text | append: '' | json }},"reviews_link":{{ block.settings.reviews_link | append: '' | json }}}{%- else -%}{}{%- endcase -%}{%- endcapture -%}
+          <div class="ps-slide{% if forloop.first %} is-active{% endif %}" data-ps-slide data-pb-block="{{ block.id }}" data-pb-type="slide" data-pb-settings="{{ pb_bjson | escape }}" data-pb-product="{% if p != blank %}true{% else %}false{% endif %}" role="group" aria-roledescription="slide" aria-label="{{ forloop.index }} / {{ slide_count }}"{% unless forloop.first %} aria-hidden="true" inert{% endunless %} {{ block.shopify_attributes }}>
             <div class="ps-col-left">
-              {%- if b.heading != blank -%}
-                <h2 class="ps-heading">{{ b.heading }}</h2>
+              <h2 class="ps-heading" data-ps-heading{% if title == blank %} hidden{% endif %}>{{ title }}</h2>
+              {%- if p != blank -%}
+                <p class="ps-price" data-ps-price>
+                  {%- if p.compare_at_price > p.price -%}<s>{{ p.compare_at_price | money }}</s>{%- endif -%}
+                  <span>{{ p.price | money }}</span>
+                  {%- unless p.available -%}<span class="ps-price__tag">{{ 'products.product.sold_out' | t }}</span>{%- endunless -%}
+                </p>
               {%- endif -%}
-              {%- if b.description != blank -%}
-                <p class="ps-desc">{{ b.description }}</p>
-              {%- endif -%}
-
-              {%- if section.blocks.size > 1 and s.show_arrows -%}
-                <div class="ps-arrows">
-                  <button type="button" class="ps-arrow" data-ps-prev aria-label="Previous">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+              <p class="ps-desc" data-ps-desc{% if desc == blank %} hidden{% endif %}>{{ desc }}</p>
+              {%- if slide_count > 1 -%}
+                <div class="ps-arrows" data-ps-arrows{% unless s.show_arrows %} hidden{% endunless %}>
+                  <button type="button" class="ps-arrow" data-ps-prev aria-label="{{ 'general.previous' | t | default: 'Previous' }}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
                   </button>
-                  <button type="button" class="ps-arrow" data-ps-next aria-label="Next">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                  <button type="button" class="ps-arrow" data-ps-next aria-label="{{ 'general.next' | t | default: 'Next' }}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                   </button>
                 </div>
               {%- endif -%}
             </div>
-
-            {%- comment -%} CENTER: product image {%- endcomment -%}
             <div class="ps-col-center">
-              <div class="ps-image">
-                {%- if b.image != blank -%}
+              <div class="ps-image" data-ps-image>
+                {%- if img != blank -%}
                   {%- liquid
-                    if forloop.first
+                    assign ps_loading = 'lazy'
+                    if forloop.first and sp_preload
                       assign ps_loading = 'eager'
-                      unless sp_preload
-                        assign ps_loading = 'lazy'
-                      endunless
-                    else
-                      assign ps_loading = 'lazy'
-                      unless sp_lazy
-                        assign ps_loading = 'eager'
-                      endunless
                     endif
                   -%}
                   <img
-                    src="{{ b.image | image_url: width: ps_img_max }}"
-                    srcset="{{ b.image | image_url: width: 360 }} 360w,
-                            {{ b.image | image_url: width: 540 }} 540w,
-                            {{ b.image | image_url: width: 720 }} 720w,
-                            {{ b.image | image_url: width: 960 }} 960w,
-                            {{ b.image | image_url: width: 1200 }} 1200w,
-                            {{ b.image | image_url: width: ps_img_max }} {{ ps_img_max }}w"
+                    src="{{ img | image_url: width: 1400 }}"
+                    srcset="{{ img | image_url: width: 360 }} 360w, {{ img | image_url: width: 720 }} 720w, {{ img | image_url: width: 1080 }} 1080w, {{ img | image_url: width: 1400 }} 1400w"
                     sizes="(max-width: 749px) 90vw, 33vw"
-                    width="{{ b.image.width }}"
-                    height="{{ b.image.height }}"
-                    alt="{{ b.image.alt | default: b.heading | escape }}"
+                    width="{{ img.width }}" height="{{ img.height }}"
+                    alt="{{ img.alt | default: title | strip_html | escape }}"
                     loading="{{ ps_loading }}"
                     {% if forloop.first and sp_preload %}fetchpriority="high"{% endif %}
-                    {% if sp_decode %}decoding="async"{% endif %}>
+                    decoding="async">
                 {%- else -%}
-                  <img class="ps-placeholder-img"
-                    src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22%3E%3Crect width=%22400%22 height=%22300%22 fill=%22%23efefef%22/%3E%3Ccircle cx=%22172%22 cy=%22124%22 r=%2214%22 fill=%22%23cfcfcf%22/%3E%3Cpath d=%22M140 192l40-46 25 28 20-18 35 36z%22 fill=%22%23cfcfcf%22/%3E%3C/svg%3E"
-                    alt="{{ b.heading | escape }}"
-                    width="1200" height="900"
-                    loading="{% if forloop.first %}eager{% else %}lazy{% endif %}"
-                    {% if sp_decode %}decoding="async"{% endif %}>
+                  <svg class="ps-ph" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false"><g fill="currentColor"><circle cx="172" cy="124" r="14"/><path d="M140 192l40-46 25 28 20-18 35 36z"/></g></svg>
                 {%- endif -%}
               </div>
             </div>
-
-            {%- comment -%} RIGHT: rating, benefits, button {%- endcomment -%}
             <div class="ps-col-right">
-              {%- if b.star_rating > 0 or b.reviews_text != blank -%}
-                <div class="ps-rating">
-                  {%- if b.star_rating > 0 -%}
-                    <span class="ps-stars" role="img" aria-label="{{ b.star_rating }} out of 5 stars">
-                      <span class="ps-stars-base" aria-hidden="true">★★★★★</span>
-                      <span class="ps-stars-fill" aria-hidden="true" style="width: {{ b.star_rating | times: 20 }}%;">★★★★★</span>
-                    </span>
-                  {%- endif -%}
-                  {%- if b.reviews_text != blank -%}
-                    {%- if b.reviews_link != blank -%}
-                      <a class="ps-reviews" href="{{ b.reviews_link }}">{{ b.reviews_text }}</a>
-                    {%- else -%}
-                      <span class="ps-reviews">{{ b.reviews_text }}</span>
-                    {%- endif -%}
-                  {%- endif -%}
-                </div>
-              {%- endif -%}
-
-              {%- assign has_benefit = false -%}
-              {%- for i in (1..5) -%}
-                {%- assign key = 'benefit_' | append: i -%}
-                {%- if b[key] != blank -%}{%- assign has_benefit = true -%}{%- endif -%}
-              {%- endfor -%}
-              {%- if has_benefit -%}
-                <ul class="ps-benefits">
-                  {%- for i in (1..5) -%}
-                    {%- assign key = 'benefit_' | append: i -%}
-                    {%- if b[key] != blank -%}
-                      <li class="ps-benefit">
-                        <span class="ps-check">{{ ps_check_svg }}</span>
-                        <span>{{ b[key] }}</span>
-                      </li>
-                    {%- endif -%}
-                  {%- endfor -%}
-                </ul>
-              {%- endif -%}
-
-              {%- if b.button_text != blank -%}
-                <a class="ps-btn" data-theme-button="primary" data-sl-button style="{%- render 'button-overrides', bg: s.button_bg_color, text: s.button_text_color, hover_bg: s.button_bg_hover_color, hover_text: s.button_text_hover_color, custom: ps_custom, radius: s.button_radius, padding_y: s.button_padding_v, padding_x: s.button_padding_h, font_size: s.button_font_size, border_width: 0 -%}" href="{{ b.button_link | default: routes.all_products_collection_url | default: '/collections/all' }}">{{ b.button_text }}</a>
-              {%- endif -%}
+              <div class="ps-rating" data-ps-rating{% unless b.star_rating > 0 or b.reviews_text != blank %} hidden{% endunless %}>
+                <span class="ps-stars" role="img" aria-label="{{ b.star_rating }} / 5" data-ps-stars{% unless b.star_rating > 0 %} hidden{% endunless %}>
+                  <span class="ps-stars-base" aria-hidden="true">★★★★★</span>
+                  <span class="ps-stars-fill" aria-hidden="true" style="width: {{ b.star_rating | times: 20 }}%;">★★★★★</span>
+                </span>
+                {%- if b.reviews_link != blank -%}
+                  <a class="ps-reviews" data-ps-reviews href="{{ b.reviews_link | url }}"{% if b.reviews_text == blank %} hidden{% endif %}>{{ b.reviews_text | escape }}</a>
+                {%- else -%}
+                  <span class="ps-reviews" data-ps-reviews{% if b.reviews_text == blank %} hidden{% endif %}>{{ b.reviews_text | escape }}</span>
+                {%- endif -%}
+              </div>
+              <ul class="ps-benefits" data-ps-benefits{% unless has_benefit %} hidden{% endunless %}>
+                {%- for i in (1..5) -%}
+                  {%- assign key = 'benefit_' | append: i -%}
+                  <li class="ps-benefit" data-ps-benefit="{{ i }}"{% if b[key] == blank %} hidden{% endif %}><span class="ps-check" data-ps-check>{{ ps_check_svg }}</span><span data-ps-benefit-text>{{ b[key] | escape }}</span></li>
+                {%- endfor -%}
+              </ul>
+              <a class="ps-btn" data-theme-button="primary" data-sl-button data-ps-btn href="{{ href | default: routes.all_products_collection_url | default: '/collections/all' }}"{% if b.button_text == blank %} hidden{% endif %}>{{ b.button_text | escape }}</a>
             </div>
-
           </div>
         {%- endfor -%}
       </div>
     </div>
   </div>
 </div>
-
-<script>
-  (function () {
-  function initPs() {
-    var root = document.getElementById('shopify-section-{{ section.id }}');
-    if (!root) return;
-    if (root.__psCleanup) { root.__psCleanup(); root.__psCleanup = null; }
-    var track = root.querySelector('[data-ps-track]');
-    if (!track || track.__psInit) return;
-    track.__psInit = true;
-    var slides = track.querySelectorAll('[data-ps-slide]');
-    var count = slides.length;
-    if (count <= 1) return;
-
-    var index = 0;
-    var autoplay = {{ s.autoplay | json }};
-    var speed = {{ s.autoplay_speed | default: 6 }} * 1000;
-    var timer = null;
-
-    function render() {
-      track.style.transform = 'translateX(' + (-index * 100) + '%)';
-      for (var k = 0; k < slides.length; k++) {
-        slides[k].classList.toggle('is-active', k === index);
-      }
-    }
-    function go(to) { index = (to + count) % count; render(); }
-
-    root.querySelectorAll('[data-ps-prev]').forEach(function (el) {
-      el.addEventListener('click', function () { go(index - 1); restart(); });
-    });
-    root.querySelectorAll('[data-ps-next]').forEach(function (el) {
-      el.addEventListener('click', function () { go(index + 1); restart(); });
-    });
-
-    /* ---- Real-time touch swipe (mobile) ---- */
-    var viewport = root.querySelector('.ps-viewport');
-    var startX = 0, startY = 0, dx = 0, dragging = false, locked = false, vw = 0;
-    if (viewport) {
-      viewport.addEventListener('touchstart', function (e) {
-        if (count <= 1) return;
-        dragging = true; locked = false; dx = 0;
-        startX = e.touches[0].clientX;
-        startY = e.touches[0].clientY;
-        vw = viewport.clientWidth || 1;
-        track.style.transition = 'none';
-        stop();
-      }, { passive: true });
-
-      viewport.addEventListener('touchmove', function (e) {
-        if (!dragging) return;
-        var mx = e.touches[0].clientX - startX;
-        var my = e.touches[0].clientY - startY;
-        /* Decide intent once: horizontal => drive the slider, vertical
-           => let the page scroll and bail out of the swipe. */
-        if (!locked) {
-          if (Math.abs(mx) < 6 && Math.abs(my) < 6) return;
-          if (Math.abs(my) > Math.abs(mx)) { dragging = false; track.style.transition = ''; render(); start(); return; }
-          locked = true;
-        }
-        dx = mx;
-        /* resist past the first/last edge so it feels natural */
-        if ((index === 0 && dx > 0) || (index === count - 1 && dx < 0)) dx *= 0.35;
-        track.style.transform = 'translateX(calc(' + (-index * 100) + '% + ' + dx + 'px))';
-      }, { passive: true });
-
-      function endSwipe() {
-        if (!dragging) return;
-        dragging = false;
-        track.style.transition = '';
-        var threshold = vw * 0.18;
-        if (dx <= -threshold) go(index + 1);
-        else if (dx >= threshold) go(index - 1);
-        else render();
-        dx = 0;
-        start();
-      }
-      viewport.addEventListener('touchend', endSwipe);
-      viewport.addEventListener('touchcancel', endSwipe);
-    }
-
-    var onScreen = true;
-    function start() { if (autoplay && onScreen && !timer && document.body.contains(track)) { timer = setInterval(function () { if (!document.body.contains(track)) { stop(); return; } go(index + 1); }, speed); } }
-    function stop() { if (timer) { clearInterval(timer); timer = null; } }
-    function restart() { stop(); start(); }
-
-    root.addEventListener('mouseenter', stop);
-    root.addEventListener('mouseleave', start);
-
-    var io = null;
-    if (autoplay && 'IntersectionObserver' in window) {
-      io = new IntersectionObserver(function (entries) {
-        onScreen = entries[0].isIntersecting;
-        if (onScreen) start(); else stop();
-      });
-      io.observe(root);
-    }
-    root.__psCleanup = function () {
-      stop();
-      root.removeEventListener('mouseenter', stop);
-      root.removeEventListener('mouseleave', start);
-      if (io) io.disconnect();
-    };
-
-    render();
-    start();
-  }
-  initPs();
-  window.__psListen = window.__psListen || {};
-  if (!window.__psListen['{{ section.id }}']) {
-    window.__psListen['{{ section.id }}'] = true;
-    document.addEventListener('storelib:section-load', function (e) {
-      if (e.detail && e.detail.sectionId === '{{ section.id }}') initPs();
-    });
-  }
-  })();
-{% comment %}{% endcomment %}</script>
-
-
-
 </template>
 
 <schema>
@@ -1248,7 +947,13 @@
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "select",
@@ -1279,12 +984,6 @@
         ]
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
-      },
-      {
         "type": "range",
         "id": "content_max_width",
         "label": "Custom max width",
@@ -1293,6 +992,35 @@
         "default": 1300,
         "step": 10,
         "visible_if": "{{ section.settings.section_width == 'custom' }}"
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "left_vertical_align",
+        "label": "Heading column position",
+        "default": "center",
+        "options": [
+          {
+            "value": "start",
+            "label": "Top"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "end",
+            "label": "Bottom"
+          }
+        ],
+        "info": "Desktop."
+      },
+      {
+        "type": "header",
+        "content": "Images"
       },
       {
         "type": "range",
@@ -1313,96 +1041,81 @@
         "step": 1
       },
       {
-        "type": "select",
-        "id": "left_vertical_align",
-        "label": "Text position",
-        "default": "center",
-        "options": [
-          {
-            "value": "start",
-            "label": "Top"
-          },
-          {
-            "value": "center",
-            "label": "Center"
-          },
-          {
-            "value": "end",
-            "label": "Bottom"
-          }
-        ]
-      },
-      {
         "type": "header",
-        "content": "Spacing"
+        "content": "Slider"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_arrows",
+        "label": "Show arrows",
+        "default": true,
+        "info": "With two or more slides."
       },
       {
         "type": "range",
-        "id": "padding_top",
-        "label": "Top Padding (Desktop)",
-        "min": 0,
-        "max": 100,
-        "default": 80,
-        "step": 1
-      },
-      {
-        "type": "range",
-        "id": "padding_bottom",
-        "label": "Bottom Padding (Desktop)",
-        "min": 0,
-        "max": 100,
-        "default": 80,
-        "step": 1
-      },
-      {
-        "type": "range",
-        "id": "padding_top_mobile",
-        "label": "Top Padding (Mobile)",
-        "min": 0,
-        "max": 100,
+        "id": "arrow_size",
+        "label": "Arrow size",
+        "min": 30,
+        "max": 80,
         "default": 48,
         "step": 1
       },
       {
+        "type": "checkbox",
+        "id": "autoplay",
+        "label": "Auto-rotate slides",
+        "default": false,
+        "info": "Stops on hover, off screen and when visitors prefer reduced motion."
+      },
+      {
         "type": "range",
-        "id": "padding_bottom_mobile",
-        "label": "Bottom Padding (Mobile)",
-        "min": 0,
-        "max": 100,
-        "default": 48,
-        "step": 1
+        "id": "autoplay_speed",
+        "label": "Change slide every (seconds)",
+        "min": 3,
+        "max": 15,
+        "default": 6,
+        "step": 1,
+        "visible_if": "{{ section.settings.autoplay }}"
       },
       {
         "type": "header",
-        "content": "Background"
+        "content": "Appearance"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Enable custom styling",
+        "default": false
       },
       {
         "type": "color",
         "id": "background_color",
-        "label": "Background Color"
+        "label": "Background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
       },
       {
         "type": "checkbox",
         "id": "enable_gradient",
         "label": "Background gradient",
-        "default": false
+        "default": false,
+        "visible_if": "{{ section.settings.enable_custom_style }}"
       },
       {
         "type": "color",
         "id": "gradient_color_1",
-        "label": "Gradient Color 1",
-        "visible_if": "{{ section.settings.enable_gradient }}"
+        "label": "Gradient color 1",
+        "visible_if": "{{ section.settings.enable_custom_style and section.settings.enable_gradient }}"
       },
       {
         "type": "color",
         "id": "gradient_color_2",
-        "label": "Gradient Color 2",
-        "visible_if": "{{ section.settings.enable_gradient }}"
+        "label": "Gradient color 2",
+        "visible_if": "{{ section.settings.enable_custom_style and section.settings.enable_gradient }}"
       },
       {
         "type": "select",
         "id": "gradient_degrees",
-        "label": "Gradient Direction",
+        "label": "Gradient direction",
         "default": "135deg",
         "options": [
           {
@@ -1430,33 +1143,195 @@
             "label": "270°"
           }
         ],
-        "visible_if": "{{ section.settings.enable_gradient }}"
-      },
-      {
-        "type": "header",
-        "content": "Heading"
+        "visible_if": "{{ section.settings.enable_custom_style and section.settings.enable_gradient }}"
       },
       {
         "type": "color",
         "id": "heading_color",
-        "label": "Heading Color"
+        "label": "Heading",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "description_color",
+        "label": "Description",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "star_filled_color",
+        "label": "Stars",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "star_unfilled_color",
+        "label": "Empty stars",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "reviews_color",
+        "label": "Reviews text",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "benefit_color",
+        "label": "Benefits text",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "check_color",
+        "label": "Benefit icon",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "arrow_color",
+        "label": "Arrows",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "arrow_border_color",
+        "label": "Arrow border",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "button_bg_color",
+        "label": "Button background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "button_text_color",
+        "label": "Button text",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "button_bg_hover_color",
+        "label": "Button background (hover)",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "button_text_hover_color",
+        "label": "Button text (hover)",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "select",
+        "id": "check_icon_style",
+        "label": "Benefit icon",
+        "default": "check",
+        "options": [
+          {
+            "value": "check",
+            "label": "Checkmark"
+          },
+          {
+            "value": "check_circle",
+            "label": "Check in circle"
+          },
+          {
+            "value": "check_circle_filled",
+            "label": "Check in filled circle"
+          },
+          {
+            "value": "arrow",
+            "label": "Arrow"
+          },
+          {
+            "value": "star",
+            "label": "Star"
+          },
+          {
+            "value": "plus",
+            "label": "Plus"
+          }
+        ]
+      },
+      {
+        "type": "checkbox",
+        "id": "use_theme_button",
+        "label": "Match theme button",
+        "default": true
+      },
+      {
+        "type": "range",
+        "id": "button_radius",
+        "label": "Button corner radius",
+        "min": 0,
+        "max": 40,
+        "default": 8,
+        "step": 1,
+        "visible_if": "{{ section.settings.use_theme_button == false }}"
+      },
+      {
+        "type": "range",
+        "id": "button_padding_v",
+        "label": "Button padding y",
+        "min": 6,
+        "max": 40,
+        "default": 18,
+        "step": 1,
+        "visible_if": "{{ section.settings.use_theme_button == false }}"
+      },
+      {
+        "type": "range",
+        "id": "button_padding_h",
+        "label": "Button padding x",
+        "min": 12,
+        "max": 90,
+        "default": 44,
+        "step": 1,
+        "visible_if": "{{ section.settings.use_theme_button == false }}"
+      },
+      {
+        "type": "range",
+        "id": "button_font_size",
+        "label": "Button text size",
+        "min": 10,
+        "max": 30,
+        "default": 17,
+        "step": 1,
+        "visible_if": "{{ section.settings.use_theme_button == false }}"
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Enable custom fonts",
+        "default": false
+      },
+      {
+        "type": "font_picker",
+        "id": "heading_font",
+        "label": "Heading font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Body font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
       },
       {
         "type": "range",
         "id": "heading_size_desktop",
-        "label": "Heading Size (Desktop)",
+        "label": "Heading size (desktop)",
         "min": 20,
         "max": 120,
         "default": 56,
-        "step": 1
-      },
-      {
-        "type": "range",
-        "id": "heading_size_mobile",
-        "label": "Heading Size (Mobile)",
-        "min": 16,
-        "max": 80,
-        "default": 34,
         "step": 1
       },
       {
@@ -1501,7 +1376,7 @@
       {
         "type": "range",
         "id": "heading_letter_spacing",
-        "label": "Heading Letter Spacing",
+        "label": "Heading letter spacing",
         "min": -2,
         "max": 10,
         "default": 0,
@@ -1510,7 +1385,7 @@
       {
         "type": "select",
         "id": "heading_uppercase",
-        "label": "Heading Case",
+        "label": "Heading case",
         "default": "none",
         "options": [
           {
@@ -1519,27 +1394,18 @@
           },
           {
             "value": "uppercase",
-            "label": "UPPERCASE"
+            "label": "Upper"
           },
           {
             "value": "capitalize",
-            "label": "Capitalize"
+            "label": "Title"
           }
         ]
       },
       {
-        "type": "header",
-        "content": "Description"
-      },
-      {
-        "type": "color",
-        "id": "description_color",
-        "label": "Description Color"
-      },
-      {
         "type": "range",
         "id": "description_size_desktop",
-        "label": "Description Size (Desktop)",
+        "label": "Description size (desktop)",
         "min": 12,
         "max": 36,
         "default": 19,
@@ -1547,219 +1413,92 @@
       },
       {
         "type": "range",
-        "id": "description_size_mobile",
-        "label": "Description Size (Mobile)",
-        "min": 11,
-        "max": 28,
-        "default": 16,
-        "step": 1
-      },
-      {
-        "type": "header",
-        "content": "Stars & Reviews"
-      },
-      {
-        "type": "color",
-        "id": "star_filled_color",
-        "label": "Filled Star Color"
-      },
-      {
-        "type": "color",
-        "id": "star_unfilled_color",
-        "label": "Unfilled Star Color"
-      },
-      {
-        "type": "range",
         "id": "star_size",
-        "label": "Star Size",
+        "label": "Star size",
         "min": 12,
         "max": 48,
         "default": 26,
         "step": 1
       },
       {
-        "type": "color",
-        "id": "reviews_color",
-        "label": "Reviews Text Color"
-      },
-      {
         "type": "range",
         "id": "reviews_size",
-        "label": "Reviews Text Size",
+        "label": "Reviews text size",
         "min": 10,
         "max": 30,
         "default": 17,
         "step": 1
       },
       {
-        "type": "header",
-        "content": "Benefits"
-      },
-      {
-        "type": "select",
-        "id": "check_icon_style",
-        "label": "Benefit icon",
-        "default": "check",
-        "options": [
-          {
-            "value": "check",
-            "label": "Checkmark"
-          },
-          {
-            "value": "check_circle",
-            "label": "Check in circle"
-          },
-          {
-            "value": "check_circle_filled",
-            "label": "Check in filled circle"
-          },
-          {
-            "value": "arrow",
-            "label": "Arrow"
-          },
-          {
-            "value": "star",
-            "label": "Star"
-          },
-          {
-            "value": "plus",
-            "label": "Plus"
-          }
-        ]
-      },
-      {
-        "type": "color",
-        "id": "benefit_color",
-        "label": "Benefit Text Color"
-      },
-      {
         "type": "range",
         "id": "benefit_size",
-        "label": "Benefit Text Size",
+        "label": "Benefits text size",
         "min": 12,
         "max": 32,
         "default": 18,
         "step": 1
       },
       {
-        "type": "color",
-        "id": "check_color",
-        "label": "Icon color"
-      },
-      {
         "type": "header",
-        "content": "Button"
-      },
-      {
-        "type": "color",
-        "id": "button_bg_color",
-        "label": "Button Background"
-      },
-      {
-        "type": "color",
-        "id": "button_text_color",
-        "label": "Button Text"
-      },
-      {
-        "type": "color",
-        "id": "button_bg_hover_color",
-        "label": "Button hover background"
-      },
-      {
-        "type": "color",
-        "id": "button_text_hover_color",
-        "label": "Button hover text"
-      },
-      {
-        "type": "checkbox",
-        "id": "use_theme_button",
-        "label": "Use theme button style",
-        "default": true
+        "content": "Desktop spacing"
       },
       {
         "type": "range",
-        "id": "button_radius",
-        "label": "Button Corner Radius",
+        "id": "padding_top",
+        "label": "Top padding (desktop)",
         "min": 0,
-        "max": 40,
-        "default": 8,
-        "step": 1,
-        "visible_if": "{{ section.settings.use_theme_button == false }}"
+        "max": 100,
+        "default": 80,
+        "step": 1
       },
       {
         "type": "range",
-        "id": "button_padding_v",
-        "label": "Button Padding Vertical",
-        "min": 6,
-        "max": 40,
-        "default": 18,
-        "step": 1,
-        "visible_if": "{{ section.settings.use_theme_button == false }}"
-      },
-      {
-        "type": "range",
-        "id": "button_padding_h",
-        "label": "Button Padding Horizontal",
-        "min": 12,
-        "max": 90,
-        "default": 44,
-        "step": 1,
-        "visible_if": "{{ section.settings.use_theme_button == false }}"
-      },
-      {
-        "type": "range",
-        "id": "button_font_size",
-        "label": "Button Text Size",
-        "min": 10,
-        "max": 30,
-        "default": 17,
-        "step": 1,
-        "visible_if": "{{ section.settings.use_theme_button == false }}"
+        "id": "padding_bottom",
+        "label": "Bottom padding (desktop)",
+        "min": 0,
+        "max": 100,
+        "default": 80,
+        "step": 1
       },
       {
         "type": "header",
-        "content": "Slider"
-      },
-      {
-        "type": "checkbox",
-        "id": "show_arrows",
-        "label": "Show arrows",
-        "default": true
+        "content": "Mobile"
       },
       {
         "type": "range",
-        "id": "arrow_size",
-        "label": "Arrow size",
-        "min": 30,
+        "id": "heading_size_mobile",
+        "label": "Heading size (mobile)",
+        "min": 16,
         "max": 80,
+        "default": 34,
+        "step": 1
+      },
+      {
+        "type": "range",
+        "id": "description_size_mobile",
+        "label": "Description size (mobile)",
+        "min": 11,
+        "max": 28,
+        "default": 16,
+        "step": 1
+      },
+      {
+        "type": "range",
+        "id": "padding_top_mobile",
+        "label": "Top padding (mobile)",
+        "min": 0,
+        "max": 100,
         "default": 48,
         "step": 1
       },
       {
-        "type": "color",
-        "id": "arrow_color",
-        "label": "Arrow Color"
-      },
-      {
-        "type": "color",
-        "id": "arrow_border_color",
-        "label": "Arrow Border Color"
-      },
-      {
-        "type": "checkbox",
-        "id": "autoplay",
-        "label": "Autoplay Slides",
-        "default": false
-      },
-      {
         "type": "range",
-        "id": "autoplay_speed",
-        "label": "Autoplay Speed (seconds)",
-        "min": 3,
-        "max": 15,
-        "default": 6,
-        "step": 1,
-        "visible_if": "{{ section.settings.autoplay }}"
+        "id": "padding_bottom_mobile",
+        "label": "Bottom padding (mobile)",
+        "min": 0,
+        "max": 100,
+        "default": 48,
+        "step": 1
       }
     ],
     "blocks": [
@@ -1768,57 +1507,42 @@
         "name": "Slide",
         "settings": [
           {
-            "type": "header",
-            "content": "Image"
+            "type": "product",
+            "id": "product",
+            "label": "Product",
+            "info": "Gives the slide its picture, title, price and link. The fields below replace them."
           },
           {
             "type": "image_picker",
             "id": "image",
-            "label": "Product Image"
+            "label": "Image",
+            "info": "Empty: the product picture."
           },
           {
-            "type": "header",
-            "content": "Text"
-          },
-          {
-            "type": "text",
+            "type": "inline_richtext",
             "id": "heading",
             "label": "Heading",
-            "default": "Your Product Name"
+            "default": "Your Product Name",
+            "info": "Empty: the product title."
           },
           {
             "type": "textarea",
             "id": "description",
             "label": "Description",
-            "default": "Describe your product in a sentence or two. Highlight what makes it different and why customers keep coming back for it."
-          },
-          {
-            "type": "header",
-            "content": "Rating"
-          },
-          {
-            "type": "range",
-            "id": "star_rating",
-            "label": "Star Rating",
-            "min": 0,
-            "max": 5,
-            "default": 4.5,
-            "step": 0.5
+            "default": "Describe your product in a sentence or two. Highlight what makes it different and why customers keep coming back for it.",
+            "info": "Empty: the start of the product description."
           },
           {
             "type": "text",
-            "id": "reviews_text",
-            "label": "Reviews Text",
-            "default": "1,200+ Reviews"
+            "id": "button_text",
+            "label": "Button label",
+            "default": "Shop Now"
           },
           {
             "type": "url",
-            "id": "reviews_link",
-            "label": "Reviews Link"
-          },
-          {
-            "type": "header",
-            "content": "Benefits"
+            "id": "button_link",
+            "label": "Button link",
+            "info": "Empty: the product page."
           },
           {
             "type": "text",
@@ -1850,19 +1574,25 @@
             "label": "Benefit 5"
           },
           {
-            "type": "header",
-            "content": "Button"
+            "type": "range",
+            "id": "star_rating",
+            "label": "Star rating",
+            "min": 0,
+            "max": 5,
+            "default": 0,
+            "step": 0.5,
+            "info": "0 hides the stars."
           },
           {
             "type": "text",
-            "id": "button_text",
-            "label": "Button Text",
-            "default": "Shop Now"
+            "id": "reviews_text",
+            "label": "Reviews text",
+            "info": "For example the number of reviews the product has."
           },
           {
             "type": "url",
-            "id": "button_link",
-            "label": "Button Link"
+            "id": "reviews_link",
+            "label": "Reviews link"
           }
         ]
       }
@@ -1877,8 +1607,6 @@
             "settings": {
               "heading": "Your First Product",
               "description": "Describe your product in a sentence or two. Highlight what makes it different and why customers keep coming back for it.",
-              "star_rating": 4.5,
-              "reviews_text": "1,200+ Reviews",
               "benefit_1": "Benefit number one",
               "benefit_2": "Benefit number two",
               "benefit_3": "Benefit number three",
@@ -1891,8 +1619,6 @@
             "settings": {
               "heading": "Your Second Product",
               "description": "Swap in your own copy here. Each slide is its own product with its own image, rating, benefits and button.",
-              "star_rating": 5,
-              "reviews_text": "980+ Reviews",
               "benefit_1": "Highlight a key feature",
               "benefit_2": "Add a reason to buy",
               "benefit_3": "Mention a guarantee",

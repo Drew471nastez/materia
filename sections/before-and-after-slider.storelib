@@ -54,12 +54,41 @@
     assign cols = wide | append: ' 1fr'
   endif
   assign start = st.start_percent | default: 50
+  # Heading, text and button are blocks. The old section settings
+  # (headline, content, link_text, link) are drawn only when the section
+  # has no block of that type, so instances saved before the blocks keep
+  # their words.
+  assign has_heading_block = false
+  assign has_sub_block = false
+  assign has_button_block = false
+  assign block_text = false
+  for block in section.blocks
+    case block.type
+      when 'heading'
+        assign has_heading_block = true
+      when 'subheading'
+        assign has_sub_block = true
+      when 'button'
+        assign has_button_block = true
+    endcase
+    if block.settings.text != blank
+      assign block_text = true
+    endif
+  endfor
+  assign legacy_heading = false
+  if has_heading_block == false and st.headline != blank
+    assign legacy_heading = true
+  endif
+  assign legacy_content = false
+  if has_sub_block == false and st.content != blank
+    assign legacy_content = true
+  endif
   assign show_button = false
-  if st.enable_button and st.link_text != blank
+  if has_button_block == false and st.enable_button and st.link_text != blank
     assign show_button = true
   endif
   assign show_text = false
-  if st.headline != blank or st.content != blank or show_button
+  if legacy_heading or legacy_content or show_button or block_text
     assign show_text = true
   endif
   assign before_alt = st.before_image.alt | default: st.before_caption | strip_html | default: 'Before'
@@ -68,6 +97,7 @@
 -%}
 <style>
   {%- if st.enable_custom_fonts %}{% if st.heading_font.family %}{{ st.heading_font | font_face: font_display: 'swap' }}{% endif %}{% if st.body_font.family %}{{ st.body_font | font_face: font_display: 'swap' }}{% endif %}{% endif %}
+  {%- for block in section.blocks %}{% if block.settings.enable_custom_fonts and block.settings.font.family %}{{ block.settings.font | font_face: font_display: 'swap' }}{% endif %}{% endfor %}
   #shopify-section-{{ sid }} {
     isolation: isolate;
     position: relative;
@@ -138,8 +168,12 @@
   #shopify-section-{{ sid }} .bas__container { position: relative; max-width: var(--bas-max); margin: 0 auto; padding: var(--bas-cpad-y-m) var(--bas-cpad-x-m); }
   #shopify-section-{{ sid }} .bas__grid { display: flex; flex-direction: column; gap: var(--bas-el-gap); }
   #shopify-section-{{ sid }} .bas__text { display: flex; flex-direction: column; gap: var(--bas-el-gap); padding-bottom: var(--bas-text-gap); text-align: var(--bas-align); min-width: 0; }
-  #shopify-section-{{ sid }} .bas__heading { margin: 0; font-family: var(--bas-heading-font); font-size: var(--bas-heading-size-m); line-height: var(--bas-heading-lh); color: var(--bas-heading-color) !important; }
-  #shopify-section-{{ sid }} .bas__content { font-family: var(--bas-body-font); font-size: var(--bas-text-size); line-height: var(--bas-text-lh); color: var(--bas-text-color) !important; }
+  #shopify-section-{{ sid }} .bas__heading { margin: 0; font-family: var(--bas-font, var(--bas-heading-font)); font-size: var(--bas-heading-size-m); line-height: var(--bas-heading-lh); color: var(--bas-c, var(--bas-heading-color)) !important; }
+  #shopify-section-{{ sid }} .bas__content { font-family: var(--bas-font, var(--bas-body-font)); font-size: var(--bas-text-size); line-height: var(--bas-text-lh); color: var(--bas-c, var(--bas-text-color)) !important; }
+  #shopify-section-{{ sid }} :is(.bas__heading, .bas__content)[data-weight="true"] { font-weight: var(--bas-w); }
+  #shopify-section-{{ sid }} :is(.bas__heading, .bas__content)[data-weight="true"] > * { font-weight: inherit; }
+  #shopify-section-{{ sid }} .bas__heading[data-size="true"] { font-size: var(--bas-size-m); line-height: var(--bas-lh); letter-spacing: var(--bas-track); }
+  #shopify-section-{{ sid }} .bas__content[data-size="true"] { font-size: var(--bas-size); line-height: var(--bas-lh); }
   #shopify-section-{{ sid }} .bas__content > * { margin: 0 0 var(--bas-el-gap); font-size: inherit; line-height: inherit; color: inherit; }
   #shopify-section-{{ sid }} .bas__content > :last-child { margin-bottom: 0; }
   #shopify-section-{{ sid }} .bas__content li { margin: 0 0 5px; }
@@ -161,6 +195,7 @@
     #shopify-section-{{ sid }} .bas[data-show="mobile"] { display: none; }
     #shopify-section-{{ sid }} .bas__container { padding: var(--bas-cpad-y-d) var(--bas-cpad-x-d); }
     #shopify-section-{{ sid }} .bas__heading { font-size: var(--bas-heading-size-d); }
+    #shopify-section-{{ sid }} .bas__heading[data-size="true"] { font-size: var(--bas-size-d); }
     #shopify-section-{{ sid }} .bas:is([data-location="left"], [data-location="right"]) .bas__grid:has(> .bas__text:not([hidden])) { display: grid; grid-template-columns: var(--bas-cols); align-items: center; column-gap: var(--bas-col-gap); }
     #shopify-section-{{ sid }} .bas[data-location="left"] .bas__media { grid-column: 1; grid-row: 1; }
     #shopify-section-{{ sid }} .bas[data-location="left"] .bas__text { grid-column: 2; grid-row: 1; }
@@ -170,22 +205,69 @@
   @media (min-width: 1200px) {
     #shopify-section-{{ sid }} .bas[data-width="stretch_width"] { padding-inline: 3rem; }
   }
+  {%- for block in section.blocks -%}
+    {%- assign bs = block.settings -%}
+    {%- case block.type -%}
+      {%- when 'heading' %}
+  #shopify-section-{{ sid }} [data-bam-block="{{ block.id }}"] {
+    --bas-c: {% if bs.enable_custom_style %}{% render 'scheme-color', color: bs.color, fallback: 'var(--bas-heading-color)' %}{% else %}var(--bas-heading-color){% endif %};
+    --bas-font: {% if bs.enable_custom_fonts and bs.font.family %}{{ bs.font.family }}, {{ bs.font.fallback_families | default: 'sans-serif' }}{% else %}var(--bas-heading-font){% endif %};
+    --bas-w: {{ bs.weight | default: 700 }};
+    --bas-size-d: {{ bs.size_desktop | default: 36 }}px;
+    --bas-size-m: {{ bs.size_mobile | default: 30 }}px;
+    --bas-lh: {{ bs.line_height | default: 1.1 }};
+    --bas-track: {{ bs.tracking | default: 0 }}px;
+  }
+      {%- when 'subheading' %}
+  #shopify-section-{{ sid }} [data-bam-block="{{ block.id }}"] {
+    --bas-c: {% if bs.enable_custom_style %}{% render 'scheme-color', color: bs.color, fallback: 'var(--bas-text-color)' %}{% else %}var(--bas-text-color){% endif %};
+    --bas-font: {% if bs.enable_custom_fonts and bs.font.family %}{{ bs.font.family }}, {{ bs.font.fallback_families | default: 'sans-serif' }}{% else %}var(--bas-body-font){% endif %};
+    --bas-w: {{ bs.weight | default: 400 }};
+    --bas-size: {{ bs.size | default: 17 }}px;
+    --bas-lh: {{ bs.line_height | default: 1.4 }};
+  }
+    {%- endcase -%}
+  {%- endfor %}
 {% comment %}{% endcomment %}</style>
 {% render 'media-ba-compare-style', sid: sid %}
 {%- capture cta_style -%}{%- if custom -%}{%- render 'button-overrides', bg: st.button_background_color, text: st.button_text_color -%}{%- endif -%}{%- if st.use_theme_button == false -%}{%- render 'button-overrides', custom: true, radius: st.button_border_radius, padding_y: st.button_padding_tb, padding_x: st.button_padding_lr, font_size: st.button_text_size -%}{%- endif -%}{%- endcapture -%}
-<div class="bas color-{{ color_scheme }} gradient" data-bam-root="slider" data-bam-section="{{ sid }}" data-bam-settings="{{ st | json | escape }}" data-bam-defaults='{"color_scheme":"default-color-scheme","section_width":"full_width","show_on_device":"all","reset_spacing":true,"headline":"<strong>Before and after</strong>","content":"<p>Present comparisons between two images, for showcasing product benefits.</p>","before_caption":"Before","after_caption":"After","enable_button":true,"text_alignment":"center","media_location":"bottom","horizontal_gap":100,"container_max_width":850,"element_spacing":21,"headline_spacing":15,"media_aspect_ratio":"16 / 9","media_radius":5,"image_shadow":"none","start_percent":50,"show_bar":true,"vertical_line_weight":3,"bar_opacity":75,"show_circle":true,"circle_icon":"icon2","circle_opacity":95,"use_theme_button":true,"button_text_size":14,"button_padding_tb":9,"button_padding_lr":23,"button_border_radius":5,"button_hover_animation":"fade-in","enable_custom_style":false,"enable_custom_fonts":false,"heading_font":"assistant_n4","body_font":"assistant_n4","headline_size":36,"headline_line_height":"1.0","text_size":17,"text_line_height":"1.4","reveal":true,"section_padding_top_bottom":30,"section_padding_left_right":25,"container_padding_top_bottom":10,"container_padding_left_right":10,"section_margin_top_desktop":0,"section_margin_bottom_desktop":0,"mobile_headline_size":38,"mobile_section_padding_top_bottom":30,"mobile_section_padding_left_right":25,"mobile_container_padding_top_bottom":10,"mobile_container_padding_left_right":0,"section_margin_top_mobile":0,"section_margin_bottom_mobile":0}' data-bam-placeholder="{{ placeholder | escape }}" data-width="{{ st.section_width }}" data-show="{{ st.show_on_device | default: 'all' }}" data-location="{{ st.media_location | default: 'bottom' }}" data-shadow="{{ st.image_shadow | default: 'none' }}">
+<div class="bas color-{{ color_scheme }} gradient" data-bam-root="slider" data-bam-section="{{ sid }}" data-bam-settings="{{ st | json | escape }}" data-bam-defaults='{"color_scheme":"default-color-scheme","section_width":"full_width","show_on_device":"all","reset_spacing":true,"before_caption":"Before","after_caption":"After","enable_button":true,"text_alignment":"center","media_location":"bottom","horizontal_gap":100,"container_max_width":850,"element_spacing":21,"headline_spacing":15,"media_aspect_ratio":"16 / 9","media_radius":5,"image_shadow":"none","start_percent":50,"show_bar":true,"vertical_line_weight":3,"bar_opacity":75,"show_circle":true,"circle_icon":"icon2","circle_opacity":95,"use_theme_button":true,"button_text_size":14,"button_padding_tb":9,"button_padding_lr":23,"button_border_radius":5,"button_hover_animation":"fade-in","enable_custom_style":false,"enable_custom_fonts":false,"heading_font":"assistant_n4","body_font":"assistant_n4","headline_size":36,"headline_line_height":"1.0","text_size":17,"text_line_height":"1.4","reveal":true,"section_padding_top_bottom":30,"section_padding_left_right":25,"container_padding_top_bottom":10,"container_padding_left_right":10,"section_margin_top_desktop":0,"section_margin_bottom_desktop":0,"mobile_headline_size":38,"mobile_section_padding_top_bottom":30,"mobile_section_padding_left_right":25,"mobile_container_padding_top_bottom":10,"mobile_container_padding_left_right":0,"section_margin_top_mobile":0,"section_margin_bottom_mobile":0}' data-bam-block-defaults='{"heading":{"text":"<strong>Before and after</strong>","enable_custom_style":false,"weight_enable":false,"weight":"700","size_enable":false,"size_desktop":36,"size_mobile":30,"line_height":1.1,"tracking":0,"enable_custom_fonts":false,"font":"assistant_n4"},"subheading":{"text":"<p>Present comparisons between two images, for showcasing product benefits.</p>","enable_custom_style":false,"weight_enable":false,"weight":"400","size_enable":false,"size":17,"line_height":1.4,"enable_custom_fonts":false,"font":"assistant_n4"},"button":{"text":"Shop now","link":"/collections/all","enable_custom_style":false,"use_theme_button":true,"border_width":0,"radius":5,"size":14,"weight_enable":false,"weight":"600","pad_x":23,"pad_y":9}}' data-bam-placeholder="{{ placeholder | escape }}" data-width="{{ st.section_width }}" data-show="{{ st.show_on_device | default: 'all' }}" data-location="{{ st.media_location | default: 'bottom' }}" data-shadow="{{ st.image_shadow | default: 'none' }}">
   <div class="bas__container">
     <div class="bas__grid">
       <div class="bas__text"{% unless show_text %} hidden{% endunless %}>
-        <h2 class="bas__heading" data-bam-text="headline"{% if st.headline == blank %} hidden{% endif %}>{{ st.headline }}</h2>
-        <div class="bas__content" data-bam-text="content"{% if st.content == blank %} hidden{% endif %}>{{ st.content }}</div>
-        <div class="bas__actions"{% unless show_button %} hidden{% endunless %}>
+        {%- unless has_heading_block -%}
+          <h2 class="bas__heading" data-bam-text="headline"{% unless legacy_heading %} hidden{% endunless %}>{{ st.headline }}</h2>
+        {%- endunless -%}
+        {%- unless has_sub_block -%}
+          <div class="bas__content" data-bam-text="content"{% unless legacy_content %} hidden{% endunless %}>{{ st.content }}</div>
+        {%- endunless -%}
+        {%- for block in section.blocks -%}
+          {%- assign bs = block.settings -%}
+          {%- case block.type -%}
+            {%- when 'heading' -%}
+              <h2 class="bas__heading" data-bam-block="{{ block.id }}" data-bam-type="heading" data-bam-settings="{{ bs | json | escape }}" data-size="{% if bs.size_enable %}true{% else %}false{% endif %}" data-weight="{% if bs.weight_enable %}true{% else %}false{% endif %}"{% if bs.text == blank %} hidden{% endif %} {{ block.shopify_attributes }}>{{ bs.text }}</h2>
+            {%- when 'subheading' -%}
+              <div class="bas__content" data-bam-block="{{ block.id }}" data-bam-type="subheading" data-bam-settings="{{ bs | json | escape }}" data-size="{% if bs.size_enable %}true{% else %}false{% endif %}" data-weight="{% if bs.weight_enable %}true{% else %}false{% endif %}"{% if bs.text == blank %} hidden{% endif %} {{ block.shopify_attributes }}>{{ bs.text }}</div>
+            {%- when 'button' -%}
+              {%- capture btn_style -%}{%- if bs.enable_custom_style -%}{%- render 'button-overrides', bg: bs.bg, text: bs.color, border: bs.border_color, hover_bg: bs.bg_hover, hover_text: bs.color_hover -%}{%- endif -%}{%- if bs.use_theme_button == false -%}{%- if bs.weight_enable -%}{%- assign btn_weight = bs.weight -%}{%- else -%}{%- assign btn_weight = nil -%}{%- endif -%}{%- render 'button-overrides', custom: true, radius: bs.radius, padding_y: bs.pad_y, padding_x: bs.pad_x, font_size: bs.size, weight: btn_weight, border_width: bs.border_width -%}{%- endif -%}{%- endcapture -%}
+              <div class="bas__actions" data-bam-button-wrap{% if bs.text == blank %} hidden{% endif %} {{ block.shopify_attributes }}>
+                {%- if bs.link != blank -%}
+                  <a class="bas__cta" href="{{ bs.link }}" data-bam-block="{{ block.id }}" data-bam-type="button" data-bam-settings="{{ bs | json | escape }}" data-theme-button="primary" data-sl-button data-button-role="primary"{% if btn_style != blank %} style="{{ btn_style | strip }}"{% endif %}>{{ bs.text | escape }}</a>
+                {%- else -%}
+                  <button class="bas__cta" type="button" data-bam-block="{{ block.id }}" data-bam-type="button" data-bam-settings="{{ bs | json | escape }}" data-theme-button="primary" data-sl-button data-button-role="primary"{% if btn_style != blank %} style="{{ btn_style | strip }}"{% endif %}>{{ bs.text | escape }}</button>
+                {%- endif -%}
+              </div>
+          {%- endcase -%}
+        {%- endfor -%}
+        {%- unless has_button_block -%}
+        <div class="bas__actions" data-bam-legacy-button{% unless show_button %} hidden{% endunless %}>
           {%- if st.link != blank -%}
             <a class="bas__cta" href="{{ st.link }}" data-bam-cta data-theme-button="primary" data-sl-button data-button-role="primary"{% if st.use_theme_button == false and st.button_hover_animation != 'none' %} data-hover-anim="{{ st.button_hover_animation }}"{% endif %}{% if cta_style != blank %} style="{{ cta_style | strip }}"{% endif %}>{{ st.link_text }}</a>
           {%- else -%}
             <button class="bas__cta" type="button" data-bam-cta data-theme-button="primary" data-sl-button data-button-role="primary"{% if st.use_theme_button == false and st.button_hover_animation != 'none' %} data-hover-anim="{{ st.button_hover_animation }}"{% endif %}{% if cta_style != blank %} style="{{ cta_style | strip }}"{% endif %}>{{ st.link_text }}</button>
           {%- endif -%}
         </div>
+        {%- endunless -%}
       </div>
       <div class="bas__media">
         <div class="bam-compare" data-bam-compare data-bar="{% if st.show_bar == false %}false{% else %}true{% endif %}" data-circle="{% if st.show_circle == false %}false{% else %}true{% endif %}" style="--bam-pos: {{ start }}%;">
@@ -1077,13 +1159,15 @@
         "type": "inline_richtext",
         "id": "headline",
         "label": "Heading",
-        "default": "<strong>Before and after</strong>"
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Heading block"
       },
       {
         "type": "richtext",
         "id": "content",
         "label": "Text",
-        "default": "<p>Present comparisons between two images, for showcasing product benefits.</p>"
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Subheading block"
       },
       {
         "type": "inline_richtext",
@@ -1101,19 +1185,25 @@
         "type": "checkbox",
         "id": "enable_button",
         "label": "Show button",
-        "default": true
+        "default": true,
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Button block"
       },
       {
         "type": "inline_richtext",
         "id": "link_text",
         "label": "Button label",
-        "visible_if": "{{ section.settings.enable_button }}"
+        "visible_if": "{{ section.settings.enable_button }}",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Button block"
       },
       {
         "type": "url",
         "id": "link",
         "label": "Button link",
-        "visible_if": "{{ section.settings.enable_button }}"
+        "visible_if": "{{ section.settings.enable_button }}",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Button block"
       },
       {
         "type": "text_alignment",
@@ -1377,15 +1467,13 @@
         "visible_if": "{{ section.settings.show_circle }}"
       },
       {
-        "type": "header",
-        "content": "Button"
-      },
-      {
         "type": "checkbox",
         "id": "use_theme_button",
         "label": "Match theme button",
         "default": true,
-        "visible_if": "{{ section.settings.enable_button }}"
+        "visible_if": "{{ section.settings.enable_button }}",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Button block"
       },
       {
         "type": "range",
@@ -1396,7 +1484,9 @@
         "unit": "px",
         "label": "Button text size",
         "default": 14,
-        "visible_if": "{{ section.settings.enable_button and section.settings.use_theme_button == false }}"
+        "visible_if": "{{ section.settings.enable_button and section.settings.use_theme_button == false }}",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Button block"
       },
       {
         "type": "range",
@@ -1407,7 +1497,9 @@
         "unit": "px",
         "default": 9,
         "label": "Button padding top and bottom",
-        "visible_if": "{{ section.settings.enable_button and section.settings.use_theme_button == false }}"
+        "visible_if": "{{ section.settings.enable_button and section.settings.use_theme_button == false }}",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Button block"
       },
       {
         "type": "range",
@@ -1418,7 +1510,9 @@
         "unit": "px",
         "default": 23,
         "label": "Button padding left and right",
-        "visible_if": "{{ section.settings.enable_button and section.settings.use_theme_button == false }}"
+        "visible_if": "{{ section.settings.enable_button and section.settings.use_theme_button == false }}",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Button block"
       },
       {
         "type": "range",
@@ -1429,7 +1523,9 @@
         "unit": "px",
         "default": 5,
         "label": "Button corner radius",
-        "visible_if": "{{ section.settings.enable_button and section.settings.use_theme_button == false }}"
+        "visible_if": "{{ section.settings.enable_button and section.settings.use_theme_button == false }}",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Button block"
       },
       {
         "type": "select",
@@ -1450,7 +1546,9 @@
           }
         ],
         "default": "fade-in",
-        "visible_if": "{{ section.settings.enable_button and section.settings.use_theme_button == false }}"
+        "visible_if": "{{ section.settings.enable_button and section.settings.use_theme_button == false }}",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Button block"
       },
       {
         "type": "header",
@@ -1514,13 +1612,17 @@
         "type": "color",
         "id": "button_background_color",
         "label": "Button background",
-        "visible_if": "{{ section.settings.enable_custom_style and section.settings.enable_button }}"
+        "visible_if": "{{ section.settings.enable_custom_style and section.settings.enable_button }}",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Button block"
       },
       {
         "type": "color",
         "id": "button_text_color",
         "label": "Button text",
-        "visible_if": "{{ section.settings.enable_custom_style and section.settings.enable_button }}"
+        "visible_if": "{{ section.settings.enable_custom_style and section.settings.enable_button }}",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Button block"
       },
       {
         "type": "header",
@@ -1778,7 +1880,404 @@
     "presets": [
       {
         "name": "Before and After Image Slider",
-        "category": "Features"
+        "category": "Features",
+        "blocks": [
+          {
+            "type": "heading"
+          },
+          {
+            "type": "subheading"
+          },
+          {
+            "type": "button"
+          }
+        ]
+      }
+    ],
+    "blocks": [
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "inline_richtext",
+            "id": "text",
+            "label": "Heading",
+            "default": "<strong>Before and after</strong>"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "weight_enable",
+            "label": "Custom font weight",
+            "default": false
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Weight",
+            "default": "700",
+            "visible_if": "{{ block.settings.weight_enable }}",
+            "options": [
+              {
+                "value": "400",
+                "label": "Normal"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi-bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              },
+              {
+                "value": "800",
+                "label": "Extra-bold"
+              }
+            ]
+          },
+          {
+            "type": "checkbox",
+            "id": "size_enable",
+            "label": "Custom size",
+            "info": "Off: uses the section's heading size.",
+            "default": false
+          },
+          {
+            "type": "range",
+            "id": "size_desktop",
+            "visible_if": "{{ block.settings.size_enable }}",
+            "label": "Size (desktop)",
+            "min": 18,
+            "max": 80,
+            "step": 1,
+            "unit": "px",
+            "default": 36
+          },
+          {
+            "type": "range",
+            "id": "size_mobile",
+            "visible_if": "{{ block.settings.size_enable }}",
+            "label": "Size (mobile)",
+            "min": 16,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 30
+          },
+          {
+            "type": "range",
+            "id": "line_height",
+            "visible_if": "{{ block.settings.size_enable }}",
+            "label": "Line height",
+            "min": 0.9,
+            "max": 2,
+            "step": 0.1,
+            "default": 1.1
+          },
+          {
+            "type": "range",
+            "id": "tracking",
+            "visible_if": "{{ block.settings.size_enable }}",
+            "label": "Letter spacing",
+            "min": -3,
+            "max": 7,
+            "step": 0.1,
+            "unit": "px",
+            "default": 0
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom fonts",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
+          }
+        ]
+      },
+      {
+        "type": "subheading",
+        "name": "Subheading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "richtext",
+            "id": "text",
+            "label": "Text",
+            "default": "<p>Present comparisons between two images, for showcasing product benefits.</p>"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "weight_enable",
+            "label": "Custom font weight",
+            "default": false
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Weight",
+            "default": "400",
+            "visible_if": "{{ block.settings.weight_enable }}",
+            "options": [
+              {
+                "value": "300",
+                "label": "Light"
+              },
+              {
+                "value": "400",
+                "label": "Normal"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi-bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              }
+            ]
+          },
+          {
+            "type": "checkbox",
+            "id": "size_enable",
+            "label": "Custom size",
+            "info": "Off: uses the section's text size.",
+            "default": false
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "visible_if": "{{ block.settings.size_enable }}",
+            "label": "Size",
+            "min": 12,
+            "max": 30,
+            "step": 1,
+            "unit": "px",
+            "default": 17
+          },
+          {
+            "type": "range",
+            "id": "line_height",
+            "visible_if": "{{ block.settings.size_enable }}",
+            "label": "Line height",
+            "min": 1,
+            "max": 2,
+            "step": 0.1,
+            "default": 1.4
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom fonts",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
+          }
+        ]
+      },
+      {
+        "type": "button",
+        "name": "Button",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Label",
+            "default": "Shop now"
+          },
+          {
+            "type": "url",
+            "id": "link",
+            "label": "Link",
+            "default": "/collections/all"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "bg",
+            "label": "Background",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Text color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "bg_hover",
+            "label": "Background (hover)",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "color_hover",
+            "label": "Text color (hover)",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "border_color",
+            "label": "Border color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "header",
+            "content": "Shape and type"
+          },
+          {
+            "type": "checkbox",
+            "id": "use_theme_button",
+            "label": "Match theme button",
+            "default": true
+          },
+          {
+            "type": "range",
+            "id": "border_width",
+            "label": "Border width",
+            "min": 0,
+            "max": 5,
+            "step": 1,
+            "unit": "px",
+            "default": 0,
+            "visible_if": "{{ block.settings.use_theme_button == false }}"
+          },
+          {
+            "type": "range",
+            "id": "radius",
+            "label": "Corner radius",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "unit": "px",
+            "default": 5,
+            "visible_if": "{{ block.settings.use_theme_button == false }}"
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "label": "Text size",
+            "min": 10,
+            "max": 30,
+            "step": 1,
+            "unit": "px",
+            "default": 14,
+            "visible_if": "{{ block.settings.use_theme_button == false }}"
+          },
+          {
+            "type": "checkbox",
+            "id": "weight_enable",
+            "label": "Custom font weight",
+            "default": false,
+            "visible_if": "{{ block.settings.use_theme_button == false }}"
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Weight",
+            "default": "600",
+            "visible_if": "{{ block.settings.use_theme_button == false and block.settings.weight_enable }}",
+            "options": [
+              {
+                "value": "400",
+                "label": "Normal"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semi-bold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "pad_x",
+            "label": "Side padding",
+            "min": 6,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 23,
+            "visible_if": "{{ block.settings.use_theme_button == false }}"
+          },
+          {
+            "type": "range",
+            "id": "pad_y",
+            "label": "Top and bottom padding",
+            "min": 4,
+            "max": 28,
+            "step": 1,
+            "unit": "px",
+            "default": 9,
+            "visible_if": "{{ block.settings.use_theme_button == false }}"
+          }
+        ]
       }
     ]
   }

@@ -96,19 +96,13 @@ const SECTIONS = {
   },
   'before-and-after-slider': {
     bp: 900,
-    settings: {link_text: 'Shop the kit', link: '/collections/all'},
     specs: [
       {id: 'color_scheme', v: 'alt-scheme', p: style('.bas', 'backgroundColor'), want: 'rgb(250, 250, 250)'},
       {id: 'section_width', v: 'fluid_container', p: style('.bas', 'maxWidth'), want: '1530px'},
       {id: 'show_on_device', v: 'mobile', p: visible('.bas__container'), want: {d: false, m: true}},
       {id: 'reset_spacing', v: false, p: resetSibling, want: '30px'},
-      {id: 'headline', v: '<em>Clean results</em>', p: textOf('.bas__heading'), want: '<em>Clean results</em>'},
-      {id: 'content', v: '<p>Two weeks <strong>apart</strong>.</p>', p: textOf('.bas__content'), want: '<p>Two weeks <strong>apart</strong>.</p>'},
       {id: 'before_caption', v: 'Old', p: textOf('.bam-compare__label--before'), want: 'Old'},
       {id: 'after_caption', v: 'New', p: textOf('.bam-compare__label--after'), want: 'New'},
-      {id: 'enable_button', v: false, p: visible('.bas__cta'), want: false},
-      {id: 'link_text', v: 'Buy the set', p: textOf('.bas__cta'), want: 'Buy the set'},
-      {id: 'link', v: '/pages/kit', p: attrOf('.bas__cta', 'href'), want: '/pages/kit'},
       {id: 'text_alignment', v: 'left', p: style('.bas__text', 'textAlign'), want: 'left'},
       {id: 'media_location', v: 'left', p: t => t.page.evaluate(() => { const m = document.querySelector('#shopify-section-test .bas__media').getBoundingClientRect(), x = document.querySelector('#shopify-section-test .bas__text').getBoundingClientRect(); return m.right <= x.left ? 'media-left' : x.bottom <= m.top ? 'text-above' : 'other'; }), want: {d: 'media-left', m: 'text-above'}},
       {id: 'horizontal_gap', v: 40, with: {media_location: 'right'}, p: style('.bas__grid', 'columnGap'), want: {d: '40px', m: SAME}},
@@ -128,12 +122,6 @@ const SECTIONS = {
       {id: 'show_circle', v: false, p: style('.bam-compare__knob', 'display'), want: 'none'},
       {id: 'circle_icon', v: 'icon3', p: attrOf('.bam-compare__knob', 'data-bam-icon-current'), want: 'icon3', editorOnly: true},
       {id: 'circle_opacity', v: 50, p: style('.bam-compare__knob', 'opacity'), want: '0.5'},
-      {id: 'use_theme_button', v: false, p: style('.bas__cta', 'borderTopLeftRadius'), want: '5px'},
-      {id: 'button_text_size', v: 20, with: {use_theme_button: false}, p: style('.bas__cta', 'fontSize'), want: '20px'},
-      {id: 'button_padding_tb', v: 15, with: {use_theme_button: false}, p: style('.bas__cta', 'paddingTop'), want: '15px'},
-      {id: 'button_padding_lr', v: 31, with: {use_theme_button: false}, p: style('.bas__cta', 'paddingLeft'), want: '31px'},
-      {id: 'button_border_radius', v: 9, with: {use_theme_button: false}, p: style('.bas__cta', 'borderTopLeftRadius'), want: '9px'},
-      {id: 'button_hover_animation', v: 'shadow', with: {use_theme_button: false}, p: hovered('.bas__cta', style('.bas__cta', 'boxShadow')), want: /rgba\(0, 0, 0, 0\.3\) 0px 4px 10px/},
       {id: 'enable_custom_style', v: true, with: {section_background_color: '#abcdef'}, p: style('.bas', 'backgroundColor'), want: 'rgb(171, 205, 239)'},
       {id: 'section_background_color', v: '#112233', with: {enable_custom_style: true}, p: style('.bas', 'backgroundColor'), want: 'rgb(17, 34, 51)'},
       {id: 'headline_color', v: '#ff0000', with: {enable_custom_style: true}, p: style('.bas__heading', 'color'), want: 'rgb(255, 0, 0)'},
@@ -143,8 +131,6 @@ const SECTIONS = {
       {id: 'bar_color', v: '#00ffff', with: {enable_custom_style: true}, p: style('.bam-compare__bar', 'backgroundColor'), want: 'rgb(0, 255, 255)'},
       {id: 'circle_color', v: '#ffff00', with: {enable_custom_style: true}, p: style('.bam-compare__knob', 'backgroundColor'), want: 'rgb(255, 255, 0)'},
       {id: 'circle_icon_color', v: '#ff8800', with: {enable_custom_style: true}, p: style('.bam-compare__knob', 'color'), want: 'rgb(255, 136, 0)'},
-      {id: 'button_background_color', v: '#224466', with: {enable_custom_style: true}, p: style('.bas__cta', 'backgroundColor'), want: 'rgb(34, 68, 102)'},
-      {id: 'button_text_color', v: '#ffcc00', with: {enable_custom_style: true}, p: style('.bas__cta', 'color'), want: 'rgb(255, 204, 0)'},
       {id: 'enable_custom_fonts', v: true, with: {heading_font: VERDANA, body_font: TAHOMA}, p: t => Promise.all([style('.bas__heading', 'fontFamily')(t), style('.bas__content', 'fontFamily')(t)]), want: v => /^Verdana/.test(v[0]) && /^Tahoma/.test(v[1])},
       {id: 'heading_font', v: VERDANA, with: {enable_custom_fonts: true}, p: style('.bas__heading', 'fontFamily'), want: /^Verdana/},
       {id: 'body_font', v: TAHOMA, with: {enable_custom_fonts: true}, p: style('.bas__content', 'fontFamily'), want: /^Tahoma/},
@@ -166,13 +152,73 @@ const SECTIONS = {
       {id: 'mobile_container_padding_left_right', v: 8, p: style('.bas__container', 'paddingLeft'), want: {d: SAME, m: '8px'}},
       {id: 'section_margin_top_mobile', v: 16, p: style(':wrap', 'marginTop'), want: {d: SAME, m: '16px'}},
       {id: 'section_margin_bottom_mobile', v: 12, p: style(':wrap', 'marginBottom'), want: {d: SAME, m: '12px'}},
+      {block: 'heading', id: 'text', v: '<em>Edited</em> heading', p: textOf('.bas__heading'), want: '<em>Edited</em> heading'},
+      {block: 'heading', id: 'enable_custom_style', v: true, with: {color: '#cc0033'}, p: style('.bas__heading', 'color'), want: 'rgb(204, 0, 51)'},
+      {block: 'heading', id: 'color', v: '#00cc33', with: {enable_custom_style: true}, p: style('.bas__heading', 'color'), want: 'rgb(0, 204, 51)'},
+      {block: 'heading', id: 'weight_enable', v: true, with: {weight: '400'}, p: style('.bas__heading', 'fontWeight'), want: '400'},
+      {block: 'heading', id: 'weight', v: '500', with: {weight_enable: true}, p: style('.bas__heading', 'fontWeight'), want: '500'},
+      {block: 'heading', id: 'size_enable', v: true, p: style('.bas__heading', 'fontSize'), want: {d: '36px', m: '30px'}},
+      {block: 'heading', id: 'size_desktop', v: 56, with: {size_enable: true}, p: style('.bas__heading', 'fontSize'), want: {d: '56px', m: '30px'}},
+      {block: 'heading', id: 'size_mobile', v: 26, with: {size_enable: true}, p: style('.bas__heading', 'fontSize'), want: {d: '36px', m: '26px'}},
+      {block: 'heading', id: 'line_height', v: 1.5, with: {size_enable: true}, p: style('.bas__heading', 'lineHeight'), want: {d: '54px', m: '45px'}},
+      {block: 'heading', id: 'tracking', v: 2, with: {size_enable: true}, p: style('.bas__heading', 'letterSpacing'), want: '2px'},
+      {block: 'heading', id: 'enable_custom_fonts', v: true, with: {font: VERDANA}, p: style('.bas__heading', 'fontFamily'), want: /^Verdana/},
+      {block: 'heading', id: 'font', v: TAHOMA, with: {enable_custom_fonts: true}, p: style('.bas__heading', 'fontFamily'), want: /^Tahoma/},
+      {block: 'subheading', id: 'text', v: '<p>One <strong>coat</strong>.</p>', p: textOf('.bas__content'), want: '<p>One <strong>coat</strong>.</p>'},
+      {block: 'subheading', id: 'enable_custom_style', v: true, with: {color: '#cc0033'}, p: style('.bas__content p', 'color'), want: 'rgb(204, 0, 51)'},
+      {block: 'subheading', id: 'color', v: '#00cc33', with: {enable_custom_style: true}, p: style('.bas__content p', 'color'), want: 'rgb(0, 204, 51)'},
+      {block: 'subheading', id: 'weight_enable', v: true, with: {weight: '700'}, p: style('.bas__content p', 'fontWeight'), want: '700'},
+      {block: 'subheading', id: 'weight', v: '300', with: {weight_enable: true}, p: style('.bas__content p', 'fontWeight'), want: '300'},
+      {block: 'subheading', id: 'size_enable', v: true, with: {size: 21}, p: style('.bas__content p', 'fontSize'), want: '21px'},
+      {block: 'subheading', id: 'size', v: 20, with: {size_enable: true}, p: style('.bas__content p', 'fontSize'), want: '20px'},
+      {block: 'subheading', id: 'line_height', v: 2, with: {size_enable: true, size: 20}, p: style('.bas__content p', 'lineHeight'), want: '40px'},
+      {block: 'subheading', id: 'enable_custom_fonts', v: true, with: {font: VERDANA}, p: style('.bas__content p', 'fontFamily'), want: /^Verdana/},
+      {block: 'subheading', id: 'font', v: TAHOMA, with: {enable_custom_fonts: true}, p: style('.bas__content p', 'fontFamily'), want: /^Tahoma/},
+      {block: 'button', id: 'text', v: 'Buy the kit', p: textOf('.bas__cta'), want: 'Buy the kit'},
+      {block: 'button', id: 'link', v: '', p: t => t.page.evaluate(() => document.querySelector('#shopify-section-test .bas__cta').tagName + ' ' + document.querySelector('#shopify-section-test .bas__cta').getAttribute('type')), want: 'BUTTON button'},
+      {block: 'button', id: 'enable_custom_style', v: true, with: {bg: '#224466'}, p: style('.bas__cta', 'backgroundColor'), want: 'rgb(34, 68, 102)'},
+      {block: 'button', id: 'bg', v: '#336633', with: {enable_custom_style: true}, p: style('.bas__cta', 'backgroundColor'), want: 'rgb(51, 102, 51)'},
+      {block: 'button', id: 'color', v: '#ffcc00', with: {enable_custom_style: true}, p: style('.bas__cta', 'color'), want: 'rgb(255, 204, 0)'},
+      {block: 'button', id: 'bg_hover', v: '#00ff00', with: {enable_custom_style: true}, p: hovered('.bas__cta', style('.bas__cta', 'backgroundColor')), want: 'rgb(0, 255, 0)'},
+      {block: 'button', id: 'color_hover', v: '#000000', with: {enable_custom_style: true}, p: hovered('.bas__cta', style('.bas__cta', 'color')), want: 'rgb(0, 0, 0)'},
+      {block: 'button', id: 'border_color', v: '#ff00ff', with: {enable_custom_style: true}, p: style('.bas__cta', 'borderTopColor'), want: 'rgb(255, 0, 255)'},
+      {block: 'button', id: 'use_theme_button', v: false, p: style('.bas__cta', 'borderTopLeftRadius'), want: '5px'},
+      {block: 'button', id: 'border_width', v: 3, with: {use_theme_button: false}, p: style('.bas__cta', 'borderTopWidth'), want: '3px'},
+      {block: 'button', id: 'radius', v: 30, with: {use_theme_button: false}, p: style('.bas__cta', 'borderTopLeftRadius'), want: '30px'},
+      {block: 'button', id: 'size', v: 20, with: {use_theme_button: false}, p: style('.bas__cta', 'fontSize'), want: '20px'},
+      {block: 'button', id: 'weight_enable', v: true, with: {use_theme_button: false, weight: '700'}, p: style('.bas__cta', 'fontWeight'), want: '700'},
+      {block: 'button', id: 'weight', v: '400', with: {use_theme_button: false, weight_enable: true}, p: style('.bas__cta', 'fontWeight'), want: '400'},
+      {block: 'button', id: 'pad_x', v: 40, with: {use_theme_button: false}, p: style('.bas__cta', 'paddingLeft'), want: '40px'},
+      {block: 'button', id: 'pad_y', v: 20, with: {use_theme_button: false}, p: style('.bas__cta', 'paddingTop'), want: '20px'},
     ],
     variants: [
       ['image_shadow', ['none', 'low', 'medium', 'high'], style('.bam-compare', 'boxShadow')],
       ['media_location', ['left', 'right', 'bottom'], t => t.page.evaluate(() => { const m = document.querySelector('#shopify-section-test .bas__media').getBoundingClientRect(); return [Math.round(m.x), Math.round(m.y), Math.round(m.width)].join(); }), 1366],
       ['circle_icon', ['icon1', 'icon2', 'icon3', 'icon10', 'icon11', 'icon12', 'icon13', 'icon14'], t => t.page.locator('#shopify-section-test .bam-compare__knob').screenshot().then(b => b.toString('base64'))],
-      ['button_hover_animation', ['none', 'fade-in', 'shadow'], hovered('.bas__cta', t => t.page.evaluate(() => { const s = getComputedStyle(document.querySelector('#shopify-section-test .bas__cta')); return s.opacity + '|' + s.boxShadow; })), 0, {use_theme_button: false}],
     ],
+    /* Saved instances from before the blocks: no blocks, text in the old section settings. */
+    legacy: {
+      blocks: [],
+      settings: {headline: '<strong>Before and after</strong>', content: '<p>Present comparisons between two images.</p>', link_text: 'Shop the kit', link: '/collections/all'},
+      specs: [
+        {id: 'headline', v: '<em>Clean results</em>', p: textOf('.bas__heading'), want: '<em>Clean results</em>'},
+        {id: 'content', v: '<p>Two weeks <strong>apart</strong>.</p>', p: textOf('.bas__content'), want: '<p>Two weeks <strong>apart</strong>.</p>'},
+        {id: 'enable_button', v: false, p: visible('.bas__cta'), want: false},
+        {id: 'link_text', v: 'Buy the set', p: textOf('.bas__cta'), want: 'Buy the set'},
+        {id: 'link', v: '/pages/kit', p: attrOf('.bas__cta', 'href'), want: '/pages/kit'},
+        {id: 'use_theme_button', v: false, p: style('.bas__cta', 'borderTopLeftRadius'), want: '5px'},
+        {id: 'button_text_size', v: 20, with: {use_theme_button: false}, p: style('.bas__cta', 'fontSize'), want: '20px'},
+        {id: 'button_padding_tb', v: 15, with: {use_theme_button: false}, p: style('.bas__cta', 'paddingTop'), want: '15px'},
+        {id: 'button_padding_lr', v: 31, with: {use_theme_button: false}, p: style('.bas__cta', 'paddingLeft'), want: '31px'},
+        {id: 'button_border_radius', v: 9, with: {use_theme_button: false}, p: style('.bas__cta', 'borderTopLeftRadius'), want: '9px'},
+        {id: 'button_hover_animation', v: 'shadow', with: {use_theme_button: false}, p: hovered('.bas__cta', style('.bas__cta', 'boxShadow')), want: /rgba\(0, 0, 0, 0\.3\) 0px 4px 10px/},
+        {id: 'button_background_color', v: '#224466', with: {enable_custom_style: true}, p: style('.bas__cta', 'backgroundColor'), want: 'rgb(34, 68, 102)'},
+        {id: 'button_text_color', v: '#ffcc00', with: {enable_custom_style: true}, p: style('.bas__cta', 'color'), want: 'rgb(255, 204, 0)'},
+      ],
+      variants: [
+        ['button_hover_animation', ['none', 'fade-in', 'shadow'], hovered('.bas__cta', t => t.page.evaluate(() => { const s = getComputedStyle(document.querySelector('#shopify-section-test .bas__cta')); return s.opacity + '|' + s.boxShadow; })), 0, {use_theme_button: false}],
+      ],
+    },
     images: ['[data-bam-image="before_image"]', '[data-bam-image="after_image"]'],
     unrelated: {section_padding_top_bottom: 40, mobile_section_padding_top_bottom: 20, media_radius: 9, headline: 'Edited heading'},
   },
@@ -392,6 +438,99 @@ async function slider(browser, name, width, editing) {
   await t.page.close();
 }
 
+/* Before and After Slider: heading, subheading and button blocks. Order,
+   add, remove, live edits, two instances, first paint, and the legacy
+   section text drawn only for a type that has no block. */
+async function sliderBlocks(browser, name, cfg) {
+  const order = t => t.page.evaluate(() => [...document.querySelectorAll('#shopify-section-test .bas__text > *')].filter(el => !el.hidden).map(el => el.dataset.bamType || el.querySelector('[data-bam-type]')?.dataset.bamType || el.dataset.bamText || (el.matches('[data-bam-legacy-button]') ? 'legacy-button' : el.className)));
+  const blocks = t => current(t).blocks.map(b => ({type: b.type, settings: b.settings}));
+  for (const width of [375, 1366]) {
+    const t = await mount(browser, name, {width, assets: JS});
+    const tag = `${name} blocks ${width}`;
+    same(await order(t), ['heading', 'subheading', 'button'], tag + ' preset draws heading, subheading, button in order');
+    same(await t.page.locator('#shopify-section-test [data-bam-text="headline"], #shopify-section-test [data-bam-text="content"], #shopify-section-test [data-bam-legacy-button]').count(), 0, tag + ' no legacy elements while every block type exists');
+    // Reorder
+    const [h, sub, btn] = blocks(t);
+    await t.redraw({blocks: [btn, h, sub]});
+    same(await order(t), ['button', 'heading', 'subheading'], tag + ' reorder follows block order');
+    const geo = await t.page.evaluate(() => ['.bas__actions', '.bas__heading', '.bas__content'].map(s => Math.round(document.querySelector('#shopify-section-test ' + s).getBoundingClientRect().y)));
+    ok(geo[0] < geo[1] && geo[1] < geo[2], tag + ' reordered blocks stack in that order ' + geo);
+    // Remove the subheading: no text paragraph, and the empty legacy default stays hidden
+    await t.redraw({blocks: [h, btn]});
+    same(await order(t), ['heading', 'button'], tag + ' removed block is gone');
+    same(await visible('.bas__content')(t), false, tag + ' removed subheading leaves no text');
+    // Add it back, edit it live
+    await t.redraw({blocks: [h, btn, {type: 'subheading', settings: {text: '<p>Added text</p>'}}]});
+    const id = current(t).blocks[2].id;
+    same(await order(t), ['heading', 'button', 'subheading'], tag + ' added block renders last');
+    await t.emit({text: '<p>Edited added</p>'}, id);
+    same(await textOf(`[data-bam-block="${id}"]`)(t), '<p>Edited added</p>', tag + ' added block is live');
+    await t.emit({size_enable: true, size: 22}, id);
+    same(await style(`[data-bam-block="${id}"] p`, 'fontSize')(t), '22px', tag + ' added block size is live');
+    await t.redraw(); await t.redraw();
+    same((await t.page.evaluate(() => window.MateriaBeforeAfterMedia.roots())).map(r => r.listeners), [7], tag + ' one controller, no extra listeners after redraws');
+    // Live edits of every block in the same frame, then all empty hides the text column
+    await t.emit({text: 'Live heading'}, t.blockId('heading'));
+    await t.emit({text: 'Live button', link: '/pages/a'}, t.blockId('button'));
+    same([await textOf('.bas__heading')(t), await textOf('.bas__cta')(t), await attrOf('.bas__cta', 'href')(t)], ['Live heading', 'Live button', '/pages/a'], tag + ' live block text and link');
+    for (const type of ['heading', 'button', 'subheading']) await t.emit({text: ''}, t.blockId(type));
+    same(await t.page.evaluate(() => document.querySelector('#shopify-section-test .bas__text').hidden), true, tag + ' empty blocks hide the text column');
+    if (width === 1366) {
+      await t.emit({media_location: 'left'});
+      same(await style('.bas__grid', 'display')(t), 'flex', tag + ' image takes the full row with no text');
+      await t.emit({text: 'Back'}, t.blockId('heading'));
+      same(await style('.bas__grid', 'display')(t), 'grid', tag + ' text column returns beside the image');
+    }
+    same(t.errors, [], tag + ' errors');
+    await t.page.close();
+  }
+  // Layout settings apply to the block stack
+  {
+    const t = await mount(browser, name, {width: 1366, assets: JS, settings: {media_location: 'right', text_alignment: 'right', element_spacing: 30}});
+    const r = await t.page.evaluate(() => { const q = s => document.querySelector('#shopify-section-test ' + s).getBoundingClientRect(); return {text: q('.bas__text'), media: q('.bas__media'), h: q('.bas__heading'), sub: q('.bas__content'), btn: q('.bas__cta')}; });
+    ok(r.text.right <= r.media.left, 'slider blocks: image right puts the block stack on the left');
+    ok(Math.abs(r.btn.right - r.text.right) <= 1, 'slider blocks: right alignment moves the button');
+    same(Math.round(r.sub.top - r.h.bottom), 30, 'slider blocks: element spacing between blocks');
+    await t.page.close();
+  }
+  // Legacy fallback per type: only the type with no block uses the old setting
+  {
+    const t = await mount(browser, name, {width: 1366, assets: JS, settings: {headline: 'Saved heading', content: '<p>Saved text</p>', link_text: 'Saved button', link: '/pages/saved'}, blocks: [{type: 'heading', settings: {text: 'Block heading'}}]});
+    same(await t.page.locator('#shopify-section-test .bas__heading').count(), 1, 'slider legacy: one heading when a heading block exists');
+    same([await textOf('.bas__heading')(t), await textOf('.bas__content')(t), await textOf('.bas__cta')(t), await attrOf('.bas__cta', 'href')(t)], ['Block heading', '<p>Saved text</p>', 'Saved button', '/pages/saved'], 'slider legacy: block heading, saved text and saved button');
+    same(await order(t), ['content', 'heading', 'legacy-button'], 'slider legacy: saved text, block, saved button');
+    await t.emit({headline: 'Ignored'});
+    same(await textOf('.bas__heading')(t), 'Block heading', 'slider legacy: the old heading setting does not touch the block');
+    await t.emit({content: '<p>Saved text, edited</p>', link_text: 'Saved, edited'});
+    same([await textOf('.bas__content')(t), await textOf('.bas__cta')(t)], ['<p>Saved text, edited</p>', 'Saved, edited'], 'slider legacy: old settings still live where no block exists');
+    same(t.errors, [], 'slider legacy errors');
+    await t.page.close();
+  }
+  // Two instances: a block edit in a leaves b alone
+  {
+    const two = await mount(browser, name, {width: 1366, assets: JS, instances: [{uid: 'a'}, {uid: 'b'}]});
+    await two.emit({text: 'Only in a', enable_custom_style: true, color: '#ff0000'}, two.blockId('heading', 0, 'a'), 'a');
+    same(await two.page.evaluate(() => ['a', 'b'].map(u => { const h = document.querySelector('#shopify-section-' + u + ' .bas__heading'); return h.textContent + '|' + getComputedStyle(h).color; })), ['Only in a|rgb(255, 0, 0)', 'Before and after|' + HEAD], 'slider blocks: instance a edit stays in a');
+    same(two.errors, [], 'slider two instance block errors');
+    await two.page.close();
+  }
+  // First paint equals hydrated paint with custom block values
+  const customBlocks = [
+    {type: 'button', settings: {enable_custom_style: true, bg: '#224466', color: '#ffcc00', border_color: '#ff00ff', use_theme_button: false, radius: 20, size: 18, weight_enable: true, weight: '700', pad_x: 30, pad_y: 12, border_width: 2}},
+    {type: 'heading', settings: {enable_custom_style: true, color: '#cc0033', weight_enable: true, weight: '500', size_enable: true, size_desktop: 50, size_mobile: 28, line_height: 1.3, tracking: 1, enable_custom_fonts: true, font: VERDANA}},
+    {type: 'subheading', settings: {enable_custom_style: true, color: '#00cc33', weight_enable: true, weight: '600', size_enable: true, size: 19, line_height: 1.8, enable_custom_fonts: true, font: TAHOMA}},
+  ];
+  for (const width of [375, 1366]) {
+    const a = await mount(browser, name, {width, assets: [], blocks: customBlocks}), b = await mount(browser, name, {width, assets: JS, blocks: customBlocks});
+    await wait(b.page, 100);
+    const sa = await snapshot(a.page), sb = await snapshot(b.page);
+    same(sb, sa, `${name} ${width}: custom blocks first paint equals hydrated paint`);
+    const fonts = [await style('.bas__heading', 'fontFamily')(b), await style('.bas__content p', 'fontFamily')(b), await style('.bas__cta', 'borderTopLeftRadius')(b)];
+    ok(/^Verdana/.test(fonts[0]) && /^Tahoma/.test(fonts[1]) && fonts[2] === '20px', `${name} ${width}: custom block fonts and shape ${fonts}`);
+    await a.page.close(); await b.page.close();
+  }
+}
+
 (async () => {
   const browser = await launch();
   try {
@@ -405,6 +544,8 @@ async function slider(browser, name, width, editing) {
       const tpl = require('fs').readFileSync(require('path').join(__dirname, '../sections', name + '.storelib'), 'utf8');
       const defaults = JSON.parse(tpl.match(/data-bam-defaults='([^']*)'/)[1]);
       same(defaults, Object.fromEntries(schema.settings.filter(s => s.id && s.default !== undefined).map(s => [s.id, s.default])), name + ' embedded defaults match the schema');
+      const blockDefaults = tpl.match(/data-bam-block-defaults='([^']*)'/);
+      if (blockDefaults) same(JSON.parse(blockDefaults[1]), Object.fromEntries((schema.blocks || []).map(b => [b.type, Object.fromEntries(b.settings.filter(s => s.id && s.default !== undefined).map(s => [s.id, s.default]))])), name + ' embedded block defaults match the schema');
 
       for (const width of [375, 1366]) for (const editing of [true, false]) {
         const t = await mount(browser, name, {width, editing, assets: JS, settings: cfg.settings, blocks: cfg.blocks});
@@ -442,6 +583,20 @@ async function slider(browser, name, width, editing) {
         same(t.errors, [], tag + ' errors');
         await t.page.close();
       }
+
+      // Legacy text settings (no blocks): every old control still works, live and redrawn
+      if (cfg.legacy) for (const width of [375, 1366]) for (const editing of [true, false]) {
+        const t = await mount(browser, name, {width, editing, assets: JS, settings: cfg.legacy.settings, blocks: cfg.legacy.blocks});
+        const tag = `${name} legacy ${width} ${editing ? 'editor' : 'storefront'}`;
+        same([await t.page.locator('#shopify-section-test [data-bam-block]').count(), await t.page.locator('#shopify-section-test .bas__heading').count()], [0, 1], tag + ' draws the legacy heading only');
+        same([await style('.bas__heading', 'color')(t), await style('.bas__heading', 'fontFamily')(t), await style('.bas__content p', 'color')(t), await style('.bas__cta', 'backgroundColor')(t)], [HEAD, 'Georgia', TEXT, 'rgb(18, 52, 86)'], tag + ' legacy text inherits the theme');
+        await controls(t, name, {...cfg, specs: cfg.legacy.specs}, width, editing);
+        if (editing) await variants(t, name, {...cfg, variants: cfg.legacy.variants}, width);
+        ok(await t.noOverflow(), tag + ' no sideways scroll');
+        same(t.errors, [], tag + ' errors');
+        await t.page.close();
+      }
+      if (name === 'before-and-after-slider') await sliderBlocks(browser, name, cfg);
 
       // 8. Two instances stay independent
       const two = await mount(browser, name, {width: 1366, assets: JS, instances: [{uid: 'a', settings: cfg.settings, blocks: cfg.blocks}, {uid: 'b', settings: cfg.settings, blocks: cfg.blocks}]});
