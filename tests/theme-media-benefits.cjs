@@ -336,6 +336,10 @@ async function saved(browser) {
     const s = clone(sec); s.settings.enable_custom_style = true;
     for (const b of Object.values(s.blocks)) b.settings.enable_custom_style = true;
     return s;
+  }, untoggle = (sec) => {
+    const s = clone(sec); delete s.settings.enable_custom_style;
+    for (const b of Object.values(s.blocks)) delete b.settings.enable_custom_style;
+    return s;
   };
   /* the section as last committed before this change */
   let oldRaw; try { oldRaw = execSync('git show e03ef3051f969105d301665d0243d326aa3a98dc:sections/' + name + '.storelib', {cwd: path.join(__dirname, '..'), encoding: 'utf8'}); } catch (_) { return; }
@@ -373,7 +377,7 @@ async function saved(browser) {
         await page.close();
         return r;
       };
-      const was = await look(await renderRaw(oldRaw, fill(s))), now = await look(await renderRaw(newRaw, fill(toggles(s)))), plain = await look(await renderRaw(newRaw, fill(s)));
+      const was = await look(await renderRaw(oldRaw, fill(s))), now = await look(await renderRaw(newRaw, fill(toggles(s)))), plain = await look(await renderRaw(newRaw, fill(untoggle(s))));
       eq(now, was, key + ' @' + width + ' looks the same with the custom styling toggles on');
       ok(plain.bg !== was.bg || plain.h[0] !== was.h[0], key + ' without the toggles it follows the theme (so the toggles are needed)');
       savedCompared++;
