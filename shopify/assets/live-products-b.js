@@ -80,7 +80,10 @@
       const d = parse(v); if (!d.src) return el;
       let img = el.querySelector('img');
       if (!img) { img = document.createElement('img'); img.decoding = 'async'; img.loading = 'lazy'; el.replaceChildren(img); }
-      if (img.getAttribute('src') !== d.src) { img.removeAttribute('srcset'); img.src = d.src; }
+      if (img.getAttribute('src') !== d.src) {
+        img.removeAttribute('srcset');
+        img.src = d.src;
+      }
       img.alt = d.alt || '';
       if (d.w && d.h) { img.width = d.w; img.height = d.h; } else { img.removeAttribute('width'); img.removeAttribute('height'); }
     }

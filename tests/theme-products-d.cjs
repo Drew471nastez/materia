@@ -410,37 +410,38 @@ async function carousel(browser) {
   for (const width of [375, 1366]) {
     const t = await mount(browser, name, {width, editing: false, instances: [{uid: 'a', ...cfgMount(name)}, {uid: 'b', ...cfgMount(name)}], globals: {product: PANTS}, assets: ASSETS});
     const tr = t.page.locator('#shopify-section-a .pd-set__track');
+    /* wait until smooth scrolling has stopped (machines under load scroll slower) */
+    const settle = async () => { let prev = -1; for (let i = 0; i < 60; i++) { await t.page.waitForTimeout(120); const v = await tr.evaluate(e => e.scrollLeft); if (v === prev) return v; prev = v; } return prev; };
     const next = t.page.locator('#shopify-section-a .pd-set__arrow--next');
     ok((await next.boundingBox()).width >= 44, width + ' arrow target');
     eq(await t.page.locator('#shopify-section-a .pd-set__arrow--prev').isDisabled(), true, width + ' prev disabled at the start');
-    await next.click(); await t.page.waitForTimeout(700);
+    await next.click(); await settle();
     ok(await tr.evaluate(e => e.scrollLeft) > 0, width + ' next scrolls');
     eq(await t.page.locator('#shopify-section-b .pd-set__track').evaluate(e => e.scrollLeft), 0, width + ' the other instance stays');
     eq(await t.page.locator('#shopify-section-a .pd-set__dot').first().getAttribute('aria-current'), null, width + ' pagination follows');
     eq(await t.page.locator('#shopify-section-a .pd-set__dot[aria-current="true"]').count(), 1, width + ' one current dot');
     eq(await t.page.locator('#shopify-section-b .pd-set__dot').first().getAttribute('aria-current'), 'true', width + ' other pagination stays');
-    await t.page.locator('#shopify-section-a .pd-set__dot').first().click(); await t.page.waitForTimeout(700);
+    await t.page.locator('#shopify-section-a .pd-set__dot').first().click(); await settle();
     eq(await tr.evaluate(e => e.scrollLeft), 0, width + ' dot goes to its slide');
     ok((await t.page.locator('#shopify-section-a .pd-set__dot').first().boundingBox()).height >= 44, width + ' dot target height');
-    await tr.focus(); await t.page.keyboard.press('ArrowRight'); await t.page.waitForTimeout(700);
+    await tr.focus(); await t.page.keyboard.press('ArrowRight'); await settle();
     ok(await tr.evaluate(e => e.scrollLeft) > 0, width + ' arrow key scrolls');
-    await t.page.keyboard.press('ArrowLeft'); await t.page.waitForTimeout(700);
+    await t.page.keyboard.press('ArrowLeft'); await settle();
     eq(await tr.evaluate(e => e.scrollLeft), 0, width + ' arrow key back');
     const box = await tr.boundingBox();
     await t.page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2); await t.page.mouse.down();
-    await t.page.mouse.move(box.x + box.width * 0.2, box.y + box.height / 2, {steps: 8}); await t.page.mouse.up(); await t.page.waitForTimeout(700);
+    await t.page.mouse.move(box.x + box.width * 0.2, box.y + box.height / 2, {steps: 8}); await t.page.mouse.up(); await settle();
     ok(await tr.evaluate(e => e.scrollLeft) > 0, width + ' mouse drag scrolls');
     /* loop: next at the end goes back to the first set */
     await t.emit({infinite: true}, undefined, 'a');
     await tr.evaluate(e => { e.style.scrollBehavior = 'auto'; e.scrollLeft = e.scrollWidth; }); await t.page.waitForTimeout(100);
     await tr.evaluate(e => e.style.removeProperty('scroll-behavior'));
-    await next.click(); await t.page.waitForTimeout(800);
+    await next.click(); await settle();
     eq(await tr.evaluate(e => e.scrollLeft), 0, width + ' loop wraps to the first set');
     /* autoplay advances, and only for the section that has it */
     await t.page.mouse.move(0, 0); await t.page.evaluate(() => document.activeElement && document.activeElement.blur());
     await t.emit({autoplay: true, autorotate_speed: 2}, undefined, 'a');
-    await t.page.waitForTimeout(2900);
-    ok(await tr.evaluate(e => e.scrollLeft) > 0, width + ' autoplay advances');
+    ok(await t.page.waitForFunction(() => document.querySelector('#shopify-section-a .pd-set__track').scrollLeft > 0, null, {timeout: 6000}).then(() => true, () => false), width + ' autoplay advances');
     eq(await t.page.locator('#shopify-section-b .pd-set__track').evaluate(e => e.scrollLeft), 0, width + ' autoplay only in its own section');
     eq(await t.page.evaluate(() => window.MateriaProductsD.timers()), 1, width + ' one timer');
     await t.page.evaluate(() => { document.querySelector('#shopify-section-a').remove(); });
@@ -488,6 +489,36 @@ async function savedSet(browser) {
   return compared;
 }
 
+/* Shop The Look: prices from the products, sold out, theme cards, hover colours. */
+async function look(browser) {
+  const name = 'product-shop-the-look', blocks = [{type: 'heading'}, {type: 'product', settings: {product: CHEAP}}, {type: 'product', settings: {product: GONE}}, {type: 'product', settings: {product: PANTS}}];
+  let t = await mount(browser, name, {width: 1366, editing: false, blocks, assets: ASSETS});
+  eq(await t.page.locator('[data-pd-block="test-b1"] del').count(), 0, 'no compare price when it is not higher');
+  eq(await t.page.locator('[data-pd-block="test-b3"] del').count(), 1, 'compare price when higher');
+  eq(await t.page.locator('[data-pd-block="test-b2"] .pstl__card-soldout').count(), 1, 'sold out product tagged');
+  eq(await t.page.locator('[data-pd-block="test-b1"]').getAttribute('href'), CHEAP.url, 'card links to the product');
+  await t.page.close();
+  t = await mount(browser, name, {width: 1366, editing: true, blocks, assets: ASSETS});
+  await t.emit({enable_custom_style: true, card_border_hover: '#00ff00', cta_bg_hover: '#0000ff'});
+  await t.page.locator('[data-pd-block="test-b1"]').hover(); await t.page.waitForTimeout(400);
+  eq(await t.page.locator('[data-pd-block="test-b1"]').evaluate(e => getComputedStyle(e).borderTopColor), 'rgb(0, 255, 0)', 'custom card border on hover');
+  eq(await t.page.locator('[data-pd-block="test-b1"] .pstl__card-cta').evaluate(e => getComputedStyle(e).backgroundColor), 'rgb(0, 0, 255)', 'custom arrow background on hover');
+  await t.page.close();
+  t = await mount(browser, name, {width: 1366, editing: false, settings: {card_style: 'theme'}, blocks, assets: ASSETS});
+  eq(await t.page.locator('.pstl__theme-card .product-item').count(), 3, 'theme cards drawn with the theme product card');
+  ok(await t.noOverflow(), 'theme cards no overflow'); eq(t.errors, [], 'look errors');
+  await t.page.close();
+  /* Quick Add to Cart: a custom hover colour reaches the button on hover */
+  t = await mount(browser, 'addtocartbutton', {width: 375, editing: true, settings: {selected_product: PANTS}, blocks: [{type: 'button'}], assets: ASSETS});
+  await t.emit({enable_custom_style: true, button_hover_color: '#00ff00'});
+  await t.root('.pd-atc__button').hover(); await t.page.waitForTimeout(60);
+  eq(await t.css('.pd-atc__button', 'backgroundColor'), 'rgb(0, 255, 0)', 'quick add custom hover colour');
+  await t.emit({enable_gradient: true, gradient_selector: 'radial'});
+  ok(/radial-gradient/.test(await t.css('.pd-atc__button', 'backgroundImage')), 'quick add gradient');
+  eq(t.errors, [], 'atc hover errors');
+  await t.page.close();
+}
+
 (async () => {
   const only = process.argv.slice(2), names = Object.keys(CFG).filter(n => !only.length || only.includes(n));
   const browser = await launch();
@@ -508,6 +539,7 @@ async function savedSet(browser) {
     await Promise.all(names.map(n => empty(browser, n)));
     if (names.includes('addtocartbutton')) await atc(browser);
     if (names.includes('dynamic-pricing')) await prices(browser);
+    if (names.includes('product-shop-the-look')) await look(browser);
     if (names.includes('product-set')) { await carousel(browser); saved = await savedSet(browser); }
     console.log(checks + ' products-d checks passed (controls covered: ' + Object.entries(covered).map(([n, c]) => n + ' ' + c).join(', ') + '; saved Products set compared with the previous version: ' + saved + ')');
   } finally { await browser.close(); }

@@ -61,10 +61,11 @@ const CFG = {
     root: '.ps-section', heading: '.ps-heading', text: '.ps-desc', button: '.ps-btn',
     settings: () => ({}),
     blocks: () => presetBlocks('product-showcase').map((b, i) => i ? b : {...b, settings: {...b.settings, star_rating: 4, reviews_text: '40 reviews'}}),
-    desk: ['left_vertical_align'], mob: [],
+    desk: ['left_vertical_align', 'padding_top', 'padding_bottom'], mob: [],
     structural: ['product'],
     pre: {reviews_link: {reviews_text: '40 reviews'}},
-    vals: {product: [PANTS]},
+    vals: {product: [PANTS], image_max_height: [200]},
+    preBlocks: {image_max_height: b => b.map(x => ({...x, settings: {...x.settings, image: IMG}}))},
     wide: ['section_width', 'content_max_width'],
   },
   'featured-product2': {
@@ -140,9 +141,11 @@ async function addFp(page) {
     };
   });
 }
-const fp = (t, uid = 'test') => t.page.evaluate(u => window.__fp(u), uid);
+const fp = async (t, uid = 'test') => { await t.page.evaluate(u => Promise.all([...document.querySelectorAll('#shopify-section-' + u + ' img')].map(i => { i.loading = 'eager'; return i.decode().catch(() => {}); })), uid); return t.page.evaluate(u => window.__fp(u), uid); };
 const audit = (t, uid = 'test') => t.page.evaluate(u => window.MateriaProductsB.audit(document.querySelector('#shopify-section-' + u + ' [data-pb-root]')), uid);
 const diff = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
+/* The test picture as a real 800x600 image, so a picture drawn live and one drawn by the server size the same. */
+const realPictures = page => page.route('**/pic.png*', r => r.fulfill({body: '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="#888"/></svg>', contentType: 'image/svg+xml'}));
 const SPACING = '.shopify-section{padding-top:7px;padding-bottom:7px} *,*::before,*::after{transition:none!important}'; /* end states: no colour transitions mid-measure */
 const bpOf = name => ({'products-listing': 768, 'products-carousel': 768, 'product-showcase': 750, 'featured-product2': 760})[name];
 
@@ -152,7 +155,7 @@ const bpOf = name => ({'products-listing': 768, 'products-carousel': 768, 'produ
 async function everyControl(browser, name, width) {
   const cfg = CFG[name], {schema} = schemaOf(name);
   const t = await mount(browser, name, {width, editing: true, settings: cfg.settings(), blocks: cfg.blocks(), assets: [ASSET], theme: THEME});
-  await t.page.addStyleTag({content: SPACING}); await addFp(t.page);
+  await t.page.addStyleTag({content: SPACING}); await addFp(t.page); await realPictures(t.page);
   const base = {...clone(t.section.settings), ...cfg.settings()};
   for (const x of schema.settings) if (x.id && !(x.id in base)) base[x.id] = '';
   const baseBlocks = t.section.blocks.map(b => ({type: b.type, settings: clone(b.settings)}));
@@ -425,7 +428,7 @@ async function slider(browser) {
   const name = 'product-showcase';
   for (const width of [375, 1366]) {
     const tag = name + ' slider @' + width;
-    const t = await mount(browser, name, {width, height: 700, editing: false, settings: {autoplay: true, autoplay_speed: 3}, blocks: CFG[name].blocks(), assets: [ASSET], theme: THEME, inlineScripts: true});
+    const t = await mount(browser, name, {width, height: 1800, editing: false, settings: {autoplay: true, autoplay_speed: 3}, blocks: CFG[name].blocks(), assets: [ASSET], theme: THEME, inlineScripts: true});
     const active = () => t.page.evaluate(() => [...document.querySelectorAll('#shopify-section-test [data-ps-slide]')].findIndex(s => s.classList.contains('is-active')));
     const n = await t.root('[data-ps-slide]').count();
     ok(n >= 2, tag + ' several slides');
@@ -442,14 +445,14 @@ async function slider(browser) {
     await t.page.mouse.move(box.x + box.width * 0.2, box.y + 40, {steps: 8}); await t.page.mouse.up(); await t.page.waitForTimeout(80);
     eq(await active(), 2 % n, tag + ': swipe moves to the next slide');
     for (const el of await t.root('.ps-slide.is-active .ps-arrow').all()) { const b = await el.boundingBox(); ok(b.width >= 44 && b.height >= 44, tag + ': arrow 44px'); }
-    await t.root('.ps-slide.is-active [data-ps-next]').focus();
+    await t.page.keyboard.press('Shift'); await t.root('.ps-slide.is-active [data-ps-next]').focus();
     ok(await t.root('.ps-slide.is-active [data-ps-next]').evaluate(e => getComputedStyle(e).outlineStyle !== 'none'), tag + ': visible focus ring');
-    await t.page.evaluate(() => document.activeElement.blur()); await t.page.mouse.move(0, 690);
+    await t.page.evaluate(() => document.activeElement.blur()); await t.page.mouse.move(5, 1795);
     await t.page.waitForTimeout(80);
     eq(await t.root('[data-pb-root]').getAttribute('data-pb-running'), 'true', tag + ': autoplay runs on screen');
     const at = await active(); await t.page.waitForTimeout(3300);
     ok(await active() !== at, tag + ': autoplay moves on');
-    await t.page.evaluate(() => { const s = document.createElement('div'); s.style.height = '3000px'; document.body.prepend(s); });
+    await t.page.evaluate(() => { const s = document.createElement('div'); s.style.height = '4000px'; document.body.prepend(s); });
     await t.page.waitForTimeout(150);
     eq(await t.root('[data-pb-root]').getAttribute('data-pb-running'), 'false', tag + ': autoplay stops off screen');
     await t.page.evaluate(() => document.body.firstElementChild.remove()); await t.page.waitForTimeout(150);
@@ -525,7 +528,7 @@ async function saved(browser) {
       await page.addStyleTag({content: THEME_VARS});
       for (const f of ['critical.css', 'theme.css', 'theme-button-contract.css']) await page.addStyleTag({content: fs.readFileSync(path.join(__dirname, '../shopify/assets', f), 'utf8')});
       await page.evaluate(h => { const w = document.createElement('div'); w.id = 'shopify-section-S'; w.className = 'shopify-section'; w.innerHTML = h; document.body.append(w); }, html);
-      await page.waitForTimeout(50);
+      await page.waitForTimeout(800); /* the old version fades its first slide in */
       const r = await page.evaluate(() => {
         const q = s => document.querySelector('#shopify-section-S ' + s), cs = (s, p) => getComputedStyle(q(s))[p], box = s => { const b = q(s).getBoundingClientRect(); return [b.x, b.y, b.width, b.height].map(Math.round).join(','); };
         return {bg: cs('.ps-section', 'backgroundColor'), pad: [cs('.ps-section', 'paddingTop'), cs('.ps-section', 'paddingBottom')],

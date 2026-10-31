@@ -50,7 +50,8 @@
       const n = key.slice(1);
       if (v == null || v === false) { if (el.hasAttribute(n)) el.removeAttribute(n); }
       else { const s = v === true ? '' : String(v); if (el.getAttribute(n) !== s) el.setAttribute(n, s); }
-    } else if (key === 'hidden') { if (el.hidden !== !!v) el.hidden = !!v; }
+    } else if (key[0] === '.') { const k = key.slice(1); if (v == null || v === '') { if (el.style.getPropertyValue(k) !== '') el.style.removeProperty(k); } else if (el.style.getPropertyValue(k) !== String(v)) el.style.setProperty(k, String(v)); }
+    else if (key === 'hidden') { if (el.hidden !== !!v) el.hidden = !!v; }
     else if (key === 'text') { const s = v == null ? '' : String(v); if (el.textContent !== s) el.textContent = s; }
     else if (key === 'rich') rich(el, v);
     else if (key === 'scheme') { if (typeof v === 'string' && /^[\w-]+$/.test(v) && !el.classList.contains('color-' + v)) { for (const c of [...el.classList]) if (c.startsWith('color-')) el.classList.remove(c); el.classList.add('color-' + v); } }
@@ -194,7 +195,7 @@
       const legacy = {h1: 'h1', h2: 'h2', h3: 'h3'}[hb.heading_size] || 'h2';
       const hStyle = hb.text_style && hb.text_style !== 'medium' ? {large: 'h1', small: 'h3'}[hb.text_style] || 'h2' : legacy;
       put(root, 'scheme', scheme(s));
-      const attrs = {'data-ct-width': s.section_width, 'data-ct-h': hEl ? hStyle : 'h2', 'data-ct-s': sEl ? sb.text_size || 'body' : 'body', 'data-ct-align': s.content_alignment || 'center', 'data-ct-tabs-align': s.tabs_alignment || 'center', 'data-ct-style': style, 'data-ct-switch': s.tab_switch_animation || 'fade', 'data-ct-hc': !!hc, 'data-ct-sc': !!sc, 'data-ct-line': bool(s.show_nav_bottom_border), 'data-ct-full': bool(s.tabs_full_width), 'data-ct-custom': custom, 'data-ct-hover-bg': custom && !!colorOr(s.tab_hover_bg_color), 'data-ct-hover-text': custom && !!colorOr(s.tab_hover_text_color)};
+      const attrs = {'data-ct-animation': s.scroll_animation || 'none', 'data-ct-width': s.section_width, 'data-ct-h': hEl ? hStyle : 'h2', 'data-ct-s': sEl ? sb.text_size || 'body' : 'body', 'data-ct-align': s.content_alignment || 'center', 'data-ct-tabs-align': s.tabs_alignment || 'center', 'data-ct-style': style, 'data-ct-switch': s.tab_switch_animation || 'fade', 'data-ct-hc': !!hc, 'data-ct-sc': !!sc, 'data-ct-line': bool(s.show_nav_bottom_border), 'data-ct-full': bool(s.tabs_full_width), 'data-ct-custom': custom, 'data-ct-hover-bg': custom && !!colorOr(s.tab_hover_bg_color), 'data-ct-hover-text': custom && !!colorOr(s.tab_hover_text_color)};
       for (const k in attrs) put(root, '@' + k, attrs[k]);
       const c = v => custom ? colorOr(v) : '';
       const bwOn = num(s.tab_checked_border_thickness);
@@ -216,6 +217,8 @@
         '--ct-icon': px(s.tab_icon_size, 22), '--ct-empty-color': c(s.empty_state_text_color), '--ct-empty-fs': px(s.empty_state_font_size, 16), '--ct-loadmore-gap': px(s.gap_loadmore, 30),
       };
       for (const k in vars) put(root, k, vars[k]);
+      const wrap = root.closest('.shopify-section'), wide = ctDesktop.matches ? 'desktop' : 'mobile';
+      if (wrap) for (const side of ['top', 'bottom']) if (st.margins || st.changed.has('section_margin_' + side + '_desktop') || st.changed.has('section_margin_' + side + '_mobile')) { st.margins = wrap.__pcMargins = true; put(wrap, '.margin-' + side, px(s['section_margin_' + side + '_' + wide])); }
       if (hEl) { put(hEl, 'rich', hb.heading || ''); put(hEl, 'hidden', blank(hb.heading)); }
       if (sEl) { put(sEl, 'rich', sb.subheading || ''); put(sEl, 'hidden', blank(sb.subheading)); }
       for (const btn of root.querySelectorAll('[data-ct-type="collection"]')) {
@@ -230,8 +233,13 @@
         put(grid, '--col-gap', gap < 15 ? gap + 'px' : '15px'); put(grid, '--col-gap-desktop', gap < 15 ? null : gap + 'px');
       }
       for (const el of root.querySelectorAll('.ti-tabs__empty')) if (s.empty_state_message) put(el, 'text', s.empty_state_message);
-      const lm = root.querySelector('.load-more');
-      if (lm && !root.querySelector('[data-ct-type="view_more"]')) { put(lm.querySelector('.hidden-on-load'), 'text', s.button_label || ''); }
+      const vm = root.querySelector('[data-ct-type="view_more"]'), vb = vm ? st.block(vm) : null, own = vb && bool(vb.custom_style);
+      for (const lm of root.querySelectorAll('.load-more')) {
+        const role = vb ? vb.button_role || 'primary' : 'primary', outline = vb ? vb.appearance === 'outline' : bool(s.use_outline_button_style);
+        put(lm.querySelector('.hidden-on-load'), 'text', vb ? vb.label || '' : s.button_label || '');
+        put(lm, '@data-theme-button', role); put(lm, '@data-button-role', role); put(lm, '@data-button-appearance', outline ? 'outline' : null); put(lm, '@data-button-outline', String(outline));
+        put(lm, '--mb-bg', own ? colorOr(vb.button_background) : null); put(lm, '--mb-text', own ? colorOr(vb.button_text) : null); put(lm, '--mb-border', own ? colorOr(vb.button_border) : null);
+      }
     },
   };
 
@@ -339,6 +347,8 @@
       return b.s;
     };
     if (!ct) bindHotspots(st);
+    const wrap = root.closest('.shopify-section');
+    if (ct && wrap && wrap.__pcMargins) { wrap.style.removeProperty('margin-top'); wrap.style.removeProperty('margin-bottom'); wrap.__pcMargins = false; } // a redraw prints the margins again
     roots.set(root, st);
     st.changed.clear();
     paint(st);
@@ -379,6 +389,7 @@
   }).observe(document.documentElement, {subtree: true, childList: true, attributes: true, attributeFilter: ['data-pch-settings', 'data-ct-settings', 'data-ct-block-settings']});
   let wasDesktop = desktop.matches;
   desktop.addEventListener('change', () => { if (desktop.matches === wasDesktop) return; wasDesktop = desktop.matches; for (const st of roots.values()) if (st.open) close(st, false); });
+  ctDesktop.addEventListener('change', () => { for (const st of roots.values()) if (st.kind === 'ct' && st.margins) schedule(st); });
   window.MateriaProductsC = {scan, stats: () => ({roots: roots.size, listeners: [...roots.values()].reduce((n, st) => n + st.listeners, 0), paints: [...roots.values()].map(st => st.paints)}), state: root => roots.get(root)};
   scan();
 })();

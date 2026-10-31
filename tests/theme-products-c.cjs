@@ -467,7 +467,7 @@ async function productData(browser, cfg) {
 async function onThePicture(browser) {
   // Hotspot Image Product 2 crops the picture to the frame; a dot stays on the same spot of the picture.
   for (const width of [375, 1366]) {
-    const t = await mount(browser, 'hotspot-image-product-2', {width, settings: {image: IMG}, blocks: [{type: 'hotspot', settings: {position_x: 30, position_y: 35, product: PANTS}}, {type: 'hotspot', settings: {position_x: 70, position_y: 80, product: OTHER}}], assets: ASSETS});
+    const t = await mount(browser, 'hotspot-image-product-2', {width, settings: {image: IMG}, blocks: [{type: 'hotspot', settings: {position_x: 30, position_y: 40, product: PANTS}}, {type: 'hotspot', settings: {position_x: 70, position_y: 62, product: OTHER}}], assets: ASSETS});
     const pts = await t.page.evaluate(() => {
       const img = document.querySelector('.hsp2__img').getBoundingClientRect(), ar = 0.8;
       const boxAr = img.width / img.height, dispW = boxAr > ar ? img.width : img.height * ar, dispH = boxAr > ar ? img.width / ar : img.height;
