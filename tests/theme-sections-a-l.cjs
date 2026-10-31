@@ -64,6 +64,42 @@ function withSnippets(text, seen = new Set()) {
   return out;
 }
 
+// The cached script or stylesheet a section links ('x.js' | asset_url) reads its
+// settings too: the section hands them over as JSON (data-hp3-settings) and the
+// script reads b.id or s['id'], or the CSS reads the custom property the
+// section writes. Only the section's own linked files count.
+function linkedAssets(text) {
+  // Also a runtime the layout loads on every page that the section names (shopify/assets/media-live-stats-reels.js).
+  const names = new Set([...text.matchAll(/'([\w.-]+\.(?:js|css))'\s*\|\s*asset_url|shopify\/assets\/([\w.-]+\.(?:js|css))/g)].map(m => m[1] || m[2]));
+  return [...names].map(n => path.join(root, 'shopify/assets', n)).filter(f => fs.existsSync(f)).map(f => fs.readFileSync(f, 'utf8')).join('\n');
+}
+function assetRead(id, assets) {
+  if (!assets) return false;
+  // b.id, b['id'], or the id as a string in a list the script walks (['--hp2-gap','content_gap']).
+  if (new RegExp('(?:\\.|[\'"`])' + esc(id) + '(?![\\w-])').test(assets)) return true;
+  // A key built in a loop: b['benefit_img_'+n], b['pill'+i+'_icon_image'], `avatar_${i}`.
+  const m = id.match(/^(\D*?)(\d+)(\D*)$/);
+  if (!m) return false;
+  const q = '[\'"`]', pre = m[1] ? q + esc(m[1]) + '(?:[\'"`]\\s*\\+\\s*\\w+|\\$\\{\\s*\\w+\\s*\\})' : '', post = m[3] ? '(?:\\s*\\+\\s*' + q + ')?' + esc(m[3]) + q : '(?![\\w])';
+  return !!pre && new RegExp(pre + post).test(assets);
+}
+// A key joined from two literal parts at one '_' (or digit) boundary, in Liquid
+// (prefix | append: '_icon_image') or script (s[id+(d?'_desktop':'_mobile')]):
+// both parts are quoted somewhere in the section, its snippets or its files.
+function builtRead(id, hay) {
+  const q = s => new RegExp('[\'"`]' + esc(s) + '[\'"`]').test(hay);
+  // The second part is joined on: + '_tail', append: '_tail', or one side of (d ? '_desktop' : '_mobile').
+  const joined = s => new RegExp('(?:\\+\\s*\\(?|append:\\s*|[?:]\\s*)[\'"`]' + esc(s) + '[\'"`]').test(hay);
+  const tailNumber = id.match(/^(\w*_)\d+$/);
+  if (tailNumber && q(tailNumber[1])) return true; // (social ? 'ref_avatar_' : 'avatar_') + n
+  const parts = id.replace(/\d+/g, '').split('_');
+  for (let i = 1; i < parts.length; i++) {
+    const head = parts.slice(0, i).join('_'), tail = parts.slice(i).join('_');
+    if (head.length > 2 && tail.length > 1 && (q(head) || q(head + '_')) && joined('_' + tail)) return true;
+  }
+  return false;
+}
+
 // Liquid block balance, with {% comment %} and {% raw %} bodies skipped.
 const BLOCKS = new Set(['if', 'unless', 'for', 'case', 'capture', 'form', 'paginate', 'tablerow', 'style', 'javascript', 'stylesheet', 'schema']);
 function liquidBalance(markup) {
@@ -105,7 +141,7 @@ function settingsOf(schema) {
   const take = (list, owner) => {
     for (const s of list || []) {
       if (!s.id || s.type === 'header' || s.type === 'paragraph') continue;
-      out.push({ owner, id: s.id, hidden: /\{\{\s*false\s*\}\}/.test(s.visible_if || ''), storelib: !schema.shopify });
+      out.push({ owner, id: s.id, hidden: s.hidden === true || /\{\{\s*false\s*\}\}/.test(s.visible_if || ''), storelib: !schema.shopify });
     }
   };
   take(sh.settings, 'section');
@@ -118,7 +154,7 @@ function readers(markup) {
   let grew = true;
   while (grew) {
     grew = false;
-    for (const m of markup.matchAll(/\b(\w+)\s*=\s*([\w.]+)/g)) {
+    for (const m of markup.matchAll(/\b(\w+)\s*[=:]\s*([\w.]+)/g)) {
       const rhs = m[2];
       if ((rhs.split('.').pop() === 'settings' || aliases.has(rhs)) && !aliases.has(m[1])) { aliases.add(m[1]); grew = true; }
     }
@@ -169,19 +205,23 @@ for (const f of FILES) {
   }
   checks++;
 
-  // 2. Every setting is read.
+  // 2. Every setting is read. A retired section (hero-product4: its template
+  // draws nothing) keeps its schema only so stored content survives.
+  if (!plain.replace(/<\/?template[^>]*>/g, '').trim()) { checks++; continue; }
   const all = markup + withSnippets(markup);
   const norm = all
     .replace(/(['"])\s*\|\s*append:\s*[\w.]+\s*\|\s*append:\s*(['"])/g, '#')
     .replace(/(['"])\s*\|\s*append:\s*[\w.]+/g, '#$1')
     .replace(/\{\{-?\s*[\w.]+\s*-?\}\}/g, '#');
   const al = readers(all);
+  const assets = linkedAssets(all);
   const seen = new Set();
   for (const s of settingsOf(schema)) {
     const key = s.owner + '/' + s.id;
     if (seen.has(key)) fail(f, `${key} is declared twice`);
     seen.add(key);
     if (isRead(s.id, all, norm, al)) continue;
+    if (assetRead(s.id, assets) || builtRead(s.id, all + assets)) continue;
     const reason = (ALLOW[f] || {})[key];
     if (reason) { allowed.push(`${f} ${key}: ${reason}`); continue; }
     if (s.hidden) continue; // retired, hidden from the panel, kept for stored content
@@ -222,7 +262,11 @@ for (const f of ['inline-image-heading', 'addtocartbutton', 'annoucment-bar-scro
   const m = parts(read(`sections/${f}.storelib`)).markup;
   assert.match(m, /\{%-?\s*if section\.settings\.reveal == false\s*-?%\}<span data-ti-no-reveal hidden><\/span>/, `${f}: reveal off marks the section for the layout reveal`);
   const hook = m.match(/\{%-?\s*if settings\.scroll_animation != blank and settings\.scroll_animation != 'none'([^%]*)-?%\}/);
-  if (hook) assert.match(hook[1], /and section\.settings\.reveal(?: != false)?\s*-?$/, `${f}: reveal off skips the theme reveal class`);
+  // A section may keep the theme condition in a variable and gate on it with reveal (banner3: theme_anim).
+  const flag = m.match(/if settings\.scroll_animation != blank and settings\.scroll_animation != 'none'\s+assign (\w+) = true\s+endif/);
+  const gate = flag && m.match(new RegExp(`\\{%-?\\s*if ${flag[1]} and section\\.settings\\.reveal(?: != false)?\\s*-?%\\}[\\s\\S]*?classList\\.add\\('scroll-trigger'`));
+  if (flag && !hook) assert(gate, `${f}: reveal off skips the theme reveal class`);
+  else if (hook) assert.match(hook[1], /and section\.settings\.reveal(?: != false)?\s*-?$/, `${f}: reveal off skips the theme reveal class`);
   else assert.match(m, /if __ti_reveal == false\s+assign __theme_scroll_animation = 'none'/, `${f}: reveal off skips the theme reveal class`);
 }
 const layout = read('layout/theme.storelib');

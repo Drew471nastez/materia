@@ -152,6 +152,37 @@ function readKind(id, src, aliases) {
   return '';
 }
 
+// The cached script or stylesheet a section links ('x.js' | asset_url), or a
+// runtime the layout loads that the section names (shopify/assets/x.js), reads
+// its settings too: the section hands them over as JSON and the script reads
+// b.id, b['id'], a list of ids it walks, or a key it builds.
+function linkedAssets(text) {
+  const names = new Set([...text.matchAll(/'([\w.-]+\.(?:js|css))'\s*\|\s*asset_url|shopify\/assets\/([\w.-]+\.(?:js|css))/g)].map(m => m[1] || m[2]));
+  return [...names].map(n => path.join(root, 'shopify/assets', n)).filter(f => fs.existsSync(f)).map(f => fs.readFileSync(f, 'utf8')).join('\n');
+}
+function assetRead(id, assets) {
+  if (!assets) return false;
+  if (new RegExp('(?:\\.|[\'"`])' + esc(id) + '(?![\\w-])').test(assets)) return true;
+  const m = id.match(/^(\D*?)(\d+)(\D*)$/);
+  if (!m) return false;
+  const q = '[\'"`]', pre = m[1] ? q + esc(m[1]) + '(?:[\'"`]\\s*\\+\\s*\\w+|\\$\\{\\s*\\w+\\s*\\})' : '', post = m[3] ? '(?:\\s*\\+\\s*' + q + ')?' + esc(m[3]) + q : '(?![\\w])';
+  return !!pre && new RegExp(pre + post).test(assets);
+}
+// A key joined from two quoted parts (prefix | append: '_icon_image', s[id+(d?'_desktop':'_mobile')]).
+function builtRead(id, hay) {
+  const q = s => new RegExp('[\'"`]' + esc(s) + '[\'"`]').test(hay);
+  // The second part is joined on: + '_tail', append: '_tail', or one side of (d ? '_desktop' : '_mobile').
+  const joined = s => new RegExp('(?:\\+\\s*\\(?|append:\\s*|[?:]\\s*)[\'"`]' + esc(s) + '[\'"`]').test(hay);
+  const tailNumber = id.match(/^(\w*_)\d+$/);
+  if (tailNumber && q(tailNumber[1])) return true; // (social ? 'ref_avatar_' : 'avatar_') + n
+  const parts = id.replace(/\d+/g, '').split('_');
+  for (let i = 1; i < parts.length; i++) {
+    const head = parts.slice(0, i).join('_'), tail = parts.slice(i).join('_');
+    if (head.length > 2 && tail.length > 1 && (q(head) || q(head + '_')) && joined('_' + tail)) return true;
+  }
+  return false;
+}
+
 for (const file of files) {
   const text = fs.readFileSync(path.join(sectionsDir, file), 'utf8');
   const first = text.split('\n')[0];
@@ -177,6 +208,9 @@ for (const file of files) {
   // Unique ids, then every id read.
   const groups = [['section', sch.settings || []], ...(sch.blocks || []).map(b => [b.type, b.settings || []])];
   const src = withSnippets(template);
+  const assets = linkedAssets(src);
+  // A retired section (its template draws nothing) keeps its schema only for stored content.
+  const retired = !STRIP_COMMENTS(template).replace(/<\/?template[^>]*>/g, '').trim();
   const aliases = new Set(['settings']);
   for (const m of src.matchAll(/\b(\w+)\s*[=:]\s*(?:section|block|[\w]+(?:\[\d+\])?|section\.blocks\[\d+\])\.settings\b(?!\.)/g)) aliases.add(m[1]);
   const aliasRe = [...aliases].map(esc).join('|');
@@ -188,13 +222,13 @@ for (const file of files) {
       if (seen.has(s.id)) fail(file, `${owner}: setting id "${s.id}" is declared twice`);
       seen.add(s.id);
       idCount++;
-      const kind = readKind(s.id, src, aliasRe);
+      const kind = readKind(s.id, src, aliasRe) || ((assetRead(s.id, assets) || builtRead(s.id, src + assets)) ? 'dynamic' : '');
       if (kind === 'dynamic') dynamicReads++;
       const key = `${owner}:${s.id}`;
       if (kind && allow[key]) fail(file, `ALLOW entry ${key} is read now; remove it`);
       if (kind) continue;
       if (allow[key]) { allowedUnread++; continue; }
-      if (String(s.visible_if || '').replace(/\s/g, '') === '{{false}}') { hiddenUnread++; hiddenList.push(`${file} ${key}`); continue; }
+      if (retired || s.hidden === true || String(s.visible_if || '').replace(/\s/g, '') === '{{false}}') { hiddenUnread++; hiddenList.push(`${file} ${key}`); continue; }
       fail(file, `${key} (${s.type} "${s.label || ''}") is never read: wire it, or hide it and say why in its info`);
     }
   }

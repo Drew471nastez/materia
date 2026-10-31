@@ -62,7 +62,9 @@ const animationCss = read('shopify/assets/animation.css');
 {
   const head = between(layout, '<head>', '</head>').replace(/<noscript>[\s\S]*?<\/noscript>/g, '');
   const blocking = [...head.matchAll(/\{\{\s*'([^']+\.css)'\s*\|\s*asset_url\s*\|\s*stylesheet_tag([^}]*)\}\}/g)].map(m => m[1]);
-  const allowed = ['critical.css', 'section-isolation.css', 'animation.css', 'rtl.css', 'product-card.css', 'swiper-bundle.min.css', 'design-mode.css', 'theme.css', 'theme-button-contract.css'];
+  const allowed = ['critical.css', 'section-isolation.css', 'animation.css', 'rtl.css', 'product-card.css', 'swiper-bundle.min.css', 'design-mode.css', 'theme.css', 'theme-button-contract.css',
+    // A few hiding rules (an invalid countdown never flashes); the product blocks that use it link it too.
+    'product-block-runtime.css'];
   for (const f of blocking) ok(allowed.includes(f), `head: ${f} is a blocking stylesheet; only first-paint styles may hold the page`);
   for (const f of ['popup.css', 'judgeme-reviews.css']) {
     ok(new RegExp(`<link rel="stylesheet" href="\\{\\{ '${f.replace('.', '\\.')}' \\| asset_url \\}\\}" media="print" onload="this\\.media='all'">`).test(layout), `head: ${f} loads without blocking (print swap)`);

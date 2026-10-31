@@ -197,7 +197,7 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
     const live=read('snippets/theme-live.storelib');
     const liveJs=live.slice(live.indexOf('<script>')+8,live.lastIndexOf('{% comment %}{% endcomment %}</script>'))
       .replace(/\[\{% for scheme[\s\S]*?\{% endfor %\}\]/,'[]')
-      .replace(/\{\{[^}]*\|\s*json\s*\}\}/g,'null').replace(/\{\{[^}]*\}\}/g,'');
+      .replace(/\{\{[^}]*\|\s*json\b[^}]*\}\}/g,'null').replace(/\{\{[^}]*\}\}/g,'');
     const critical=read('shopify/assets/critical.css');
     const hcount=critical.slice(critical.indexOf('.h-count {'),critical.indexOf('.menu_label {'));
     await page.setContent(`<style>:root{--color-primary:#3456e6;--color-white:#fff;--count-bubble-size:18px;--count-bubble-font-size:10px;--count-bubble-font-weight:600;--count-bubble-radius:999px;--count-bubble-border-width:0px;--count-bubble-offset-x:0px;--count-bubble-offset-y:0px;--count-bubble-animation:mt-count-pop}${hcount}${bubbleCss}</style>

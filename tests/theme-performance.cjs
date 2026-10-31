@@ -16,11 +16,13 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
       window.requests=[];
       window.fetch=url=>new Promise(resolve=>requests.push({url,resolve}));
     });
-    await page.addScriptTag({content:cart.slice(cart.indexOf('class BaseFetcher'),cart.indexOf('class CartUpsellHeading'))});
+    // The fetcher's helpers, and the response as the cart-upsell section draws it: since 018b66f
+    // only slides inside [data-cart-upsell-results] that hold a product card are taken.
+    await page.addScriptTag({content:cart.slice(0,cart.indexOf('\n',cart.indexOf('const materiaReduced')))+'\n'+cart.slice(cart.indexOf('function materiaPruneRecommendationExtras'),cart.indexOf('// This file is imported as a module'))+cart.slice(cart.indexOf('class BaseFetcher'),cart.indexOf('class CartUpsellHeading'))+';window.wrap=inner=>\'<div data-cart-upsell-results>\'+inner.replace(/(<div class="(?:swiper-slide|cart-upsell-item)">)([^<]+)/g,\'$1<div class="product-item">$2</div>\')+\'</div>\';'});
     await page.evaluate(()=>document.body.innerHTML='<minicart-recommendations data-url="/recommend/a"><h2>You may also like</h2><slide-section><div class="swiper-wrapper"></div></slide-section></minicart-recommendations><minicart-recommendations-beside data-url="/recommend/a"><h2>More</h2><div class="cart-upsell-wrapper"></div></minicart-recommendations-beside>');
     assert.equal(await page.evaluate(()=>requests.length),1,'inside/beside share one network request');
     assert.equal(await page.locator('[hidden]').count(),2,'no empty recommendation heading while pending');
-    await page.evaluate(()=>requests[0].resolve({ok:true,text:async()=>'<div class="swiper-wrapper"><div class="swiper-slide">Product</div></div><div class="cart-upsell-wrapper"><div class="cart-upsell-item">Product</div></div>'}));
+    await page.evaluate(()=>requests[0].resolve({ok:true,text:async()=>wrap('<div class="swiper-wrapper"><div class="swiper-slide">Product</div></div><div class="cart-upsell-wrapper"><div class="cart-upsell-item">Product</div></div>')}));
     await page.waitForTimeout(40);
     assert.equal(await page.locator('[hidden]').count(),0);
     assert.equal(await page.locator('minicart-recommendations .swiper-slide').count(),1);passed++;
@@ -28,15 +30,15 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
       const rec=document.querySelector('minicart-recommendations');rec.init();
       rec.dataset.url='/recommend/old';rec.init();
       rec.dataset.url='/recommend/new';rec.init();
-      requests[2].resolve({ok:true,text:async()=>'<div class="swiper-wrapper"><div class="swiper-slide">Newest</div></div>'});
+      requests[2].resolve({ok:true,text:async()=>wrap('<div class="swiper-wrapper"><div class="swiper-slide">Newest</div></div>')});
     });
     await page.waitForTimeout(30);
-    await page.evaluate(()=>requests[1].resolve({ok:true,text:async()=>'<div class="swiper-wrapper"><div class="swiper-slide">Stale</div></div>'}));
+    await page.evaluate(()=>requests[1].resolve({ok:true,text:async()=>wrap('<div class="swiper-wrapper"><div class="swiper-slide">Stale</div></div>')}));
     await page.waitForTimeout(30);
     assert.equal(await page.locator('minicart-recommendations .swiper-wrapper').textContent(),'Newest','stale response must not overwrite new lead product');passed++;
     await page.evaluate(()=>{
       const rec=document.querySelector('minicart-recommendations');rec.dataset.url='/recommend/empty';rec.init();
-      requests[3].resolve({ok:true,text:async()=>'<div class="swiper-wrapper"> <!-- no products --> </div>'});
+      requests[3].resolve({ok:true,text:async()=>wrap('<div class="swiper-wrapper"> <!-- no products --> </div>')});
     });
     await page.waitForTimeout(30);
     assert(await page.locator('minicart-recommendations').evaluate(el=>el.hidden),'empty results hide the whole heading and carousel');passed++;

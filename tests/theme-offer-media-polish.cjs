@@ -8,12 +8,14 @@ const {engine,clean}=helper.exports;
  const p=await browser.newPage({viewport:{width:390,height:844}}),errors=[];p.on('pageerror',e=>errors.push(e.message));
  await p.setContent('<div id="shopify-section-header"><nav class="navigation mobile"><button>Close</button></nav></div>');
  await p.addStyleTag({content:read('shopify/assets/navigation.css')});
- await p.addStyleTag({content:read('snippets/header-sticky-controller.storelib').match(/<style>([\s\S]*?)<\/style>/)[1].replaceAll('{{ section.id }}','header')});
+ await p.addStyleTag({content:read('shopify/assets/header-sticky.css')});/* the sticky controller's fixed rules are this cached file since 768e649 */
  await p.addScriptTag({content:read('shopify/assets/header-sticky-extras.js')});
  await p.evaluate(()=>document.documentElement.classList.add('nav-open'));await p.waitForTimeout(620);
  assert(await p.locator('nav').evaluate(el=>el.matches(':popover-open')));assert.equal(await p.locator('nav').evaluate(el=>getComputedStyle(el,'::backdrop').opacity),'1');checks++;
  await p.evaluate(()=>document.documentElement.classList.remove('nav-open'));await p.waitForTimeout(180);
- const opacity=await p.locator('nav').evaluate(el=>+getComputedStyle(el,'::backdrop').opacity);assert(opacity>0&&opacity<1,'backdrop fades during drawer close');
+ /* 7fd60ba (with the creator) restored the 25 October drawer: the top layer adds no dim of its own
+    (the theme's overlay dims the page) and the drawer stays in the top layer while it slides shut. */
+ assert.equal(await p.locator('nav').evaluate(el=>getComputedStyle(el,'::backdrop').backgroundColor),'rgba(0, 0, 0, 0)','no second dim layer');assert(await p.locator('nav').evaluate(el=>el.matches(':popover-open')),'drawer stays up while it slides shut');
  await p.waitForTimeout(440);assert(!await p.locator('nav').evaluate(el=>el.matches(':popover-open')));checks++;
  await p.setViewportSize({width:1100,height:900});
  const gallery=()=>'<media-gallery data-mt-product-id="p"><slide-with-thumbs data-desktop="1" data-tablet="1" data-mobile="1"><div class="swiper-wrapper-preview swiper" style="width:320px;height:220px"><div class="swiper-wrapper"><div class="swiper-slide">First</div><div class="swiper-slide">Second</div></div></div></slide-with-thumbs></media-gallery>';

@@ -46,6 +46,7 @@ const ALLOW = {
   'breadcrumb.storelib': { classes: ['bc__btn'], reason: 'Round 36px icon controls (all products, previous and next product); the text inside is the hover preview card, not a label.' },
   'collection-lookbook.storelib': { classes: ['lcb__card'], reason: 'The whole collection card is the link; its label is a span sized from Theme settings > Buttons variables that changes with the card hover, so it cannot take the per-element hover contract.' },
   'hotspot-image-product-2.storelib': { classes: ['hsp2__pop'], reason: 'A product popover card link; the small View label inside is part of the card, sized for a 220px popover.' },
+  'help_centre_faq.storelib': { classes: ['hc__btn'], reason: 'A retired Created section (7340efa): Storelib wrote the file back with no presets, so it cannot be added, and no page uses it.' },
   'main-cart-items.storelib': { classes: ['cart-remove', 'btn-primary'], reason: 'Remove is a text link (button--tertiary). The cart page colour override is a cart setting, kept with the cart page work.' },
 };
 
@@ -297,7 +298,12 @@ for (const file of CONNECTED) {
   if (!r) regressions.push(`${file}: section file not found`);
   else {
     for (const f of r.open) regressions.push(`${file} L${f.line} ${f.kind}: ${show(f.detail)}`);
-    if (!/data-theme-button/.test(templatePart(fs.readFileSync(path.join(dir, file), 'utf8')))) regressions.push(`${file}: no data-theme-button left in the template`);
+    // A retired section (promo-banner-1, 032979b) draws nothing: Storelib keeps the empty file.
+    const own = templatePart(fs.readFileSync(path.join(dir, file), 'utf8'));
+    if (!own.replace(/<\/?template[^>]*>|\s/g, '')) continue;
+    // The buttons may be drawn by a snippet the section renders (snippets/marketing-block draws the hero and promo buttons).
+    const withRendered = (text, seen = new Set()) => text + [...text.matchAll(/\{%-?\s*render\s+'([\w-]+)'/g)].map(m => m[1]).filter(n => !seen.has(n) && seen.add(n) && fs.existsSync(path.join(root, 'snippets', n + '.storelib'))).map(n => withRendered(templatePart(fs.readFileSync(path.join(root, 'snippets', n + '.storelib'), 'utf8')), seen)).join('\n');
+    if (!/data-theme-button/.test(withRendered(templatePart(fs.readFileSync(path.join(dir, file), 'utf8'))))) regressions.push(`${file}: no data-theme-button left in the template or the snippets it renders`);
   }
 }
 if (regressions.length) {

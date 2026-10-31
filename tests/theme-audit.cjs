@@ -32,7 +32,9 @@ for(const file of batch) {
   for(const liquid of markup.matchAll(/\{%-?\s*liquid\b([\s\S]*?)%-?\}/g)) {
     assert(!/\{%-?/.test(liquid[1]),file+' nested tag inside Liquid block');
   }
-  assert(markup.includes('theme-type') || markup.includes('--theme-font') || markup.includes('--heading-font'),file+' shared typography inside template');
+  // A section's fixed CSS may live in its cached asset (768e649 moved the header's there).
+  const own=[markup,...[...markup.matchAll(/'([\w.-]+\.css)'\s*\|\s*asset_url/g)].map(m=>path.join(root,'shopify/assets',m[1])).filter(f=>fs.existsSync(f)).map(f=>fs.readFileSync(f,'utf8'))].join('\n');
+  assert(own.includes('theme-type') || own.includes('--theme-font') || own.includes('--heading-font'),file+' shared typography inside template or its own stylesheet');
 }
 // A case's else must come last: a when after it is swallowed by the else in
 // engines that read it that way, so every later block renders for any block.
