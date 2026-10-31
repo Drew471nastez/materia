@@ -12,6 +12,16 @@ Segment tangents match, and eased keyframes soften the animation reversal.
 `tests/theme-wave-identities.cjs` compares sampled silhouettes pairwise in
 static and animated states, rather than only comparing path strings.
 
+Native SVG timelines run without a JavaScript animation loop. Live edits do
+not repeatedly pause/restart playback. A bounded, in-memory phase history
+restores all four timelines when the editor replaces the section DOM.
+Wave geometry is parsed only when its metadata changes. Viewer animations
+prewarm 200px before entering the viewport; the editor does not pause them
+based on canvas intersection. Reduced motion, the animation toggle and
+hidden tabs still pause intentionally. `tests/theme-wave-playback.cjs`
+checks clocks and actual moving outlines during streamed settings changes
+under 4x CPU throttling, plus redraw, repeat, speed and resume behaviour.
+
 Title and subtitle blocks use inline rich text; supporting text uses rich
 text in a div, so paragraph formatting does not create nested paragraphs.
 Section and block styling remain independent opt-ins. Reset theme spacing
