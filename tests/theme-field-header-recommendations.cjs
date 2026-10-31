@@ -23,7 +23,9 @@ const part=(file,tag)=>read(file).match(new RegExp('<'+tag+'[^>]*>([\\s\\S]*?)</
   await page.addStyleTag({content:':root { --field-text-override:#ff00ff; }'});
   await apply({field_text:''});assert.equal(await css('#entry','color'),'rgb(238, 238, 238)','clearing the picker overrides even the original saved CSS');checks++;
   let dimensions=part('snippets/header-dimensions.storelib','style').replace(/\{\{\s*section.id\s*\}\}/g,'header').replace(/\{\{[\s\S]*?\}\}/g,'64');
-  await page.addStyleTag({content:dimensions});await page.addScriptTag({content:part('snippets/header-dimensions.storelib','script')});
+  // The heights the snippet prints, the bar rules in header-layout.css and the slider drag in header-section.js.
+  await page.$eval('#shopify-section-header',el=>el.classList.add('shopify-section'));
+  await page.addStyleTag({content:read('shopify/assets/header-layout.css')+dimensions});await page.addScriptTag({content:read('shopify/assets/header-section.js')});
   await page.evaluate(()=>{window.kept=document.querySelector('#keep');for(let i=0;i<100;i++)document.dispatchEvent(new CustomEvent('storelib:settings-change',{detail:{settings:{header_height:120,header_height_mobile:80},live:true}}));});
   await page.waitForTimeout(40);assert.equal(await css('header','height'),'80px');assert(await page.evaluate(()=>kept===document.querySelector('#keep')));checks++;
   await page.setViewportSize({width:1280,height:900});assert.equal(await css('header','height'),'120px');checks++;

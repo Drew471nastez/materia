@@ -30,7 +30,8 @@ const menuJs = `var root=document.body;var getScrollBarWidth={init:()=>0};${moti
 const toggleSnippet = read('snippets/toggle-menu.storelib');
 const toggleHtml = stripLiquid(between(toggleSnippet, '<button', '</button>')).replace(/\{\{[^}]*\}\}/g, 'Menu');
 const sticky = read('snippets/header-sticky-controller.storelib');
-const stickyCss = stripLiquid(sticky.match(/<style>([\s\S]*?)<\/style>/)[1]).replace(/\{\{\s*section\.id\s*\}\}/g, 'header');
+// The controller's rules are the cached header-sticky.css it links.
+const stickyCss = read('shopify/assets/header-sticky.css');
 // The controller's inline script, then the part it loads deferred (overlay fade, Back button, phone menu layer).
 const stickyJs = stripLiquid(sticky.match(/<script>([\s\S]*?)<\/script>/)[1]) + '\n' + read('shopify/assets/header-sticky-extras.js');
 const mnb = read('sections/mobile-navigation-bar.storelib');
@@ -56,7 +57,7 @@ const level = (name, kids) => `
   </li>`;
 const nav = cls => `
   <nav class="flex flex-column ${cls} block-1025 navigation horizontal fixed inset-0 soft-slide" data-action-mobile="false">
-    ${cls === 'mobile' ? '<close-menu aria-label="Close" class="close-menu pointer absolute top-0 w-55 h-55 inline-flex hidden-1025 content-center right-7"><svg width="13" height="13"></svg></close-menu>' : ''}
+    ${cls === 'mobile' ? '<close-menu aria-label="Close" class="close-menu pointer absolute top-0 w-55 h-55 inline-flex hidden-1025 content-center right-7"><svg width="13" height="13"></svg></close-menu><div class="menu-mobile-title min-h-55 flex align-center px-30 hidden-1025">Menu</div>' : ''}
     <div class="navigation__menu-content word-break">
       <ul class="horizontal-list list-unstyled inline-flex-1025 horizontal px-30">
         <li class="level0 single"><menu-item class="relative flex px-15"><a class="no-underline py-10 min-h-55 inline-flex" href="/">Home</a></menu-item></li>
