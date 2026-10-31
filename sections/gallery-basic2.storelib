@@ -1,38 +1,40 @@
 <template compat="shopify">
 {% render 'theme-type' %}
 {%- liquid
-  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
-  assign sec_id = section.id
+  assign s = section.settings
+  assign color_scheme = s.color_scheme.id | default: s.color_scheme | default: 'default-color-scheme'
+  assign custom = s.enable_custom_style
+  assign loading = 'eager'
+  if s.lazyload
+    assign loading = 'lazy'
+  endif
+  assign order = 'none'
+  if s.display_video_first
+    assign order = 'video'
+  elsif s.display_image_first
+    assign order = 'image'
+  endif
+  assign ratio_d = s.img_proportion | remove: '%'
+  assign ratio_m = s.img_proportion_mobile | remove: '%'
+  case s.image_shadow
+    when 'low'
+      assign shadow = '0 2px 4px rgba(0, 0, 0, 0.1)'
+    when 'medium'
+      assign shadow = '0 4px 8px rgba(0, 0, 0, 0.2)'
+    when 'high'
+      assign shadow = '0 6px 12px rgba(0, 0, 0, 0.3)'
+    else
+      assign shadow = 'none'
+  endcase
+  assign radius = s.image_border_radius | append: 'px'
+  if s.make_images_circle
+    assign radius = '50%'
+  endif
+  assign max_width = 'none'
+  if s.container_max_width > 0
+    assign max_width = s.container_max_width | append: 'px'
+  endif
 -%}
-<style>
-  /* Section width */
-  {%- case section.settings.section_width -%}
-    {%- when 'container' -%}
-      #shopify-section-{{ section.id }} {
-        max-width: calc(var(--page-width, 1300px) + 3rem);
-        margin-inline: auto;
-        padding-inline: 1.5rem;
-        box-sizing: border-box;
-      }
-    {%- when 'fluid_container' -%}
-      #shopify-section-{{ section.id }} {
-        max-width: calc(var(--fluid-container-width, 1500px) + 3rem);
-        margin-inline: auto;
-        padding-inline: 1.5rem;
-        box-sizing: border-box;
-      }
-    {%- when 'stretch_width' -%}
-      #shopify-section-{{ section.id }} {
-        padding-inline: 1.5rem;
-        box-sizing: border-box;
-      }
-      @media (min-width: 1200px) {
-        #shopify-section-{{ section.id }} { padding-inline: 3rem; }
-      }
-    {%- when 'full_width' -%}
-      /* full bleed */
-  {%- endcase -%}
-{% comment %}{% endcomment %}</style>
 {%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
 {%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
 <style>
@@ -49,504 +51,123 @@
   })();
 {% comment %}{% endcomment %}</script>
 {%- endif -%}
-<style data-rs-bulletproof>
-  {%- if section.settings.reset_spacing -%}
-    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
-    #shopify-section-{{ section.id }},
-    #shopify-section-{{ section.id }} > .section,
-    #shopify-section-{{ section.id }} > section,
-    #shopify-section-{{ section.id }} > div,
-    #shopify-section-{{ section.id }} > div > .section {
-      margin-top: 0 !important;
-      margin-bottom: 0 !important;
-    }
-    #shopify-section-{{ section.id }} + .shopify-section,
-    #shopify-section-{{ section.id }} + section,
-    .shopify-section + #shopify-section-{{ section.id }} {
-      margin-top: 0 !important;
-    }
-  {%- endif -%}
-{% comment %}{% endcomment %}</style>
+{% render 'media-galleries-a-base', section: section %}
 {%- comment -%}
-  Section background colour wiring. Painted on the section wrapper so
-  the colour fills edge-to-edge regardless of inner section width.
+  Materia Themes. Gallery Simple 1: a grid of images or looping videos. When an
+  image block has both, the section's media order decides which shows first and
+  which appears on hover or focus. An optional link shows as a round arrow.
 {%- endcomment -%}
-{%- if section.settings.section_bg != blank and section.settings.section_bg.alpha != 0 -%}
-  <style>
-    #shopify-section-{{ section.id }} {
-      background-color: {{ section.settings.section_bg }};
-    }
-{% comment %}{% endcomment %}  </style>
-{%- endif -%}
-{%- comment -%}
-  Remove default space between sections — zeroes this section's
-  vertical margin when the toggle is on. Targets the wrapping
-  `#shopify-section-{id}` so it works regardless of the section's
-  root markup.
-{%- endcomment -%}
-{%- if section.settings.reset_spacing -%}
-  <style>
-    #shopify-section-{{ section.id }} { margin-top: 0 !important; margin-bottom: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; }
-    #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
-{% comment %}{% endcomment %}  </style>
-{%- endif -%}
 <style>
-  /* Section isolation — prevent CSS/JS bleed between sections */
-  #shopify-section-{{ section.id }} {
+  #shopify-section-{{ section.id }} .mga-b2__inner { max-width: var(--mga-max); margin-inline: auto; }
+  #shopify-section-{{ section.id }} .mga-b2[data-mga-width="full_width"] .mga-b2__inner { padding-inline: 16px; }
+  #shopify-section-{{ section.id }} .mga-b2__frame { background: var(--mga-bg); }
+  #shopify-section-{{ section.id }} .mga-b2__grid {
+    display: grid;
+    grid-template-columns: repeat(var(--mga-cols-m), minmax(0, 1fr));
+    gap: var(--mga-gap-m);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  #shopify-section-{{ section.id }} .mga-b2__media {
+    aspect-ratio: 100 / var(--mga-ratio-m);
+    border-radius: var(--mga-radius);
+    box-shadow: var(--mga-shadow);
     isolation: isolate;
-    position: relative;
   }
-  :where(#shopify-section-{{ section.id }}) {
-    font-family: var(--body-font, inherit);
+  #shopify-section-{{ section.id }} .mga-b2__media .mga-fill { transition: transform 0.4s ease, opacity 0.4s ease; -webkit-user-drag: none; user-select: none; }
+  #shopify-section-{{ section.id }} .mga-b2__media video.mga-fill { z-index: 0; }
+  #shopify-section-{{ section.id }} .mga-b2__media img.mga-fill { z-index: 1; }
+  #shopify-section-{{ section.id }} .mga-b2[data-mga-order="none"] [data-media="both"] img.mga-fill { opacity: 0; }
+  #shopify-section-{{ section.id }} .mga-b2[data-mga-order="video"] [data-media="both"] img.mga-fill { opacity: 0; }
+  #shopify-section-{{ section.id }} .mga-b2[data-mga-order="video"] [data-media="both"]:is(:hover, :focus-within) img.mga-fill { opacity: 1; }
+  #shopify-section-{{ section.id }} .mga-b2[data-mga-order="image"] [data-media="both"] video.mga-fill { opacity: 0; }
+  #shopify-section-{{ section.id }} .mga-b2[data-mga-order="image"] [data-media="both"]:is(:hover, :focus-within) video.mga-fill { opacity: 1; }
+  #shopify-section-{{ section.id }} .mga-b2[data-mga-order="image"] [data-media="both"]:is(:hover, :focus-within) img.mga-fill { opacity: 0; }
+  @media (prefers-reduced-motion: no-preference) {
+    #shopify-section-{{ section.id }} .mga-b2[data-mga-hover="zoom_in_subtle"] .mga-b2__media:hover .mga-fill { transform: scale(1.05); }
+    #shopify-section-{{ section.id }} .mga-b2[data-mga-hover="scale_up"] .mga-b2__media:hover .mga-fill { transform: scale(1.1); }
   }
-  :where(#shopify-section-{{ section.id }}) :where(button, input, textarea, select, optgroup) {
-    font-family: inherit;
-  }
-{% comment %}{% endcomment %}</style>
-
-{%- style -%}
-  .loudecom-section__{{sec_id}} *,
-  .loudecom-section__{{sec_id}} *:after,
-  .loudecom-section__{{sec_id}} *:before {
-    box-sizing: border-box;
-  }
-
-  .loudecom-section__{{sec_id}} img,
-  .loudecom-section__{{sec_id}} video {
-    max-width: 100%;
-    height: auto;
-    /* Ensure images and videos cover the wrapper for hover effects */
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    /* Prevent copying or dragging the media */
-    user-select: none;
-    -webkit-user-drag: none;
-    -webkit-touch-callout: none;
-    /* Unified transition for a smoother hover/fade effect */
-    transition: transform 0.4s ease, opacity 0.4s ease;
-  }
-
-  .loudecom-container,
-  .loudecom-container-fluid {
-    width: 100%;
-    padding-right: var(--loudecom-gutter-x, 10px);
-    padding-left: var(--loudecom-gutter-x, 10px);
-    margin-right: auto;
-    margin-left: auto;
-  }
-
-  @media (min-width: 576px) {
-    .loudecom-container {
-      max-width: 540px;
-    }
-  }
-
-  @media (min-width: 750px) {
-    .loudecom-container {
-      max-width: 720px;
-    }
-  }
-
-  @media (min-width: 992px) {
-    .loudecom-container {
-      max-width: 960px;
-    }
-    {% if section.settings.container_max_width >= 720 and section.settings.container_max_width <= 960 %}
-      .loudecom-section__{{sec_id}} .loudecom-container {
-        max-width: {{section.settings.container_max_width}}px;
-      }
-    {% endif %}
-  }
-
-  @media (min-width: 1200px) {
-    .loudecom-container {
-      max-width: 1140px;
-    }
-    {% if section.settings.container_max_width >= 720 and section.settings.container_max_width <= 1140 %}
-      .loudecom-section__{{sec_id}} .loudecom-container {
-        max-width: {{section.settings.container_max_width}}px;
-      }
-    {% endif %}
-  }
-
-  @media (min-width: 1400px) {
-    .loudecom-container {
-      max-width: 1320px;
-    }
-    {% if section.settings.container_max_width >= 720 and section.settings.container_max_width != 1320 %}
-      .loudecom-section__{{sec_id}} .loudecom-container {
-        max-width: {{section.settings.container_max_width}}px;
-      }
-    {% endif %}
-  }
-
-  .loudecom-section__{{sec_id}} .loudecom-row {
-    display: flex;
-    flex-wrap: wrap;
-    margin-right: calc(var(--loudecom-gutter-x, 15px) * -1);
-    margin-left: calc(var(--loudecom-gutter-x, 15px) * -1);
-  }
-
-  .loudecom-section__{{sec_id}} .loudecom-row > * {
-    box-sizing: border-box;
-    flex-shrink: 0;
-    width: 100%;
-    max-width: 100%;
-    padding-right: var(--loudecom-gutter-x, 15px);
-    padding-left: var(--loudecom-gutter-x, 15px);
-    margin-bottom: calc(var(--loudecom-gutter-x, 15px) * 2);
-  }
-
-  @media (min-width: 750px) {
-    .loudecom-section__{{sec_id}} .loudecom-col-md-4 {
-      flex: 0 0 auto;
-      width: 33.33333333%;
-    }
-  }
-
-  .loudecom-section__{{sec_id}} {
-    --loudecom-gutter-x: {{section.settings.gutter}}px;
-    padding-top: {{section.settings.section_padding_top}}px;
-    padding-bottom: {{section.settings.section_padding_bottom}}px;
-    background-color: {% render 'scheme-color', color: section.settings.background_color, fallback: 'var(--color-background)' %};
-    color: {% render 'scheme-color', color: section.settings.text_color, fallback: 'var(--color-text)' %};
-    line-height: 1.5;
-  }
-
-  .loudecom-section__{{sec_id}} .loudecom-section-title {
-    color: {% render 'scheme-color', color: section.settings.text_color, fallback: 'var(--color-heading)' %};
-    font-weight: var(--heading-weight, 700);
-    margin-top: 0;
-    margin-bottom: 40px;
-    text-align: {{section.settings.text_align}};
-  }
-
-  {% if section.settings.inherit_fonts == false %}
-    .loudecom-section__{{sec_id}} .loudecom-large.loudecom-section-title {
-      font-size: 64px;
-    }
-    .loudecom-section__{{sec_id}} .loudecom-medium.loudecom-section-title {
-      font-size: 48px;
-    }
-    .loudecom-section__{{sec_id}} .loudecom-small.loudecom-section-title {
-      font-size: 32px;
-    }
-  {% endif %}
-
-  /* Default placeholder images for demonstration */
-  .loudecom-section__{{sec_id}} .loudecom-col-md-4:nth-child(1) .loudecom-img-wrapper {
-    background: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22%3E%3Crect width=%22400%22 height=%22300%22 fill=%22%23efefef%22/%3E%3Ccircle cx=%22172%22 cy=%22124%22 r=%2214%22 fill=%22%23cfcfcf%22/%3E%3Cpath d=%22M140 192l40-46 25 28 20-18 35 36z%22 fill=%22%23cfcfcf%22/%3E%3C/svg%3E') no-repeat center/cover;
-  }
-  .loudecom-section__{{sec_id}} .loudecom-col-md-4:nth-child(2) .loudecom-img-wrapper {
-    background: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22%3E%3Crect width=%22400%22 height=%22300%22 fill=%22%23efefef%22/%3E%3Ccircle cx=%22172%22 cy=%22124%22 r=%2214%22 fill=%22%23cfcfcf%22/%3E%3Cpath d=%22M140 192l40-46 25 28 20-18 35 36z%22 fill=%22%23cfcfcf%22/%3E%3C/svg%3E') no-repeat center/cover;
-  }
-  .loudecom-section__{{sec_id}} .loudecom-col-md-4:nth-child(3) .loudecom-img-wrapper {
-    background: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22%3E%3Crect width=%22400%22 height=%22300%22 fill=%22%23efefef%22/%3E%3Ccircle cx=%22172%22 cy=%22124%22 r=%2214%22 fill=%22%23cfcfcf%22/%3E%3Cpath d=%22M140 192l40-46 25 28 20-18 35 36z%22 fill=%22%23cfcfcf%22/%3E%3C/svg%3E') no-repeat center/cover;
-  }
-  .loudecom-section__{{sec_id}} .loudecom-col-md-4:nth-child(4) .loudecom-img-wrapper {
-    background: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22%3E%3Crect width=%22400%22 height=%22300%22 fill=%22%23efefef%22/%3E%3Ccircle cx=%22172%22 cy=%22124%22 r=%2214%22 fill=%22%23cfcfcf%22/%3E%3Cpath d=%22M140 192l40-46 25 28 20-18 35 36z%22 fill=%22%23cfcfcf%22/%3E%3C/svg%3E') no-repeat center/cover;
-  }
-  .loudecom-section__{{sec_id}} .loudecom-col-md-4:nth-child(5) .loudecom-img-wrapper {
-    background: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22%3E%3Crect width=%22400%22 height=%22300%22 fill=%22%23efefef%22/%3E%3Ccircle cx=%22172%22 cy=%22124%22 r=%2214%22 fill=%22%23cfcfcf%22/%3E%3Cpath d=%22M140 192l40-46 25 28 20-18 35 36z%22 fill=%22%23cfcfcf%22/%3E%3C/svg%3E') no-repeat center/cover;
-  }
-  .loudecom-section__{{sec_id}} .loudecom-col-md-4:nth-child(6) .loudecom-img-wrapper {
-    background: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22%3E%3Crect width=%22400%22 height=%22300%22 fill=%22%23efefef%22/%3E%3Ccircle cx=%22172%22 cy=%22124%22 r=%2214%22 fill=%22%23cfcfcf%22/%3E%3Cpath d=%22M140 192l40-46 25 28 20-18 35 36z%22 fill=%22%23cfcfcf%22/%3E%3C/svg%3E') no-repeat center/cover;
-  }
-
-  .loudecom-section__{{sec_id}} .loudecom-img-wrapper {
-    background-color: rgba(var(--color-heading-rgb), 0.06);
-    position: relative;
-    height: auto;
-    padding-top: {{section.settings.img_proportion}};
-    overflow: hidden;
-    border-radius: {{ section.settings.image_border_radius }}px;
-    box-shadow: {% case section.settings.image_shadow %}
-      {% when 'none' %}
-        none;
-      {% when 'low' %}
-        0 2px 4px rgba(0,0,0,0.1);
-      {% when 'medium' %}
-        0 4px 8px rgba(0,0,0,0.2);
-      {% when 'high' %}
-        0 6px 12px rgba(0,0,0,0.3);
-      {% else %}
-        none;
-      {% endcase %}
-    /* Ensures the transition is smooth on hover */
-    transition: transform 0.3s ease, opacity 0.3s ease;
-  }
-
-  {% if section.settings.make_images_circle %}
-    .loudecom-section__{{sec_id}} .loudecom-img-wrapper {
-      border-radius: 50% !important;
-    }
-  {% endif %}
-
-  {% case section.settings.image_hover_animation %}
-    {% when 'none' %}
-      .loudecom-section__{{sec_id}} .loudecom-img-wrapper:hover img,
-      .loudecom-section__{{sec_id}} .loudecom-img-wrapper:hover video {
-        transform: none;
-        transition: none;
-      }
-    {% when 'fade_in' %}
-      .loudecom-section__{{sec_id}} .loudecom-img-wrapper:hover img,
-      .loudecom-section__{{sec_id}} .loudecom-img-wrapper:hover video {
-        opacity: 0.8;
-        transition: opacity 0.3s ease;
-      }
-    {% when 'zoom_in_subtle' %}
-      .loudecom-section__{{sec_id}} .loudecom-img-wrapper:hover img,
-      .loudecom-section__{{sec_id}} .loudecom-img-wrapper:hover video {
-        transform: scale(1.05);
-        transition: transform 0.3s ease;
-      }
-    {% when 'smooth_tilt' %}
-      .loudecom-section__{{sec_id}} .loudecom-img-wrapper:hover img,
-      .loudecom-section__{{sec_id}} .loudecom-img-wrapper:hover video {
-        transform: rotate(3deg);
-        transition: transform 0.3s ease;
-      }
-    {% when 'scale_up' %}
-      .loudecom-section__{{sec_id}} .loudecom-img-wrapper:hover img,
-      .loudecom-section__{{sec_id}} .loudecom-img-wrapper:hover video {
-        transform: scale(1.1);
-        transition: transform 0.3s ease;
-      }
-    {% when 'rotate' %}
-      .loudecom-section__{{sec_id}} .loudecom-img-wrapper:hover img,
-      .loudecom-section__{{sec_id}} .loudecom-img-wrapper:hover video {
-        transform: rotate(5deg);
-        transition: transform 0.3s ease;
-      }
-    {% when 'slide_up' %}
-      .loudecom-section__{{sec_id}} .loudecom-img-wrapper:hover img,
-      .loudecom-section__{{sec_id}} .loudecom-img-wrapper:hover video {
-        transform: translateY(-10px);
-        transition: transform 0.3s ease;
-      }
-    {% else %}
-      .loudecom-section__{{sec_id}} .loudecom-img-wrapper:hover img,
-      .loudecom-section__{{sec_id}} .loudecom-img-wrapper:hover video {
-        transform: scale(1.03);
-        transition: transform 0.3s ease;
-      }
-  {% endcase %}
-
-  /* New CSS for media toggle behavior */
-  .loudecom-section__{{sec_id}} .loudecom-img-wrapper.display-video-first video {
-    opacity: 1;
-  }
-  .loudecom-section__{{sec_id}} .loudecom-img-wrapper.display-video-first img {
-    opacity: 0;
-  }
-  .loudecom-section__{{sec_id}} .loudecom-img-wrapper.display-video-first:hover video {
-    opacity: 0;
-  }
-  .loudecom-section__{{sec_id}} .loudecom-img-wrapper.display-video-first:hover img {
-    opacity: 1;
-  }
-
-  .loudecom-section__{{sec_id}} .loudecom-img-wrapper.display-image-first img {
-    opacity: 1;
-  }
-  .loudecom-section__{{sec_id}} .loudecom-img-wrapper.display-image-first video {
-    opacity: 0;
-  }
-  .loudecom-section__{{sec_id}} .loudecom-img-wrapper.display-image-first:hover img {
-    opacity: 0;
-  }
-  .loudecom-section__{{sec_id}} .loudecom-img-wrapper.display-image-first:hover video {
-    opacity: 1;
-  }
-
-  .loudecom-section__{{sec_id}} .loudecom-gallery-link {
+  #shopify-section-{{ section.id }} .mga-b2__link {
     position: absolute;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%);
     z-index: 2;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
-    background-color: rgba(0, 0, 0, 0.6);
+    width: max(44px, calc(var(--mga-icon) + 16px));
+    height: max(44px, calc(var(--mga-icon) + 16px));
     border-radius: 50%;
-    transition: background-color 0.3s, opacity 0.3s;
+    background: var(--mga-link-bg);
+    color: var(--mga-link-color);
+    transform: translate(-50%, -50%);
     opacity: 0;
-    cursor: pointer;
+    transition: opacity 0.3s ease;
   }
-
-  .loudecom-section__{{sec_id}} .loudecom-img-wrapper:hover .loudecom-gallery-link {
-    opacity: 1;
+  #shopify-section-{{ section.id }} .mga-b2__link svg { width: var(--mga-icon); height: var(--mga-icon); display: block; }
+  #shopify-section-{{ section.id }} .mga-b2__media:is(:hover, :focus-within) .mga-b2__link { opacity: 1; }
+  @media (hover: none) { #shopify-section-{{ section.id }} .mga-b2__link { opacity: 1; } }
+  @media (min-width: 750px) {
+    #shopify-section-{{ section.id }} .mga-b2[data-mga-width="full_width"] .mga-b2__inner { padding-inline: 24px; }
+    #shopify-section-{{ section.id }} .mga-b2__grid { grid-template-columns: repeat(var(--mga-cols-d), minmax(0, 1fr)); gap: var(--mga-gap-d); }
+    #shopify-section-{{ section.id }} .mga-b2__media { aspect-ratio: 100 / var(--mga-ratio-d); }
   }
-
-  .loudecom-section__{{sec_id}} .loudecom-gallery-link svg {
-    width: {{ section.settings.icon_size }}px;
-    height: {{ section.settings.icon_size }}px;
-  }
-
-  @media only screen and (max-width: 749px) {
-    .loudecom-section__{{sec_id}} {
-      padding-top: {{section.settings.section_padding_top_mobile}}px;
-      padding-bottom: {{section.settings.section_padding_bottom_mobile}}px;
-    }
-    {% if section.settings.inherit_fonts == false %}
-      .loudecom-section__{{sec_id}} .loudecom-large.loudecom-section-title {
-        font-size: 56px;
-      }
-      .loudecom-section__{{sec_id}} .loudecom-medium.loudecom-section-title {
-        font-size: 40px;
-      }
-      .loudecom-section__{{sec_id}} .loudecom-small.loudecom-section-title {
-        font-size: 28px;
-      }
-    {% endif %}
-    .loudecom-section__{{sec_id}} .loudecom-row > * {
-      margin-bottom: {{ section.settings.vertical_space_mobile }}px;
-    }
-    /* Apply mobile image ratio */
-    .loudecom-section__{{sec_id}} .loudecom-img-wrapper {
-      padding-top: {{ section.settings.img_proportion_mobile }};
-    }
-  }
-{%- endstyle -%}
-
-{% if section.settings.custom_css != blank %}
-  {%- style -%}
-    {{section.settings.custom_css}}
-  {%- endstyle -%}
-{% endif %}
-
-{% if section.settings.is_fullwidth == true %}
-  {% assign container = 'loudecom-container-fluid' %}
-{% else %}
-  {% assign container = 'loudecom-container' %}
-{% endif %}
-
-{% if section.settings.lazyload == true %}
-  {% assign loading = 'lazy' %}
-{% else %}
-  {% assign loading = 'eager' %}
-{% endif %}
-
-<div class="loudecom-section__{{sec_id}} color-{{ color_scheme }} gradient {{ section.settings.custom_class }}">
-  <div class="{{container}}">
-    {% if section.settings.heading_text != blank %}
-      <{{ section.settings.heading_tag }} class="{{ section.settings.heading_size }} loudecom-section-title">
-        {{ section.settings.heading_text | escape }}
-      </{{ section.settings.heading_tag }}>
-    {% endif %}
-    <div class="loudecom-row">
-      {% for block in section.blocks %}
-        {% case block.type %}
-          {% when 'image' %}
-            {%- assign wrapper_class = '' -%}
-            {% if block.settings.video_url != blank and block.settings.background_image != blank %}
-              {% if section.settings.display_video_first %}
-                {% assign wrapper_class = ' display-video-first' %}
-              {% elsif section.settings.display_image_first %}
-                {% assign wrapper_class = ' display-image-first' %}
-              {% endif %}
-            {% endif %}
-            <div class="loudecom-col-md-4" {{ block.shopify_attributes }}>
-              <div class="loudecom-img-wrapper{{ wrapper_class }}{% if section.settings.make_images_circle %} make-circle{% endif %}">
-                {% comment %}
-                  If both video & image are present with 'Display Video First':
-                  - We place the <video> first, then the <img> so the video is default visible
-                  and the image fades in on hover.
-                {% endcomment %}
-                {% if block.settings.video_url != blank
-                  and block.settings.background_image != blank
-                  and section.settings.display_video_first
-                %}
-                  <video autoplay muted loop playsinline style="width:100%; height:100%; object-fit:cover;">
-                    <source src="{{ block.settings.video_url }}" type="video/mp4">
-                  </video>
-                  {{
-                    block.settings.background_image
-                    | image_url: width: 2048
-                    | image_tag:
-                      widths: '490, 750, 992, 1200, 2048',
-                      sizes: '(min-width: 750px) 30vw, 100vw',
-                      loading: loading
-                  }}
-
-                  {% comment %}
-                    If both video & image are present with 'Display Image First':
-                    - We place the <img> first, then the <video>, so the image is default visible
-                    and the video fades in on hover.
-                  {% endcomment %}
-                {% elsif block.settings.video_url != blank
-                  and block.settings.background_image != blank
-                  and section.settings.display_image_first
-                %}
-                  {{
-                    block.settings.background_image
-                    | image_url: width: 2048
-                    | image_tag:
-                      widths: '490, 750, 992, 1200, 2048',
-                      sizes: '(min-width: 750px) 30vw, 100vw',
-                      loading: loading
-                  }}
-                  <video autoplay muted loop playsinline style="width:100%; height:100%; object-fit:cover;">
-                    <source src="{{ block.settings.video_url }}" type="video/mp4">
-                  </video>
-
-                {% elsif block.settings.video_url != blank %}
-                  <video autoplay muted loop playsinline style="width:100%; height:100%; object-fit:cover;">
-                    <source src="{{ block.settings.video_url }}" type="video/mp4">
-                  </video>
-                {% elsif block.settings.background_image != blank %}
-                  {{
-                    block.settings.background_image
-                    | image_url: width: 2048
-                    | image_tag:
-                      widths: '490, 750, 992, 1200, 2048',
-                      sizes: '(min-width: 750px) 30vw, 100vw',
-                      loading: loading
-                  }}
-                {% endif %}
-                {% if block.settings.gallery_link_url != blank %}
-                  <a
-                    href="{{ block.settings.gallery_link_url }}"
-                    class="loudecom-gallery-link"
-                    aria-label="{{ 'accessibility.view_details' | t }}"
-                  >
-                    <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="none">
-                      <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                      <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
-                      <g id="SVGRepo_iconCarrier">
-                        <path fill="#ffffff" d="M8.235 4.045a.75.75 0 111.03-1.09l4.5 4.25a.75.75 0 010 1.09l-4.5 4.25a.75.75 0 01-1.03-1.09L11.364 8.5H2.75a.75.75 0 010-1.5h8.614L8.235 4.045z"></path>
-                      </g>
-                    </svg>
-                  </a>
-                {% endif %}
+{% comment %}{% endcomment %}</style>
+<div
+  class="mga mga-b2 color-{{ color_scheme }} gradient"
+  data-mga-section="{{ section.id }}"
+  data-mga-type="gallery-basic2"
+  data-mga-settings="{{ section.settings | json | escape }}"
+  data-mga-defaults='{"color_scheme":"default-color-scheme","section_width":"full_width","reset_spacing":true,"columns_desktop":3,"gutter":20,"container_max_width":990,"img_proportion":"125%","image_border_radius":4,"make_images_circle":false,"image_shadow":"none","image_hover_animation":"zoom_in_subtle","display_video_first":false,"display_image_first":false,"icon_size":32,"lazyload":true,"enable_custom_style":false,"section_padding_top":50,"section_padding_bottom":50,"columns_mobile":1,"img_proportion_mobile":"80%","vertical_space_mobile":20,"section_padding_top_mobile":50,"section_padding_bottom_mobile":50}'
+  data-mga-block-defaults='{"image":{"link_label":"View details"}}'
+  data-mga-width="{{ s.section_width | default: 'full_width' }}"
+  data-mga-reset="{% if s.reset_spacing %}true{% else %}false{% endif %}"
+  data-mga-hover="{{ s.image_hover_animation | default: 'none' }}"
+  data-mga-order="{{ order }}"
+  style="--mga-section-bg: {% if custom %}{% render 'scheme-color', color: s.section_bg, fallback: 'var(--color-background)' %}{% else %}var(--color-background){% endif %}; --mga-bg: {% if custom %}{% render 'scheme-color', color: s.background_color, fallback: 'var(--color-background)' %}{% else %}var(--color-background){% endif %}; --mga-link-bg: {% if custom %}{% render 'scheme-color', color: s.link_bg, fallback: 'var(--color-background)' %}{% else %}var(--color-background){% endif %}; --mga-link-color: {% if custom %}{% render 'scheme-color', color: s.link_color, fallback: 'var(--color-heading)' %}{% else %}var(--color-heading){% endif %}; --mga-ratio-d: {{ ratio_d }}; --mga-ratio-m: {{ ratio_m }}; --mga-shadow: {{ shadow }}; --mga-radius: {{ radius }}; --mga-cols-d: {{ s.columns_desktop | default: 3 }}; --mga-cols-m: {{ s.columns_mobile | default: 1 }}; --mga-gap-d: {{ s.gutter }}px; --mga-gap-m: {{ s.vertical_space_mobile }}px; --mga-max: {{ max_width }}; --mga-icon: {{ s.icon_size }}px; --mga-pt-d: {{ s.section_padding_top }}px; --mga-pb-d: {{ s.section_padding_bottom }}px; --mga-pt-m: {{ s.section_padding_top_mobile }}px; --mga-pb-m: {{ s.section_padding_bottom_mobile }}px;"
+>
+  <style data-mga-custom-css>{{ s.custom_css }}</style>
+  <div class="mga__frame mga-b2__frame">
+    <div class="mga-b2__inner">
+      <ul class="mga-b2__grid" role="list">
+        {%- for block in section.blocks -%}
+          {%- if block.type == 'image' -%}
+            {%- liquid
+              assign b = block.settings
+              assign img = b.background_image
+              assign vid = b.video_url | strip_html | strip
+              assign href = b.gallery_link_url | url
+              assign media = 'none'
+              if img != blank and vid != blank
+                assign media = 'both'
+              elsif img != blank
+                assign media = 'image'
+              elsif vid != blank
+                assign media = 'video'
+              endif
+              assign alt = b.alt | strip_html | strip
+              if alt == blank
+                assign alt = img.alt
+              endif
+              assign link_label = b.link_label | strip_html | strip | default: 'View details'
+            -%}
+            <li class="mga-b2__item" data-mga-block="{{ block.id }}" data-mga-type="image" data-mga-settings="{{ b | json | escape }}" {{ block.shopify_attributes }}>
+              <div class="mga-media mga-b2__media" data-mga-media data-media="{{ media }}">
+                {% render 'media-galleries-a-ph' %}
+                <video data-mga-video class="mga-fill" muted loop playsinline autoplay preload="metadata" aria-hidden="true"{% if vid != blank %} src="{{ vid | escape }}"{% else %} hidden{% endif %}></video>
+                <img data-mga-img class="mga-fill"{% if img != blank %} src="{{ img | image_url: width: 1200 }}" srcset="{{ img | image_url: width: 490 }} 490w, {{ img | image_url: width: 750 }} 750w, {{ img | image_url: width: 1200 }} 1200w" sizes="(min-width: 750px) 33vw, 100vw" width="{{ img.width | default: 1200 }}" height="{{ img.height | default: 1500 }}"{% else %} hidden{% endif %} alt="{{ alt | escape }}" loading="{{ loading }}" decoding="async" draggable="false">
+                <a data-mga-link class="mga-b2__link"{% if href != blank %} href="{{ href }}"{% else %} hidden{% endif %} aria-label="{{ link_label | escape }}">
+                  <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8.235 4.045a.75.75 0 111.03-1.09l4.5 4.25a.75.75 0 010 1.09l-4.5 4.25a.75.75 0 01-1.03-1.09L11.364 8.5H2.75a.75.75 0 010-1.5h8.614L8.235 4.045z"/></svg>
+                </a>
               </div>
-            </div>
-        {% endcase %}
-      {% endfor %}
+            </li>
+          {%- endif -%}
+        {%- endfor -%}
+      </ul>
     </div>
   </div>
 </div>
-
-<script>
-  // Disable right-click context menu for images in this section
-  (function(){
-    var imgs = document.querySelectorAll('.loudecom-section__{{sec_id}} img');
-    imgs.forEach(function(img) {
-      img.oncontextmenu = function() { return false; };
-    });
-  })();
-{% comment %}{% endcomment %}</script>
-
-
-
 </template>
 
 <schema>
@@ -934,7 +555,13 @@
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "select",
@@ -961,30 +588,49 @@
         "default": "full_width"
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
-      },
-      {
         "type": "checkbox",
         "id": "reset_spacing",
-        "label": "Remove default space between sections",
+        "label": "Remove the theme's space between sections",
         "default": true
       },
       {
         "type": "header",
-        "content": "Image Settings"
+        "content": "Layout"
       },
       {
-        "type": "color",
-        "id": "background_color",
-        "label": "Background"
+        "type": "range",
+        "id": "columns_desktop",
+        "label": "Images per row (desktop)",
+        "min": 1,
+        "max": 6,
+        "step": 1,
+        "default": 3
+      },
+      {
+        "type": "range",
+        "id": "gutter",
+        "min": 0,
+        "max": 50,
+        "step": 1,
+        "unit": "px",
+        "label": "Gap between images (desktop)",
+        "default": 20
+      },
+      {
+        "type": "number",
+        "id": "container_max_width",
+        "label": "Content max width (px)",
+        "default": 990,
+        "info": "Leave at 0 for no limit."
+      },
+      {
+        "type": "header",
+        "content": "Images"
       },
       {
         "type": "select",
         "id": "img_proportion",
-        "label": "Image ratio",
+        "label": "Image shape (desktop)",
         "options": [
           {
             "value": "100%",
@@ -1022,9 +668,171 @@
         "default": "125%"
       },
       {
+        "type": "range",
+        "id": "image_border_radius",
+        "min": 0,
+        "max": 50,
+        "step": 1,
+        "unit": "px",
+        "label": "Image corner radius",
+        "default": 4,
+        "visible_if": "{{ section.settings.make_images_circle == false }}"
+      },
+      {
+        "type": "checkbox",
+        "id": "make_images_circle",
+        "default": false,
+        "label": "Round images"
+      },
+      {
+        "type": "select",
+        "id": "image_shadow",
+        "label": "Image shadow",
+        "options": [
+          {
+            "value": "none",
+            "label": "None"
+          },
+          {
+            "value": "low",
+            "label": "Low Shadow"
+          },
+          {
+            "value": "medium",
+            "label": "Medium Shadow"
+          },
+          {
+            "value": "high",
+            "label": "High Shadow"
+          }
+        ],
+        "default": "none"
+      },
+      {
+        "type": "select",
+        "id": "image_hover_animation",
+        "label": "Hover effect",
+        "options": [
+          {
+            "value": "none",
+            "label": "None"
+          },
+          {
+            "value": "zoom_in_subtle",
+            "label": "Zoom In Subtle"
+          },
+          {
+            "value": "scale_up",
+            "label": "Scale Up"
+          }
+        ],
+        "default": "zoom_in_subtle"
+      },
+      {
+        "type": "checkbox",
+        "id": "display_video_first",
+        "default": false,
+        "label": "Show video first, image on hover",
+        "info": "For blocks with both an image and a video."
+      },
+      {
+        "type": "checkbox",
+        "id": "display_image_first",
+        "default": false,
+        "label": "Show image first, video on hover",
+        "visible_if": "{{ section.settings.display_video_first == false }}"
+      },
+      {
+        "type": "range",
+        "id": "icon_size",
+        "min": 8,
+        "max": 64,
+        "step": 1,
+        "unit": "px",
+        "label": "Link arrow size",
+        "default": 32
+      },
+      {
+        "type": "checkbox",
+        "id": "lazyload",
+        "default": true,
+        "label": "Load images as they scroll into view"
+      },
+      {
+        "type": "header",
+        "content": "Appearance"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Enable custom styling",
+        "default": false
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Section background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "background_color",
+        "label": "Gallery background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "link_bg",
+        "label": "Link button background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "link_color",
+        "label": "Link arrow colour",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "header",
+        "content": "Desktop spacing"
+      },
+      {
+        "type": "range",
+        "id": "section_padding_top",
+        "min": 0,
+        "max": 200,
+        "step": 10,
+        "unit": "px",
+        "label": "Top padding (desktop)",
+        "default": 50
+      },
+      {
+        "type": "range",
+        "id": "section_padding_bottom",
+        "min": 0,
+        "max": 200,
+        "step": 10,
+        "unit": "px",
+        "label": "Bottom padding (desktop)",
+        "default": 50
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "range",
+        "id": "columns_mobile",
+        "label": "Images per row (mobile)",
+        "min": 1,
+        "max": 3,
+        "step": 1,
+        "default": 1
+      },
+      {
         "type": "select",
         "id": "img_proportion_mobile",
-        "label": "Image ratio (mobile)",
+        "label": "Image shape (mobile)",
         "options": [
           {
             "value": "100%",
@@ -1062,132 +870,14 @@
         "default": "80%"
       },
       {
-        "type": "select",
-        "id": "image_shadow",
-        "label": "Image shadow",
-        "options": [
-          {
-            "value": "none",
-            "label": "None"
-          },
-          {
-            "value": "low",
-            "label": "Low Shadow"
-          },
-          {
-            "value": "medium",
-            "label": "Medium Shadow"
-          },
-          {
-            "value": "high",
-            "label": "High Shadow"
-          }
-        ],
-        "default": "none"
-      },
-      {
-        "type": "range",
-        "id": "image_border_radius",
-        "min": 0,
-        "max": 50,
-        "step": 1,
-        "unit": "px",
-        "label": "Corner radius",
-        "default": 4
-      },
-      {
-        "type": "checkbox",
-        "id": "make_images_circle",
-        "default": false,
-        "label": "Circle images"
-      },
-      {
-        "type": "select",
-        "id": "image_hover_animation",
-        "label": "Hover animation",
-        "options": [
-          {
-            "value": "none",
-            "label": "None"
-          },
-          {
-            "value": "zoom_in_subtle",
-            "label": "Zoom In Subtle"
-          },
-          {
-            "value": "scale_up",
-            "label": "Scale Up"
-          }
-        ],
-        "default": "zoom_in_subtle"
-      },
-      {
-        "type": "header",
-        "content": "Media Display Options"
-      },
-      {
-        "type": "checkbox",
-        "id": "display_video_first",
-        "default": false,
-        "label": "Video first"
-      },
-      {
-        "type": "checkbox",
-        "id": "display_image_first",
-        "default": false,
-        "label": "Image first"
-      },
-      {
-        "type": "header",
-        "content": "Spacing"
-      },
-      {
-        "type": "range",
-        "id": "gutter",
-        "min": 0,
-        "max": 50,
-        "step": 1,
-        "unit": "px",
-        "label": "Image gap (desktop)",
-        "default": 20
-      },
-      {
         "type": "range",
         "id": "vertical_space_mobile",
         "min": 0,
         "max": 50,
         "step": 1,
         "unit": "px",
-        "label": "Image gap (mobile)",
+        "label": "Gap between images (mobile)",
         "default": 20
-      },
-      {
-        "type": "header",
-        "content": "Section Padding"
-      },
-      {
-        "type": "range",
-        "id": "section_padding_top",
-        "min": 0,
-        "max": 200,
-        "step": 10,
-        "unit": "px",
-        "label": "Top padding (desktop)",
-        "default": 50
-      },
-      {
-        "type": "range",
-        "id": "section_padding_bottom",
-        "min": 0,
-        "max": 200,
-        "step": 10,
-        "unit": "px",
-        "label": "Bottom padding (desktop)",
-        "default": 50
-      },
-      {
-        "type": "header",
-        "content": "Mobile Padding"
       },
       {
         "type": "range",
@@ -1211,47 +901,12 @@
       },
       {
         "type": "header",
-        "content": "Customization"
-      },
-      {
-        "type": "number",
-        "id": "container_max_width",
-        "label": "Content width (px)",
-        "default": 990
+        "content": "Advanced"
       },
       {
         "type": "textarea",
         "id": "custom_css",
         "label": "Custom CSS"
-      },
-      {
-        "type": "header",
-        "content": "Performance"
-      },
-      {
-        "type": "checkbox",
-        "id": "lazyload",
-        "default": true,
-        "label": "Lazy load images"
-      },
-      {
-        "type": "header",
-        "content": "Icons"
-      },
-      {
-        "type": "range",
-        "id": "icon_size",
-        "min": 8,
-        "max": 64,
-        "step": 1,
-        "unit": "px",
-        "label": "Icon size",
-        "default": 32
-      },
-      {
-        "type": "color",
-        "id": "section_bg",
-        "label": "Section background"
       }
     ],
     "blocks": [
@@ -1266,14 +921,28 @@
             "label": "Image"
           },
           {
+            "type": "text",
+            "id": "alt",
+            "label": "Image description",
+            "info": "Read by screen readers. Leave empty to use the image’s own alt text."
+          },
+          {
+            "type": "text",
+            "id": "video_url",
+            "label": "Video file URL",
+            "info": "A direct link to an .mp4 file. It plays muted on a loop."
+          },
+          {
             "type": "url",
             "id": "gallery_link_url",
             "label": "Link"
           },
           {
-            "type": "inline_richtext",
-            "id": "video_url",
-            "label": "Video URL"
+            "type": "text",
+            "id": "link_label",
+            "label": "Link description",
+            "default": "View details",
+            "info": "Read by screen readers for the arrow button."
           }
         ]
       }

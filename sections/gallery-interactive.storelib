@@ -1,7 +1,29 @@
 <template compat="shopify">
 {% render 'theme-type' %}
 {%- liquid
-  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+  assign s = section.settings
+  assign color_scheme = s.color_scheme.id | default: s.color_scheme | default: 'default-color-scheme'
+  assign custom = s.enable_custom_style
+  case s.gallery_wrap_shadow
+    when 'low'
+      assign shadow = '0 2px 4px rgba(0, 0, 0, 0.1)'
+    when 'medium'
+      assign shadow = '0 4px 8px rgba(0, 0, 0, 0.2)'
+    when 'high'
+      assign shadow = '0 6px 12px rgba(0, 0, 0, 0.3)'
+    else
+      assign shadow = 'none'
+  endcase
+  case s.display_section_on
+    when 'mobile_only'
+      assign show = 'mobile'
+    when 'desktop_only'
+      assign show = 'desktop'
+    when 'no_devices'
+      assign show = 'none'
+    else
+      assign show = 'all'
+  endcase
 -%}
 {%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
 {%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' and section.settings.reveal != false -%}
@@ -19,341 +41,133 @@
   })();
 {% comment %}{% endcomment %}</script>
 {%- endif -%}
-<style data-rs-bulletproof>
-  {%- if section.settings.reset_spacing -%}
-    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
-    #shopify-section-{{ section.id }},
-    #shopify-section-{{ section.id }} > .section,
-    #shopify-section-{{ section.id }} > section,
-    #shopify-section-{{ section.id }} > div,
-    #shopify-section-{{ section.id }} > div > .section {
-      margin-top: 0 !important;
-      margin-bottom: 0 !important;
-    }
-    #shopify-section-{{ section.id }} + .shopify-section,
-    #shopify-section-{{ section.id }} + section,
-    .shopify-section + #shopify-section-{{ section.id }} {
-      margin-top: 0 !important;
-    }
-  {%- endif -%}
-{% comment %}{% endcomment %}</style>
-{%- liquid
-  assign __ti_scroll_animation = settings.scroll_animation | default: 'none'
-  assign __ti_reveal = section.settings.reveal
--%}
+{% render 'media-galleries-a-base', section: section %}
+{%- comment -%}
+  Materia Themes. Gallery Interactive 2: a row of image panels. The panel under
+  the pointer, the focused panel or the tapped panel widens; the others narrow.
+  Panels are buttons, so they work with a keyboard (Tab, arrow keys, Enter).
+{%- endcomment -%}
 <style>
-  /* Section isolation — prevent CSS/JS bleed between sections */
-  #shopify-section-{{ section.id }} {
-    isolation: isolate;
-    position: relative;
+  #shopify-section-{{ section.id }} .mga-gi__head { display: grid; gap: var(--mga-title-gap); margin-bottom: var(--mga-gallery-gap); text-align: center; }
+  #shopify-section-{{ section.id }} .mga-gi__head:not(:has(> :not([hidden]))) { display: none; }
+  #shopify-section-{{ section.id }} .mga-gi__text {
+    margin: 0;
+    color: var(--mga-color);
+    font-family: var(--mga-font);
+    font-weight: var(--mga-weight);
+    font-size: var(--mga-size-m);
+    padding-inline: var(--mga-pl-m, 0px) var(--mga-pr-m, 0px);
+    overflow-wrap: anywhere;
   }
-  /* Aggressive theme typography */
-  :where(#shopify-section-{{ section.id }}) {
-    font-family: var(--body-font, inherit);
-  }
-  :where(#shopify-section-{{ section.id }}) :where(button, input, textarea, select, optgroup) {
-    font-family: inherit;
-  }
-  /* Theme font-weight inheritance — sections inherit theme weights by default.
-     Specific font-weight rules in section CSS still override these. */
-  #shopify-section-{{ section.id }} {
-    font-weight: var(--body-weight, inherit);
-  }
-  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
-    font-weight: var(--heading-weight, inherit);
-  }
-  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
-    font-family: var(--heading-font, inherit);
-  }
-  /* Section margin sliders (mobile-first) */
-  #shopify-section-{{ section.id }} {
-    margin-top: {{ section.settings.section_margin_top_mobile | default: 0 }}px;
-    margin-bottom: {{ section.settings.section_margin_bottom_mobile | default: 0 }}px;
-  }
-  @media (min-width: 768px) {
-    #shopify-section-{{ section.id }} {
-      margin-top: {{ section.settings.section_margin_top_desktop | default: 0 }}px;
-      margin-bottom: {{ section.settings.section_margin_bottom_desktop | default: 0 }}px;
-    }
-  }
-  /* Section wrapper spans its parent's full width without breaking out of
-     the editor preview. The section + first child span 100% so backgrounds
-     reach edge-to-edge but the editor inspector outline stays inside the
-     iframe viewport. */
-  #shopify-section-{{ section.id }} {
-    max-width: none !important;
-    width: 100% !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-    position: relative !important;
-    box-sizing: border-box !important;
-  }
-  #shopify-section-{{ section.id }} > :where(div, section, header, footer, aside, main, article):first-child {
-    max-width: none !important;
-    width: 100% !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    box-sizing: border-box !important;
-  }
-
-  /* Section width — universal selector that works regardless of inner
-     markup. Targets both:
-       1) Theme container classes (.container/.fluid_container/etc.) — for
-          sections that have an inner wrapper with that class
-       2) The section's first-child div — for sections that don't have a
-          named inner wrapper. The padding-inline sets the max content
-          area while the wrapper itself stays 100% wide so any background
-          stays edge-to-edge. */
-  {%- case section.settings.section_width -%}
-    {%- when 'container' -%}
-      #shopify-section-{{ section.id }} .container,
-      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
-        max-width: calc(var(--page-width, 1300px) + 3rem) !important;
-        margin-inline: auto !important;
-        box-sizing: border-box !important;
-      }
-    {%- when 'fluid_container' -%}
-      #shopify-section-{{ section.id }} .fluid_container,
-      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
-        max-width: calc(var(--fluid-container-width, 1500px) + 3rem) !important;
-        margin-inline: auto !important;
-        box-sizing: border-box !important;
-      }
-    {%- when 'stretch_width' -%}
-      /* Stretched: no max-width; tighter side padding handled below */
-      @media (min-width: 1200px) {
-        #shopify-section-{{ section.id }} .stretch_width,
-        #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
-          padding-inline: 3rem;
-        }
-      }
-    {%- when 'full_width' -%}
-      /* full bleed — no constraints */
-  {%- endcase -%}
-  /* Reset spacing */
-  {%- if section.settings.reset_spacing -%}
-    #shopify-section-{{ section.id }} { margin-bottom: 0 !important; margin-top: 0 !important; }
-    #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
-  {%- endif -%}
-{% comment %}{% endcomment %}</style>
-<!-- ti-theme:start -->
-
-
-<style>
-  {% assign heading_block = section.blocks | where: 'type', 'heading' | first %}
-  {% if heading_block and heading_block.settings.enable_custom_fonts %}
-    @import url('https://fonts.googleapis.com/css2?family={{ heading_block.settings.font_family | replace: ' ', '+' }}&display=swap');
-  {% endif %}
-
-  {% assign subheading_block = section.blocks | where: 'type', 'subheading' | first %}
-  {% if subheading_block and subheading_block.settings.enable_custom_fonts %}
-    @import url('https://fonts.googleapis.com/css2?family={{ subheading_block.settings.font_family | replace: ' ', '+' }}&display=swap');
-  {% endif %}
-
-  /* Gallery Section Styles */
-  #shopify-section-{{ section.id }} .custom-gallery {
-    width: 100%;
-    padding-top: {{ section.settings.section_padding_top_desktop }}px;
-    padding-bottom: {{ section.settings.section_padding_bottom_desktop }}px;
-    padding-left: {{ section.settings.section_padding_left_desktop }}px;
-    padding-right: {{ section.settings.section_padding_right_desktop }}px;
-    margin: 0 auto;
-    max-width: 100%;
-    position: relative;
-    box-sizing: border-box;
-    background-color: {% render 'scheme-color', color: section.settings.section_background_color, fallback: 'var(--color-background)' %} !important;
-    {% comment %}
-      Handle Display Section On
-      - all_devices: display normally
-      - mobile_only: hide on desktop
-      - desktop_only: hide on mobile
-      - no_devices: hide on all
-    {% endcomment %}
-    {% if section.settings.display_section_on == 'mobile_only' %}
-      display: block;
-    {% elsif section.settings.display_section_on == 'desktop_only' %}
-      display: block;
-    {% elsif section.settings.display_section_on == 'no_devices' %}
-      display: none;
-    {% endif %}
-  }
-
-  /* Responsive Display Handling */
-  {% if section.settings.display_section_on == 'mobile_only' %}
-    @media (min-width: 769px) {
-      #shopify-section-{{ section.id }} .custom-gallery {
-        display: none;
-      }
-    }
-  {% elsif section.settings.display_section_on == 'desktop_only' %}
-    @media (max-width: 768px) {
-      #shopify-section-{{ section.id }} .custom-gallery {
-        display: none;
-      }
-    }
-  {% endif %}
-
-  {% if heading_block %}
-    #shopify-section-{{ section.id }} .custom-gallery h1 {
-      position: relative;
-      margin-bottom: 0;
-      {% if heading_block.settings.enable_custom_fonts %}
-        font-family: '{{ heading_block.settings.font_family }}', sans-serif;
-      {% endif %}
-      font-weight: {{ heading_block.settings.font_weight }};
-      font-size: {{ heading_block.settings.size_desktop }}px;
-      text-transform: normal;
-      color: {% render 'scheme-color', color: heading_block.settings.color, fallback: 'var(--color-heading)' %} !important;
-      text-align: center;
-    }
-  {% endif %}
-
-  {% if subheading_block %}
-    #shopify-section-{{ section.id }} .custom-gallery h2 {
-      text-align: center;
-      {% if subheading_block.settings.enable_custom_fonts %}
-        font-family: '{{ subheading_block.settings.font_family }}', sans-serif;
-      {% else %}
-        font-family: var(--body-font, inherit);
-      {% endif %}
-      font-weight: {{ subheading_block.settings.font_weight }};
-      font-size: {{ subheading_block.settings.size_desktop }}px;
-      color: {% render 'scheme-color', color: subheading_block.settings.color, fallback: 'var(--color-text)' %} !important;
-      padding-left: {{ subheading_block.settings.padding_left_desktop }}px;
-      padding-right: {{ subheading_block.settings.padding_right_desktop }}px;
-      margin-top: {{ section.settings.vertical_space_title_subheading }}px;
-      margin-bottom: {{ section.settings.vertical_space_subheading_gallery }}px;
-    }
-  {% endif %}
-
-  #shopify-section-{{ section.id }} .gallery-wrap {
+  #shopify-section-{{ section.id }} .mga-gi__heading { line-height: var(--heading-line-height, 1.2); }
+  #shopify-section-{{ section.id }} .mga-gi__sub { line-height: var(--body-line-height, 1.5); }
+  #shopify-section-{{ section.id }} .mga-gi__wrap {
     display: flex;
-    flex-direction: row;
+    gap: var(--mga-item-gap);
     width: 100%;
-    height: 70vh;
+    height: calc(var(--mga-height-m) * 1vw);
+    border-radius: var(--mga-radius);
+    box-shadow: var(--mga-shadow);
     overflow: hidden;
-    border-radius: {{ section.settings.gallery_wrap_border_radius }}px;
-    {% comment %}
-      Apply Box Shadow based on selection
-    {% endcomment %}
-    {% case section.settings.gallery_wrap_shadow %}
-      {% when 'low' %}
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      {% when 'medium' %}
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-      {% when 'high' %}
-        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
-      {% else %}
-        box-shadow: none;
-    {% endcase %}
   }
-
-  #shopify-section-{{ section.id }} .gallery-wrap .item {
-    flex: 1;
+  #shopify-section-{{ section.id }} .mga-gi__item {
+    flex: 1 1 0;
+    min-width: 44px;
     height: 100%;
-    background-position: center;
-    background-size: cover;
-    background-repeat: no-repeat;
-    transition: flex 0.8s ease;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    font: inherit;
+    color: inherit;
     cursor: pointer;
-    border-radius: inherit;
+    transition: flex-grow 0.8s ease;
+    -webkit-tap-highlight-color: transparent;
   }
-
-  #shopify-section-{{ section.id }} .gallery-wrap .item:hover {
-    flex: 7;
-  }
-
-  #shopify-section-{{ section.id }} .social {
-    position: absolute;
-    right: 35px;
-    bottom: 35px;
-  }
-
-  #shopify-section-{{ section.id }} .social a img {
-    display: block;
-    width: 32px;
-    height: 32px;
-  }
-
-  /* Responsive Adjustments */
-  @media (max-width: 1200px) {
-    #shopify-section-{{ section.id }} .custom-gallery {
-      width: 100%;
-      padding-top: {{ section.settings.section_padding_top_desktop }}px;
-      padding-bottom: {{ section.settings.section_padding_bottom_desktop }}px;
-      padding-left: {{ section.settings.section_padding_left_mobile }}px;
-      padding-right: {{ section.settings.section_padding_right_mobile }}px;
-      max-width: 100%;
-    }
-  }
-
-  @media (max-width: 768px) {
-    #shopify-section-{{ section.id }} .gallery-wrap {
-      flex-direction: row; /* Keep items in a row on mobile */
-      height: auto;
-    }
-
-    #shopify-section-{{ section.id }} .gallery-wrap .item {
-      height: 80vw; /* Adjust height for mobile devices */
-    }
-
-    /* Enable hover effects on mobile */
-    #shopify-section-{{ section.id }} .gallery-wrap .item:hover {
-      flex: 7;
-    }
-
-    {% if heading_block %}
-      #shopify-section-{{ section.id }} .custom-gallery h1 {
-        font-size: {{ heading_block.settings.size_mobile }}px;
-        margin-bottom: 0;
-      }
-    {% endif %}
-
-    {% if subheading_block %}
-      #shopify-section-{{ section.id }} .custom-gallery h2 {
-        font-size: {{ subheading_block.settings.size_mobile }}px;
-        padding-left: {{ subheading_block.settings.padding_left_mobile }}px;
-        padding-right: {{ subheading_block.settings.padding_right_mobile }}px;
-        margin-top: {{ section.settings.vertical_space_title_subheading }}px;
-        margin-bottom: {{ section.settings.vertical_space_subheading_gallery }}px;
-      }
-    {% endif %}
-
-    #shopify-section-{{ section.id }} .custom-gallery {
-      padding-top: {{ section.settings.section_padding_top_mobile }}px;
-      padding-bottom: {{ section.settings.section_padding_bottom_mobile }}px;
-    }
+  #shopify-section-{{ section.id }} .mga-gi__item:is(:hover, :focus-visible, .is-active) { flex-grow: var(--mga-grow); }
+  #shopify-section-{{ section.id }} .mga-gi__wrap:hover .mga-gi__item.is-active:not(:hover) { flex-grow: 1; }
+  #shopify-section-{{ section.id }} .mga-gi__item:focus-visible { outline-offset: -4px; }
+  #shopify-section-{{ section.id }} .mga-gi__item .mga-fill { pointer-events: none; }
+  #shopify-section-{{ section.id }} .mga-gi__item .mga-ph { inset: auto; top: 50%; left: 50%; width: 160px; height: 120px; transform: translate(-50%, -50%); }
+  #shopify-section-{{ section.id }} .mga-gi__item:nth-child(even)[data-media="none"] { background: color-mix(in srgb, var(--color-heading) 13%, var(--color-background)); }
+  @media (min-width: 750px) {
+    #shopify-section-{{ section.id }} .mga-gi__text { font-size: var(--mga-size-d); padding-inline: var(--mga-pl-d, 0px) var(--mga-pr-d, 0px); }
+    #shopify-section-{{ section.id }} .mga-gi__wrap { height: calc(var(--sl-vh, 1vh) * var(--mga-height-d)); }
   }
 {% comment %}{% endcomment %}</style>
-
-<div class="custom-gallery color-{{ color_scheme }} gradient">
-  {% for block in section.blocks %}
-    {% if block.type == 'heading' %}
-      <h1>{{ block.settings.title }}</h1>
-    {% elsif block.type == 'subheading' %}
-      <h2>{{ block.settings.text }}</h2>
-    {% endif %}
-  {% endfor %}
-  <div class="gallery-wrap">
-    {% for block in section.blocks %}
-      {% if block.type == 'gallery_image' %}
-        <div
-          class="item"
-          style="background-image: url('{% if block.settings.image %}{{ block.settings.image | img_url: 'original' }}{% else %}data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22%3E%3Crect width=%22400%22 height=%22300%22 fill=%22%23efefef%22/%3E%3Ccircle cx=%22172%22 cy=%22124%22 r=%2214%22 fill=%22%23cfcfcf%22/%3E%3Cpath d=%22M140 192l40-46 25 28 20-18 35 36z%22 fill=%22%23cfcfcf%22/%3E%3C/svg%3E{% endif %}');"
-        ></div>
-      {% endif %}
-    {% endfor %}
-  </div>
-
-  {% if section.settings.twitter_link and section.settings.twitter_icon %}
-    <div class="social">
-      <a href="{{ section.settings.twitter_link }}" target="_blank" rel="noopener">
-        <img src="{{ section.settings.twitter_icon | img_url: '32x32' }}" alt="{{ 'general.social.links.twitter' | t }}">
-      </a>
+<div
+  class="mga mga-gi color-{{ color_scheme }} gradient"
+  data-mga-section="{{ section.id }}"
+  data-mga-type="gallery-interactive"
+  data-mga-settings="{{ section.settings | json | escape }}"
+  data-mga-defaults='{"color_scheme":"default-color-scheme","section_width":"full_width","display_section_on":"all_devices","reset_spacing":true,"gallery_height_desktop":70,"expand_ratio":7,"image_gap":0,"vertical_space_title_subheading":20,"vertical_space_subheading_gallery":30,"gallery_wrap_border_radius":3,"gallery_wrap_shadow":"low","enable_custom_style":false,"reveal":true,"section_padding_top_desktop":75,"section_padding_bottom_desktop":65,"section_padding_left_desktop":150,"section_padding_right_desktop":150,"section_margin_top_desktop":0,"section_margin_bottom_desktop":0,"gallery_height_mobile":80,"section_padding_top_mobile":40,"section_padding_bottom_mobile":40,"section_padding_left_mobile":25,"section_padding_right_mobile":25,"section_margin_top_mobile":0,"section_margin_bottom_mobile":0}'
+  data-mga-block-defaults='{"heading":{"title":"<strong>Discover Our Gallery</strong>","enable_custom_style":false,"enable_custom_fonts":false,"font":"assistant_n4","font_family":"Oswald","font_weight":"inherit","size_desktop":32,"size_mobile":30},"subheading":{"text":"Explore the latest trends and styles in our collection","enable_custom_style":false,"enable_custom_fonts":false,"font":"assistant_n4","font_family":"Roboto","font_weight":"inherit","size_desktop":16,"size_mobile":15,"padding_left_desktop":20,"padding_right_desktop":20,"padding_left_mobile":10,"padding_right_mobile":10},"gallery_image":{}}'
+  data-mga-width="{{ s.section_width | default: 'full_width' }}"
+  data-mga-reset="{% if s.reset_spacing %}true{% else %}false{% endif %}"
+  data-mga-show="{{ show }}"
+  style="--mga-bg: {% if custom %}{% render 'scheme-color', color: s.section_background_color, fallback: 'var(--color-background)' %}{% else %}var(--color-background){% endif %}; --mga-radius: {{ s.gallery_wrap_border_radius }}px; --mga-shadow: {{ shadow }}; --mga-title-gap: {{ s.vertical_space_title_subheading }}px; --mga-gallery-gap: {{ s.vertical_space_subheading_gallery }}px; --mga-height-d: {{ s.gallery_height_desktop | default: 70 }}; --mga-height-m: {{ s.gallery_height_mobile | default: 80 }}; --mga-grow: {{ s.expand_ratio | default: 7 }}; --mga-item-gap: {{ s.image_gap | default: 0 }}px; --mga-pt-d: {{ s.section_padding_top_desktop }}px; --mga-pb-d: {{ s.section_padding_bottom_desktop }}px; --mga-pl-d: {{ s.section_padding_left_desktop }}px; --mga-pr-d: {{ s.section_padding_right_desktop }}px; --mga-mt-d: {{ s.section_margin_top_desktop | default: 0 }}px; --mga-mb-d: {{ s.section_margin_bottom_desktop | default: 0 }}px; --mga-pt-m: {{ s.section_padding_top_mobile }}px; --mga-pb-m: {{ s.section_padding_bottom_mobile }}px; --mga-pl-m: {{ s.section_padding_left_mobile }}px; --mga-pr-m: {{ s.section_padding_right_mobile }}px; --mga-mt-m: {{ s.section_margin_top_mobile | default: 0 }}px; --mga-mb-m: {{ s.section_margin_bottom_mobile | default: 0 }}px;"
+>
+  <div class="mga__frame mga-gi__frame">
+    <div class="mga-gi__head">
+      {%- for block in section.blocks -%}
+        {%- assign b = block.settings -%}
+        {%- if block.type == 'heading' or block.type == 'subheading' -%}
+          {%- liquid
+            if block.type == 'heading'
+              assign text = b.title
+              assign fallback_color = 'var(--color-heading)'
+              assign fallback_font = 'var(--heading-font)'
+              assign fallback_weight = 'var(--heading-weight, 700)'
+            else
+              assign text = b.text
+              assign fallback_color = 'var(--color-text)'
+              assign fallback_font = 'var(--body-font)'
+              assign fallback_weight = 'var(--body-weight, 400)'
+            endif
+            assign weight = fallback_weight
+            if b.font_weight != blank and b.font_weight != 'inherit'
+              assign weight = b.font_weight
+            endif
+            assign font = fallback_font
+            if b.enable_custom_fonts and b.font.family
+              assign font = b.font.family | append: ', ' | append: b.font.fallback_families | default: 'sans-serif'
+            endif
+          -%}
+          {%- capture block_style -%}--mga-color: {% if b.enable_custom_style %}{% render 'scheme-color', color: b.color, fallback: fallback_color %}{% else %}{{ fallback_color }}{% endif %}; --mga-font: {{ font }}; --mga-weight: {{ weight }}; --mga-size-d: {{ b.size_desktop }}px; --mga-size-m: {{ b.size_mobile }}px;{% if block.type == 'subheading' %} --mga-pl-d: {{ b.padding_left_desktop }}px; --mga-pr-d: {{ b.padding_right_desktop }}px; --mga-pl-m: {{ b.padding_left_mobile }}px; --mga-pr-m: {{ b.padding_right_mobile }}px;{% endif %}{%- endcapture -%}
+          {%- if b.enable_custom_fonts and b.font.family -%}<style>{{ b.font | font_face: font_display: 'swap' }}</style>{%- endif -%}
+          {%- if block.type == 'heading' -%}
+            <h2 class="mga-gi__text mga-gi__heading" data-mga-block="{{ block.id }}" data-mga-type="heading" data-mga-settings="{{ b | json | escape }}" style="{{ block_style }}"{% if text == blank %} hidden{% endif %} {{ block.shopify_attributes }}>{{ text }}</h2>
+          {%- else -%}
+            <p class="mga-gi__text mga-gi__sub" data-mga-block="{{ block.id }}" data-mga-type="subheading" data-mga-settings="{{ b | json | escape }}" style="{{ block_style }}"{% if text == blank %} hidden{% endif %} {{ block.shopify_attributes }}>{{ text }}</p>
+          {%- endif -%}
+        {%- endif -%}
+      {%- endfor -%}
     </div>
-  {% endif %}
+    <div class="mga-gi__wrap">
+      {%- assign n = 0 -%}
+      {%- for block in section.blocks -%}
+        {%- if block.type == 'gallery_image' -%}
+          {%- liquid
+            assign n = n | plus: 1
+            assign b = block.settings
+            assign img = b.image
+            assign alt = b.alt | strip_html | strip
+            if alt == blank
+              assign alt = img.alt
+            endif
+            assign label = alt
+            if label == blank
+              assign label = 'Gallery image ' | append: n
+            endif
+          -%}
+          <button type="button" class="mga-media mga-gi__item" data-mga-item data-mga-block="{{ block.id }}" data-mga-type="gallery_image" data-mga-settings="{{ b | json | escape }}" data-media="{% if img != blank %}image{% else %}none{% endif %}" aria-expanded="false" aria-label="{{ label | escape }}" {{ block.shopify_attributes }}>
+            {% render 'media-galleries-a-ph' %}
+            <img data-mga-img class="mga-fill"{% if img != blank %} src="{{ img | image_url: width: 1600 }}" srcset="{{ img | image_url: width: 600 }} 600w, {{ img | image_url: width: 1000 }} 1000w, {{ img | image_url: width: 1600 }} 1600w" sizes="(min-width: 750px) 60vw, 70vw" width="{{ img.width | default: 1600 }}" height="{{ img.height | default: 1100 }}"{% else %} hidden{% endif %} alt="{{ alt | escape }}" loading="lazy" decoding="async">
+          </button>
+        {%- endif -%}
+      {%- endfor -%}
+    </div>
+  </div>
 </div>
 </template>
 
@@ -1641,7 +1455,13 @@
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "select",
@@ -1668,25 +1488,9 @@
         ]
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
-      },
-      {
-        "type": "checkbox",
-        "id": "reset_spacing",
-        "label": "Remove section spacing",
-        "default": true
-      },
-      {
-        "type": "header",
-        "content": "General"
-      },
-      {
         "type": "select",
         "id": "display_section_on",
-        "label": "Show on",
+        "label": "Show section on",
         "options": [
           {
             "value": "all_devices",
@@ -1708,18 +1512,72 @@
         "default": "all_devices"
       },
       {
-        "type": "color",
-        "id": "section_background_color",
-        "label": "Background"
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove the theme's space between sections",
+        "default": true
       },
       {
         "type": "header",
-        "content": "Style & Colors"
+        "content": "Layout"
+      },
+      {
+        "type": "range",
+        "id": "gallery_height_desktop",
+        "label": "Gallery height (desktop, % of screen)",
+        "min": 30,
+        "max": 90,
+        "step": 5,
+        "default": 70
+      },
+      {
+        "type": "range",
+        "id": "expand_ratio",
+        "label": "Opened image width",
+        "info": "How many times wider the opened image is than the others.",
+        "min": 2,
+        "max": 10,
+        "step": 1,
+        "default": 7
+      },
+      {
+        "type": "range",
+        "id": "image_gap",
+        "label": "Gap between images",
+        "min": 0,
+        "max": 24,
+        "step": 2,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "vertical_space_title_subheading",
+        "label": "Gap between heading and subheading",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "default": 20,
+        "unit": "px"
+      },
+      {
+        "type": "range",
+        "id": "vertical_space_subheading_gallery",
+        "label": "Gap above the gallery",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "default": 30,
+        "unit": "px"
+      },
+      {
+        "type": "header",
+        "content": "Images"
       },
       {
         "type": "range",
         "id": "gallery_wrap_border_radius",
-        "label": "Corner radius",
+        "label": "Gallery corner radius",
         "min": 0,
         "max": 50,
         "step": 1,
@@ -1729,7 +1587,7 @@
       {
         "type": "select",
         "id": "gallery_wrap_shadow",
-        "label": "Shadow",
+        "label": "Gallery shadow",
         "options": [
           {
             "value": "none",
@@ -1752,37 +1610,34 @@
       },
       {
         "type": "header",
-        "content": "Animation & Behavior"
+        "content": "Appearance"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Enable custom styling",
+        "default": false
+      },
+      {
+        "type": "color",
+        "id": "section_background_color",
+        "label": "Section background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "header",
+        "content": "Animation"
       },
       {
         "type": "checkbox",
         "id": "reveal",
         "label": "Reveal on scroll",
-        "default": true
+        "default": true,
+        "info": "Uses the scroll animation chosen in Theme settings."
       },
       {
         "type": "header",
-        "content": "Layout & Spacing"
-      },
-      {
-        "type": "range",
-        "id": "vertical_space_title_subheading",
-        "label": "Heading to subheading gap",
-        "min": 0,
-        "max": 100,
-        "step": 1,
-        "default": 20,
-        "unit": "px"
-      },
-      {
-        "type": "range",
-        "id": "vertical_space_subheading_gallery",
-        "label": "Subheading to gallery gap",
-        "min": 0,
-        "max": 100,
-        "step": 1,
-        "default": 30,
-        "unit": "px"
+        "content": "Desktop spacing"
       },
       {
         "type": "range",
@@ -1848,6 +1703,15 @@
       },
       {
         "type": "range",
+        "id": "gallery_height_mobile",
+        "label": "Gallery height (mobile, % of width)",
+        "min": 40,
+        "max": 150,
+        "step": 5,
+        "default": 80
+      },
+      {
+        "type": "range",
         "id": "section_padding_top_mobile",
         "label": "Top padding (mobile)",
         "min": 20,
@@ -1908,19 +1772,42 @@
     "blocks": [
       {
         "type": "heading",
-        "name": "Heading Text",
+        "name": "Heading",
         "settings": [
           {
             "type": "inline_richtext",
             "id": "title",
-            "label": "Heading Text",
+            "label": "Heading",
             "default": "<strong>Discover Our Gallery</strong>"
           },
           {
             "type": "checkbox",
-            "id": "enable_custom_fonts",
-            "label": "Custom font",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
             "default": false
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Heading colour",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom fonts",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
           },
           {
             "type": "select",
@@ -2289,12 +2176,13 @@
               }
             ],
             "default": "Oswald",
-            "visible_if": "{{ block.settings.enable_custom_fonts }}"
+            "hidden": true,
+            "info": "Older font list, kept for saved content. Use Font above."
           },
           {
             "type": "select",
             "id": "font_weight",
-            "label": "Font Weight",
+            "label": "Font weight",
             "options": [
               {
                 "value": "inherit",
@@ -2342,7 +2230,7 @@
           {
             "type": "range",
             "id": "size_desktop",
-            "label": "Size (desktop)",
+            "label": "Text size (desktop)",
             "min": 20,
             "max": 100,
             "step": 1,
@@ -2352,17 +2240,12 @@
           {
             "type": "range",
             "id": "size_mobile",
-            "label": "Size (mobile)",
+            "label": "Text size (mobile)",
             "min": 20,
             "max": 100,
             "step": 1,
             "default": 30,
             "unit": "px"
-          },
-          {
-            "type": "color",
-            "id": "color",
-            "label": "Color"
           }
         ]
       },
@@ -2371,16 +2254,39 @@
         "name": "Subheading",
         "settings": [
           {
-            "type": "text",
+            "type": "inline_richtext",
             "id": "text",
-            "label": "Subheading Text",
+            "label": "Subheading",
             "default": "Explore the latest trends and styles in our collection"
           },
           {
             "type": "checkbox",
-            "id": "enable_custom_fonts",
-            "label": "Custom font",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
             "default": false
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Text colour",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom fonts",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
           },
           {
             "type": "select",
@@ -2749,12 +2655,13 @@
               }
             ],
             "default": "Roboto",
-            "visible_if": "{{ block.settings.enable_custom_fonts }}"
+            "hidden": true,
+            "info": "Older font list, kept for saved content. Use Font above."
           },
           {
             "type": "select",
             "id": "font_weight",
-            "label": "Font Weight",
+            "label": "Font weight",
             "options": [
               {
                 "value": "inherit",
@@ -2802,7 +2709,7 @@
           {
             "type": "range",
             "id": "size_desktop",
-            "label": "Size (desktop)",
+            "label": "Text size (desktop)",
             "min": 10,
             "max": 60,
             "step": 1,
@@ -2812,7 +2719,7 @@
           {
             "type": "range",
             "id": "size_mobile",
-            "label": "Size (mobile)",
+            "label": "Text size (mobile)",
             "min": 10,
             "max": 60,
             "step": 1,
@@ -2820,29 +2727,8 @@
             "unit": "px"
           },
           {
-            "type": "color",
-            "id": "color",
-            "label": "Color"
-          },
-          {
-            "type": "range",
-            "id": "padding_left_mobile",
-            "label": "Left padding (mobile)",
-            "min": 0,
-            "max": 50,
-            "step": 1,
-            "default": 10,
-            "unit": "px"
-          },
-          {
-            "type": "range",
-            "id": "padding_right_mobile",
-            "label": "Right padding (mobile)",
-            "min": 0,
-            "max": 50,
-            "step": 1,
-            "default": 10,
-            "unit": "px"
+            "type": "header",
+            "content": "Spacing"
           },
           {
             "type": "range",
@@ -2863,17 +2749,43 @@
             "step": 1,
             "default": 20,
             "unit": "px"
+          },
+          {
+            "type": "range",
+            "id": "padding_left_mobile",
+            "label": "Left padding (mobile)",
+            "min": 0,
+            "max": 50,
+            "step": 1,
+            "default": 10,
+            "unit": "px"
+          },
+          {
+            "type": "range",
+            "id": "padding_right_mobile",
+            "label": "Right padding (mobile)",
+            "min": 0,
+            "max": 50,
+            "step": 1,
+            "default": 10,
+            "unit": "px"
           }
         ]
       },
       {
         "type": "gallery_image",
-        "name": "Gallery Image",
+        "name": "Image",
         "settings": [
           {
             "type": "image_picker",
             "id": "image",
-            "label": "Gallery Image"
+            "label": "Image"
+          },
+          {
+            "type": "text",
+            "id": "alt",
+            "label": "Image description",
+            "info": "Read by screen readers. Leave empty to use the image’s own alt text."
           }
         ]
       }
