@@ -140,10 +140,15 @@
       const extra = String(s.html_class || '').split(/[\s,]+/).filter(x => /^[\w-]+$/.test(x));
       if (key(extra) !== key(st.extraClasses || [])) { for (const x of st.extraClasses || []) container.classList.remove(x); container.classList.add(...extra); st.extraClasses = extra; }
     }
+    /* Legacy tagline: only rendered when the section has no Eyebrow block. */
     const tag = root.querySelector('[data-mgb-tagline]');
     if (tag) { rich(tag, s.tagline, st); hide(tag, !String(s.tagline || '').replace(/<[^>]*>/g, '').trim()); }
     for (let [el, type, b] of blocks(root, st)) {
-      if (type === 'heading') {
+      if (type === 'eyebrow') {
+        rich(el, b.text, st); hide(el, !String(b.text || '').replace(/<[^>]*>/g, '').trim());
+        const ink = bool(b.enable_custom_style) ? color(b.color, '') : '';
+        if (ink) set(el, '--gs2-tag-color', ink); else if (el.style.getPropertyValue('--gs2-tag-color')) el.style.removeProperty('--gs2-tag-color');
+      } else if (type === 'heading') {
         rich(el, b.heading, st); hide(el, !String(b.heading || '').replace(/<[^>]*>/g, '').trim());
         let w = b.heading_weight; if (!w || w === 'inherit') w = s.heading_weight; if (!w || w === 'inherit') w = 'var(--heading-weight, 700)';
         set(el, '--gs2-h-weight', w); set(el, '--gs2-h-size-d', px(b.desktop_heading_size, 42)); set(el, '--gs2-h-size-m', px(b.mobile_heading_size, 32));

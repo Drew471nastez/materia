@@ -169,12 +169,11 @@ const SECTIONS = {
     added: {type: 'gallery_image', sel: '.mga-gi__item', setting: 'alt', attr: [null, 'aria-label']},
   },
   'gallery-simple3': {
-    blocks: [{type: 'image', settings: {background_image: IMG, gallery_link_url: '/pages/a'}}, {type: 'image', settings: {background_image: IMG2}}, {type: 'image'}, {type: 'image'}],
-    heading: '.mga-s3__title', button: {sel: '.mga-s3__item:nth-child(1) .mga-s3__btn', hover: '.mga-s3__item:nth-child(1) .mga-s3__btn'},
+    blocks: [{type: 'heading'}, {type: 'subheading'}, {type: 'image', settings: {background_image: IMG, gallery_link_url: '/pages/a'}}, {type: 'image', settings: {background_image: IMG2}}, {type: 'image'}, {type: 'image'}],
+    heading: '.mga-s3__title', text: '.mga-s3__sub', button: {sel: '.mga-s3__item:nth-child(1) .mga-s3__btn', hover: '.mga-s3__item:nth-child(1) .mga-s3__btn'},
     controls: [
       {id: 'is_fullwidth', v: false, sel: '.mga-s3__frame', prop: 'maxWidth', want: '1320px'},
       {id: 'reset_spacing', v: false, wrapper: 'marginTop', want: '40px'},
-      {id: 'heading_text', v: '<em>New work</em>', sel: '.mga-s3__title em', text: true, want: 'New work'},
       {id: 'text_align', v: 'left', sel: '.mga-s3__title', prop: 'textAlign', want: 'left'},
       {id: 'container_max_width', v: 900, with: {is_fullwidth: false}, sel: '.mga-s3__frame', prop: 'maxWidth', want: '900px'},
       {id: 'columns_desktop', v: 3, sel: '.mga-s3__grid', prop: 'gridTemplateColumns', map: cols, want: W(2, 3)},
@@ -204,17 +203,32 @@ const SECTIONS = {
       {id: 'section_padding_right_mobile', v: 22, sel: '.mga', prop: 'paddingRight', want: W('22px', '100px')},
       {id: 'custom_class', v: 'lookbook-grid', sel: '.mga', classHas: 'lookbook-grid', want: true},
       {id: 'custom_css', v: uid => '#shopify-section-' + uid + ' .mga-s3__grid{outline:3px solid rgb(1, 2, 3)}', sel: '.mga-s3__grid', prop: 'outlineColor', want: 'rgb(1, 2, 3)'},
-      {block: 2, id: 'background_image', v: {url: 'https://theme.test/new.png'}, sel: '.mga-s3__item:nth-child(3) img', attr: 'src', map: v => /new\.png/.test(v || ''), want: true, visible: '.mga-s3__item:nth-child(3) img'},
-      {block: 0, id: 'alt', v: 'Ceramic bowls', sel: '.mga-s3__item:nth-child(1) img', attr: 'alt', want: 'Ceramic bowls'},
-      {block: 1, id: 'gallery_link_url', v: '/pages/b', sel: '.mga-s3__item:nth-child(2) a', attr: 'href', want: '/pages/b', visible: '.mga-s3__item:nth-child(2) a'},
-      {block: 0, id: 'gallery_link_label', v: 'See the set', sel: '.mga-s3__item:nth-child(1) .mga-s3__btn', text: true, want: 'See the set'},
+      {block: 0, id: 'text', v: '<em>New work</em>', sel: '.mga-s3__title em', text: true, want: 'New work'},
+      {block: 0, id: 'enable_custom_style', v: true, with: {color: '#ff8800'}, sel: '.mga-s3__title', prop: 'color', want: 'rgb(255, 136, 0)'},
+      {block: 0, id: 'color', v: '#ff8800', with: {enable_custom_style: true}, sel: '.mga-s3__title', prop: 'color', want: 'rgb(255, 136, 0)'},
+      {block: 0, id: 'size_enable', v: true, with: {size_desktop: 50, size_mobile: 22}, sel: '.mga-s3__title', prop: 'fontSize', want: W('22px', '50px')},
+      {block: 0, id: 'size_desktop', v: 50, with: {size_enable: true}, sel: '.mga-s3__title', prop: 'fontSize', want: W('28px', '50px')},
+      {block: 0, id: 'size_mobile', v: 22, with: {size_enable: true}, sel: '.mga-s3__title', prop: 'fontSize', want: W('22px', '35px')},
+      {block: 0, id: 'enable_custom_fonts', v: true, with: {font: {family: 'Arial', fallback_families: 'sans-serif'}}, sel: '.mga-s3__title', prop: 'fontFamily', map: v => /^"?Arial/.test(v), want: true},
+      {block: 0, id: 'font', v: {family: 'Verdana', fallback_families: 'sans-serif'}, with: {enable_custom_fonts: true}, sel: '.mga-s3__title', prop: 'fontFamily', map: v => /^"?Verdana/.test(v), want: true},
+      {block: 1, id: 'text', v: '<p>Shot in the <strong>studio</strong></p>', sel: '.mga-s3__sub strong', text: true, want: 'studio'},
+      {block: 1, id: 'enable_custom_style', v: true, with: {color: '#00aa55'}, sel: '.mga-s3__sub', prop: 'color', want: 'rgb(0, 170, 85)'},
+      {block: 1, id: 'color', v: '#00aa55', with: {enable_custom_style: true}, sel: '.mga-s3__sub', prop: 'color', want: 'rgb(0, 170, 85)'},
+      {block: 1, id: 'size_enable', v: true, with: {size: 21}, sel: '.mga-s3__sub', prop: 'fontSize', want: '21px'},
+      {block: 1, id: 'size', v: 13, with: {size_enable: true}, sel: '.mga-s3__sub', prop: 'fontSize', want: '13px'},
+      {block: 1, id: 'enable_custom_fonts', v: true, with: {font: {family: 'Georgia', fallback_families: 'serif'}}, sel: '.mga-s3__sub', prop: 'fontFamily', map: v => /^"?Georgia/.test(v), want: true},
+      {block: 1, id: 'font', v: {family: 'Verdana', fallback_families: 'sans-serif'}, with: {enable_custom_fonts: true}, sel: '.mga-s3__sub', prop: 'fontFamily', map: v => /^"?Verdana/.test(v), want: true},
+      {block: 4, id: 'background_image', v: {url: 'https://theme.test/new.png'}, sel: '.mga-s3__item:nth-child(3) img', attr: 'src', map: v => /new\.png/.test(v || ''), want: true, visible: '.mga-s3__item:nth-child(3) img'},
+      {block: 2, id: 'alt', v: 'Ceramic bowls', sel: '.mga-s3__item:nth-child(1) img', attr: 'alt', want: 'Ceramic bowls'},
+      {block: 3, id: 'gallery_link_url', v: '/pages/b', sel: '.mga-s3__item:nth-child(2) a', attr: 'href', want: '/pages/b', visible: '.mga-s3__item:nth-child(2) a'},
+      {block: 2, id: 'gallery_link_label', v: 'See the set', sel: '.mga-s3__item:nth-child(1) .mga-s3__btn', text: true, want: 'See the set'},
     ],
     variants: [
       {id: 'image_hover_animation', sig: ['.mga-s3__item:nth-child(2) .mga-s3__media', ['transform', 'boxShadow'], 'img', ['transform', 'opacity']], hover: '.mga-s3__item:nth-child(2) .mga-s3__media'},
       {id: 'img_proportion', sig: ['.mga-s3__media', ['height']]},
       {id: 'text_align', sig: ['.mga-s3__title', ['textAlign']]},
     ],
-    image: {block: 0, img: '.mga-s3__item:nth-child(1) img'},
+    image: {block: 2, img: '.mga-s3__item:nth-child(1) img'},
     added: {type: 'image', sel: '.mga-s3__item', setting: 'alt', attr: ['img', 'alt']},
   },
 };
@@ -465,6 +479,55 @@ async function basic(browser) {
   await t.page.close();
 }
 
+/* Gallery Simple 3 header blocks: block order, and the hidden legacy heading_text
+   used only when the section has no Heading block (saved instances). */
+async function simple3Header(browser) {
+  const images = SECTIONS['gallery-simple3'].blocks.filter(b => b.type === 'image');
+  for (const width of [375, 1366]) {
+    // Legacy path: no header blocks, the old section heading renders and stays live.
+    const t = await mount(browser, 'gallery-simple3', {width, editing: true, assets: [ASSET], blocks: images, settings: {heading_text: 'Legacy <em>title</em>'}});
+    const title = '#shopify-section-test .mga-s3__title';
+    eq(await t.page.locator(title).count(), 1, width + ' legacy heading renders once');
+    eq(await t.page.locator(title).getAttribute('data-mga-heading'), '', width + ' legacy heading is the section setting');
+    eq(await t.page.locator(title + ' em').textContent(), 'title', width + ' legacy heading text');
+    eq(await t.css('.mga-s3__title', 'color'), 'rgb(255, 255, 255)', width + ' legacy heading theme colour');
+    ok(/Georgia/.test(await t.css('.mga-s3__title', 'fontFamily')), width + ' legacy heading theme font');
+    await t.emit({heading_text: 'Live <strong>legacy</strong>'});
+    eq(await t.page.locator(title + ' strong').textContent(), 'legacy', width + ' legacy heading live');
+    await t.emit({enable_custom_style: true, text_color: '#ff8800'});
+    eq(await t.css('.mga-s3__title', 'color'), 'rgb(255, 136, 0)', width + ' legacy heading custom colour');
+    await t.emit({enable_custom_style: false});
+    await t.emit({heading_text: ''});
+    eq(await t.css('.mga-s3__head', 'display'), 'none', width + ' empty legacy heading leaves no header space (live)');
+    await t.redraw({settings: {heading_text: ''}});
+    eq(await t.css('.mga-s3__head', 'display'), 'none', width + ' empty legacy heading leaves no header space (redraw)');
+    await t.redraw({settings: {heading_text: 'Back again'}});
+    eq((await t.page.locator(title).textContent()).trim(), 'Back again', width + ' legacy heading redraw');
+    assert.deepEqual(t.errors, [], width + ' legacy errors'); checks++;
+    await t.page.close();
+    // Blocks path: header blocks render in block order and the legacy value is ignored.
+    const b = await mount(browser, 'gallery-simple3', {width, editing: true, assets: [ASSET], blocks: [{type: 'subheading'}, ...images.slice(0, 2), {type: 'heading', settings: {text: 'From the block'}}], settings: {heading_text: 'Legacy title'}});
+    eq(await b.page.locator('#shopify-section-test [data-mga-heading]').count(), 0, width + ' legacy heading not rendered when a Heading block exists');
+    eq(await b.page.evaluate(() => [...document.querySelectorAll('#shopify-section-test .mga-s3__head > *')].map(e => e.dataset.mgaType).join(',')), 'subheading,heading', width + ' header blocks in block order');
+    eq(await b.page.locator('#shopify-section-test .mga-s3__item').count(), 2, width + ' image blocks fill the grid');
+    ok(await b.page.evaluate(() => { const h = document.querySelector('#shopify-section-test .mga-s3__head').getBoundingClientRect(), g = document.querySelector('#shopify-section-test .mga-s3__grid').getBoundingClientRect(); return h.bottom <= g.top; }), width + ' header above the grid');
+    await b.emit({heading_text: 'Ignored'});
+    eq((await b.page.locator(title).textContent()).trim(), 'From the block', width + ' legacy edit does not touch the Heading block');
+    await b.redraw({blocks: [images[0], {type: 'heading', settings: {text: 'From the block'}}, {type: 'subheading'}]});
+    eq(await b.page.evaluate(() => [...document.querySelectorAll('#shopify-section-test .mga-s3__head > *')].map(e => e.dataset.mgaType).join(',')), 'heading,subheading', width + ' reordered header blocks after redraw');
+    const sub = b.rendered[0].section.blocks.find(x => x.type === 'subheading').id;
+    await b.emit({text: ''}, sub);
+    eq(await b.page.locator('#shopify-section-test .mga-s3__sub').isVisible(), false, width + ' emptied subheading hides');
+    assert.deepEqual(b.errors, [], width + ' blocks errors'); checks++;
+    await b.page.close();
+    // The first preset: a Heading block, then images.
+    const p = await mount(browser, 'gallery-simple3', {width, editing: true, assets: [ASSET]});
+    eq(await p.page.locator(title).getAttribute('data-mga-type'), 'heading', width + ' preset heading is a block');
+    eq((await p.page.locator(title).textContent()).trim(), 'Gallery', width + ' preset heading text');
+    await p.page.close();
+  }
+}
+
 (async () => {
   const browser = await launch();
   try {
@@ -474,7 +537,8 @@ async function basic(browser) {
       await preview(browser, name);
       if (name === 'gallery-interactive') await interactive(browser);
       if (name === 'gallery-basic2') await basic(browser);
+      if (name === 'gallery-simple3') await simple3Header(browser);
     }
-    console.log(checks + ' galleries-a checks passed (Gallery Simple 1, Gallery Grid 1, Gallery Interactive 2, Gallery Simple 3: schema, theme, schemes, custom style/fonts, every control live and redraw, desktop/mobile, variants, instances, added blocks, no reload, first paint, reduced motion, interaction, previews)');
+    console.log(checks + ' galleries-a checks passed (Gallery Simple 1, Gallery Grid 1, Gallery Interactive 2, Gallery Simple 3 with header blocks and legacy heading: schema, theme, schemes, custom style/fonts, every control live and redraw, desktop/mobile, variants, instances, added blocks, no reload, first paint, reduced motion, interaction, previews)');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exit(1); });

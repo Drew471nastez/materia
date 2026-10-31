@@ -275,7 +275,6 @@ function gs2Probes() {
   return [
     {id: 'section_width', value: 'container', prop: 'maxWidth', expect: v => v !== 'none'},
     {id: 'reset_spacing', value: false, sel: 'wrap', prop: 'paddingTop', expect: '7px'},
-    {id: 'tagline', value: 'New <em>rooms</em>', sel: T, prop: 'html', expect: 'New <em>rooms</em>'},
     {id: 'inner_width_px', value: 900, sel: C, prop: 'maxWidth', expect: d('940px')},
     {id: 'desktop_heading_max_width', value: 500, sel: T, prop: 'maxWidth', expect: d('500px')},
     {id: 'image_border_radius', value: 20, sel: IT + ' img', prop: 'borderTopLeftRadius', expect: '20px'},
@@ -313,6 +312,9 @@ function gs2Probes() {
     {id: 'section_margin_bottom_mobile', value: 16, sel: 'wrap', prop: 'marginBottom', expect: m('16px')},
     {id: 'html_id', value: 'Our Gallery', sel: C, prop: 'attr:id', expect: 'our-gallery'},
     {id: 'html_class', value: 'promo, wide', sel: C, prop: 'classes', expect: v => /\bpromo\b/.test(v) && /\bwide\b/.test(v)},
+    {block: 'eyebrow', id: 'text', value: 'New <em>rooms</em>', sel: T, prop: 'html', expect: 'New <em>rooms</em>'},
+    {block: 'eyebrow', id: 'enable_custom_style', value: true, with: {color: '#ff8800'}, sel: T, prop: 'color', expect: 'rgb(255, 136, 0)'},
+    {block: 'eyebrow', id: 'color', value: '#ff8800', with: {enable_custom_style: true}, sel: T, prop: 'color', expect: 'rgb(255, 136, 0)'},
     {block: 'heading', id: 'heading', value: 'Rooms <strong>we love</strong>', sel: H, prop: 'html', expect: 'Rooms <strong>we love</strong>'},
     {block: 'heading', id: 'heading_weight', value: '300', sel: H, prop: 'fontWeight', expect: '300'},
     {block: 'heading', id: 'desktop_heading_size', value: 56, sel: H, prop: 'fontSize', expect: d('56px')},
@@ -388,15 +390,54 @@ async function gs2(browser) {
       await rootsStable(t);
     }
     await t.emit({image: IMG}, t.blockId('gallery_image_02'));
-    await noReload(t, '.gs2__item img', {image_border_radius: 6, desktop_top_padding: 30, tagline: 'Fresh'});
+    await noReload(t, '.gs2__item img', {image_border_radius: 6, desktop_top_padding: 30, tagline_font_weight: '500'});
+    await noReload(t, '.gs2__item img', {text: 'Fresh'}, t.blockId('eyebrow'));
     ok(await t.noOverflow(), name + ' overflow'); eq(t.errors, [], name + ' errors'); await t.page.close();
     t = await M(browser, name, width, editing, {extraBlocks: [{type: 'gallery_image_02', settings: {image: IMG2}}]});
     eq(await t.root('.gs2__item').count(), 7, name + ' extra block rendered'); await t.redraw();
     await t.emit({image_alt: 'Seventh'}, t.blockId('gallery_image_02', 6));
     eq(await measure(t, {sel: '.gs2__item:nth-child(7) img', prop: 'attr:alt'}), 'Seventh', name + ' extra block live'); eq(t.errors, [], name + ' errors'); await t.page.close();
-    await twoInstances(browser, name, width, editing, {tagline: 'Only in A'}, {sel: '.gs2__tagline', prop: 'text'});
+    await twoInstances(browser, name, width, editing, {text: 'Only in A'}, {sel: '.gs2__tagline', prop: 'text'}, 'eyebrow');
+    await gs2Legacy(browser, width, editing);
     await firstPaint(browser, name, {width, editing}, ['#shopify-section-test [data-mgb]', '#shopify-section-test .gs2__tagline', '#shopify-section-test .gs2__heading', '#shopify-section-test .gs2__btn', '#shopify-section-test .gs2__item', '#shopify-section-test .gs2__item:nth-child(5)', '#shopify-section-test .gs2__nav'], width);
   }
+}
+
+/* Eyebrow block order, and the hidden legacy tagline used only when the
+   section has no Eyebrow block (saved instances). */
+async function gs2Legacy(browser, width, editing) {
+  const name = 'gallerysimple2', imgs = Array.from({length: 6}, () => ({type: 'gallery_image_02'}));
+  const order = t => t.page.evaluate(() => [...document.querySelectorAll('#shopify-section-test .gs2__content > *')].map(e => e.dataset.mgbType || (e.hasAttribute('data-mgb-tagline') ? 'legacy' : e.tagName)).join(','));
+  // Legacy path: no Eyebrow block; the section tagline renders first and stays live.
+  let t = await M(browser, name, width, editing, {blocks: [{type: 'heading'}, {type: 'button'}, ...imgs], settings: {tagline: 'Saved <em>tagline</em>'}});
+  eq(await order(t), 'legacy,heading,button', name + ' ' + width + ' legacy tagline first');
+  eq(await measure(t, {sel: '[data-mgb-tagline]', prop: 'html'}), 'Saved <em>tagline</em>', name + ' ' + width + ' legacy tagline text');
+  eq(await measure(t, {sel: '.gs2__tagline', prop: 'color'}), 'rgb(204, 204, 204)', name + ' ' + width + ' legacy tagline theme colour');
+  await t.emit({tagline: 'Live <strong>tagline</strong>'});
+  eq(await measure(t, {sel: '[data-mgb-tagline]', prop: 'html'}), 'Live <strong>tagline</strong>', name + ' ' + width + ' legacy tagline live');
+  await t.emit({enable_custom_style: true, tagline_text_color: '#00ff00'});
+  eq(await measure(t, {sel: '.gs2__tagline', prop: 'color'}), 'rgb(0, 255, 0)', name + ' ' + width + ' legacy tagline custom colour');
+  await t.emit({enable_custom_style: false, tagline: ''});
+  eq(await measure(t, {sel: '[data-mgb-tagline]', prop: 'visible'}), false, name + ' ' + width + ' empty legacy tagline hides (live)');
+  await t.redraw({settings: {tagline: 'Redrawn'}});
+  eq(await measure(t, {sel: '[data-mgb-tagline]', prop: 'text'}), 'Redrawn', name + ' ' + width + ' legacy tagline redraw');
+  eq(t.errors, [], name + ' legacy errors'); await t.page.close();
+  // Blocks path: content blocks in block order; the legacy tagline is not rendered or touched.
+  t = await M(browser, name, width, editing, {blocks: [{type: 'heading'}, {type: 'eyebrow', settings: {text: 'Under the heading'}}, ...imgs, {type: 'button'}], settings: {tagline: 'Saved tagline'}});
+  eq(await order(t), 'heading,eyebrow,button', name + ' ' + width + ' blocks in block order');
+  eq(await t.root('[data-mgb-tagline]').count(), 0, name + ' ' + width + ' no legacy tagline with an Eyebrow block');
+  await t.emit({tagline: 'Ignored'});
+  eq(await measure(t, {sel: '.gs2__tagline', prop: 'text'}), 'Under the heading', name + ' ' + width + ' legacy edit leaves the Eyebrow block');
+  await t.redraw({blocks: [{type: 'button'}, ...imgs, {type: 'eyebrow', settings: {text: 'Under the heading'}}, {type: 'heading'}]});
+  eq(await order(t), 'button,eyebrow,heading', name + ' ' + width + ' reordered after redraw');
+  await t.redraw({blocks: [{type: 'eyebrow'}, {type: 'button'}, ...imgs]});
+  eq(await order(t), 'eyebrow,button', name + ' ' + width + ' removed heading block');
+  eq(t.errors, [], name + ' blocks errors'); await t.page.close();
+  // The first preset starts with an Eyebrow block.
+  t = await M(browser, name, width, editing);
+  eq(await order(t), 'eyebrow,heading,button', name + ' ' + width + ' preset order');
+  eq(await measure(t, {sel: '.gs2__tagline', prop: 'text'}), 'Latest interior designs', name + ' ' + width + ' preset eyebrow text');
+  await t.page.close();
 }
 
 /* ================= Gallery Scrolling Logos (images-carousel) ================= */

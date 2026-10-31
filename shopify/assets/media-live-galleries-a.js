@@ -54,6 +54,8 @@
   }
   function customCss(root, css) { const el = root.querySelector(':scope > style[data-mga-custom-css]'); if (el && el.textContent !== String(css ?? '')) el.textContent = String(css ?? ''); }
   function vars(el, map) { for (const k in map) setVar(el, k, map[k]); }
+  /* Like vars(), but null removes the property so the inherited value shows. */
+  function overrides(el, map) { for (const k in map) { if (map[k] == null) { if (el.style.getPropertyValue(k)) el.style.removeProperty(k); } else setVar(el, k, map[k]); } }
   function show(v) { return {mobile_only: 'mobile', desktop_only: 'desktop', no_devices: 'none'}[v] || 'all'; }
   function spacing(s, keys) { const out = {}; for (const [k, id] of Object.entries(keys)) out[k] = px(s[id]); return out; }
   function maxWidth(v) { return num(v) > 0 ? num(v) + 'px' : 'none'; }
@@ -176,15 +178,28 @@
       },
       attrs(s) { return {'data-mga-reset': String(bool(s.reset_spacing)), 'data-mga-hover': s.image_hover_animation || 'none'}; },
       section(root, state, s, init) {
+        /* Legacy heading: only rendered when the section has no Heading block. */
         const h = root.querySelector('[data-mga-heading]');
-        rich(state, h, init.heading_text, s.heading_text); setHidden(h, !strip(s.heading_text));
+        if (h) { rich(state, h, init.heading_text, s.heading_text); setHidden(h, !strip(s.heading_text)); }
         sync(state, root, 'class', strip(init.custom_class), strip(s.custom_class), v => {
           const tokens = x => String(x || '').split(/\s+/).filter(t => /^[\w-]+$/.test(t) && !t.startsWith('mga') && !t.startsWith('color-'));
           for (const cls of state.customClasses || tokens(init.custom_class)) root.classList.remove(cls);
           state.customClasses = tokens(v); root.classList.add(...state.customClasses);
         });
       },
-      block(root, state, el, b, init) {
+      block(root, state, el, b, init, type) {
+        if (type === 'heading' || type === 'subheading') {
+          /* Header blocks: text, then their own overrides as inline variables
+             over the section's (removed again when switched off). */
+          const heading = type === 'heading', own = bool(b.enable_custom_style), size = bool(b.size_enable), f = bool(b.enable_custom_fonts) ? font(b.font, '') : '';
+          rich(state, el, init.text, b.text); setHidden(el, !strip(b.text));
+          const ink = own ? color(b.color, '') : '';
+          overrides(el, heading ? {
+            '--mga-heading-color': ink || null, '--mga-heading-font': f || null,
+            '--mga-heading-size-d': size ? px(b.size_desktop, 35) : null, '--mga-heading-size-m': size ? px(b.size_mobile, 28) : null,
+          } : {'--mga-sub-color': ink || null, '--mga-sub-font': f || null, '--mga-sub-size': size ? px(b.size, 16) : null});
+          return;
+        }
         const img = el.querySelector('img[data-mga-img]'), a = el.querySelector('[data-mga-link]'), label = el.querySelector('[data-mga-label]'), s = state.s, custom = bool(s.enable_custom_style);
         image(state, img, init.background_image, b.background_image);
         const hasImg = !!url(b.background_image, true); setHidden(img, !hasImg); setAttr(el.querySelector('[data-mga-media]'), 'data-media', hasImg ? 'image' : 'none');

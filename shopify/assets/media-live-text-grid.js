@@ -108,11 +108,20 @@
         '--iwb-h3-d': px(s.card_heading_size_desktop), '--iwb-h3-m': px(s.card_heading_size_mobile), '--iwb-body': px(s.card_body_size),
         '--iwb-head-color': col(custom, s.section_heading_color), '--iwb-sub-color': col(custom, s.section_subheading_color),
       });
-      rich(q('.iwb__title'), s.heading, st); show(q('.iwb__title'), !blank(s.heading));
-      rich(q('.iwb__sub'), s.subheading, st); show(q('.iwb__sub'), !blank(s.subheading));
-      show(q('.iwb__head'), !blank(s.heading) || !blank(s.subheading));
+      /* Legacy section heading/subheading: rendered only when no block of that type exists. */
+      const lh = q('[data-iwb-legacy="heading"]'), ls = q('[data-iwb-legacy="subheading"]');
+      if (lh) { rich(lh, s.heading, st); show(lh, !blank(s.heading)); }
+      if (ls) { rich(ls, s.subheading, st); show(ls, !blank(s.subheading)); }
       for (const [el, type, b] of blocks(root, st)) {
         const own = bool(b.enable_custom_style), cs = Math.max(1, num(b.col_span_desktop, 1));
+        if (type === 'heading' || type === 'subheading') {
+          /* Header blocks: own colour and size over the section's, removed again when off. */
+          const size = bool(b.size_enable);
+          rich(el, b.text, st); show(el, !blank(b.text));
+          if (type === 'heading') vars(el, {'--iwb-head-color': col(own, b.color), '--iwb-h2-d': size ? px(b.size_desktop, 40) : '', '--iwb-h2-m': size ? px(b.size_mobile, 28) : ''});
+          else vars(el, {'--iwb-sub-color': col(own, b.color), '--iwb-sub-size': size ? px(b.size, 15) : ''});
+          continue;
+        }
         vars(el, {'--iwb-cs-d': Math.min(cs, cols), '--iwb-cs-t': Math.min(cs, 2), '--iwb-rs': Math.max(1, num(b.row_span_desktop, 1))});
         if (type === 'text_card') { attr(el, 'data-style', b.card_style || 'inverse'); vars(el, {'--iwb-card-bg': col(own, b.bg), '--iwb-card-fg': col(own, b.text_color)}); }
         if (type === 'text_over_image') { attr(el, 'data-position', b.content_position || 'center'); vars(el, {'--iwb-ov-op': num(b.overlay_opacity) / 100, '--iwb-card-fg': col(own, b.text_color), '--iwb-ov-color': col(own, b.overlay_color)}); }

@@ -95,8 +95,6 @@ const SECTIONS = {
     section: {
       ...common({heading: '.iwb__title', text: false}),
       custom_max_width_desktop: E({section_width: 'custom', custom_max_width_desktop: 900}, '.tg__inner', 'maxWidth', '900px'),
-      heading: E('Our <em>studio</em>', '.iwb__title', '@html', 'Our <em>studio</em>'),
-      subheading: E('Small <strong>batches</strong>', '.iwb__sub', '@html', 'Small <strong>batches</strong>'),
       columns: E('4', '.iwb__grid', 'gridTemplateColumns', {d: cols(4), m: cols(1)}),
       gap_desktop: E(30, '.iwb__grid', 'columnGap', {d: '30px'}),
       row_height_desktop: E(400, '.iwb__grid', 'gridAutoRows', {d: /400px/}),
@@ -115,6 +113,21 @@ const SECTIONS = {
       card_heading_size_mobile: E(20, '.iwb__heading', 'fontSize', {m: '20px'}),
     },
     blocks: {
+      heading: {
+        text: E('Our <em>studio</em>', '', '@html', 'Our <em>studio</em>'),
+        enable_custom_style: E({enable_custom_style: true, color: '#ff0000'}, '', 'color', 'rgb(255, 0, 0)'),
+        color: E({enable_custom_style: true, color: '#00ff00'}, '', 'color', 'rgb(0, 255, 0)'),
+        size_enable: E({size_enable: true, size_desktop: 52, size_mobile: 21}, '', 'fontSize', {d: '52px', m: '21px'}),
+        size_desktop: E({size_enable: true, size_desktop: 56}, '', 'fontSize', {d: '56px', m: '28px'}),
+        size_mobile: E({size_enable: true, size_mobile: 24}, '', 'fontSize', {d: '40px', m: '24px'}),
+      },
+      subheading: {
+        text: E('<p>Small <strong>batches</strong></p>', '', '@html', '<p>Small <strong>batches</strong></p>'),
+        enable_custom_style: E({enable_custom_style: true, color: '#ff0000'}, '', 'color', 'rgb(255, 0, 0)'),
+        color: E({enable_custom_style: true, color: '#00ff00'}, '', 'color', 'rgb(0, 255, 0)'),
+        size_enable: E({size_enable: true, size: 19}, '', 'fontSize', '19px'),
+        size: E({size_enable: true, size: 13}, '', 'fontSize', '13px'),
+      },
       text_card: {
         caption: E('New in', '.iwb__caption', '@text', 'New in'),
         heading: E('Card <em>one</em>', '.iwb__heading', '@html', 'Card <em>one</em>'),
@@ -520,6 +533,50 @@ async function testSection(browser, name, cfg) {
     ok(await h.isVisible() && await t.page.evaluate(uid => getComputedStyle(document.getElementById('shopify-section-' + uid)).opacity, t.section.id) === '1', name + ' reduced motion content visible');
     ok(t.errors.length === 0, name + ' reduced motion errors');
     await t.page.close();
+  }
+
+  /* Bento header blocks: block order, and the hidden legacy heading/subheading
+     used only when no block of that type exists (saved instances). */
+  if (name === 'image-with-text-bento') {
+    const {schemaOf} = require('./media-fixture.cjs');
+    const tiles = schemaOf(name).schema.presets[0].blocks.filter(b => !['heading', 'subheading'].includes(b.type));
+    const kinds = t => t.page.evaluate(uid => [...document.querySelectorAll('#shopify-section-' + uid + ' .iwb__head > *')].map(e => (e.dataset.iwbLegacy ? 'legacy-' + e.dataset.iwbLegacy : e.dataset.tgType) + (e.hidden ? ':hidden' : '')).join(','), t.section.id);
+    for (const width of [375, 1366]) {
+      const tag = `${name} @${width}`;
+      // Legacy path: no header blocks, saved section text renders and stays live.
+      let t = await mount(browser, name, {width, blocks: tiles, settings: {heading: 'Saved <em>heading</em>', subheading: 'Saved sub'}, assets: [ASSET]});
+      const uid = t.section.id, q = sel => t.page.locator('#shopify-section-' + uid + ' ' + sel);
+      ok(await kinds(t) === 'legacy-heading,legacy-subheading', tag + ' legacy heading and subheading render: ' + await kinds(t));
+      ok(await q('.iwb__title').innerHTML() === 'Saved <em>heading</em>' && (await q('.iwb__sub').textContent()).trim() === 'Saved sub', tag + ' legacy text');
+      ok(await t.css('.iwb__title', 'color') === 'rgb(255, 255, 255)' && /^Georgia/.test(await t.css('.iwb__title', 'fontFamily')), tag + ' legacy heading theme colour and font');
+      ok(await t.css('.iwb__title', 'fontSize') === (width >= 768 ? '40px' : '28px'), tag + ' legacy heading section size');
+      await t.emit({heading: 'Live <strong>heading</strong>', enable_custom_style: true, section_subheading_color: '#00ff00'});
+      ok(await q('.iwb__title').innerHTML() === 'Live <strong>heading</strong>', tag + ' legacy heading live');
+      ok(await t.css('.iwb__sub', 'color') === 'rgb(0, 255, 0)', tag + ' legacy subheading custom colour');
+      await t.emit({heading: '', subheading: '', enable_custom_style: false});
+      ok(await t.css('.iwb__head', 'display') === 'none', tag + ' empty legacy header takes no space (live)');
+      await t.redraw({settings: {heading: '', subheading: ''}});
+      ok(await t.css('.iwb__head', 'display') === 'none', tag + ' empty legacy header takes no space (redraw)');
+      await t.redraw({settings: {heading: 'Back', subheading: ''}});
+      ok(await kinds(t) === 'legacy-heading,legacy-subheading:hidden', tag + ' legacy redraw: ' + await kinds(t));
+      ok(t.errors.length === 0, tag + ' legacy errors: ' + t.errors.join(' | '));
+      await t.page.close();
+      // Mixed: a Subheading block with a saved section heading keeps the heading first.
+      t = await mount(browser, name, {width, blocks: [...tiles.slice(0, 2), {type: 'subheading'}], settings: {heading: 'Saved heading', subheading: 'Not shown'}, assets: [ASSET]});
+      ok(await kinds(t) === 'legacy-heading,subheading', tag + ' legacy heading above a Subheading block: ' + await kinds(t));
+      await t.page.close();
+      // Blocks path: header blocks in block order above the grid, tiles in the grid, legacy ignored.
+      t = await mount(browser, name, {width, blocks: [{type: 'subheading'}, ...tiles.slice(0, 3), {type: 'heading', settings: {text: 'Block heading'}}], settings: {heading: 'Saved heading'}, assets: [ASSET]});
+      ok(await kinds(t) === 'subheading,heading', tag + ' header blocks in block order: ' + await kinds(t));
+      ok(await t.page.locator('#shopify-section-' + t.section.id + ' .iwb__grid > *').count() === 3, tag + ' only tiles in the grid');
+      ok(await t.page.evaluate(uid => document.querySelector('#shopify-section-' + uid + ' .iwb__head').getBoundingClientRect().bottom <= document.querySelector('#shopify-section-' + uid + ' .iwb__grid').getBoundingClientRect().top, t.section.id), tag + ' header above the grid');
+      await t.emit({heading: 'Ignored'});
+      ok((await t.page.locator('#shopify-section-' + t.section.id + ' .iwb__title').textContent()).trim() === 'Block heading', tag + ' legacy edit leaves the Heading block');
+      await t.redraw({blocks: [{type: 'heading', settings: {text: 'Block heading'}}, {type: 'subheading'}, ...tiles.slice(0, 3)]});
+      ok(await kinds(t) === 'heading,subheading', tag + ' reordered after redraw: ' + await kinds(t));
+      ok(t.errors.length === 0, tag + ' blocks errors: ' + t.errors.join(' | '));
+      await t.page.close();
+    }
   }
 
   /* Text over an image stays readable at the default overlay on a white or black photo. */
