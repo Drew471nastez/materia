@@ -232,12 +232,14 @@ checks++;
 // 4b. Own scroll animations offer and draw the theme's newer reveals.
 const NEW_REVEALS = ['blur_up', 'slide_side', 'mask_reveal'];
 for (const f of ['faq', 'faq1', 'faq5', 'faq-pro', 'collection-tab', 'countdown-timer2']) {
-  const { markup, schemaText } = parts(read(`sections/${f}.storelib`));
+  const { markup: own, schemaText } = parts(read(`sections/${f}.storelib`));
+  // faq-pro draws its reveals from its cached stylesheet, keyed by data-faq7-reveal.
+  const markup = f === 'faq-pro' ? own + read('shopify/assets/faq-pro.css') : own;
   const setting = JSON.parse(schemaText).shopify.settings.find(s => s.id === 'scroll_animation');
   const values = setting.options.map(o => o.value);
   for (const v of NEW_REVEALS) {
     assert.ok(values.includes(v), `${f}: scroll_animation offers ${v}`);
-    assert.match(markup, new RegExp(`when '${v}'`), `${f}: draws ${v}`);
+    assert.match(markup, new RegExp(f === 'faq-pro' ? `data-faq7-reveal="${v}"` : `when '${v}'`), `${f}: draws ${v}`);
   }
   assert.match(markup, /prefers-reduced-motion[\s\S]*clip-path: none !important/, `${f}: the mask and blur stop under reduced motion`);
 }

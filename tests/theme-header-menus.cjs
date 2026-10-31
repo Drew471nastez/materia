@@ -34,7 +34,8 @@ const sticky = read('snippets/header-sticky-controller.storelib');
 const stickyCss = read('shopify/assets/header-sticky.css');
 // The controller's inline script, then the part it loads deferred (overlay fade, Back button, phone menu layer).
 const stickyJs = stripLiquid(sticky.match(/<script>([\s\S]*?)<\/script>/)[1]) + '\n' + read('shopify/assets/header-sticky-extras.js');
-const mnb = read('sections/mobile-navigation-bar.storelib');
+// The bar's CSS lives in the cached file the section loads.
+const mnb = read('shopify/assets/mobile-navigation-bar.css');
 const mnbCss = mnb.slice(mnb.indexOf('/* Tap feedback without a grey box'), mnb.indexOf('.mobile-navigation-bar .h-count')).replace(/\{\{\s*section\.id\s*\}\}/g, 'mnb');
 
 const level = (name, kids) => `

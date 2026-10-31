@@ -57,7 +57,8 @@ const B = type => hs.blocks.find(b => b.type === type);
   ok(!/section_st\[label_setting\]/.test(sl) && /render 'menu-link-title'/.test(sl), 'submenu badges read the Menu badges block through menu-link-title');
   const hd = body(read('snippets/header-dimensions.storelib'));
   ok(!/data-menu-hover/.test(hd), 'header-dimensions no longer draws its own hover line');
-  const footer = read('sections/theme-footer.storelib');
+  // The footer's CSS and script live in cached files it loads.
+  const footer = read('sections/theme-footer.storelib') + read('shopify/assets/footer-section.css') + read('shopify/assets/footer-section.js');
   ok(!/<collapsible-block/.test(footer) && /data-footer-acc-toggle/.test(footer) && /grid-template-rows: 0fr/.test(footer), 'footer columns use the grid-rows accordion, not the theme slide script');
   ok(/storelib:section-load/.test(footer) && /window\.MateriaFooterAccordion/.test(footer), 'footer accordion binds once and resyncs after a builder redraw');
 }
