@@ -1,0 +1,123 @@
+<template compat="shopify">
+{%- comment -%}
+  Materia Themes. The video player of the Image, Video and Video 2 sections.
+  Draws a Shopify-hosted video, a video file URL, a YouTube or Vimeo link, or
+  a cover image, with a play button, overlay and mute button. Playback
+  (autoplay only while on screen, never under reduced motion) and live edits
+  are run by media-live-image-video.js, so nothing here plays on its own.
+
+  {% render 'media-iv-player', sid: section.id, video: st.video, url: st.video_url, poster: st.poster,
+     autoplay: true, loop: true, controls: false, muted: true, label: '', title: '',
+     play_style: 'circle', mute_btn: false, lazy: false, fit: 'cover' %}
+{%- endcomment -%}
+{%- liquid
+  assign ivp_kind = 'none'
+  assign ivp_src = ''
+  assign ivp_id = ''
+  assign ivp_poster = ''
+  assign ivp_w = ''
+  assign ivp_h = ''
+  if video != blank and video.sources
+    for s in video.sources
+      if s.format == 'mp4' or s.mime_type == 'video/mp4'
+        assign ivp_src = s.url
+        break
+      endif
+    endfor
+    if ivp_src == ''
+      assign ivp_src = video.sources.first.url
+    endif
+    if ivp_src != blank
+      assign ivp_kind = 'file'
+    endif
+    if video.preview_image != blank
+      assign ivp_poster = video.preview_image | image_url: width: 1600
+      assign ivp_w = video.preview_image.width
+      assign ivp_h = video.preview_image.height
+    endif
+  endif
+  if ivp_kind == 'none' and url != blank
+    assign ivp_lower = url | downcase
+    if ivp_lower contains 'youtube.com/watch'
+      assign ivp_id = url | split: 'v=' | last | split: '&' | first
+      assign ivp_kind = 'youtube'
+    elsif ivp_lower contains 'youtu.be/'
+      assign ivp_id = url | split: 'youtu.be/' | last | split: '?' | first | split: '&' | first
+      assign ivp_kind = 'youtube'
+    elsif ivp_lower contains 'youtube.com/embed/'
+      assign ivp_id = url | split: 'embed/' | last | split: '?' | first
+      assign ivp_kind = 'youtube'
+    elsif ivp_lower contains 'youtube.com/shorts/'
+      assign ivp_id = url | split: 'shorts/' | last | split: '?' | first
+      assign ivp_kind = 'youtube'
+    elsif ivp_lower contains 'vimeo.com/'
+      assign ivp_id = url | split: 'vimeo.com/' | last | split: '?' | first | split: '/' | last
+      assign ivp_kind = 'vimeo'
+    else
+      assign ivp_src = url
+      assign ivp_kind = 'file'
+    endif
+  endif
+  if poster != blank
+    assign ivp_poster = poster | image_url: width: 1600
+    assign ivp_w = poster.width
+    assign ivp_h = poster.height
+  endif
+  assign ivp_auto = '0'
+  if autoplay
+    assign ivp_auto = '1'
+  endif
+  assign ivp_loop = '0'
+  if loop
+    assign ivp_loop = '1'
+  endif
+  assign ivp_controls = '0'
+  if controls or autoplay == false
+    assign ivp_controls = '1'
+  endif
+  assign ivp_play = play_style | default: 'circle'
+-%}
+<div class="ivp ivp--play-{{ ivp_play }}{% if fit == 'contain' %} ivp--contain{% endif %}" data-iv-player data-kind="{{ ivp_kind }}" data-state="paused">
+  <img class="ivp__cover" {% if ivp_poster != '' and ivp_kind != 'file' %}src="{{ ivp_poster }}"{% if ivp_w != blank %} width="{{ ivp_w }}" height="{{ ivp_h }}"{% endif %}{% else %}hidden{% endif %} alt="{{ label | escape }}" {% if lazy %}loading="lazy" {% endif %}decoding="async">
+  {%- case ivp_kind -%}
+    {%- when 'file' -%}
+      <video class="ivp__video" src="{{ ivp_src }}" playsinline preload="{% if lazy %}none{% else %}metadata{% endif %}"{% if autoplay or muted %} muted{% endif %}{% if loop %} loop{% endif %}{% if controls %} controls{% endif %}{% if ivp_poster != '' %} poster="{{ ivp_poster }}"{% endif %}{% if label != blank %} aria-label="{{ label | escape }}"{% endif %}{% if title != blank %} title="{{ title | escape }}"{% endif %}></video>
+    {%- when 'youtube' -%}
+      <iframe class="ivp__frame" data-src="https://www.youtube-nocookie.com/embed/{{ ivp_id | escape }}?autoplay={{ ivp_auto }}&mute={% if autoplay or muted %}1{% else %}0{% endif %}&loop={{ ivp_loop }}&playlist={{ ivp_id | escape }}&controls={{ ivp_controls }}&playsinline=1&rel=0&modestbranding=1" title="{{ title | default: label | default: 'Video' | escape }}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe>
+    {%- when 'vimeo' -%}
+      <iframe class="ivp__frame" data-src="https://player.vimeo.com/video/{{ ivp_id | escape }}?autoplay={{ ivp_auto }}&muted={% if autoplay or muted %}1{% else %}0{% endif %}&loop={{ ivp_loop }}&controls={{ ivp_controls }}&playsinline=1&dnt=1" title="{{ title | default: label | default: 'Video' | escape }}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe>
+  {%- endcase -%}
+  <div class="ivp__ph" aria-hidden="true"{% if ivp_kind != 'none' or ivp_poster != '' %} hidden{% endif %}><svg viewBox="0 0 64 64" width="64" height="64" focusable="false"><circle cx="32" cy="32" r="30" fill="none" stroke="currentColor" stroke-width="2"/><path d="M26 21v22l18-11z" fill="currentColor"/></svg></div>
+  <span class="ivp__overlay" aria-hidden="true"></span>
+  <button type="button" class="ivp__play" data-iv-play aria-label="Play video"{% unless ivp_kind == 'file' and ivp_play != 'none' and controls != true %} hidden{% endunless %}>
+    <svg class="ivp__icon-play" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5v14l11-7z"/></svg>
+    <svg class="ivp__icon-pause" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+  </button>
+  <button type="button" class="ivp__mute" data-iv-mute aria-label="Turn sound on" aria-pressed="false"{% unless mute_btn and ivp_kind == 'file' %} hidden{% endunless %}>
+    <svg class="ivp__icon-muted" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M16 9l5 5M21 9l-5 5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+    <svg class="ivp__icon-sound" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a4 4 0 010 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+  </button>
+</div>
+<style>
+  #shopify-section-{{ sid }} .ivp { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: inherit; isolation: isolate; background: color-mix(in srgb, var(--color-text) 10%, var(--color-background)); }
+  #shopify-section-{{ sid }} .ivp > :is(.ivp__cover, .ivp__video, .ivp__frame, .ivp__ph) { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border: 0; margin: 0; max-width: none; object-fit: cover; border-radius: inherit; }
+  #shopify-section-{{ sid }} .ivp--contain > :is(.ivp__cover, .ivp__video) { object-fit: contain; }
+  #shopify-section-{{ sid }} .ivp > [hidden] { display: none !important; }
+  #shopify-section-{{ sid }} .ivp > .ivp__ph { display: grid; place-items: center; color: var(--color-text); }
+  #shopify-section-{{ sid }} .ivp__ph svg { width: clamp(40px, 12%, 72px); height: auto; opacity: .55; }
+  #shopify-section-{{ sid }} .ivp__overlay { position: absolute; inset: 0; z-index: 1; pointer-events: none; background: var(--iv-overlay, var(--color-background)); opacity: var(--iv-overlay-o, 0); }
+  #shopify-section-{{ sid }} .ivp__play { position: absolute; z-index: 2; top: 50%; left: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; padding: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer; color: var(--color-heading); background: color-mix(in srgb, var(--color-background) 72%, transparent); border: 2px solid transparent; transition: opacity var(--btn-anim-duration, .3s) ease, background-color var(--btn-anim-duration, .3s) ease; }
+  #shopify-section-{{ sid }} .ivp--play-outline .ivp__play { background: transparent; border-color: currentColor; color: var(--color-heading); width: 72px; height: 72px; margin: -36px 0 0 -36px; }
+  #shopify-section-{{ sid }} .ivp__play svg { width: 26px; height: 26px; fill: currentColor; }
+  #shopify-section-{{ sid }} .ivp__play .ivp__icon-pause, #shopify-section-{{ sid }} .ivp[data-state="playing"] .ivp__play .ivp__icon-play { display: none; }
+  #shopify-section-{{ sid }} .ivp[data-state="playing"] .ivp__play .ivp__icon-pause { display: block; }
+  #shopify-section-{{ sid }} .ivp[data-state="playing"] .ivp__play { opacity: 0; }
+  #shopify-section-{{ sid }} .ivp[data-state="playing"]:hover .ivp__play, #shopify-section-{{ sid }} .ivp .ivp__play:focus-visible { opacity: 1; }
+  #shopify-section-{{ sid }} .ivp__mute { position: absolute; z-index: 3; right: 12px; bottom: 12px; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer; color: var(--color-heading); background: color-mix(in srgb, var(--color-background) 72%, transparent); }
+  #shopify-section-{{ sid }} .ivp__mute svg { width: 20px; height: 20px; fill: currentColor; }
+  #shopify-section-{{ sid }} .ivp__mute .ivp__icon-sound, #shopify-section-{{ sid }} .ivp__mute[aria-pressed="true"] .ivp__icon-muted { display: none; }
+  #shopify-section-{{ sid }} .ivp__mute[aria-pressed="true"] .ivp__icon-sound { display: block; }
+  #shopify-section-{{ sid }} .ivp :is(.ivp__play, .ivp__mute):focus-visible { outline: 2px solid var(--color-heading); outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) { #shopify-section-{{ sid }} .ivp__play { transition: none; } }
+{% comment %}{% endcomment %}</style>
+</template>

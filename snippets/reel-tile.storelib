@@ -1,153 +1,118 @@
 <template compat="shopify">
 {%- comment -%}
-  Reel tile — used by sections/reels-wall.liquid.
-  Inputs: b (block.settings), s (section.settings), section_id
+  Reel tile, used by sections/reels-wall only.
+  Inputs: b (block.settings), s (section.settings).
+  The tile is a box, not a link: a stretched link covers it when the reel has
+  a button link or a product, and the product chip, the button, the sound and
+  play buttons and the side actions sit above it, so no link is nested in
+  another. Videos carry no autoplay attribute: shopify/assets/media-live-stats-reels.js
+  plays them muted while in view and never under reduced motion. Elements a
+  setting can switch on are always printed and hidden, so builder edits apply
+  in place.
 {%- endcomment -%}
 {%- liquid
-  assign has_link = false
-  assign tile_href = '#'
-  if b.cta_link != blank
-    assign has_link = true
-    assign tile_href = b.cta_link
-  elsif b.product != blank
-    assign has_link = true
+  assign tile_href = b.cta_link
+  if tile_href == blank and b.product != blank
     assign tile_href = b.product.url
   endif
   assign avatar_letter = b.username | default: '@' | strip | replace: '@', '' | slice: 0, 1 | upcase
+  assign has_html5 = false
+  assign vid_src = ''
+  if b.local_video != blank
+    for source in b.local_video.sources
+      if source.format == 'mp4' or source.mime_type == 'video/mp4'
+        assign vid_src = source.url
+        break
+      endif
+    endfor
+    if vid_src == blank
+      assign vid_src = b.local_video.sources.first.url
+    endif
+  elsif b.video_url_direct != blank
+    assign vid_src = b.video_url_direct
+  endif
+  if vid_src != blank
+    assign has_html5 = true
+  endif
 -%}
-{%- if has_link -%}
-  <a class="rw-tile" href="{{ tile_href }}" aria-label="{{ b.heading | default: 'Reel' | escape }}">
-{%- else -%}
-  <div class="rw-tile">
-{%- endif -%}
-  {%- if b.local_video != blank -%}
-    {%- liquid
-      assign vid_src = ''
-      for src in b.local_video.sources
-        if src.format == 'mp4'
-          assign vid_src = src.url
-          break
-        endif
-      endfor
-    -%}
-    <video
-      {% if s.autoplay_videos %}autoplay{% endif %}
-      muted
-      {% if s.loop_videos %}loop{% endif %}
-      playsinline preload="metadata"
-      {% if b.poster_image != blank %}poster="{{ b.poster_image | image_url: width: 720 }}"{% endif %}
-    >
+<div class="rw-tile" data-msr-media>
+  {%- if has_html5 -%}
+    <video data-msr-video muted playsinline preload="metadata"{% if s.loop_videos %} loop{% endif %}{% if b.poster_image != blank %} poster="{{ b.poster_image | image_url: width: 720 }}"{% endif %} aria-label="{{ b.heading | strip_html | escape }}">
       <source src="{{ vid_src }}" type="video/mp4">
-    </video>
-  {%- elsif b.video_url_direct != blank -%}
-    <video
-      {% if s.autoplay_videos %}autoplay{% endif %}
-      muted
-      {% if s.loop_videos %}loop{% endif %}
-      playsinline preload="metadata"
-      {% if b.poster_image != blank %}poster="{{ b.poster_image | image_url: width: 720 }}"{% endif %}
-    >
-      <source src="{{ b.video_url_direct }}" type="video/mp4">
     </video>
   {%- elsif b.video_url != blank -%}
     {%- assign yt_id = b.video_url.id -%}
     {%- if b.video_url.type == 'youtube' -%}
-      <iframe src="https://www.youtube.com/embed/{{ yt_id }}?{% if s.autoplay_videos %}autoplay=1&{% endif %}mute=1&{% if s.loop_videos %}loop=1&playlist={{ yt_id }}&{% endif %}controls=0&rel=0&modestbranding=1" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+      <iframe data-msr-embed src="https://www.youtube.com/embed/{{ yt_id }}?enablejsapi=1&mute=1&playsinline=1&{% if s.loop_videos %}loop=1&playlist={{ yt_id }}&{% endif %}controls=0&rel=0&modestbranding=1" title="{{ b.heading | strip_html | default: 'YouTube' | escape }}" loading="lazy" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
     {%- elsif b.video_url.type == 'vimeo' -%}
-      <iframe src="https://player.vimeo.com/video/{{ yt_id }}?{% if s.autoplay_videos %}autoplay=1&{% endif %}muted=1&{% if s.loop_videos %}loop=1&{% endif %}controls=0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+      <iframe data-msr-embed src="https://player.vimeo.com/video/{{ yt_id }}?api=1&muted=1&playsinline=1&{% if s.loop_videos %}loop=1&{% endif %}controls=0" title="{{ b.heading | strip_html | default: 'Vimeo' | escape }}" loading="lazy" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
     {%- endif -%}
   {%- elsif b.poster_image != blank -%}
-    <img src="{{ b.poster_image | image_url: width: 720 }}" alt="{{ b.poster_image.alt | escape }}" loading="lazy">
+    <img data-rw-poster src="{{ b.poster_image | image_url: width: 720 }}" alt="{{ b.poster_image.alt | escape }}" width="{{ b.poster_image.width | default: 720 }}" height="{{ b.poster_image.height | default: 1280 }}" loading="lazy" decoding="async">
   {%- else -%}
     {%- render 'placeholder-render', class: 'rw-tile__placeholder' -%}
   {%- endif -%}
 
-  <div class="rw-tile__overlay"></div>
+  <div class="rw-tile__overlay" aria-hidden="true"></div>
+  <a class="rw-tile__link" data-rw-link href="{{ tile_href | default: '#' }}" aria-label="{{ b.heading | strip_html | default: b.cta_label | escape }}"{% if tile_href == blank %} hidden{% endif %}></a>
 
-  {%- if s.show_handle and b.username != blank -%}
-    <div class="rw-handle">
-      {%- if b.avatar != blank -%}
-        <img src="{{ b.avatar | image_url: width: 64 }}" alt="{{ b.username | escape }}" loading="lazy">
-      {%- else -%}
-        <span class="rw-handle__avatar-fallback">{{ avatar_letter }}</span>
-      {%- endif -%}
-      <span>{{ b.username }}</span>
-    </div>
-  {%- endif -%}
-
-  {%- assign rw_has_html5 = false -%}
-  {%- if b.local_video != blank or b.video_url_direct != blank -%}{%- assign rw_has_html5 = true -%}{%- endif -%}
-  {%- if s.show_unmute and rw_has_html5 -%}
-    <button type="button" class="rw-sound" aria-label="Toggle sound">
-      <svg class="icon-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/>
-        <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
-      </svg>
-      <svg class="icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/>
-        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-      </svg>
-    </button>
-  {%- endif -%}
-
-  {%- if s.show_actions and b.show_block_actions != false -%}
-    <div class="rw-actions" aria-label="Reel actions">
-      <button type="button" class="rw-action" data-action="like" aria-label="Like">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-        </svg>
-        <span>{{ b.likes | default: '0' }}</span>
-      </button>
-      <button type="button" class="rw-action" data-action="share" aria-label="Share">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-        </svg>
-        <span>{{ b.shares | default: '0' }}</span>
-      </button>
-      <button type="button" class="rw-action" data-action="save" aria-label="Save">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-        </svg>
-        <span>{{ b.saves | default: '0' }}</span>
-      </button>
-    </div>
-  {%- endif -%}
-
-  {%- if b.heading != blank or b.caption != blank or b.cta_label != blank -%}
-    <div class="rw-content">
-      {%- if b.heading != blank -%}
-        <h3 class="rw-content__heading">{{ b.heading }}</h3>
-      {%- endif -%}
-      {%- if b.caption != blank -%}
-        <p class="rw-content__caption">{{ b.caption }}</p>
-      {%- endif -%}
-      {%- if b.cta_label != blank and b.cta_link != blank -%}
-        <span class="rw-cta">
-          {{ b.cta_label }}
-          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg>
-        </span>
-      {%- endif -%}
-    </div>
-  {%- endif -%}
-
-  {%- if b.product != blank -%}
-    {%- assign p = b.product -%}
-    <a class="rw-product" href="{{ p.url }}" aria-label="Shop {{ p.title | escape }}" onclick="event.stopPropagation();">
-      {%- if p.featured_image != blank -%}
-        <img src="{{ p.featured_image | image_url: width: 64 }}" alt="{{ p.title | escape }}" loading="lazy">
-      {%- endif -%}
-      <div>
-        <div class="rw-product__name">{{ p.title }}</div>
-        <div class="rw-product__price">{{ p.price | money }}</div>
-      </div>
-    </a>
-  {%- endif -%}
-
-{%- if has_link -%}
-  </a>
-{%- else -%}
+  <div class="rw-handle" data-rw-handle{% if b.username == blank %} hidden{% endif %}>
+    {%- if b.avatar != blank -%}
+      <img src="{{ b.avatar | image_url: width: 64 }}" alt="" width="22" height="22" loading="lazy" decoding="async">
+    {%- else -%}
+      <span class="rw-handle__avatar-fallback" aria-hidden="true">{{ avatar_letter }}</span>
+    {%- endif -%}
+    <span data-rw-username>{{ b.username | escape }}</span>
   </div>
-{%- endif -%}
 
+  {%- if has_html5 -%}
+    <div class="rw-buttons">
+      <button type="button" class="rw-round rw-play" data-msr-play aria-pressed="false" aria-label="{{ 'accessibility.play_video' | t }}" data-label-play="{{ 'accessibility.play_video' | t | escape }}" data-label-pause="{{ 'accessibility.play_pause' | t | escape }}">
+        <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M8 5v14l11-7z"/></svg>
+        <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+      </button>
+      <button type="button" class="rw-round rw-sound" data-msr-sound aria-pressed="false" aria-label="{{ 'accessibility.toggle_sound' | t }}">
+        <svg class="icon-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+        <svg class="icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+      </button>
+    </div>
+  {%- endif -%}
+
+  <div class="rw-actions" data-rw-actions{% if b.show_block_actions == false %} hidden{% endif %}>
+    <button type="button" class="rw-action" data-action="like" aria-pressed="false" aria-label="{{ 'accessibility.like' | t }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+      <span data-rw-count="likes">{{ b.likes | default: '0' | escape }}</span>
+    </button>
+    <button type="button" class="rw-action" data-action="share" aria-label="{{ 'accessibility.share' | t }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      <span data-rw-count="shares">{{ b.shares | default: '0' | escape }}</span>
+    </button>
+    <button type="button" class="rw-action" data-action="save" aria-pressed="false" aria-label="{{ 'accessibility.save' | t }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+      <span data-rw-count="saves">{{ b.saves | default: '0' | escape }}</span>
+    </button>
+  </div>
+
+  <div class="rw-content">
+    {%- if b.product != blank -%}
+      {%- assign p = b.product -%}
+      <a class="rw-product" href="{{ p.url }}">
+        {%- if p.featured_image != blank -%}
+          <img src="{{ p.featured_image | image_url: width: 64 }}" alt="" width="28" height="28" loading="lazy" decoding="async">
+        {%- endif -%}
+        <span class="rw-product__text">
+          <span class="rw-product__name">{{ p.title | escape }}</span>
+          <span class="rw-product__price">{{ p.price | money }}</span>
+        </span>
+      </a>
+    {%- endif -%}
+    <h3 class="rw-content__heading" data-rw-heading{% if b.heading == blank %} hidden{% endif %}>{{ b.heading | escape }}</h3>
+    <p class="rw-content__caption" data-rw-caption{% if b.caption == blank %} hidden{% endif %}>{{ b.caption | escape }}</p>
+    {%- if tile_href != blank -%}
+      <a class="rw-cta" data-rw-cta data-theme-button="primary" data-sl-button href="{{ tile_href }}"{% if b.cta_label == blank %} hidden{% endif %}>{{ b.cta_label | escape }}</a>
+    {%- else -%}
+      <button type="button" class="rw-cta" data-rw-cta data-theme-button="primary" data-sl-button{% if b.cta_label == blank %} hidden{% endif %}>{{ b.cta_label | escape }}</button>
+    {%- endif -%}
+  </div>
+</div>
 </template>
