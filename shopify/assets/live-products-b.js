@@ -315,7 +315,8 @@
           const next = ((to % n) + n) % n, changed = next !== st.index;
           st.index = next;
           const track = root.querySelector('[data-ps-track]');
-          track.style.transform = next ? 'translateX(' + (-next * 100) + '%)' : '';
+          const dir = getComputedStyle(track).direction === 'rtl' ? 1 : -1; /* right to left: the next slide is to the left */
+          track.style.transform = next ? 'translateX(' + (dir * next * 100) + '%)' : '';
           list.forEach((el, i) => {
             const on = i === next;
             el.classList.toggle('is-active', on);
@@ -347,15 +348,17 @@
             if (!down || e.pointerId !== down.id) return;
             const mx = e.clientX - down.x, my = e.clientY - down.y;
             if (!down.lock) { if (Math.abs(mx) < 6 && Math.abs(my) < 6) return; if (Math.abs(my) > Math.abs(mx)) { down = null; return; } down.lock = true; try { vp.setPointerCapture(e.pointerId); } catch (_) {} root.querySelector('[data-ps-track]').classList.add('is-dragging'); T.motion(root, st, true); }
-            const n = slides().length; down.dx = (st.index === 0 && mx > 0) || (st.index === n - 1 && mx < 0) ? mx * 0.35 : mx;
-            root.querySelector('[data-ps-track]').style.transform = 'translateX(calc(' + (-st.index * 100) + '% + ' + down.dx + 'px))';
+            const n = slides().length, rtl = getComputedStyle(vp).direction === 'rtl', fwd = rtl ? mx > 0 : mx < 0; down.dx = (st.index === 0 && !fwd) || (st.index === n - 1 && fwd) ? mx * 0.35 : mx;
+            const track = root.querySelector('[data-ps-track]'), dir = getComputedStyle(track).direction === 'rtl' ? 1 : -1;
+            track.style.transform = 'translateX(calc(' + (dir * st.index * 100) + '% + ' + down.dx + 'px))';
           }, sig);
           const end = () => {
             if (!down) return; const d = down; down = null;
             const track = root.querySelector('[data-ps-track]'); track.classList.remove('is-dragging');
             if (!d.lock) return;
             const limit = (vp.clientWidth || 1) * 0.18;
-            st.go(d.dx <= -limit ? st.index + 1 : d.dx >= limit ? st.index - 1 : st.index, true);
+            const s = getComputedStyle(vp).direction === 'rtl' ? -d.dx : d.dx;
+            st.go(s <= -limit ? st.index + 1 : s >= limit ? st.index - 1 : st.index, true);
           };
           vp.addEventListener('pointerup', end, sig); vp.addEventListener('pointercancel', end, sig); vp.addEventListener('lostpointercapture', end, sig);
         }
