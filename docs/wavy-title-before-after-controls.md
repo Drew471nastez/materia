@@ -22,6 +22,16 @@ hidden tabs still pause intentionally. `tests/theme-wave-playback.cjs`
 checks clocks and actual moving outlines during streamed settings changes
 under 4x CPU throttling, plus redraw, repeat, speed and resume behaviour.
 
+The wavy section renders `wavy-first-paint` before its content. It removes
+inherited wrapper padding immediately when reset spacing is enabled,
+reserves the final SVG dimensions and description text size, and applies
+explicit margin sliders before deferred scripts run. The live reset flag
+also releases the CSS reset when that toggle is disabled. This prevents
+temporary white bands caused by wrapper spacing being removed only during
+hydration. `tests/theme-wave-first-paint.cjs` checks delayed stylesheet and
+script arrival, including a four-second delay, against a padded white
+wrapper in mobile/desktop editor and viewer fixtures.
+
 Title and subtitle blocks use inline rich text; supporting text uses rich
 text in a div, so paragraph formatting does not create nested paragraphs.
 Section and block styling remain independent opt-ins. Reset theme spacing
