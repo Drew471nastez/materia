@@ -134,9 +134,9 @@ const SECTIONS = {
       {id: 'bar_color', v: '#00ffff', with: {enable_custom_style: true}, p: style('.bam-compare__bar', 'backgroundColor'), want: 'rgb(0, 255, 255)'},
       {id: 'circle_color', v: '#ffff00', with: {enable_custom_style: true}, p: style('.bam-compare__knob', 'backgroundColor'), want: 'rgb(255, 255, 0)'},
       {id: 'circle_icon_color', v: '#ff8800', with: {enable_custom_style: true}, p: style('.bam-compare__knob', 'color'), want: 'rgb(255, 136, 0)'},
-      {id: 'enable_custom_fonts', v: true, with: {heading_font: VERDANA, body_font: TAHOMA}, p: t => Promise.all([style('.bas__heading', 'fontFamily')(t), style('.bas__content', 'fontFamily')(t)]), want: v => /^Verdana/.test(v[0]) && /^Tahoma/.test(v[1])},
+      {id: 'enable_custom_fonts', v: true, with: {heading_font: VERDANA, body_font: TAHOMA}, p: t => Promise.all([style('.bas__heading', 'fontFamily')(t), style('.bas__content p', 'fontFamily')(t)]), want: v => /^Verdana/.test(v[0]) && /^Tahoma/.test(v[1])},
       {id: 'heading_font', v: VERDANA, with: {enable_custom_fonts: true}, p: style('.bas__heading', 'fontFamily'), want: /^Verdana/},
-      {id: 'body_font', v: TAHOMA, with: {enable_custom_fonts: true}, p: style('.bas__content', 'fontFamily'), want: /^Tahoma/},
+      {id: 'body_font', v: TAHOMA, with: {enable_custom_fonts: true}, p: style('.bas__content p', 'fontFamily'), want: /^Tahoma/},
       {id: 'headline_size', v: 50, p: style('.bas__heading', 'fontSize'), want: {d: '50px', m: SAME}},
       {id: 'headline_line_height', v: '1.6', p: t => Promise.all([style('.bas__heading', 'lineHeight')(t), style('.bas__heading', 'fontSize')(t)]), want: ([lh, fs]) => Math.abs(parseFloat(lh) - 1.6 * parseFloat(fs)) < 1},
       {id: 'text_size', v: 20, p: style('.bas__content p', 'fontSize'), want: '20px'},
@@ -158,14 +158,14 @@ const SECTIONS = {
       {block: 'heading', id: 'text', v: '<em>Edited</em> heading', p: textOf('.bas__heading'), want: '<em>Edited</em> heading'},
       {block: 'heading', id: 'enable_custom_style', v: true, with: {color: '#cc0033'}, p: style('.bas__heading', 'color'), want: 'rgb(204, 0, 51)'},
       {block: 'heading', id: 'color', v: '#00cc33', with: {enable_custom_style: true}, p: style('.bas__heading', 'color'), want: 'rgb(0, 204, 51)'},
-      {block: 'heading', id: 'weight_enable', v: true, with: {weight: '400'}, p: style('.bas__heading', 'fontWeight'), want: '400'},
-      {block: 'heading', id: 'weight', v: '500', with: {weight_enable: true}, p: style('.bas__heading', 'fontWeight'), want: '500'},
+      {block: 'heading', id: 'weight_enable', v: true, with: {weight: '400'}, p: t => Promise.all([style('.bas__heading', 'fontWeight')(t), style('.bas__heading strong', 'fontWeight')(t)]), want: ['400', '400']},
+      {block: 'heading', id: 'weight', v: '500', with: {weight_enable: true}, p: t => Promise.all([style('.bas__heading', 'fontWeight')(t), style('.bas__heading strong', 'fontWeight')(t)]), want: ['500', '500']},
       {block: 'heading', id: 'size_enable', v: true, p: style('.bas__heading', 'fontSize'), want: {d: '36px', m: '30px'}},
       {block: 'heading', id: 'size_desktop', v: 56, with: {size_enable: true}, p: style('.bas__heading', 'fontSize'), want: {d: '56px', m: '30px'}},
       {block: 'heading', id: 'size_mobile', v: 26, with: {size_enable: true}, p: style('.bas__heading', 'fontSize'), want: {d: '36px', m: '26px'}},
       {block: 'heading', id: 'line_height', v: 1.5, with: {size_enable: true}, p: style('.bas__heading', 'lineHeight'), want: {d: '54px', m: '45px'}},
-      {block: 'heading', id: 'tracking', v: 2, with: {size_enable: true}, p: style('.bas__heading', 'letterSpacing'), want: '2px'},
-      {block: 'heading', id: 'enable_custom_fonts', v: true, with: {font: VERDANA}, p: style('.bas__heading', 'fontFamily'), want: /^Verdana/},
+      {block: 'heading', id: 'tracking', v: 2, with: {size_enable: true}, p: t => Promise.all([style('.bas__heading', 'letterSpacing')(t), style('.bas__heading strong', 'letterSpacing')(t)]), want: ['2px', '2px']},
+      {block: 'heading', id: 'enable_custom_fonts', v: true, with: {font: VERDANA}, p: t => Promise.all([style('.bas__heading', 'fontFamily')(t), style('.bas__heading strong', 'fontFamily')(t)]), want: v => /^Verdana/.test(v[0]) && /^Verdana/.test(v[1])},
       {block: 'heading', id: 'font', v: TAHOMA, with: {enable_custom_fonts: true}, p: style('.bas__heading', 'fontFamily'), want: /^Tahoma/},
       {block: 'subheading', id: 'text', v: '<p>One <strong>coat</strong>.</p>', p: textOf('.bas__content'), want: '<p>One <strong>coat</strong>.</p>'},
       {block: 'subheading', id: 'enable_custom_style', v: true, with: {color: '#cc0033'}, p: style('.bas__content p', 'color'), want: 'rgb(204, 0, 51)'},
@@ -193,6 +193,8 @@ const SECTIONS = {
       {block: 'button', id: 'weight', v: '400', with: {use_theme_button: false, weight_enable: true}, p: style('.bas__cta', 'fontWeight'), want: '400'},
       {block: 'button', id: 'pad_x', v: 40, with: {use_theme_button: false}, p: style('.bas__cta', 'paddingLeft'), want: '40px'},
       {block: 'button', id: 'pad_y', v: 20, with: {use_theme_button: false}, p: style('.bas__cta', 'paddingTop'), want: '20px'},
+      {block: 'button', id: 'enable_custom_fonts', v: true, with: {use_theme_button: false, font: VERDANA}, p: style('.bas__cta', 'fontFamily'), want: /^Verdana/},
+      {block: 'button', id: 'font', v: TAHOMA, with: {use_theme_button: false, enable_custom_fonts: true}, p: style('.bas__cta', 'fontFamily'), want: /^Tahoma/},
     ],
     variants: [
       ['image_shadow', ['none', 'low', 'medium', 'high'], style('.bam-compare', 'boxShadow')],
@@ -264,9 +266,9 @@ const SECTIONS = {
       {id: 'handle_line_color', v: '#00ffff', with: {enable_custom_style: true}, p: style('.bam-compare__bar', 'backgroundColor'), want: 'rgb(0, 255, 255)'},
       {id: 'label_bg', v: '#0000ff', with: {enable_custom_style: true, show_labels: true}, p: style('.bam-compare__label--after', 'backgroundColor'), want: 'rgb(0, 0, 255)'},
       {id: 'label_color', v: '#ff00ff', with: {enable_custom_style: true, show_labels: true}, p: style('.bam-compare__label--after', 'color'), want: 'rgb(255, 0, 255)'},
-      {id: 'enable_custom_fonts', v: true, with: {heading_font: VERDANA, body_font: TAHOMA}, p: t => Promise.all([style('.ba2__heading', 'fontFamily')(t), style('.ba2__sub', 'fontFamily')(t)]), want: v => /^Verdana/.test(v[0]) && /^Tahoma/.test(v[1])},
+      {id: 'enable_custom_fonts', v: true, with: {heading_font: VERDANA, body_font: TAHOMA}, p: t => Promise.all([style('.ba2__heading', 'fontFamily')(t), style('.ba2__sub p', 'fontFamily')(t)]), want: v => /^Verdana/.test(v[0]) && /^Tahoma/.test(v[1])},
       {id: 'heading_font', v: VERDANA, with: {enable_custom_fonts: true}, p: style('.ba2__heading', 'fontFamily'), want: /^Verdana/},
-      {id: 'body_font', v: TAHOMA, with: {enable_custom_fonts: true}, p: style('.ba2__sub', 'fontFamily'), want: /^Tahoma/},
+      {id: 'body_font', v: TAHOMA, with: {enable_custom_fonts: true}, p: style('.ba2__sub p', 'fontFamily'), want: /^Tahoma/},
       {id: 'padding_top_desktop', v: 40, p: style('.ba2', 'paddingTop'), want: {d: '40px', m: SAME}},
       {id: 'padding_bottom_desktop', v: 44, p: style('.ba2', 'paddingBottom'), want: {d: '44px', m: SAME}},
       {id: 'section_margin_top_desktop', v: 24, p: style(':wrap', 'marginTop'), want: {d: '24px', m: SAME}},
@@ -300,8 +302,8 @@ const SECTIONS = {
       {block: 'subheading', id: 'size_enable', v: true, p: style('.ba2__sub', 'fontSize'), want: '16px'},
       {block: 'subheading', id: 'size', v: 20, with: {size_enable: true}, p: style('.ba2__sub', 'fontSize'), want: '20px'},
       {block: 'subheading', id: 'line_height', v: 2, with: {size_enable: true, size: 20}, p: style('.ba2__sub', 'lineHeight'), want: '40px'},
-      {block: 'subheading', id: 'enable_custom_fonts', v: true, with: {font: VERDANA}, p: style('.ba2__sub', 'fontFamily'), want: /^Verdana/},
-      {block: 'subheading', id: 'font', v: TAHOMA, with: {enable_custom_fonts: true}, p: style('.ba2__sub', 'fontFamily'), want: /^Tahoma/},
+      {block: 'subheading', id: 'enable_custom_fonts', v: true, with: {font: VERDANA}, p: t => Promise.all([style('.ba2__sub', 'fontFamily')(t), style('.ba2__sub p', 'fontFamily')(t)]), want: v => /^Verdana/.test(v[0]) && /^Verdana/.test(v[1])},
+      {block: 'subheading', id: 'font', v: TAHOMA, with: {enable_custom_fonts: true}, p: style('.ba2__sub p', 'fontFamily'), want: /^Tahoma/},
       {block: 'subheading', id: 'max_width', v: 300, p: style('.ba2__sub', 'maxWidth'), want: '300px'},
       {block: 'button', id: 'text', v: 'Buy the kit', p: textOf('.ba2__btn'), want: 'Buy the kit'},
       {block: 'button', id: 'link', v: '', p: t => t.page.evaluate(() => document.querySelector('#shopify-section-test .ba2__btn').tagName + ' ' + document.querySelector('#shopify-section-test .ba2__btn').getAttribute('type')), want: 'BUTTON button'},
@@ -319,6 +321,8 @@ const SECTIONS = {
       {block: 'button', id: 'weight', v: '400', with: {use_theme_button: false, weight_enable: true}, p: style('.ba2__btn', 'fontWeight'), want: '400'},
       {block: 'button', id: 'pad_x', v: 40, with: {use_theme_button: false}, p: style('.ba2__btn', 'paddingLeft'), want: '40px'},
       {block: 'button', id: 'pad_y', v: 20, with: {use_theme_button: false}, p: style('.ba2__btn', 'paddingTop'), want: '20px'},
+      {block: 'button', id: 'enable_custom_fonts', v: true, with: {use_theme_button: false, font: VERDANA}, p: style('.ba2__btn', 'fontFamily'), want: /^Verdana/},
+      {block: 'button', id: 'font', v: TAHOMA, with: {use_theme_button: false, enable_custom_fonts: true}, p: style('.ba2__btn', 'fontFamily'), want: /^Tahoma/},
       {block: 'button', id: 'gap_top', v: 20, p: style('.ba2__btn', 'marginTop'), want: '20px'},
     ],
     variants: [
@@ -362,7 +366,7 @@ async function controls(t, name, cfg, width, editing) {
     ok(matches(want, got, before, width), `${name} ${width} ${how}: ${spec.block ? spec.block + '.' : ''}${spec.id}=${JSON.stringify(spec.v)} gave ${JSON.stringify(got)} (was ${JSON.stringify(before)})`);
     await restore(t, spec, base, how);
     if (cfg.settle) await wait(t.page, cfg.settle);
-    if (how === 'live') same(await spec.p(t), before, `${name} ${width} live restore of ${spec.id}`);
+    same(await spec.p(t), before, `${name} ${width} ${how} restore of ${spec.block ? spec.block + '.' : ''}${spec.id}`);
   }
 }
 
@@ -376,6 +380,45 @@ async function variants(t, name, cfg, width) {
     for (let i = 0; i < seen.length; i++) for (let j = i + 1; j < seen.length; j++) assert.notDeepEqual(seen[i], seen[j], `${name} ${width}: ${id} ${values[i]} and ${values[j]} look the same`);
     checks++;
     await t.emit({[id]: current(t).settings[id] ?? null, ...(extra ? Object.fromEntries(Object.keys(extra).map(k => [k, current(t).settings[k] ?? null])) : {})});
+  }
+}
+
+/* Every option of the other selects (block weights, line heights, ratios,
+   widths, show on) changes its element, with the theme priority rules on. */
+const ALL = list => list.flatMap((a, i) => list.slice(i + 1).map(b => [a, b]));
+/* Stretch adds its side padding from 1200px; below that it is the full width. */
+const WIDTH_PAIRS = w => ALL(['container', 'fluid_container', 'stretch_width', 'full_width']).filter(([a, b]) => w >= 1200 || !(a === 'stretch_width' && b === 'full_width'));
+const SELECTS = {
+  'before-and-after-image': [],
+  'before-and-after-slider': [
+    ['', 'media_aspect_ratio', ['21 / 9', '16 / 9', '4 / 3', '1 / 1', '3 / 2', '5 / 4', '3 / 1'], rect('.bam-compare')],
+    ['', 'headline_line_height', ['1.0', '1.2', '1.4', '1.6', '1.8', '2.0'], style('.bas__heading', 'lineHeight')],
+    ['', 'text_line_height', ['1.0', '1.2', '1.4', '1.6', '1.8', '2.0'], style('.bas__content p', 'lineHeight')],
+    ['', 'section_width', ['container', 'fluid_container', 'stretch_width', 'full_width'], t => Promise.all([style('.bas', 'maxWidth')(t), style('.bas', 'paddingLeft')(t)]), {}, WIDTH_PAIRS],
+    ['', 'show_on_device', ['all', 'mobile', 'desktop'], visible('.bas__container'), {}, w => w >= 900 ? [['all', 'mobile'], ['mobile', 'desktop']] : [['all', 'desktop'], ['mobile', 'desktop']]],
+    ['heading', 'weight', ['400', '500', '600', '700', '800'], style('.bas__heading', 'fontWeight'), {weight_enable: true}],
+    ['subheading', 'weight', ['300', '400', '500', '600', '700'], style('.bas__content p', 'fontWeight'), {weight_enable: true}],
+    ['button', 'weight', ['400', '500', '600', '700'], style('.bas__cta', 'fontWeight'), {use_theme_button: false, weight_enable: true}],
+  ],
+  'before-and-after-slider-2': [
+    ['', 'section_width', ['container', 'fluid_container', 'stretch_width', 'full_width'], t => Promise.all([style('.ba2', 'maxWidth')(t), style('.ba2', 'paddingLeft')(t)]), {}, WIDTH_PAIRS],
+    ['', 'show_section_on', ['all', 'mobile', 'desktop'], visible('.ba2__inner'), {}, w => w >= 992 ? [['all', 'mobile'], ['mobile', 'desktop']] : [['all', 'desktop'], ['mobile', 'desktop']]],
+    ['', 'label_weight', ['500', '600', '700'], style('.bam-compare__label--after', 'fontWeight'), {show_labels: true}],
+    ['heading', 'weight', ['400', '500', '600', '700', '800'], style('.ba2__heading', 'fontWeight'), {weight_enable: true}],
+    ['button', 'weight', ['400', '500', '600', '700'], style('.ba2__btn', 'fontWeight'), {use_theme_button: false, weight_enable: true}],
+  ],
+};
+async function selects(t, name, width) {
+  for (const [block, id, values, probe, extra = {}, pairs] of SELECTS[name]) {
+    const target = block ? t.blockId(block) : undefined;
+    if (Object.keys(extra).length) await t.emit(extra, target);
+    const seen = {};
+    for (const v of values) { await t.emit({[id]: v}, target); seen[v] = JSON.stringify(await probe(t)); }
+    const list = pairs ? pairs(width) : values.flatMap((a, i) => values.slice(i + 1).map(b => [a, b]));
+    for (const [a, b] of list) assert.notEqual(seen[a], seen[b], `${name} ${width}: ${block || 'section'}.${id} ${a} and ${b} look the same`);
+    checks++;
+    const src = block ? current(t).blocks.find(b => b.type === block).settings : current(t).settings;
+    await t.emit(Object.fromEntries([id, ...Object.keys(extra)].map(k => [k, src[k] ?? null])), target);
   }
 }
 
@@ -519,7 +562,7 @@ async function sliderBlocks(browser, name, cfg) {
   }
   // First paint equals hydrated paint with custom block values
   const customBlocks = [
-    {type: 'button', settings: {enable_custom_style: true, bg: '#224466', color: '#ffcc00', border_color: '#ff00ff', use_theme_button: false, radius: 20, size: 18, weight_enable: true, weight: '700', pad_x: 30, pad_y: 12, border_width: 2}},
+    {type: 'button', settings: {enable_custom_style: true, bg: '#224466', color: '#ffcc00', border_color: '#ff00ff', use_theme_button: false, radius: 20, size: 18, weight_enable: true, weight: '700', pad_x: 30, pad_y: 12, border_width: 2, enable_custom_fonts: true, font: VERDANA}},
     {type: 'heading', settings: {enable_custom_style: true, color: '#cc0033', weight_enable: true, weight: '500', size_enable: true, size_desktop: 50, size_mobile: 28, line_height: 1.3, tracking: 1, enable_custom_fonts: true, font: VERDANA}},
     {type: 'subheading', settings: {enable_custom_style: true, color: '#00cc33', weight_enable: true, weight: '600', size_enable: true, size: 19, line_height: 1.8, enable_custom_fonts: true, font: TAHOMA}},
   ];
@@ -528,8 +571,11 @@ async function sliderBlocks(browser, name, cfg) {
     await wait(b.page, 100);
     const sa = await snapshot(a.page), sb = await snapshot(b.page);
     same(sb, sa, `${name} ${width}: custom blocks first paint equals hydrated paint`);
-    const fonts = [await style('.bas__heading', 'fontFamily')(b), await style('.bas__content p', 'fontFamily')(b), await style('.bas__cta', 'borderTopLeftRadius')(b)];
-    ok(/^Verdana/.test(fonts[0]) && /^Tahoma/.test(fonts[1]) && fonts[2] === '20px', `${name} ${width}: custom block fonts and shape ${fonts}`);
+    for (const x of [a, b]) {
+      const got = await x.page.evaluate(() => { const q = s => getComputedStyle(document.querySelector('#shopify-section-test ' + s)); const h = q('.bas__heading'), p = q('.bas__content p'), c = q('.bas__cta'); return [h.fontFamily, h.fontWeight, h.lineHeight, h.letterSpacing, p.fontFamily, p.fontWeight, p.fontSize, p.lineHeight, c.fontFamily, c.fontWeight, c.fontSize, c.paddingTop, c.paddingLeft, c.borderTopLeftRadius, c.borderTopWidth]; });
+      const fs = width >= 900 ? 50 : 28;
+      same(got, ['Verdana, sans-serif', '500', Math.round(fs * 1.3 * 100) / 100 + 'px', '1px', 'Tahoma, sans-serif', '600', '19px', Math.round(19 * 1.8 * 100) / 100 + 'px', 'Verdana, sans-serif', '700', '18px', '12px', '30px', '20px', '2px'], `${name} ${width} ${x === a ? 'first paint' : 'hydrated'}: custom heading, text and button type win over the theme`);
+    }
     await a.page.close(); await b.page.close();
   }
 }
@@ -566,6 +612,7 @@ async function sliderBlocks(browser, name, cfg) {
         } else {
           same([await style('.bai__label', 'color')(t), await style('.bai__label', 'fontFamily')(t)], [HEAD, 'Arial'], tag + ' label inherits');
         }
+        same(await t.page.locator('#shopify-section-test :is([data-own-font], [data-own-weight], [data-own-shape])').count(), 0, tag + ' no own font, weight or shape while every custom switch is off');
         // 3. Colour scheme live and after redraw
         await t.emit({color_scheme: 'alt-scheme'}); same(await style(root, 'backgroundColor')(t), 'rgb(250, 250, 250)', tag + ' live scheme');
         await t.emit({color_scheme: 'default-color-scheme'}); same(await style(root, 'backgroundColor')(t), BG, tag + ' scheme back');
@@ -579,8 +626,10 @@ async function sliderBlocks(browser, name, cfg) {
         await t.emit(Object.fromEntries(colours.map(id => [id, null])));
         // 5 and 6. Every control, live (and redrawn in the editor), at the right width
         await controls(t, name, cfg, width, editing);
+        same(await t.page.locator('#shopify-section-test :is([data-own-font], [data-own-weight], [data-own-shape])').count(), 0, tag + ' every own font, weight and shape mark is gone once its switch is off again');
         // 7. Variants
         if (editing) await variants(t, name, cfg, width);
+        if (editing) await selects(t, name, width);
         // 13. Overflow and errors
         ok(await t.noOverflow(), tag + ' no sideways scroll');
         same(t.errors, [], tag + ' errors');
@@ -600,6 +649,26 @@ async function sliderBlocks(browser, name, cfg) {
         await t.page.close();
       }
       if (name === 'before-and-after-slider') await sliderBlocks(browser, name, cfg);
+
+      // Theme inheritance with Theme settings > Typography and Buttons priority switched off
+      for (const width of [375, 1366]) {
+        const t = await mount(browser, name, {width, assets: JS, settings: cfg.settings, blocks: cfg.blocks, priority: 'off'});
+        const tag = `${name} ${width} priority off`;
+        same(await style({image: '.bai', slider: '.bas', 'slider-2': '.ba2'}[name.replace('before-and-after-', '')], 'backgroundColor')(t), BG, tag + ' scheme background');
+        if (name === 'before-and-after-image') same([await style('.bai__label', 'color')(t), await style('.bai__label', 'fontFamily')(t)], [HEAD, 'Arial'], tag + ' label inherits');
+        else {
+          const k = name === 'before-and-after-slider' ? ['.bas__heading', '.bas__content p', '.bas__cta'] : ['.ba2__heading', '.ba2__sub p', '.ba2__btn'];
+          same([await style(k[0], 'color')(t), await style(k[0], 'fontFamily')(t), await style(k[1], 'color')(t), await style(k[1], 'fontFamily')(t), await style(k[2], 'backgroundColor')(t), await style(k[2], 'borderTopLeftRadius')(t)], [HEAD, 'Georgia', TEXT, 'Arial', 'rgb(18, 52, 86)', '12px'], tag + ' heading, text and button inherit');
+          await t.emit({enable_custom_fonts: true, font: VERDANA, weight_enable: true, weight: '400'}, t.blockId('heading'));
+          same(await style(k[0], 'fontWeight')(t), '400', tag + ' custom heading weight');
+          await t.emit({use_theme_button: false, radius: 30, size: 20, pad_x: 40, pad_y: 20, border_width: 3, weight_enable: true, weight: '700', enable_custom_fonts: true, font: TAHOMA}, t.blockId('button'));
+          const b = await t.page.evaluate(sel => { const c = getComputedStyle(document.querySelector('#shopify-section-test ' + sel)); return [c.fontSize, c.paddingTop, c.paddingLeft, c.borderTopLeftRadius, c.borderTopWidth, c.fontWeight, /^"?Tahoma/.test(c.fontFamily)]; }, k[2]);
+          same(b, ['20px', '20px', '40px', '30px', '3px', '700', true], tag + ' own button size, padding, corners, border, weight and font');
+          ok(/^"?Verdana/.test(await style(k[0], 'fontFamily')(t)), tag + ' custom heading font');
+        }
+        same(t.errors, [], tag + ' errors');
+        await t.page.close();
+      }
 
       // 8. Two instances stay independent
       const two = await mount(browser, name, {width: 1366, assets: JS, instances: [{uid: 'a', settings: cfg.settings, blocks: cfg.blocks}, {uid: 'b', settings: cfg.settings, blocks: cfg.blocks}]});

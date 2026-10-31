@@ -234,7 +234,8 @@ function original(t, p, keys) {
   return Object.fromEntries(keys.map(k => [k, src[k] === undefined ? '' : src[k]]));
 }
 async function apply(t, p, changes, how) {
-  if (how === 'emit') return t.emit(changes, p.block ? t.blockId(p.block) : undefined);
+  /* The controller paints in the next animation frame: wait two frames, so a busy machine does not measure before it. */
+  if (how === 'emit') { await t.emit(changes, p.block ? t.blockId(p.block) : undefined); return t.page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))); }
   if (!p.block) return t.redraw({settings: changes});
   const r = t.rendered[0], first = r.section.blocks.find(b => b.type === p.block);
   return t.redraw({blocks: r.section.blocks.map(b => ({type: b.type, settings: b === first ? {...b.settings, ...changes} : b.settings}))});

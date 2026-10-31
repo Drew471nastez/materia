@@ -117,7 +117,7 @@ const SWEEP = {
   'gallery-simple3': {blocks: [{type: 'heading'}, {type: 'image', settings: {background_image: IMG}}, {type: 'image', settings: {background_image: IMG}}], hover: {image_hover_animation: '.mga-s3__item:nth-child(2) .mga-s3__media'}},
   gallerysimple2: {with: {button_hover: {use_theme_button: false}, button_target: {button_link: '/pages/a'}}, hover: {button_hover: '.gs2__btn'}},
   gallerysimple4: {},
-  'images-carousel': {blocks: [1, 2, 3].map(() => ({type: 'image_block', settings: {image: IMG}}))},
+  'images-carousel': {blocks: [1, 2, 3, 4].map(() => ({type: 'image_block', settings: {image: IMG}})), settings: {enable_second_scrolling: true}},
   'image-2': {settings: {image: IMG}},
 };
 const WEIGHT_IDS = /weight/;

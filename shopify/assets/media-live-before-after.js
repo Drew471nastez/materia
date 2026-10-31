@@ -83,9 +83,17 @@
     const bg = custom ? api()?.color(c.bg, '') || '' : '', tx = custom ? api()?.color(c.text, '') || '' : '';
     const bd = custom ? api()?.color(c.border, '') || bg : '', hbg = custom ? api()?.color(c.hoverBg, '') || '' : '', htx = custom ? api()?.color(c.hoverText, '') || '' : '';
     inline(el, '--mb-bg', bg); inline(el, '--mb-text', tx); inline(el, '--mb-border', bd); inline(el, '--mb-hover-bg', hbg); inline(el, '--mb-hover-text', htx); inline(el, '--mb-hover-border', hbg);
-    for (const k of ['radius', 'padding-y', 'padding-x', 'font-size', 'weight']) inline(el, '--mb-' + k, shape ? shape[k] ?? '' : '');
+    for (const k of ['radius', 'padding-y', 'padding-x', 'font-size', 'weight', 'font']) inline(el, '--mb-' + k, shape ? shape[k] ?? '' : '');
     inline(el, '--btn-border-width', shape ? shape.border ?? '' : '');
+    /* Theme settings > Buttons "Use shared button size and shape" and the
+       theme's button font and weight win unless the button opts out. */
+    ownMark(el, 'shape', !!shape); ownMark(el, 'weight', !!(shape && shape.weight)); ownMark(el, 'font', !!(shape && shape.font));
   }
+  /* data-own-font / -weight / -size / -shape: this element keeps its own
+     value under the theme's "Use in every section" type and button rules. */
+  function ownMark(el, what, on) { attr(el, 'data-own-' + what, on ? '' : null); }
+  /* A font a custom switch really sets (empty when off or unreadable). */
+  const ownFont = (on, v) => on && v ? api()?.font(v) || '' : '';
 
   /* Shared section pieces: scheme, width, show on, margins, reset, reveal. */
   function common(root, state, s) {
@@ -223,8 +231,9 @@
     data(root, 'show', s.show_on_device || 'all'); data(root, 'location', s.media_location || 'bottom'); data(root, 'shadow', s.image_shadow || 'none');
     /* Legacy section text: drawn only while the section has no block of that type. */
     const heading = q('[data-bam-text="headline"]'), content = q('[data-bam-text="content"]'), legacyButton = q('[data-bam-legacy-button]');
-    if (heading) { rich(state, heading, s.headline); hide(heading, !filled(s.headline)); }
-    if (content) { rich(state, content, s.content); hide(content, !filled(s.content)); }
+    const headFont = !!ownFont(fonts, s.heading_font), bodyFont = !!ownFont(fonts, s.body_font);
+    if (heading) { rich(state, heading, s.headline); hide(heading, !filled(s.headline)); ownMark(heading, 'font', headFont); }
+    if (content) { rich(state, content, s.content); hide(content, !filled(s.content)); ownMark(content, 'font', bodyFont); }
     let cta = legacyButton?.querySelector('[data-bam-cta]');
     if (legacyButton) hide(legacyButton, !(bool(s.enable_button) && filled(s.link_text)));
     if (cta) {
@@ -241,6 +250,7 @@
         const isHead = type === 'heading';
         rich(state, el, b.text); hide(el, !filled(b.text));
         data(el, 'size', bool(b.size_enable)); data(el, 'weight', bool(b.weight_enable));
+        ownMark(el, 'font', (isHead ? headFont : bodyFont) || !!ownFont(bf, b.font)); ownMark(el, 'weight', bool(b.weight_enable));
         put(state, el, '--bas-c', col(own, b.color, isHead ? 'var(--bas-heading-color)' : 'var(--bas-text-color)'));
         put(state, el, '--bas-font', fam(bf, b.font, isHead ? 'var(--bas-heading-font)' : 'var(--bas-body-font)'));
         put(state, el, '--bas-w', b.weight || (isHead ? 700 : 400));
@@ -251,7 +261,7 @@
         const wrap = el.closest('[data-bam-button-wrap]');
         el = retag(el, api()?.url(b.link) || '');
         text(state, el, b.text || ''); hide(wrap, !filled(b.text));
-        const shape = b.use_theme_button === false ? {radius: px(b.radius), 'padding-y': px(b.pad_y), 'padding-x': px(b.pad_x), 'font-size': px(b.size), weight: bool(b.weight_enable) ? b.weight : '', border: px(b.border_width)} : null;
+        const bfam = ownFont(bf, b.font), shape = b.use_theme_button === false ? {radius: px(b.radius), 'padding-y': px(b.pad_y), 'padding-x': px(b.pad_x), 'font-size': px(b.size), weight: bool(b.weight_enable) ? b.weight : '', font: bfam, border: px(b.border_width)} : null;
         buttonVars(el, own, {bg: b.bg, text: b.color, border: b.border_color, hoverBg: b.bg_hover, hoverText: b.color_hover}, shape);
       }
     }
@@ -302,6 +312,8 @@
       } else if (type === 'heading' || type === 'subheading') {
         rich(state, el, b.text); hide(el, !filled(b.text));
         data(el, 'size', bool(b.size_enable));
+        ownMark(el, 'font', !!ownFont(fonts, type === 'heading' ? s.heading_font : s.body_font) || !!ownFont(bf, b.font));
+        if (type === 'heading') { ownMark(el, 'weight', bool(b.weight_enable)); ownMark(el, 'size', bool(b.size_enable)); }
         put(state, el, '--ba2-c', bc(b.color, type === 'heading' ? 'var(--color-heading)' : 'var(--color-text)'));
         put(state, el, '--ba2-font', fam(bf, b.font, type === 'heading' ? 'var(--ba2-heading-font)' : 'var(--ba2-body-font)'));
         put(state, el, '--ba2-lh', num(b.line_height, type === 'heading' ? 1.1 : 1.5));
@@ -312,7 +324,7 @@
       } else if (type === 'button') {
         el = retag(el, api()?.url(b.link) || '');
         text(state, el, b.text || ''); hide(el, !filled(b.text));
-        const shape = b.use_theme_button === false ? {radius: px(b.radius), 'padding-y': px(b.pad_y), 'padding-x': px(b.pad_x), 'font-size': px(b.size), weight: bool(b.weight_enable) ? b.weight : '', border: px(b.border_width)} : null;
+        const bfam = ownFont(bf, b.font), shape = b.use_theme_button === false ? {radius: px(b.radius), 'padding-y': px(b.pad_y), 'padding-x': px(b.pad_x), 'font-size': px(b.size), weight: bool(b.weight_enable) ? b.weight : '', font: bfam, border: px(b.border_width)} : null;
         buttonVars(el, own, {bg: b.bg, text: b.color, border: b.border_color, hoverBg: b.bg_hover, hoverText: b.color_hover}, shape);
         inline(el, 'margin-top', px(b.gap_top));
       }

@@ -577,6 +577,8 @@ async function ownAll() {
       eq(f.errors, [], 'featured product storefront: no product, no errors');
       await f.page.close();
     }
+    /* round 3: custom typography against the real theme rules */
+    await ownAll();
   } finally {
     await BROWSER.close();
   }

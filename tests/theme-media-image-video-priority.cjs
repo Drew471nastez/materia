@@ -19,6 +19,8 @@ const MONO = {family: 'Courier New', fallback_families: 'monospace', weight: 400
 
 /* probe: [label, selector, property | 'lh' (line height / font size)] */
 async function read(t, probes) {
+  /* let the controller's frame-batched paint land first (the runs are parallel, so frames can lag) */
+  await t.page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
   const out = {};
   for (const [label, sel, prop] of probes) out[label] = await t.page.evaluate(({sel, prop, uid}) => {
     const el = document.querySelector('#shopify-section-' + uid + ' ' + sel); if (!el) return 'missing ' + sel;
@@ -84,9 +86,9 @@ async function run(cases, offs, title) {
 }
 
 const IV = 'media-live-image-video.js';
-const VP = [['h', '.loud-title', 'fontFamily'], ['hw', '.loud-title', 'fontWeight'], ['hb', '.loud-title b', 'fontFamily'], ['hlh', '.loud-title', 'lh'], ['hfs', '.loud-title', 'fontSize'], ['t', '.loud-text', 'fontFamily'], ['tlh', '.loud-text', 'lh'], ['tfs', '.loud-text', 'fontSize']];
+const VP = [['h', '.loud-title', 'fontFamily'], ['hw', '.loud-title', 'fontWeight'], ['hb', '.loud-title strong', 'fontFamily'], ['hbw', '.loud-title strong', 'fontWeight'], ['hlh', '.loud-title', 'lh'], ['hfs', '.loud-title', 'fontSize'], ['t', '.loud-text', 'fontFamily'], ['tlh', '.loud-text', 'lh'], ['tfs', '.loud-text', 'fontSize']];
 const CASES = [
-  {name: 'video', asset: IV, block: 'headline', label: 'headline custom font + weight', probes: VP, on: {override_font: true, headline_font: FONT, font_weight: '300'}, off: {override_font: false}, want: {h: /Verdana/, hw: '300', hb: /Verdana/}, attrs: [['.loud-title', 'data-own-font'], ['.loud-title', 'data-own-weight']]},
+  {name: 'video', asset: IV, block: 'headline', label: 'headline custom font + weight', probes: VP, on: {override_font: true, headline_font: FONT, font_weight: '300', headline: 'Video <strong>Heading</strong>'}, off: {override_font: false, headline: 'Video <strong>Heading</strong>'}, want: {h: /Verdana/, hw: '300', hb: /Verdana/}, attrs: [['.loud-title', 'data-own-font'], ['.loud-title', 'data-own-weight']]},
   {name: 'video', asset: IV, block: 'headline', label: 'headline line height', probes: VP, on: {headline_line_height: '1.7'}, off: {headline_line_height: 'inherit'}, want: {hlh: '1.70'}, attrs: [['.loud-title', 'data-own-size']]},
   {name: 'video', asset: IV, block: 'headline', label: 'headline custom size', probes: VP, on: {enable_custom_size: true, headline_size: 60, mobile_headline_size: 22}, off: {enable_custom_size: false}, want: {hfs: w => w >= 801 ? '60px' : '22px'}},
   {name: 'video', asset: IV, block: 'subtext', label: 'subtext custom font', probes: VP, on: {override_font: true, text_font: MONO}, off: {override_font: false}, want: {t: /Courier New/}, attrs: [['.loud-text', 'data-own-font']]},

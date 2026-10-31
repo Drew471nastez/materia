@@ -93,6 +93,7 @@ const NEEDS = {
   'button.button_hover_animation': {blocks: {button: {use_theme_button: false}}, hover: '[data-tx-type=button]'},
   'buttons.button_font_weight': {blocks: {buttons: {use_theme_button: false}}},
   'buttons.primary_button_style': {blocks: {buttons: {use_theme_button: false}}},
+  'buttons.primary_button_behaviour': {blocks: {buttons: {primary_button_link: '/collections/all'}}},
   'buttons.secondary_button_style': {blocks: {buttons: {use_theme_button: false, secondary_button_label: 'More'}}},
   second_text_font_weight: {section: {enable_second_text: true, second_text: 'Two'}},
   'title.font_weight': {blocks: {title: {enable_custom_style: true}}}, 'title.text_case': {blocks: {title: {enable_custom_style: true}}},
@@ -105,7 +106,8 @@ const SAME = [['to bottom', '180deg']];
 /* Container widths only differ past the fluid container (1548px). */
 const widthFor = id => /mobile|_m$/.test(id) ? 375 : /^(section_)?width$/.test(id) ? 1700 : 1366;
 /* Theme weights that no select option uses, so 'theme' is told apart from a number. */
-const THEME_WEIGHTS = ':root{--heading-weight:650;--body-weight:450;--btn-font-weight:550;--heading-text-transform:none}';
+/* body{display:block}: on the site sections sit in <main>; the fixture appends them to the flex body. */
+const THEME_WEIGHTS = 'body{display:block}:root{--heading-weight:650;--body-weight:450;--btn-font-weight:550;--heading-text-transform:capitalize}';
 
 const has = (want, got) => want instanceof RegExp ? want.test(got) : typeof want === 'function' ? want(got) : want === got;
 const merge = (rendered, change = {}) => rendered.section.blocks.map(b => ({type: b.type, settings: {...b.settings, ...((change.blocks || {})[b.type] || {})}}));
@@ -120,9 +122,9 @@ async function read(t, sel, prop) {
 async function fingerprint(t, hover) {
   if (hover) await t.root(hover).first().hover().catch(() => {});
   await t.page.waitForTimeout(hover ? 350 : 0);
-  return t.page.evaluate(() => [...document.querySelectorAll('#shopify-section-test, #shopify-section-test *')].filter(e => !e.closest('svg') || e.tagName === 'svg').map(e => {
+  return t.page.evaluate(() => [...document.querySelectorAll('#shopify-section-test, #shopify-section-test *')].filter(e => !e.closest('svg') || e.tagName === 'svg' || e.tagName === 'path').map(e => {
     const c = getComputedStyle(e), r = e.getBoundingClientRect();
-    return [e.tagName, e.getAttribute('href'), Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height), c.fontFamily, c.fontWeight, c.fontSize, c.lineHeight, c.letterSpacing, c.textTransform, c.color, c.backgroundColor, c.backgroundImage, c.borderRadius, c.borderTopWidth, c.borderTopColor, c.padding, c.textAlign, c.justifyContent, c.flexDirection, c.animationName, c.transform, c.boxShadow, c.textDecorationLine, e.childElementCount ? '' : e.textContent.trim().slice(0, 30)].join(',');
+    return [e.tagName, e.getAttribute('href'), (e.getAttribute('d') || '').slice(0, 60), Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height), c.fontFamily, c.fontWeight, c.fontSize, c.lineHeight, c.letterSpacing, c.textTransform, c.color, c.backgroundColor, c.backgroundImage, c.borderRadius, c.borderTopWidth, c.borderTopColor, c.padding, c.textAlign, c.justifyContent, c.flexDirection, c.animationName, c.transform, c.boxShadow, c.textDecorationLine, e.childElementCount ? '' : e.textContent.trim().slice(0, 30)].join(',');
   }).join('|'));
 }
 
