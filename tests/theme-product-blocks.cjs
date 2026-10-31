@@ -170,9 +170,9 @@ ${CSS.map(f => `<link rel="stylesheet" href="/assets/${f}">`).join('')}</head>`;
 const themeJs = read('shopify/assets/theme.js');
 const slice = (text, from, to) => { const a = text.indexOf(from), b = text.indexOf(to, a); return a === -1 || b === -1 ? '' : text.slice(a, b + (to.startsWith('customElements') ? to.length : 0)); };
 const themeWishlist = slice(themeJs, 'var MateriaWishlist', 'function HoverIntent') + '\n' + slice(themeJs, 'class ButtonWishlist', 'customElements.define("button-wishlist", ButtonWishlist);');
-// The header's count bubble (sections/theme-header): it follows materia:wishlist-change.
-const headerText = read('sections/theme-header.storelib');
-const headerCount = (headerText.match(/<script>\s*(\(function \(\) \{[\s\S]*?__materiaCountBubbles[\s\S]*?\}\)\(\);)/) || [])[1] || '';
+// The header's count bubble (shopify/assets/header-section.js, linked by sections/theme-header): it follows materia:wishlist-change.
+const headerText = read('shopify/assets/header-section.js');
+const headerCount = (headerText.match(/(\(function \(\) \{[\s\S]*?__materiaCountBubbles[\s\S]*?\n\}\)\(\);)/) || [])[1] || '';
 const mainJs = read('shopify/assets/main-product.js');
 const buyLabels = slice(mainJs, '/* Buy buttons enhancements:', '// js for live view');
 const productPage = ({body, theme = true, bodyAttrs = 'data-btn-style="solid" data-btn-secondary-style="solid" data-btn-hover="fade"'}) => `${head}<body ${bodyAttrs}>

@@ -189,9 +189,10 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
     await page.setViewportSize({width:1280,height:800});passed++;
 
     // Count bubbles: default, custom override with empty fallback (theme-live), animation, live counts.
-    const header=read('sections/theme-header.storelib');
-    const bubbleCss=header.slice(header.indexOf('  html body .h-count:not('),header.indexOf('{% comment %}{% endcomment %}</style>',header.indexOf('<style data-count-bubble>')));
-    const bubbleJs=header.slice(header.indexOf('<script>',header.indexOf('<style data-count-bubble>'))+8,header.indexOf('{% comment %}{% endcomment %}</script>',header.indexOf('<style data-count-bubble>')));
+    // The bubbles' rules and script are the header's cached files (sections/theme-header links them).
+    const headerCss=read('shopify/assets/header-section.css'),headerJs=read('shopify/assets/header-section.js');
+    const bubbleCss=headerCss.slice(headerCss.indexOf('html body .h-count:not('));
+    const bubbleJs=headerJs.slice(0,headerJs.indexOf('\n})();')+6);
     assert(!/\{[{%]/.test(bubbleCss+bubbleJs),'fixture copies plain CSS and script');
     const live=read('snippets/theme-live.storelib');
     const liveJs=live.slice(live.indexOf('<script>')+8,live.lastIndexOf('{% comment %}{% endcomment %}</script>'))

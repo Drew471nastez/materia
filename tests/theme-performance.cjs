@@ -81,10 +81,11 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
     const headerPage=await browser.newPage({viewport:{width:1200,height:800}});
     const headerErrors=[];headerPage.on('pageerror',e=>headerErrors.push(e.message));
     const header=read('snippets/header-sticky-controller.storelib');
-    const headerCSS=header.match(/<style>([\s\S]*?)<\/style>/)[1].replace(/\{\{ section.id \}\}/g,'fixture').replace(/\{%[\s\S]*?%\}/g,'');
+    // The controller's rules are the cached header-sticky.css it links.
+    const headerCSS=read('shopify/assets/header-sticky.css');
     await headerPage.setContent('<style>body{margin:0}#bar{position:sticky;top:0;height:40px}#shopify-section-fixture>header{height:80px}main{height:2500px}</style><div id="bar" class="shopify-section"><div data-sticky-announcement="true" style="height:40px">Shipping</div></div><div class="shopify-section section-header" id="shopify-section-fixture"><header class="header" data-sticky="on-scroll-up"></header></div><main>Content</main>');
     await headerPage.addStyleTag({content:headerCSS});
-    await headerPage.addScriptTag({content:header.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/\{%[\s\S]*?%\}/g,'')});
+    await headerPage.addScriptTag({content:header.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/\{%-?\s*comment\s*-?%\}[\s\S]*?\{%-?\s*endcomment\s*-?%\}/g,'').replace(/\{%[\s\S]*?%\}/g,'')});
     await headerPage.waitForTimeout(80);
     await headerPage.evaluate(()=>scrollTo(0,400));await headerPage.waitForTimeout(100);
     assert(await headerPage.$eval('.section-header',el=>el.classList.contains('shopify-section-header-hidden')));
