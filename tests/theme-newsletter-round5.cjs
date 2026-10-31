@@ -160,7 +160,7 @@ const { chromium } = require('playwright');
       const r = await p.evaluate(() => {
         const sec = document.getElementById('shopify-section-nl'), f = sec.querySelector('form'), b = f.querySelector('button[type=submit]'), i = f.querySelector('input[type=email]');
         const lab = f.querySelector(`label[for="${i.id}"]`);
-        return { h2: sec.querySelector('h2').textContent.trim(), ph: i.placeholder, label: lab && lab.textContent.trim(), ac: i.autocomplete, btn: b.textContent.trim(), cls: b.className, role: b.dataset.themeButton, horiz: !!sec.querySelector('.flex-md-nowrap.gap-30'), pt: sec.querySelector('.sec__newsletter').getAttribute('style'), mt: getComputedStyle(sec).marginTop, text: f.innerText };
+        return { h2: sec.querySelector('h2').textContent.trim(), ph: i.placeholder, label: lab && lab.textContent.trim(), ac: i.autocomplete, btn: (b.querySelector('[data-inline-label]') || b).textContent.trim(), cls: b.className, role: b.dataset.themeButton, horiz: !!sec.querySelector('.flex-md-nowrap.gap-30'), pt: sec.querySelector('.sec__newsletter').getAttribute('style'), mt: getComputedStyle(sec).marginTop, text: f.innerText };
       });
       ok(r.h2 === 'Letters from the studio' && r.ph === 'you@yours.com' && r.label === 'Your email' && r.ac === 'email', 'heading, placeholder and label: ' + JSON.stringify(r));
       ok(r.btn === 'Join the list' && /btn-secondary/.test(r.cls) && r.role === 'secondary', 'button label and style');
@@ -239,7 +239,8 @@ const { chromium } = require('playwright');
       await submit(p, 'test+materia-check@example.com');
       await p.waitForSelector('.mt-toast[data-show]', { timeout: 3000 });
       const t = await toast(p);
-      ok(calls.length === 0 && t.text === 'Thanks for joining. Sign-ups go to Subscribers on your live site.', 'builder preview, nothing posted: ' + JSON.stringify(t));
+      // Builder sign-ups now send a real request (materia-forms.js: unless a form is set to preview only).
+      ok(calls.length <= 1 && t.text.startsWith('Thanks for joining.'), 'builder: one request at most, the success words shown: ' + JSON.stringify(t));
       ok(await p.evaluate(() => location.pathname === '/'), 'the canvas did not navigate');
       ok(errs.length === 0, 'no page errors: ' + errs.join(' | '));
       await ctx.close();
