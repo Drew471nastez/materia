@@ -35,6 +35,8 @@
   /* Rich text the Liquid already printed is left as it is until its value changes. */
   const rich = (el, v, st) => { if (!el || !api()) return; if (!st.seen.has(el)) { st.seen.add(el); st.rich.set(el, v || ''); } api().rich(el, v || '', st); };
   const attr = (el, k, v) => { if (el && el.getAttribute(k) !== String(v)) el.setAttribute(k, v); };
+  /* Theme priority opt-outs (snippets/theme-controls): present only while the section's own value is on. */
+  const flag = (el, k, on) => { if (el && el.hasAttribute(k) !== !!on) el.toggleAttribute(k, !!on); };
   const align = v => v === 'center' ? ['center', 'center'] : v === 'right' ? ['flex-end', 'right'] : ['flex-start', 'left'];
 
   /* An image keeps its node and src until its own setting changes. */
@@ -72,10 +74,11 @@
       '--mb-hover-bg': c('bg_hover'), '--mb-hover-text': c('color_hover'), '--mb-hover-border': c('border_color_hover') || c('bg_hover'),
       '--mb-radius': shape ? px(b[p + 'radius']) : '', '--mb-padding-y': shape ? px(b[p + 'padding_y']) : '', '--mb-padding-x': shape ? px(b[p + 'padding_x']) : '',
       '--mb-font-size': shape ? px(b[p + 'font_size']) : '', '--mb-weight': shape && !blank(b[p + 'font_weight']) ? b[p + 'font_weight'] : '',
-      '--btn-border-width': shape ? px(b[p + 'border_width']) : '',
+      '--btn-border-width': shape ? px(b[p + 'border_width']) : '', '--mb-border-width': shape ? px(b[p + 'border_width']) : '',
       '--btn-text-transform': bool(b.uppercase) ? 'uppercase' : shape && 'uppercase' in b ? 'none' : '',
       '--tg-btn-w': bool(b.full_width) ? '100%' : '',
     });
+    flag(el, 'data-own-shape', shape); flag(el, 'data-own-weight', shape && !blank(b[p + 'font_weight']));
     return el;
   }
 
@@ -232,6 +235,8 @@
       '--tg-bg': col(custom, s.section_bg), '--tg-text': root.dataset.tgRoot !== 'bento' ? col(custom, s.text_color) : '',
       '--tg-hf': fonts ? fontVar(s.heading_font) : '', '--tg-hw': fonts ? fontW(s.heading_font) : '', '--tg-bf': fonts ? fontVar(s.body_font) : '', '--tg-bw': fonts ? fontW(s.body_font) : '',
     });
+    flag(root, 'data-own-font', fonts);
+    flag(root, 'data-own-weight', (fonts && !!fontW(s.heading_font)) || (!blank(s.heading_weight) && s.heading_weight !== 'theme'));
     const d = st.mq.matches, side = d ? 'desktop' : 'mobile', mt = num(s['section_margin_top_' + side]), mb = num(s['section_margin_bottom_' + side]);
     const margins = bool(s.reset_spacing) || ['top', 'bottom'].some(k => num(s['section_margin_' + k + '_desktop']) || num(s['section_margin_' + k + '_mobile']));
     imp(wrap, 'margin-top', margins ? mt + 'px' : ''); imp(wrap, 'margin-bottom', margins ? mb + 'px' : '');

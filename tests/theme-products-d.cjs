@@ -519,6 +519,100 @@ async function look(browser) {
   await t.page.close();
 }
 
+/* Round 3: custom fonts, sizes, weights and button shape against the real
+   theme rules (snippets/theme-controls, Use in every section and Use shared
+   button size and shape both on). Each case is switched on and off live and
+   by a redraw, at 375 and 1366, in the builder and on the storefront: on, its
+   element (and the text inside it) shows the custom value; off, the theme
+   value is back. Priority 'off' runs the same cases once. */
+const COURIER = {family: 'Courier New', fallback_families: 'monospace'}, VERDANA = {family: 'Verdana', fallback_families: 'sans-serif'};
+const FONTS_ON = {enable_custom_fonts: true, heading_font: COURIER, body_font: VERDANA, price_font: COURIER};
+const changed = (v, b) => v !== b;
+const OWN = {
+  addtocartbutton: {
+    mount: {settings: {selected_product: PANTS, show_variant_picker: true}, blocks: [{type: 'heading', settings: {text: 'Add it'}}, {type: 'subheading', settings: {text: '<p>Choose a <strong>size</strong>.</p>'}}, {type: 'button'}]},
+    cases: [
+      {label: 'custom fonts', on: FONTS_ON, off: {enable_custom_fonts: false}, checks: [['.pd-atc__heading', 'fontFamily', /^"Courier New"/], ['.pd-atc__sub', 'fontFamily', /^Verdana/], ['.pd-atc__sub p', 'fontFamily', /^Verdana/], ['.pd-atc__sub strong', 'fontFamily', /^Verdana/], ['.pd-atc__variant-label', 'fontFamily', /^Verdana/]], attr: ['[data-pd-root]', 'data-own-font']},
+      {label: 'heading size', block: 'heading', on: {size_enable: true, size_desktop: 50, size_mobile: 30}, off: {size_enable: false}, checks: [['.pd-atc__heading', 'fontSize', {375: '30px', 1366: '50px'}]]},
+      {label: 'text size', block: 'subheading', on: {size_enable: true, size: 23}, off: {size_enable: false}, checks: [['.pd-atc__sub', 'fontSize', '23px'], ['.pd-atc__sub p', 'fontSize', '23px'], ['.pd-atc__sub strong', 'fontSize', '23px']]},
+      {label: 'button shape (bold)', on: {use_theme_button: false, button_border_radius: 30, button_border_thickness: 3, button_font_size: 22, button_font_weight: 'bold'}, off: {use_theme_button: true}, checks: [['.pd-atc__button', 'borderTopLeftRadius', '30px'], ['.pd-atc__button', 'borderTopWidth', '3px'], ['.pd-atc__button', 'fontSize', '22px'], ['.pd-atc__label', 'fontSize', '22px'], ['.pd-atc__button', 'fontWeight', '700'], ['.pd-atc__button', 'paddingTop', '15px'], ['.pd-atc__button', 'paddingLeft', '25px']], attr: ['.pd-atc__button', 'data-own-shape']},
+      {label: 'button weight light', on: {use_theme_button: false, button_font_weight: 'light'}, off: {use_theme_button: true, button_font_weight: 'bold'}, checks: [['.pd-atc__button', 'fontWeight', '300'], ['.pd-atc__label', 'fontWeight', '300']]},
+      {label: 'button weight normal', on: {use_theme_button: false, button_font_weight: 'normal'}, off: {use_theme_button: true}, checks: [['.pd-atc__button', 'fontWeight', '400']]},
+    ],
+  },
+  'dynamic-pricing': {
+    mount: {settings: {product: PANTS, show_currency_symbol: true}},
+    cases: [
+      {label: 'custom price font', on: FONTS_ON, off: {enable_custom_fonts: false}, checks: [['.pd-price__sale', 'fontFamily', /^"Courier New"/], ['[data-pd-sale]', 'fontFamily', /^"Courier New"/], ['[data-pd-original]', 'fontFamily', /^"Courier New"/], ['.pd-price__currency', 'fontFamily', /^"Courier New"/]], attr: ['[data-pd-root]', 'data-own-font']},
+      {label: 'price weights', on: {original_price_font_weight: '300', discounted_price_font_weight: '700'}, off: {original_price_font_weight: '500', discounted_price_font_weight: '500'}, checks: [['[data-pd-original]', 'fontWeight', '300'], ['[data-pd-sale]', 'fontWeight', '700']]},
+      {label: 'price sizes', on: {original_price_size_desktop: 8, original_price_size_mobile: 6, discounted_price_size_desktop: 9, discounted_price_size_mobile: 7}, off: {original_price_size_desktop: 5, original_price_size_mobile: 4.5, discounted_price_size_desktop: 6, discounted_price_size_mobile: 3}, checks: [['[data-pd-original]', 'fontSize', changed], ['[data-pd-sale]', 'fontSize', changed]]},
+    ],
+  },
+  'product-set': {
+    mount: {settings: {}, globals: {product: PANTS}, blocks: [{type: 'heading', settings: {text: 'Wear it together'}}, {type: 'subheading', settings: {text: '<p>Three pieces, <em>one</em> set.</p>'}}, {type: 'set', settings: {products: [OTHER, TALL]}}]},
+    cases: [
+      {label: 'custom fonts', on: FONTS_ON, off: {enable_custom_fonts: false}, checks: [['.pd-set__heading', 'fontFamily', /^"Courier New"/], ['.pd-set__sub p', 'fontFamily', /^Verdana/], ['.pd-set__sub em', 'fontFamily', /^Verdana/]], attr: ['[data-pd-root]', 'data-own-font']},
+      {label: 'heading size', block: 'heading', on: {size_enable: true, size_desktop: 50, size_mobile: 30}, off: {size_enable: false}, checks: [['.pd-set__heading', 'fontSize', {375: '30px', 1366: '50px'}]]},
+      {label: 'text size', block: 'subheading', on: {size_enable: true, size: 23}, off: {size_enable: false}, checks: [['.pd-set__sub p', 'fontSize', '23px']]},
+      {label: 'heading size large', on: {header_size: 'large'}, off: {header_size: 'medium'}, checks: [['.pd-set__heading', 'fontSize', changed]]},
+      {label: 'heading size small', on: {header_size: 'small'}, off: {header_size: 'medium'}, checks: [['.pd-set__heading', 'fontSize', changed]]},
+    ],
+  },
+  'product-shop-the-look': {
+    mount: {settings: {show_vendor: true, show_price: true}, blocks: [{type: 'eyebrow', settings: {text: 'Shop the look'}}, {type: 'heading', settings: {text: 'Get the <em>look</em>'}}, {type: 'subheading', settings: {text: '<p>Picked <strong>together</strong>.</p>'}}, {type: 'product', settings: {product: PANTS}}, {type: 'product', settings: {product: OTHER}}]},
+    cases: [
+      {label: 'custom fonts', on: FONTS_ON, off: {enable_custom_fonts: false}, checks: [['.pstl__heading', 'fontFamily', /^"Courier New"/], ['.pstl__heading em', 'fontFamily', /^"Courier New"/], ['.pstl__eyebrow', 'fontFamily', /^Verdana/], ['.pstl__sub p', 'fontFamily', /^Verdana/], ['.pstl__sub strong', 'fontFamily', /^Verdana/], ['.pstl__card-title', 'fontFamily', /^"Courier New"/], ['.pstl__card-price', 'fontFamily', /^Verdana/]], attr: ['[data-pd-root]', 'data-own-font']},
+      {label: 'eyebrow size and spacing', block: 'eyebrow', on: {size: 18, letter_spacing: 0.5}, off: {size: 12, letter_spacing: 0.2}, checks: [['.pstl__eyebrow', 'fontSize', '18px'], ['.pstl__eyebrow', 'letterSpacing', '9px']]},
+      {label: 'heading sizes', block: 'heading', on: {size_desktop: 56, size_mobile: 34}, off: {size_desktop: 40, size_mobile: 28}, checks: [['.pstl__heading', 'fontSize', {375: '34px', 1366: '56px'}], ['.pstl__heading em', 'fontSize', {375: '34px', 1366: '56px'}]]},
+      {label: 'text size', block: 'subheading', on: {size: 21}, off: {size: 15}, checks: [['.pstl__sub p', 'fontSize', '21px']]},
+      {label: 'card text sizes', on: {card_title_size: 20, price_size: 18}, off: {card_title_size: 15, price_size: 14}, checks: [['.pstl__card-title', 'fontSize', '20px'], ['.pstl__card-price', 'fontSize', '18px']]},
+    ],
+  },
+};
+async function ownTypo(browser, name, width, editing, priority = true) {
+  const o = OWN[name]; if (!o) return;
+  const tag = name + ' @' + width + (editing ? ' editor' : ' storefront') + (priority === 'off' ? ' priority off' : '');
+  const t = await mount(browser, name, {width, editing, priority, settings: clone(o.mount.settings || {}), blocks: clone(o.mount.blocks || []), globals: o.mount.globals || {}, assets: ASSETS});
+  const read = async c => { const out = []; for (const [sel, prop] of c.checks) out.push(await t.css(sel, prop)); return out; };
+  const hasAttr = async c => c.attr ? t.page.locator('#shopify-section-test ' + c.attr[0]).first().evaluate((e, a) => e.hasAttribute(a), c.attr[1]) : null;
+  const want = (w, v, b) => w instanceof RegExp ? w.test(v) : typeof w === 'function' ? w(v, b) : v === (typeof w === 'object' ? w[width] : w);
+  for (const c of o.cases) {
+    const base = await read(c), bid = c.block && t.blockId(c.block);
+    const expectOn = async how => { const got = await read(c); c.checks.forEach(([sel, prop, w], i) => ok(want(w, got[i], base[i]), tag + ' ' + c.label + ' ' + how + ': ' + sel + ' ' + prop + ' is ' + got[i] + ' (theme ' + base[i] + ')')); if (c.attr) eq(await hasAttr(c), true, tag + ' ' + c.label + ' ' + how + ' marks ' + c.attr.join(' ')); };
+    const expectOff = async how => { eq(await read(c), base, tag + ' ' + c.label + ' ' + how + ': theme values back'); if (c.attr) eq(await hasAttr(c), false, tag + ' ' + c.label + ' ' + how + ' attribute gone'); };
+    const redraw = set => bid ? t.redraw({blocks: t.rendered[0].section.blocks.map(b => ({type: b.type, settings: b.id === bid ? {...b.settings, ...set} : b.settings}))}) : t.redraw({settings: set});
+    await t.emit(c.on, bid); await expectOn('live');
+    await t.emit(c.off, bid); await expectOff('live off');
+    await redraw(c.on); await expectOn('redraw');
+    await redraw(c.off); await expectOff('redraw off');
+    await redraw(c.on); await t.emit(c.off, bid); await expectOff('redraw on, live off');
+    await t.emit(c.on, bid); await expectOn('live on again');
+    await redraw(c.off);
+  }
+  ok(await t.noOverflow(), tag + ' custom typography no sideways scroll');
+  eq(t.errors, [], tag + ' custom typography errors');
+  await t.page.close();
+}
+/* Theme inheritance with both theme priorities off: the theme values still reach the section. */
+async function priorityOff(browser, name) {
+  const cfg = CFG[name], tag = name + ' priority off';
+  const t = await mount(browser, name, {width: 1366, editing: true, priority: 'off', ...cfgMount(name), assets: ASSETS});
+  eq(await t.css(ROOT, 'backgroundColor'), 'rgb(24, 32, 40)', tag + ' scheme background');
+  eq(await t.css(cfg.heading, 'color'), 'rgb(255, 255, 255)', tag + ' heading colour');
+  ok(/^Georgia/.test(await t.css(cfg.heading, 'fontFamily')) || name === 'dynamic-pricing' && /^Arial/.test(await t.css(cfg.heading, 'fontFamily')), tag + ' heading font');
+  ok(/^Arial/.test(await t.css(cfg.text, 'fontFamily')), tag + ' body font');
+  eq(await t.css(cfg.text, 'color'), 'rgb(204, 204, 204)', tag + ' text colour');
+  if (cfg.btn) {
+    eq(await t.css(cfg.btn, 'backgroundColor'), 'rgb(18, 52, 86)', tag + ' button colour');
+    await t.root(cfg.btn).first().hover(); await t.page.waitForTimeout(40);
+    eq(await t.css(cfg.btn, 'backgroundColor'), 'rgb(255, 0, 0)', tag + ' button hover');
+    await t.page.mouse.move(0, 0);
+  }
+  eq(t.errors, [], tag + ' errors');
+  await t.page.close();
+  await ownTypo(browser, name, 1366, true, 'off');
+}
+
 (async () => {
   const only = process.argv.slice(2), names = Object.keys(CFG).filter(n => !only.length || only.includes(n));
   const browser = await launch();
@@ -531,10 +625,13 @@ async function look(browser) {
       for (const b of schema.blocks || []) { const bi = b.settings.filter(x => x.id).map(x => x.id); eq(new Set(bi).size, bi.length, n + ' ' + b.type + ' unique ids'); }
       for (const x of schema.settings) if (x.type === 'select' && x.options.length <= 3 && !x.hidden) ok(x.options.every(o => o.label.split(' ').length <= 2), n + ' ' + x.id + ' button labels are a word or two');
     }
+    /* OWN_ONLY=1: only the custom typography and button shape cases. */
+    if (process.env.OWN_ONLY) { await Promise.all(names.map(async n => { for (const w of [375, 1366]) for (const e of [true, false]) await ownTypo(browser, n, w, e); await priorityOff(browser, n); })); console.log(checks + ' products-d custom typography checks passed'); return; }
     const covered = {};
     await Promise.all(names.map(async n => { covered[n] = 0; for (const w of [375, 1366]) covered[n] = Math.max(covered[n], await everyControl(browser, n, w)); }));
     await Promise.all(names.map(async n => { for (const w of [375, 1366]) for (const e of [true, false]) await theme(browser, n, w, e); }));
     await Promise.all(names.map(n => lifecycle(browser, n)));
+    await Promise.all(names.map(async n => { for (const w of [375, 1366]) for (const e of [true, false]) await ownTypo(browser, n, w, e); await priorityOff(browser, n); }));
     await Promise.all(names.map(n => reveal(browser, n)));
     await Promise.all(names.map(n => empty(browser, n)));
     if (names.includes('addtocartbutton')) await atc(browser);

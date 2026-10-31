@@ -60,6 +60,13 @@
     }
   }
   const fontVar = (on, v, f) => on ? font(v, f) : f;
+  /* Theme settings > Typography "Use in every section" and Buttons "Use shared
+     button size and shape" force the theme's font, weight, line height and
+     button shape with !important (snippets/theme-controls). An element whose
+     own switch is on carries data-own-font / -weight / -size / -shape so it
+     keeps its own value; switched off, the attribute goes and the theme wins. */
+  const own = (el, flags) => { for (const k in flags) attr(el, 'data-own-' + k, flags[k] ? '' : null); };
+  const custom = w => !!w && w !== 'inherit';
 
   /* ---------- Image 2 ---------- */
   function image2(root, st) {
@@ -102,6 +109,7 @@
         set(el, '--gs4-color', bool(b.enable_custom_style) ? color(b.color, fb) : fb);
         set(el, '--gs4-size-d', px(b.font_size_desktop, 16)); set(el, '--gs4-size-m', px(b.font_size_mobile, 16));
         set(el, '--gs4-weight', !b.font_weight || b.font_weight === 'inherit' ? (type === 'heading' ? 'var(--heading-weight, 700)' : 'var(--body-weight, 400)') : b.font_weight);
+        own(el, {font: f, weight: custom(b.font_weight)});
       } else if (type === 'gallery_item') {
         const img = el.querySelector('img'), alt = b.image_alt || (b.image && typeof b.image === 'object' ? b.image.alt : '') || '';
         image(st, img, url(b.image, true) ? b.image : b.image_url, alt, el.dataset.mgbBlock);
@@ -142,16 +150,17 @@
     }
     /* Legacy tagline: only rendered when the section has no Eyebrow block. */
     const tag = root.querySelector('[data-mgb-tagline]');
-    if (tag) { rich(tag, s.tagline, st); hide(tag, !String(s.tagline || '').replace(/<[^>]*>/g, '').trim()); }
+    if (tag) { rich(tag, s.tagline, st); hide(tag, !String(s.tagline || '').replace(/<[^>]*>/g, '').trim()); own(tag, {font: f}); }
     for (let [el, type, b] of blocks(root, st)) {
       if (type === 'eyebrow') {
         rich(el, b.text, st); hide(el, !String(b.text || '').replace(/<[^>]*>/g, '').trim());
         const ink = bool(b.enable_custom_style) ? color(b.color, '') : '';
         if (ink) set(el, '--gs2-tag-color', ink); else if (el.style.getPropertyValue('--gs2-tag-color')) el.style.removeProperty('--gs2-tag-color');
+        own(el, {font: f});
       } else if (type === 'heading') {
         rich(el, b.heading, st); hide(el, !String(b.heading || '').replace(/<[^>]*>/g, '').trim());
         let w = b.heading_weight; if (!w || w === 'inherit') w = s.heading_weight; if (!w || w === 'inherit') w = 'var(--heading-weight, 700)';
-        set(el, '--gs2-h-weight', w); set(el, '--gs2-h-size-d', px(b.desktop_heading_size, 42)); set(el, '--gs2-h-size-m', px(b.mobile_heading_size, 32));
+        set(el, '--gs2-h-weight', w); own(el, {font: f, weight: custom(b.heading_weight) || custom(s.heading_weight)}); set(el, '--gs2-h-size-d', px(b.desktop_heading_size, 42)); set(el, '--gs2-h-size-m', px(b.mobile_heading_size, 32));
         set(el, '--gs2-h-pb-d', px(b.desktop_heading_padding_bottom)); set(el, '--gs2-h-pb-m', px(b.mobile_heading_padding_bottom));
       } else if (type === 'button') {
         const href = url(b.button_link), tagName = href ? 'A' : 'BUTTON';
@@ -162,12 +171,12 @@
         hide(el, !b.button_text);
         for (const [p, val] of [['--mb-bg', s.button_background_color], ['--mb-text', s.button_text_color], ['--mb-hover-border', s.button_border_hover_color]]) { const x = c ? color(val, '') : ''; if (x) set(el, p, x); else el.style.removeProperty(p); }
         if (c && color(s.button_background_color, '')) set(el, '--mb-border', color(s.button_background_color, '')); else el.style.removeProperty('--mb-border');
-        const own = b.use_theme_button === false || b.use_theme_button === 'false';
-        attr(el, 'data-gs2-shape', own ? 'custom' : 'theme');
-        attr(el, 'data-gs2-hover', own ? (b.button_hover || 'fade') : null);
-        attr(el, 'data-button-hover', own ? ({invert: 'reverse', fade: 'fade'}[b.button_hover || 'fade'] || null) : null);
+        const mine = b.use_theme_button === false || b.use_theme_button === 'false';
+        attr(el, 'data-gs2-shape', mine ? 'custom' : 'theme'); own(el, {font: f, shape: mine, weight: mine});
+        attr(el, 'data-gs2-hover', mine ? (b.button_hover || 'fade') : null);
+        attr(el, 'data-button-hover', mine ? ({invert: 'reverse', fade: 'fade'}[b.button_hover || 'fade'] || null) : null);
         const shape = {'--mb-radius': px(b.button_border_radius), '--mb-weight': b.button_font_weight || 500, '--gs2-btn-py-d': px(b.desktop_button_padding_vertical), '--gs2-btn-px-d': px(b.desktop_button_padding_horizontal), '--gs2-btn-size-d': px(b.button_font_size, 16), '--gs2-btn-py-m': px(b.mobile_button_padding_vertical), '--gs2-btn-px-m': px(b.mobile_button_padding_horizontal), '--gs2-btn-size-m': px(b.button_font_size_mobile, 14)};
-        for (const p in shape) if (own) set(el, p, shape[p]); else el.style.removeProperty(p);
+        for (const p in shape) if (mine) set(el, p, shape[p]); else el.style.removeProperty(p);
       } else if (type === 'gallery_image_02') {
         image(st, el.querySelector('img'), b.image, b.image_alt || (b.image && typeof b.image === 'object' ? b.image.alt : '') || '', el.dataset.mgbBlock);
       }

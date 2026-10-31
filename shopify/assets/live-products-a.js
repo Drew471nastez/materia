@@ -105,6 +105,8 @@
         put(root, '--pib-title-fs', px(num(s.title_size, 15)));
         put(root, '--pib-body-fs', px(num(s.body_size, 14)));
         put(root, '--pib-font', bool(s.enable_custom_fonts) ? fontCss(s.body_font, 'var(--body-font)') : 'var(--body-font)');
+        /* Custom fonts on: the box's text keeps its own font over Theme settings > Typography (snippets/theme-controls). */
+        put(root, '@data-own-font', bool(s.enable_custom_fonts) ? '' : null);
       },
       block(c, el, b, type) {
         const {put} = c;

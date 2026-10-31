@@ -116,6 +116,8 @@
     put(root, '--m-text', pick(own, s.text_color, 'var(--color-text)'));
     put(root, '--m-hf', fonts ? fontCss(s.heading_font, 'var(--heading-font)') : 'var(--heading-font)');
     put(root, '--m-bf', fonts ? fontCss(s.body_font, 'var(--body-font)') : 'var(--body-font)');
+    /* Theme priority (Typography > Use in every section) leaves this section's text to its own fonts while custom fonts are on. */
+    put(root, '@data-own-font', fonts || null);
     for (const [k, id] of [['pt-m', 'padding_top_mobile'], ['pb-m', 'padding_bottom_mobile'], ['pt-d', 'padding_top_desktop'], ['pb-d', 'padding_bottom_desktop'], ['px-m', 'side_padding_mobile'], ['px-d', 'side_padding_desktop'], ['gap-m', cfg.gapM], ['gap-d', cfg.gapD], ['cgap', 'content_gap']]) put(root, '--m-' + k, px(s[id]));
     put(root, '--m-tw', cfg.tw(s) + '%');
     if (wrap) for (const side of ['top', 'bottom']) put(wrap, '!margin-' + side, px(s['section_margin_' + side + '_' + (desktop ? 'desktop' : 'mobile')]));
@@ -130,6 +132,8 @@
     else if (kind === 'subheading') { put(el, '--b-fs-m', px(b.size)); put(el, '--b-fs-d', px(b.size)); }
     else put(el, '--b-fs', px(b.size));
     if (kind === 'heading' && b.uppercase !== undefined) put(el, '--b-tt', bool(b.uppercase) ? 'uppercase' : 'var(--heading-text-transform, none)');
+    /* the theme's heading rule sets text-transform from this variable with priority, so Uppercase sets it on the heading itself */
+    if (kind === 'heading') put(el, '--heading-text-transform', bool(b.uppercase) ? 'uppercase' : null);
     if (kind === 'footnote') put(el, '--b-mt', px(b.margin_top));
   }
   function button(c, el, b) {
@@ -145,7 +149,9 @@
     put(el, '--mb-bg', bg || null); put(el, '--mb-text', cv(b.color) || null); put(el, '--mb-border', cv(b.border_color) || bg || null);
     put(el, '--mb-hover-bg', hb || null); put(el, '--mb-hover-text', cv(b.color_hover) || null); put(el, '--mb-hover-border', cv(b.border_color_hover) || hb || null);
     put(el, '--mb-radius', shape ? px(b.radius) : null); put(el, '--mb-padding-y', shape ? px(b.padding_y) : null); put(el, '--mb-padding-x', shape ? px(b.padding_x) : null);
-    put(el, '--mb-font-size', shape ? px(b.font_size) : null); put(el, '--mb-weight', shape ? String(b.font_weight || 600) : null); put(el, '--btn-border-width', shape ? px(b.border_width) : null);
+    put(el, '--mb-font-size', shape ? px(b.font_size) : null); put(el, '--mb-weight', shape ? String(b.font_weight || 600) : null); put(el, '--btn-border-width', shape ? px(b.border_width) : null); put(el, '--mb-border-width', shape ? px(b.border_width) : null);
+    /* own size, padding, corners, border and weight win over Theme settings > Buttons priority only while the theme button is off */
+    put(el, '@data-own-shape', shape || null); put(el, '@data-own-weight', shape || null);
     put(el, '--btn-text-transform', bool(b.uppercase) ? 'uppercase' : null);
   }
   /* image or video for one frame: a section's media or a media block's */

@@ -50,6 +50,8 @@
     const on = bool(s.enable_custom_fonts);
     return {'--pd-hf': on ? fontCss(s.heading_font, 'var(--heading-font)') : 'var(--heading-font)', '--pd-bf': on ? fontCss(s.body_font, 'var(--body-font)') : 'var(--body-font)'};
   }
+  /* Custom fonts on: the section's text keeps its own fonts over Theme settings > Typography (data-own-font, snippets/theme-controls). */
+  const own = (root, s) => attr(root, 'data-own-font', bool(s.enable_custom_fonts) ? '' : null);
   /* snippets/button-overrides: only what the creator set. */
   function buttonOverrides(o) {
     const out = {'--mb-bg': null, '--mb-text': null, '--mb-border': null, '--mb-hover-bg': null, '--mb-hover-text': null, '--mb-hover-border': null};
@@ -87,8 +89,10 @@
     Object.assign(map, buttonOverrides(custom ? (grad ? {text: s.button_text_color, border: s.button_border_color} : {bg: s.button_bg_color, text: s.button_text_color, border: s.button_border_color, hover_bg: s.button_hover_color}) : {}));
     if (grad) { const g = (GRAD[s.gradient_selector] || ((a, b, c) => `linear-gradient(90deg, ${a}, ${b}, ${c})`))(col(s.gradient_color_1) || 'var(--btn-primary-bg-color)', col(s.gradient_color_2) || 'var(--btn-primary-hover-bg-color)', col(s.gradient_color_3) || 'var(--color-primary)'); map['--mb-bg'] = g; map['--mb-hover-bg'] = g; }
     const shape = s.use_theme_button === false || s.use_theme_button === 'false';
-    Object.assign(map, {'--mb-radius': shape ? px(s.button_border_radius) : null, '--mb-padding-y': shape ? '15px' : null, '--mb-padding-x': shape ? '25px' : null, '--mb-font-size': shape ? px(s.button_font_size) : null, '--mb-weight': shape ? ({light: 300, bold: 700}[s.button_font_weight] || 400) : null, '--btn-border-width': shape ? px(s.button_border_thickness) : null, '--pd-btn-scale': shape ? String(num(s.button_overall_size, 100) / 100) : null});
-    vars(root, map); attr(root, 'data-gradient', grad ? 'true' : 'false');
+    Object.assign(map, {'--mb-radius': shape ? px(s.button_border_radius) : null, '--mb-padding-y': shape ? '15px' : null, '--mb-padding-x': shape ? '25px' : null, '--mb-font-size': shape ? px(s.button_font_size) : null, '--mb-weight': shape ? ({light: 300, bold: 700}[s.button_font_weight] || 400) : null, '--mb-border-width': shape ? px(s.button_border_thickness) : null, '--btn-border-width': shape ? px(s.button_border_thickness) : null, '--pd-btn-scale': shape ? String(num(s.button_overall_size, 100) / 100) : null});
+    vars(root, map); attr(root, 'data-gradient', grad ? 'true' : 'false'); own(root, s);
+    /* Use theme button off: the button keeps its own size, shape and weight over Theme settings > Buttons. */
+    for (const btn of root.querySelectorAll('.pd-atc__button')) { attr(btn, 'data-own-shape', shape ? '' : null); attr(btn, 'data-own-weight', shape ? '' : null); }
     for (const el of root.querySelectorAll('[data-pd-block]')) {
       const b = st.block(el);
       if (el.dataset.pdType === 'heading' || el.dataset.pdType === 'subheading') textBlock(el, b, st, el.dataset.pdType);
@@ -121,7 +125,7 @@
       '--pd-h-d': px(s.section_height), '--pd-h-m': px(s.section_height_mobile), '--pd-sc-d': String(num(s.overall_size_desktop, 100) / 100), '--pd-sc-m': String(num(s.overall_size_mobile, 100) / 100),
       '--pd-pv-d': px(s.desktop_padding), '--pd-pl-d': px(s.left_padding_desktop), '--pd-pr-d': px(s.right_padding_desktop), '--pd-pv-m': px(s.mobile_padding), '--pd-pl-m': px(s.left_padding_mobile), '--pd-pr-m': px(s.right_padding_mobile),
     });
-    attr(root, 'data-show-on', s.display_on_devices || 'all_devices');
+    attr(root, 'data-show-on', s.display_on_devices || 'all_devices'); own(root, s);
     hide(root.querySelector('.pd-price__currency'), !bool(s.show_currency_symbol));
     if (root.dataset.mode === 'legacy') {
       rich(root.querySelector('[data-pd-original]'), s.original_price, st); rich(root.querySelector('[data-pd-sale]'), s.discounted_price, st);
@@ -137,6 +141,7 @@
     scheme(root, s);
     vars(root, {'--pd-pt': px(s.padding_top), '--pd-pb': px(s.padding_bottom), '--pd-n-d': String(per(s.items_per_row)), '--pd-n-m': String(per(s.items_per_row_mobile)), '--pd-gap-d': px(s.column_gap), '--pd-gap-m': px(Math.min(num(s.column_gap), 15)),
       '--pd-hs': {small: '1.8rem', large: '3rem'}[s.header_size] || '2rem', ...widthVars(s), ...fontVars(s)});
+    own(root, s);
     attr(root, 'data-align', s.header_alignment || 'left'); attr(root, 'data-pager', s.carousel_pagination || 'disable'); attr(root, 'data-pager-pos', s.pagination_position || 'right');
     attr(root, 'data-arrows', String(bool(s.show_arrow))); attr(root, 'data-loop', String(bool(s.infinite))); attr(root, 'data-autoplay', String(bool(s.autoplay))); attr(root, 'data-speed', String(num(s.autorotate_speed, 5)));
     attr(root.querySelector('.pd-set__pager'), 'data-style', s.pagination_style || 'pill');
@@ -215,7 +220,7 @@
       ...fontVars(s),
     };
     for (const [id, k] of Object.entries(LOOK_COLORS)) map[k] = custom ? col(s[id]) : null;
-    vars(root, map);
+    vars(root, map); own(root, s);
     attr(root, 'data-aspect-d', (s.image_aspect_desktop || 'auto') === 'auto' ? 'auto' : 'ratio');
     /* The lifestyle picture: swap only when the address changes. */
     const media = root.querySelector('.pstl__media'), src = api() && api().url(s.image, true);

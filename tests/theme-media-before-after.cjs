@@ -16,8 +16,11 @@ const SAME = Symbol('same');
 const BG = 'rgb(24, 32, 40)', HEAD = 'rgb(255, 255, 255)', TEXT = 'rgb(204, 204, 204)', BORDER = 'rgb(68, 85, 102)';
 const wait = (p, ms) => p.waitForTimeout(ms);
 let checks = 0;
-const ok = (cond, msg) => { assert.ok(cond, msg); checks++; };
-const same = (a, b, msg) => { assert.deepEqual(a, b, msg); checks++; };
+/* BAM_SOFT=1 logs every failure and carries on, to list them all in one run. */
+const soft = !!process.env.BAM_SOFT, failures = [];
+const guard = (fn, msg) => { try { fn(); checks++; } catch (e) { if (!soft) throw e; failures.push(e.message.split('\n')[0]); console.log('FAIL', e.message.split('\n').slice(0, 3).join(' ')); } };
+const ok = (cond, msg) => guard(() => assert.ok(cond, msg), msg);
+const same = (a, b, msg) => guard(() => assert.deepEqual(a, b, msg), msg);
 
 /* Computed style of an element in the section (':wrap' is the section wrapper). */
 const style = (sel, prop, pseudo) => async (t, uid = 'test') => t.page.evaluate(([sel, prop, pseudo, uid]) => {
@@ -666,5 +669,6 @@ async function sliderBlocks(browser, name, cfg) {
       if (name !== 'before-and-after-image') for (const width of [375, 1366]) for (const editing of [true, false]) await slider(browser, name, width, editing);
     }
   } finally { await browser.close(); }
+  if (failures.length) { console.log(failures.length + ' failures, ' + checks + ' passed'); process.exit(1); }
   console.log(`${checks} Before/After Images, Before and After Slider and Before/After Slider 2 checks passed (schema, theme, every control live and redrawn, widths, variants, instances, blocks, slider pointer/touch/keyboard, first paint, reduced motion)`);
 })().catch(e => { console.error(e); process.exit(1); });

@@ -118,6 +118,8 @@
     put(el, '--mb-bg', bg || null); put(el, '--mb-text', cv(b.color) || null); put(el, '--mb-border', cv(b.border_color) || bg || null);
     put(el, '--mb-hover-bg', hb || null); put(el, '--mb-hover-text', cv(b.color_hover) || null); put(el, '--mb-hover-border', cv(b.border_color_hover) || hb || null);
     for (const [k, id] of Object.entries(ids)) put(el, k, shapeOn && id ? (k === '--mb-weight' ? String(b[id] || 600) : px(b[id])) : null);
+    /* The theme's shared button size and shape (theme-controls, !important) skip a button marked as having its own. */
+    if (el.matches('[data-sl-button]')) { put(el, '@data-own-shape', shapeOn || null); if ('--mb-weight' in ids) put(el, '@data-own-weight', shapeOn || null); }
   }
 
   /* ---------- section types ---------- */
@@ -281,6 +283,10 @@
           put(q('[data-ps-arrows]'), 'hidden', !bool(s.show_arrows));
           /* A slide's own heading, text, picture and link; empty ones keep the product's (redraw). */
           const h = q('[data-ps-heading]');
+          /* Its own weight, letter spacing and case win over the theme's heading rules (theme-controls). */
+          put(h, '@data-own-weight', bool(s.heading_use_custom_weight) || null);
+          put(h, '@data-pb-own-tracking', num(s.heading_letter_spacing) !== 0 || null);
+          put(h, '@data-pb-own-case', (!!s.heading_uppercase && s.heading_uppercase !== 'none') || null);
           if (!hasProduct || String(b.heading || '').trim()) { put(h, 'rich', b.heading || ''); put(h, 'hidden', !scrub(b.heading).trim()); }
           const d = q('[data-ps-desc]');
           if (!hasProduct || String(b.description || '').trim()) { put(d, 'text', b.description || ''); put(d, 'hidden', !String(b.description || '').trim()); }
@@ -299,6 +305,7 @@
           }
           put(q('[data-ps-benefits]'), 'hidden', !any);
           const btn = q('[data-ps-btn]');
+          put(btn, '@data-own-shape', s.use_theme_button === false || s.use_theme_button === 'false' || null);
           if (!hasProduct || url(b.button_link)) put(btn, '@href', url(b.button_link) || fallback);
           put(btn, 'text', b.button_text || ''); put(btn, 'hidden', !String(b.button_text || '').trim());
           const src = url(b.image, true);
@@ -412,6 +419,7 @@
         const shape = s.use_theme_button === false || s.use_theme_button === 'false';
         put(root, '--mb-radius', shape ? px(s.cta_radius) : null); put(root, '--mb-padding-x', shape ? px(s.cta_pad_x) : null);
         put(root, '--mb-padding-y', shape ? px(s.cta_pad_y) : null); put(root, '--mb-font-size', shape ? px(s.cta_size) : null);
+        for (const b of root.querySelectorAll('.psh__cta[data-sl-button]')) put(b, '@data-own-shape', shape || null);
         const src = url(s.image, true);
         if (src) put(q('[data-pb-media]'), 'picture', JSON.stringify({src, alt: s.image && s.image.alt || root.dataset.pbName || ''}));
         const title = root.dataset.pbTitle || '', productUrl = root.dataset.pbProductUrl || '';

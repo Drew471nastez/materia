@@ -192,7 +192,7 @@
       const box = vbox && vbox.querySelector('[data-iv-player]');
       if (box) player(box, {video: '', url: useVideo ? s.video_url : '', poster: s.background_image, autoplay: true, loop: true, controls: false, muted: true, label: alt, title: '', play: 'circle', muteBtn: false, lazy: false, fit: 'cover'});
       const cap = q('[data-iv-caption]');
-      if (cap) { rich(cap, s.image_description, state); hide(cap, !String(s.image_description || '').replace(/<[^>]*>/g, '').trim()); const pos = String(s.image_description_position || 'bottom-left').toLowerCase().replace(/ /g, '-'); for (const c of ['bottom-left', 'bottom-center', 'bottom-right']) cls(cap, 'position-' + c, pos === c); cls(cap, 'iv-img__caption--bg', bool(s.enable_image_text_background)); }
+      if (cap) { attr(cap, 'data-own-font', bool(s.enable_custom_fonts) && fontFamily !== 'var(--body-font)' ? '' : null); rich(cap, s.image_description, state); hide(cap, !String(s.image_description || '').replace(/<[^>]*>/g, '').trim()); const pos = String(s.image_description_position || 'bottom-left').toLowerCase().replace(/ /g, '-'); for (const c of ['bottom-left', 'bottom-center', 'bottom-right']) cls(cap, 'position-' + c, pos === c); cls(cap, 'iv-img__caption--bg', bool(s.enable_image_text_background)); }
     },
     'video-2'(root, state) {
       const s = state.s, custom = bool(s.enable_custom_style);
@@ -241,6 +241,8 @@
         const family = bool(b.override_font) ? font(f, '') : '';
         if (family) { set(el, '--iv-font', family); set(el, '--iv-weight', String(heading ? b.font_weight || (f && f.weight) || 400 : (f && f.weight) || 400)); } else { unset(el, '--iv-font'); unset(el, '--iv-weight'); }
         if (lh && lh !== 'inherit') set(el, '--iv-lh', String(lh)); else unset(el, '--iv-lh');
+        /* theme priority leaves the block's own font, weight and line height to it while they are set */
+        attr(el, 'data-own-font', family ? '' : null); attr(el, 'data-own-weight', family ? '' : null); attr(el, 'data-own-size', lh && lh !== 'inherit' ? '' : null);
         const sized = bool(b.enable_custom_size); cls(el, 'loud-block--sized', sized);
         if (sized) { set(el, '--iv-size-d', px(heading ? b.headline_size : b.text_size)); set(el, '--iv-size-m', px(heading ? b.mobile_headline_size : b.mobile_text_size)); } else { unset(el, '--iv-size-d'); unset(el, '--iv-size-m'); }
       }
