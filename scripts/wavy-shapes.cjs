@@ -1,5 +1,7 @@
 /* Shared authoring geometry for the section's SSR paths and live-preview data.
- * No runtime dependency: both copies are embedded in the native section.
+ * No runtime dependency: the paths are written into the native section's SSR
+ * markup, and the whole map (JSON.stringify(shapes)) is WAVE_SHAPES in
+ * shopify/assets/text-section-controls.js.
  * Cubic Hermite curves keep adjacent segments tangent-continuous. */
 const round=v=>Math.round(v*100)/100;
 const styles={

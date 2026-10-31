@@ -63,7 +63,9 @@
     const scheme=typeof s.color_scheme==='object'?s.color_scheme?.id:s.color_scheme;
     if(typeof scheme==='string' && /^[a-zA-Z0-9_-]+$/.test(scheme)){for(const name of [...root.classList])if(name.startsWith('color-') && name!=='color-'+scheme)root.classList.remove(name);root.classList.add('color-'+scheme);}
     const parent = root.closest('[id^="shopify-section-"]') || root.parentElement;
-    const desktop = parent.getBoundingClientRect().width >= 1024;
+    // The section's width from hero-image-one.js's shared ResizeObserver cache: no forced layout per paint.
+    const measure = window.MateriaHeroImageOne?.measure;
+    const desktop = (measure ? measure.width(parent) : parent.getBoundingClientRect().width) >= 1024;
     const overlay = !desktop && s.mobile_layout === 'overlay' && hasMedia;
     const headingFont = bool(s.enable_custom_fonts) ? font(s.heading_font) || 'var(--heading-font)' : 'var(--heading-font)';
     const bodyFont = bool(s.enable_custom_fonts) ? font(s.body_font) || 'var(--body-font)' : 'var(--body-font)';
@@ -163,7 +165,7 @@
     state.resize=new ResizeObserver(entries=>{const width=entries[0]?.contentRect.width;if(width!==state.width){state.width=width;state.schedule();}});
     state.resize.observe(root);states.set(root,state);apply(root,state);return state;
   }
-  const scan=()=>{document.querySelectorAll('[data-hero-benefits]').forEach(root=>init(root).schedule());};
+  const scan=()=>{const roots=document.querySelectorAll('[data-hero-benefits]');window.MateriaHeroImageOne?.measure?.prime([...roots].map(root=>root.closest('[id^="shopify-section-"]')||root.parentElement));roots.forEach(root=>init(root).schedule());};
   document.addEventListener('storelib:settings-change',event=>{
     const detail=event.detail||{},section=detail.section||detail.sectionId,blockId=detail.block||detail.blockId||detail.block_id;
     if(!section || !detail.settings)return; // global theme variables stay inherited
