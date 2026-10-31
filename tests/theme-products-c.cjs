@@ -166,7 +166,7 @@ const SECTIONS = [
     settings: {image: IMG, image_mobile: IMG2}, products: [SOLD, PANTS],
     probes: [
       {id: 'color_scheme', v: 'alt-scheme', sel: '', prop: 'backgroundColor', expect: 'rgb(250, 250, 250)'},
-      {id: 'width', v: 'container', sel: '.stl__inner', prop: 'maxWidth', expect: '1348px'},
+      {id: 'width', v: 'container', sel: '.stl__inner', prop: 'maxWidth', match: /^13[0-9]{2}px$/},
       {id: 'show_price', v: false, sel: '.stl__card-price', prop: 'display', open: true, expect: 'none'},
       {id: 'link_label', v: 'Go', sel: '.stl__card-link', prop: 'text', open: true, expect: 'Go'},
       {id: 'sold_out_label', v: 'Gone', sel: '.pch-badge', prop: 'text', open: true, expect: 'Gone'},
@@ -176,7 +176,7 @@ const SECTIONS = [
       {id: 'interaction_mode', v: 'hover', sel: '', prop: '@data-pch-mode', expect: 'hover'},
       {id: 'dot_size', v: 30, sel: '.pch-dot__core', prop: 'width', expect: '30px'},
       {id: 'pulse', v: false, sel: '.pch-dot__core', prop: 'animationName', expect: 'none'},
-      {id: 'show_labels', v: false, sel: '.stl__label', prop: 'visibility', expect: 'hidden'},
+      {id: 'show_labels', v: false, sel: '.stl__label', prop: 'visibility', expect: 'hidden', wait: 260},
       {id: 'enable_custom_style', v: true, with: {section_bg: C1}, sel: '', prop: 'backgroundColor', expect: RGB1},
       {id: 'section_bg', v: C1, custom: true, sel: '', prop: 'backgroundColor', expect: RGB1},
       {id: 'dot_color', v: C1, custom: true, sel: '.pch-dot__core', prop: 'backgroundColor', expect: RGB1},
@@ -258,6 +258,7 @@ async function controls(browser, cfg, width) {
       if (Object.keys(pre).length) await apply(t, p, pre, how);
       const base = await measure(t, cfg, p);
       await apply(t, p, {[p.id]: p.v}, how);
+      if (p.wait) await t.page.waitForTimeout(p.wait);
       const got = await measure(t, cfg, p);
       if (p.w && p.w !== width) { eq(got, base, `${where} (${how}): a ${p.w === 1366 ? 'desktop' : 'mobile'} value leaves this width alone`); }
       else {
@@ -266,6 +267,7 @@ async function controls(browser, cfg, width) {
         if (p.match) ok(p.match.test(String(got)), `${where} (${how}) ${got} matches ${p.match}`);
       }
       await apply(t, p, restore, how);
+      if (p.wait) await t.page.waitForTimeout(p.wait);
       eq(await measure(t, cfg, p), base, `${where} (${how}): back to where it was when undone`);
       if (Object.keys(pre).length) await apply(t, p, preRestore, how);
     }

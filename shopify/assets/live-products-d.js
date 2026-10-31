@@ -155,9 +155,10 @@
     const fit = () => root.dataset[st.mq.matches ? 'fitD' : 'fitM'] === 'true';
     const max = () => track.scrollWidth - track.clientWidth;
     const atEnd = () => !fit() && track.scrollLeft >= max() - 2, atStart = () => track.scrollLeft <= 2;
-    const index = () => { const sl = slides(); if (!sl.length) return 0; if (atEnd()) return sl.length - 1; const x = track.scrollLeft, o = sl[0].offsetLeft; let best = 0, bd = Infinity; sl.forEach((el, i) => { const d = Math.abs(el.offsetLeft - o - x); if (d < bd) { bd = d; best = i; } }); return best; };
+    const index = () => atEnd() ? slides().length - 1 : pos();
+    const pos = () => { const sl = slides(); if (!sl.length) return 0; const x = track.scrollLeft, o = sl[0].offsetLeft; let best = 0, bd = Infinity; sl.forEach((el, i) => { const d = Math.abs(el.offsetLeft - o - x); if (d < bd) { bd = d; best = i; } }); return best; };
     const go = i => { const sl = slides(); if (!sl.length) return; const n = sl.length; i = root.dataset.loop === 'true' ? (i + n) % n : Math.max(0, Math.min(n - 1, i)); track.scrollTo({left: Math.min(max(), sl[i].offsetLeft - sl[0].offsetLeft), behavior: st.reduced.matches ? 'auto' : 'smooth'}); };
-    const step = dir => { const loop = root.dataset.loop === 'true', n = slides().length; if (dir > 0 && atEnd()) { if (loop) go(0); return; } if (dir < 0 && atStart()) { if (loop) go(n - 1); return; } go(index() + dir); };
+    const step = dir => { const loop = root.dataset.loop === 'true', n = slides().length; if (dir > 0 && atEnd()) { if (loop) go(0); return; } if (dir < 0 && atStart()) { if (loop) go(n - 1); return; } go(pos() + dir); };
     const update = () => {
       const sl = slides(), i = index(), loop = root.dataset.loop === 'true';
       root.querySelectorAll('.pd-set__dot').forEach((d, k) => attr(d, 'aria-current', k === i ? 'true' : null));
@@ -173,7 +174,7 @@
     const run = () => {
       stop();
       if (root.dataset.autoplay !== 'true' || st.reduced.matches || !visible || paused || document.hidden || fit() || slides().length < 2) return;
-      timers++; timer = setTimeout(() => { timer = 0; timers--; if (atEnd()) go(0); else go(index() + 1); run(); }, num(root.dataset.speed, 5) * 1000);
+      timers++; timer = setTimeout(() => { timer = 0; timers--; if (atEnd()) go(0); else go(pos() + 1); run(); }, num(root.dataset.speed, 5) * 1000);
     };
     st.slides = slides; st.step = step; st.go = go;
     st.sync = () => { update(); if (!!timer !== (root.dataset.autoplay === 'true' && !st.reduced.matches && visible && !paused && !document.hidden && !fit() && slides().length > 1) || st.speed !== root.dataset.speed) { st.speed = root.dataset.speed; run(); } };
@@ -188,7 +189,7 @@
     /* Mouse drag; touch and trackpads scroll natively. */
     track.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse' || e.button !== 0) return; drag = {x: e.clientX, left: track.scrollLeft}; moved = false; });
     track.addEventListener('pointermove', e => { if (!drag) return; const dx = e.clientX - drag.x; if (!moved && Math.abs(dx) > 5) { moved = true; track.style.scrollSnapType = 'none'; track.style.scrollBehavior = 'auto'; } if (moved) track.scrollLeft = drag.left - dx; });
-    const end = () => { if (!drag) return; drag = null; if (moved) { track.style.removeProperty('scroll-snap-type'); track.style.removeProperty('scroll-behavior'); go(index()); setTimeout(() => { moved = false; }, 0); } };
+    const end = () => { if (!drag) return; drag = null; if (moved) { track.style.removeProperty('scroll-snap-type'); track.style.removeProperty('scroll-behavior'); go(pos()); setTimeout(() => { moved = false; }, 0); } };
     track.addEventListener('pointerup', end); track.addEventListener('pointercancel', end); track.addEventListener('pointerleave', end);
     track.addEventListener('dragstart', e => e.preventDefault());
     const pause = v => () => { paused = v; run(); };

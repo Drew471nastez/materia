@@ -301,7 +301,7 @@
       if (e.relatedTarget && st.open.contains(e.relatedTarget)) return;
       if (!st.open.contains(e.target)) return;
       clearTimeout(st.leave);
-      st.leave = setTimeout(() => { if (st.open && !st.open.matches(':hover') && !st.open.contains(document.activeElement)) close(st, false); }, 180);
+      st.leave = setTimeout(() => { if (st.open && !st.open.matches(':hover') && !st.open.querySelector(':focus-visible')) close(st, false); }, 180);
     });
     on('shopify:block:select', e => { const spot = e.target.closest && e.target.closest('[data-pch-spot]'); if (spot && root.contains(spot)) open(st, spot); });
     on('shopify:block:deselect', () => close(st, false));

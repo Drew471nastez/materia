@@ -33,6 +33,7 @@ const presetBlocks = name => clone(schemaOf(name).schema.presets[0].blocks || []
 
 /* Per section: base settings and blocks (every block type present), which controls only show at one width,
    prerequisites, values to try, and controls that wait for the builder's redraw (no live check). */
+const bottom = blocks => blocks.map(b => b.type === 'view_all' ? {...b, settings: {...b.settings, position: 'bottom'}} : b);
 const CFG = {
   'products-listing': {
     root: '.pl', heading: '.pb-heading', text: '.pb-sub', button: '.pl-btn',
@@ -48,11 +49,12 @@ const CFG = {
     settings: () => ({collection: COLLECTION}),
     blocks: () => [{type: 'eyebrow'}, ...presetBlocks('products-carousel')],
     wide: ['section_width'],
-    desk: ['show_banner', 'banner_type', 'banner_image', 'local_video', 'video_url', 'video_autoplay', 'banner_link', 'banner_width', 'position', 'sticky_banner'],
+    desk: [], large: ['show_banner', 'banner_type', 'banner_image', 'local_video', 'video_url', 'video_autoplay', 'banner_link', 'banner_width', 'position', 'sticky_banner'], /* the banner shows from 1025px */
     mob: [],
     structural: ['collection', 'items_to_show', 'items_per_row', 'column_gap', 'show_banner', 'banner_type', 'banner_image', 'local_video', 'video_url', 'video_autoplay', 'show_arrow', 'carousel_pagination', 'pagination_style', 'infinite', 'autoplay', 'autorotate_speed', 'reveal', 'items_per_row_mobile', 'reset_spacing'],
     any: ['items_per_row', 'items_per_row_mobile'],
-    pre: {local_video: {}, video_url: {}, video_autoplay: {local_video: VID}, sticky_banner: {}, banner_image: {}},
+    pre: {banner_type: {local_video: VID, banner_image: IMG}, video_autoplay: {local_video: VID}, gap_products_to_button: {carousel_pagination: 'disable'}, gap_pagination_to_button: {carousel_pagination: 'show_dots'}, gap_products_to_pagination: {carousel_pagination: 'show_dots'}, pagination_style: {carousel_pagination: 'show_dots'}, pagination_position: {carousel_pagination: 'show_dots'}},
+    preBlocks: {gap_products_to_button: bottom, gap_pagination_to_button: bottom},
     vals: {collection: [{...COLLECTION, url: '/collections/other', products: [OTHER], products_count: 1}], video_url: [{type: 'youtube', id: 'abc123'}], local_video: [VID], items_to_show: [2]},
   },
   'product-showcase': {
@@ -164,8 +166,10 @@ async function everyControl(browser, name, width) {
   for (const c of cases) {
     const {x} = c, wide = (cfg.wide || []).includes(x.id) && c.scope < 0;
     if (wide && width !== 1366) continue;
+    if ((cfg.large || []).includes(x.id) && c.scope < 0 && width < 1025) continue;
     if (wide) await t.page.setViewportSize({width: 1700, height: 900});
     let blocks0 = clone(baseBlocks), S = {...base, ...(c.scope < 0 ? COMMON_PRE[x.id] || {} : {})};
+    if (c.scope < 0 && cfg.preBlocks?.[x.id]) blocks0 = cfg.preBlocks[x.id](blocks0);
     const bi = c.scope;
     const bBase = bi >= 0 ? blocks0[bi].settings : S;
     const pre = {...prereq(x, c.list, bBase), ...(c.scope < 0 ? cfg.pre?.[x.id] || {} : cfg.preBlock?.[x.id] || {})};
@@ -175,7 +179,7 @@ async function everyControl(browser, name, width) {
     const key = (c.btype ? c.btype + '.' : '') + x.id;
     const isDesk = (c.scope < 0 && cfg.desk.includes(x.id)) || /_desktop$/.test(x.id), isMob = (c.scope < 0 && cfg.mob.includes(x.id)) || /_mobile$/.test(x.id);
     const any = (cfg.any || []).includes(x.id);
-    const shows = any || (!(isDesk && width < (name === 'products-carousel' && cfg.desk.includes(x.id) ? 1025 : bp)) && !(isMob && width >= bp));
+    const shows = any || (!(isDesk && width < bp) && !(isMob && width >= bp));
     const structural = cfg.structural.includes(x.id) || x.type === 'product' || x.type === 'collection';
     const redraw = async (settings, blocks) => { if (theme) { const r = await render(name, {editing: true, uid: 'test', settings, blocks, theme: {...THEME, ...theme}}); await t.page.evaluate(h => { const w = document.getElementById('shopify-section-test'); w.innerHTML = h; w.dispatchEvent(new CustomEvent('storelib:section-load', {bubbles: true, detail: {sectionId: 'test'}})); }, r.html); await t.page.waitForTimeout(120); } else await t.redraw({settings, blocks}); };
     await redraw(S, blocks0);
@@ -235,7 +239,8 @@ async function theme(browser, name, width, editing) {
   ok(/^Arial/.test(await t.css(cfg.text, 'fontFamily')), tag + ' body font');
   eq(await t.css(cfg.text, 'color'), 'rgb(204, 204, 204)', tag + ' text colour');
   eq(await t.root(cfg.heading).first().evaluate(e => e.tagName), 'H2', tag + ' heading is an h2');
-  const btn = t.root(cfg.button + ':not([hidden])').first();
+  const bid0 = {'products-listing': t.blockId('button'), 'products-carousel': t.blockId('view_all')}[name];
+  const btn = t.root(bid0 ? '[data-pb-block="' + bid0 + '"]' : cfg.button + ':not([hidden])').first();
   eq(await btn.evaluate(e => getComputedStyle(e).backgroundColor), 'rgb(18, 52, 86)', tag + ' button colour');
   eq(await btn.evaluate(e => getComputedStyle(e).borderTopLeftRadius), '12px', tag + ' button radius');
   eq(await btn.getAttribute('data-theme-button'), 'primary', tag + ' theme button contract');

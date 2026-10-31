@@ -111,7 +111,7 @@ async function addFp(page) {
         const cs = getComputedStyle(e), r = e.getBoundingClientRect(), o = {};
         for (const p of P) o[p] = cs[p];
         o.rect = r.width || r.height ? [r.x - r0.x, r.y - r0.y, r.width, r.height].map(Math.round).join(',') : 'none';
-        for (const v of ['--mb-bg', '--mb-text', '--mb-border', '--mb-hover-bg', '--mb-radius', '--mb-font-size', '--mb-weight', '--btn-border-width']) o[v] = cs.getPropertyValue(v).trim();
+        for (const v of ['--mb-bg', '--mb-text', '--mb-border', '--mb-hover-bg', '--mb-radius', '--mb-font-size', '--mb-weight', '--btn-border-width', '--pd-cbh', '--pd-ctabgh']) o[v] = cs.getPropertyValue(v).trim();
         if (!e.children.length || /^(H\d|P|A|BUTTON|SPAN)$/.test(e.tagName)) o.text = e.textContent.trim().replace(/\s+/g, ' ').slice(0, 80);
         o.tag = e.tagName;
         for (const a of e.attributes) if (!SKIP.test(a.name) && !/^(style|class|id|for|sizes|srcset)$/.test(a.name)) o['@' + a.name] = a.name === 'src' ? a.value.split('?')[0] : a.value;
@@ -127,7 +127,8 @@ async function addFp(page) {
   });
 }
 const fp = (t, uid = 'test') => t.page.evaluate(u => window.__fp(u), uid);
-const diff = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
+const sorted = o => JSON.stringify(o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).sort(([x], [y]) => x < y ? -1 : 1)) : o);
+const diff = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => sorted(a[k]) !== sorted(b[k]));
 /* Settled values: theme transitions (links fade colour over 0.4s) are not what is compared. */
 const SPACING = '.shopify-section{padding-top:7px;padding-bottom:7px;margin-top:11px;margin-bottom:11px}*,*::before,*::after{transition-duration:0s!important}';
 const cfgMount = (name, extra = {}) => ({settings: clone(CFG[name].settings), blocks: CFG[name].blocks(), globals: CFG[name].globals || {}, ...extra});
@@ -182,7 +183,8 @@ async function everyControl(browser, name, width) {
         if (bi < 0 && /^section_margin/.test(x.id)) ok(dR.includes('wrap'), tag + ': margin not on the section');
         if (!structural) {
           const d = diff(fpL, fpR);
-          eq(d.map(k => k + ' ' + JSON.stringify(Object.fromEntries(Object.entries(fpL[k] || {}).filter(([p, val]) => JSON.stringify(val) !== JSON.stringify((fpR[k] || {})[p]))))), [], tag + ': live differs from redraw');
+          const keys = k => [...new Set([...Object.keys(fpL[k] || {}), ...Object.keys(fpR[k] || {})])].filter(p => JSON.stringify((fpL[k] || {})[p]) !== JSON.stringify((fpR[k] || {})[p]));
+          eq(d.map(k => k + ' ' + keys(k).map(p => p + ': ' + JSON.stringify((fpL[k] || {})[p]) + ' live, ' + JSON.stringify((fpR[k] || {})[p]) + ' redraw').join('; ')), [], tag + ': live differs from redraw');
         }
         seen.push([JSON.stringify(v), fpR]);
       } else if (!none) {
@@ -414,7 +416,8 @@ async function carousel(browser) {
     await next.click(); await t.page.waitForTimeout(700);
     ok(await tr.evaluate(e => e.scrollLeft) > 0, width + ' next scrolls');
     eq(await t.page.locator('#shopify-section-b .pd-set__track').evaluate(e => e.scrollLeft), 0, width + ' the other instance stays');
-    eq(await t.page.locator('#shopify-section-a .pd-set__dot').nth(1).getAttribute('aria-current'), 'true', width + ' pagination follows');
+    eq(await t.page.locator('#shopify-section-a .pd-set__dot').first().getAttribute('aria-current'), null, width + ' pagination follows');
+    eq(await t.page.locator('#shopify-section-a .pd-set__dot[aria-current="true"]').count(), 1, width + ' one current dot');
     eq(await t.page.locator('#shopify-section-b .pd-set__dot').first().getAttribute('aria-current'), 'true', width + ' other pagination stays');
     await t.page.locator('#shopify-section-a .pd-set__dot').first().click(); await t.page.waitForTimeout(700);
     eq(await tr.evaluate(e => e.scrollLeft), 0, width + ' dot goes to its slide');
@@ -434,7 +437,7 @@ async function carousel(browser) {
     await next.click(); await t.page.waitForTimeout(800);
     eq(await tr.evaluate(e => e.scrollLeft), 0, width + ' loop wraps to the first set');
     /* autoplay advances, and only for the section that has it */
-    await t.page.mouse.move(0, 0);
+    await t.page.mouse.move(0, 0); await t.page.evaluate(() => document.activeElement && document.activeElement.blur());
     await t.emit({autoplay: true, autorotate_speed: 2}, undefined, 'a');
     await t.page.waitForTimeout(2900);
     ok(await tr.evaluate(e => e.scrollLeft) > 0, width + ' autoplay advances');
