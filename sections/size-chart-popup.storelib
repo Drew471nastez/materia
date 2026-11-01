@@ -2,296 +2,295 @@
 {% render 'theme-type' %}
 {%- assign fb_accessibility_size_guide = 'accessibility.size_guide' | t -%}
 {%- comment -%}
-  Materia Themes — Size Chart Popup (standalone section)
-  A self-contained size chart trigger + popup. Renders the trigger
-  inline and opens a modal with a size chart table built directly
-  from block settings — no Shopify Page required, no setup. Works
-  100% out of the box with sensible defaults; the merchant can edit
-  headers, rows, notes, and styling without touching liquid.
-
-  Place this section anywhere on the product template (or any page)
-  and the trigger appears wherever the section is mounted. Pairs
-  with the Product Information section.
+  Materia Themes. Size Chart Popup: a trigger button and a native <dialog>
+  with the size chart. What the dialog shows, first found:
+    1. the size chart Storelib gives this product (Products > Size charts),
+       drawn by snippets/product-size-chart-content (the same table, cm / in
+       switch and colours as every other size guide; size-chart.js),
+       while "Use the product's size chart" is on;
+    2. the chart typed here: Column headers and one Row block per size
+       (sections saved before rows were blocks keep Row 1 to Row 8);
+  then the Custom HTML and Notes blocks.
+  shopify/assets/live-popups-code.js opens it with showModal() (Escape, the
+  44px close button and a click outside close it; focus goes back to the
+  trigger) and applies every setting live in the builder, where selecting the
+  section or a block opens it in the page without covering it.
 {%- endcomment -%}
-
 {%- liquid
-  assign st  = section.settings
+  assign st = section.settings
   assign sid = section.id
+  assign color_scheme = st.color_scheme.id | default: st.color_scheme | default: 'default-color-scheme'
+  assign scs_custom = false
+  if st.enable_custom_style
+    assign scs_custom = true
+  endif
+  assign scs_fonts = false
+  if st.enable_custom_fonts
+    assign scs_fonts = true
+  endif
+  assign scs_product = product | default: page.product
+  assign scs_chart = ''
+  if st.use_product_chart != false and scs_product != blank
+    capture scs_chart
+      render 'product-size-chart-content', product: scs_product, chart_id: sid
+    endcapture
+  endif
+  assign scs_chart_plain = scs_chart | strip_html | strip
+  assign scs_has_chart = false
+  if scs_chart_plain != blank or scs_chart contains '<table' or scs_chart contains '<img'
+    assign scs_has_chart = true
+  endif
+  assign row_blocks = section.blocks | where: 'type', 'row'
+  assign html_blocks = section.blocks | where: 'type', 'html'
+  assign notes_blocks = section.blocks | where: 'type', 'notes'
+  assign scs_align = st.align | default: 'left'
 -%}
+{%- capture scs_vars -%}
+--scs-align: {{ scs_align }}; --scs-mt: {{ st.margin_top | default: 0 }}px; --scs-mb: {{ st.margin_bottom | default: 0 }}px;
+--scs-trig-fs: {{ st.trig_size | default: 16 }}px; --scs-trig-fw: {{ st.trig_weight | default: '600' }}; --scs-gap: {{ st.trig_gap | default: 8 }}px; --scs-pad-y: {{ st.trig_pad_y | default: 8 }}px; --scs-pad-x: {{ st.trig_pad_x | default: 0 }}px; --scs-icon: {{ st.icon_size | default: 18 }}px;
+--scs-title-fs: {{ st.title_size | default: 20 }}px; --scs-pad: {{ st.modal_padding | default: 24 }}px; --scs-mw-d: {{ st.modal_width_d | default: 720 }}px; --scs-mw-m: {{ st.modal_width_m | default: 360 }}px;
+{%- if scs_custom -%}
+--scs-trig: {% render 'scheme-color', color: st.trig_color, fallback: 'var(--color-text)' %}; --scs-icon-c: {% render 'scheme-color', color: st.icon_color, fallback: 'var(--scs-trig)' %}; --scs-title: {% render 'scheme-color', color: st.title_color, fallback: 'var(--color-heading)' %}; --scs-bg: {% render 'scheme-color', color: st.modal_bg, fallback: 'var(--color-background)' %}; --scs-text: {% render 'scheme-color', color: st.text_color, fallback: 'var(--color-text)' %}; --scs-tb: {% render 'scheme-color', color: st.table_border_color, fallback: 'var(--color-border)' %}; --scs-ts: {% render 'scheme-color', color: st.table_stripe_color, fallback: 'color-mix(in srgb, var(--color-text) 5%, var(--color-background))' %}; --scs-radius: {{ st.modal_radius | default: 16 }}px;
+{%- endif -%}
+{%- if scs_fonts -%}
+{%- if st.heading_font.family != blank -%}--scs-hf: {{ st.heading_font.family }}, {{ st.heading_font.fallback_families }};{%- endif -%}
+{%- if st.body_font.family != blank -%}--scs-bf: {{ st.body_font.family }}, {{ st.body_font.fallback_families }};{%- endif -%}
+{%- endif -%}
+{%- endcapture -%}
+{%- if scs_fonts -%}<style>{{ st.heading_font | font_face: font_display: 'swap' }}{{ st.body_font | font_face: font_display: 'swap' }}{% comment %}{% endcomment %}</style>{%- endif -%}
 
-<div class="scs-wrap" id="scs-{{ sid }}"
-     style="
-       --scs-align: {{ st.align | default: 'left' }};
-       margin-top: {{ st.margin_top | default: 0 }}px;
-       margin-bottom: {{ st.margin_bottom | default: 0 }}px;
-       text-align: {{ st.align | default: 'left' }};
-     ">
-
+<div class="scs-wrap color-{{ color_scheme }}" id="scs-{{ sid }}"
+     data-pc-root="size-chart-popup"
+     data-pc-section="{{ sid }}"
+     data-pc-settings="{{ st | json | escape }}"
+     data-scs-i18n='{"title":{{ fb_accessibility_size_guide | json | escape }}}'
+     data-scs-underline="{% if st.underline_text %}true{% else %}false{% endif %}"
+     style="{{ scs_vars | strip | strip_newlines }}">
   <button type="button"
-          class="scs__trigger{% if st.underline_text %} scs__trigger--underline{% endif %}"
+          class="scs__trigger"
           aria-haspopup="dialog"
           aria-expanded="false"
           aria-controls="scs-dialog-{{ sid }}"
           data-scs-open
-          style="
-            color: {{ st.trig_color | default: '#111111' }};
-            font-size: {{ st.trig_size | default: 16 }}px;
-            font-weight: {{ st.trig_weight | default: '600' }};
-            gap: {{ st.trig_gap | default: 8 }}px;
-            padding: {{ st.trig_pad_y | default: 8 }}px {{ st.trig_pad_x | default: 0 }}px;
-          ">
-    {%- if st.show_icon -%}
-      <span class="scs__icn" aria-hidden="true" style="width: {{ st.icon_size | default: 18 }}px; height: {{ st.icon_size | default: 18 }}px; color: {{ st.icon_color | default: st.trig_color | default: '#111111' }};">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M3 12h18"/><path d="M3 18h18"/><path d="M7 4v4"/><path d="M12 10v4"/><path d="M17 16v4"/></svg>
-      </span>
-    {%- endif -%}
-    <span class="scs__label">{{ st.trig_text | default: fb_accessibility_size_guide }}</span>
+          {% if scs_fonts %}data-own-font{% endif %}>
+    <span class="scs__icn" aria-hidden="true" data-scs-icon{% unless st.show_icon %} hidden{% endunless %}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 6h18"/><path d="M3 12h18"/><path d="M3 18h18"/><path d="M7 4v4"/><path d="M12 10v4"/><path d="M17 16v4"/></svg>
+    </span>
+    <span class="scs__label" data-scs-label>{{ st.trig_text | default: fb_accessibility_size_guide }}</span>
   </button>
 
-  <div class="scs__overlay" data-scs-overlay hidden></div>
-
-  <div id="scs-dialog-{{ sid }}"
-       class="scs__dialog"
-       role="dialog"
-       aria-modal="true"
-       aria-labelledby="scs-title-{{ sid }}"
-       data-scs-dialog
-       hidden>
-    <div class="scs__modal" data-scs-modal
-         style="
-           background: {{ st.modal_bg | default: '#FFFFFF' }};
-           color: {{ st.text_color | default: '#1F2937' }};
-           border-radius: {{ st.modal_radius | default: 16 }}px;
-           padding: {{ st.modal_padding | default: 24 }}px;
-           --scs-mw-d: {{ st.modal_width_d | default: 720 }}px;
-           --scs-mw-m: {{ st.modal_width_m | default: 360 }}px;
-         ">
+  <dialog id="scs-dialog-{{ sid }}" class="scs__dialog" aria-labelledby="scs-title-{{ sid }}" data-scs-dialog>
+    <div class="scs__modal" data-scs-modal>
       <div class="scs__head">
-        <h3 id="scs-title-{{ sid }}" class="scs__title"
-            style="color: {{ st.title_color | default: '#111111' }}; font-size: {{ st.title_size | default: 20 }}px;">
-          {{ st.modal_title | default: fb_accessibility_size_guide }}
-        </h3>
-        <button type="button" class="scs__close" aria-label="{{ 'accessibility.close_esc' | t }}" data-scs-close
-                style="color: {{ st.title_color | default: '#111111' }};">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+        <h2 id="scs-title-{{ sid }}" class="scs__title" data-scs-title{% if scs_fonts %} data-own-font{% endif %}>{{ st.modal_title | default: fb_accessibility_size_guide }}</h2>
+        <button type="button" class="scs__close" aria-label="{{ 'accessibility.close_esc' | t }}" data-scs-close>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
         </button>
       </div>
 
-      <div class="scs__body">
-        {%- if st.headers != blank -%}
-          {%- assign headers = st.headers | split: '|' -%}
-          <div class="scs__table-wrap">
-            <table class="scs__table"
-                   style="
-                     --scs-tb: {{ st.table_border_color | default: '#E5E7EB' }};
-                     --scs-ts: {{ st.table_stripe_color | default: '#F9FAFB' }};
-                     --scs-th: {{ st.title_color | default: '#111111' }};
-                   ">
-              <thead>
-                <tr>
-                  {%- for h in headers -%}<th>{{ h | strip }}</th>{%- endfor -%}
-                </tr>
+      <div class="scs__body"{% if scs_fonts %} data-own-font{% endif %}>
+        {%- if scs_has_chart -%}
+          <div class="scs__product-chart" data-scs-product-chart>{{ scs_chart }}</div>
+        {%- else -%}
+          {%- liquid
+            assign headers = st.headers | split: '|'
+            assign has_rows = false
+            if row_blocks.size > 0
+              assign has_rows = true
+            else
+              for n in (1..8)
+                assign key = 'row_' | append: n
+                if st[key] != blank
+                  assign has_rows = true
+                endif
+              endfor
+            endif
+          -%}
+          <div class="scs__table-wrap" data-scs-table{% if st.headers == blank and has_rows == false %} hidden{% endif %} tabindex="0" role="region" aria-label="{{ st.modal_title | default: fb_accessibility_size_guide | escape }}">
+            <table class="scs__table">
+              <thead data-scs-headers{% if st.headers == blank %} hidden{% endif %}>
+                <tr>{%- for h in headers -%}<th scope="col">{{ h | strip }}</th>{%- endfor -%}</tr>
               </thead>
               <tbody>
-                {%- for n in (1..8) -%}
-                  {%- assign key = 'row_' | append: n -%}
-                  {%- assign row_value = st[key] -%}
-                  {%- if row_value != blank -%}
-                    {%- assign cells = row_value | split: '|' -%}
-                    <tr>
-                      {%- for c in cells -%}<td>{{ c | strip }}</td>{%- endfor -%}
+                {%- if row_blocks.size > 0 -%}
+                  {%- for block in row_blocks -%}
+                    {%- assign cells = block.settings.cells | split: '|' -%}
+                    <tr data-pc-block="{{ block.id }}" data-pc-type="row" data-pc-settings="{{ block.settings | json | escape }}"{% if block.settings.cells == blank %} hidden{% endif %} {{ block.shopify_attributes }}>
+                      {%- for c in cells -%}{%- if forloop.first -%}<th scope="row">{{ c | strip }}</th>{%- else -%}<td>{{ c | strip }}</td>{%- endif -%}{%- endfor -%}
                     </tr>
-                  {%- endif -%}
-                {%- endfor -%}
+                  {%- endfor -%}
+                {%- else -%}
+                  {%- for n in (1..8) -%}
+                    {%- assign key = 'row_' | append: n -%}
+                    {%- assign row_value = st[key] -%}
+                    {%- if row_value != blank -%}
+                      {%- assign cells = row_value | split: '|' -%}
+                      <tr data-pc-legacy="{{ key }}">
+                        {%- for c in cells -%}{%- if forloop.first -%}<th scope="row">{{ c | strip }}</th>{%- else -%}<td>{{ c | strip }}</td>{%- endif -%}{%- endfor -%}
+                      </tr>
+                    {%- endif -%}
+                  {%- endfor -%}
+                {%- endif -%}
               </tbody>
             </table>
           </div>
         {%- endif -%}
 
-        {%- if st.html != blank -%}
-          <div class="scs__html"
-               style="--scs-tb: {{ st.table_border_color | default: '#E5E7EB' }}; --scs-ts: {{ st.table_stripe_color | default: '#F9FAFB' }};">
-            {{ st.html }}
-          </div>
+        {%- if html_blocks.size > 0 -%}
+          {%- for block in html_blocks -%}
+            <div class="scs__html" data-pc-block="{{ block.id }}" data-pc-type="html" data-pc-settings="{}" {{ block.shopify_attributes }}>{{ block.settings.html }}</div>
+          {%- endfor -%}
+        {%- elsif st.html != blank -%}
+          <div class="scs__html" data-pc-legacy="html">{{ st.html }}</div>
         {%- endif -%}
 
-        {%- if st.notes != blank -%}
-          <div class="scs__notes">{{ st.notes }}</div>
+        {%- if notes_blocks.size > 0 -%}
+          {%- for block in notes_blocks -%}
+            <div class="scs__notes" data-pc-block="{{ block.id }}" data-pc-type="notes" data-pc-settings="{{ block.settings | json | escape }}"{% if block.settings.text == blank %} hidden{% endif %} {{ block.shopify_attributes }}>{{ block.settings.text }}</div>
+          {%- endfor -%}
+        {%- elsif st.notes != blank -%}
+          <div class="scs__notes" data-pc-legacy="notes">{{ st.notes }}</div>
         {%- endif -%}
 
-        {%- if st.headers == blank and st.html == blank and st.notes == blank -%}
-          <p class="scs__empty">Add column headers and rows in the section settings to build your size chart, or paste an HTML table in the “Custom HTML” field.</p>
+        {%- if request.design_mode and scs_has_chart == false and st.headers == blank and html_blocks.size == 0 and st.html == blank -%}
+          <p class="scs__empty">Add column headers and Row blocks to build the chart. Only you see this note in the builder.</p>
         {%- endif -%}
       </div>
     </div>
-  </div>
+  </dialog>
 </div>
 
 <style>
-  #scs-{{ sid }} { display: block; }
+  #scs-{{ sid }} {
+    display: block;
+    margin-top: var(--scs-mt, 0px);
+    margin-bottom: var(--scs-mb, 0px);
+    text-align: var(--scs-align, left);
+    background: transparent;
+  }
   #scs-{{ sid }} .scs__trigger {
     display: inline-flex;
     align-items: center;
+    gap: var(--scs-gap, 8px);
+    min-height: 44px;
+    padding: var(--scs-pad-y, 8px) var(--scs-pad-x, 0px);
+    box-sizing: border-box;
     background: transparent;
     border: 0;
     cursor: pointer;
     line-height: 1.2;
-    font-family: inherit;
+    font-family: var(--scs-bf, inherit);
+    font-size: var(--scs-trig-fs, 16px);
+    font-weight: var(--scs-trig-fw, 600);
+    color: var(--scs-trig, var(--color-text));
   }
-  #scs-{{ sid }} .scs__trigger--underline { text-decoration: underline; text-underline-offset: 2px; }
-  #scs-{{ sid }} .scs__trigger:focus-visible { outline: 2px solid #000; outline-offset: 2px; }
-  #scs-{{ sid }} .scs__icn { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  #scs-{{ sid }}[data-scs-underline='true'] .scs__label { text-decoration: underline; text-underline-offset: 2px; }
+  #scs-{{ sid }} .scs__trigger:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+  #scs-{{ sid }} .scs__icn { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: var(--scs-icon, 18px); height: var(--scs-icon, 18px); color: var(--scs-icon-c, var(--scs-trig, var(--color-text))); }
+  #scs-{{ sid }} .scs__icn[hidden] { display: none; }
   #scs-{{ sid }} .scs__icn svg { width: 100%; height: 100%; display: block; }
 
-  #scs-{{ sid }} .scs__overlay {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,.5);
-    opacity: 0; pointer-events: none;
-    transition: opacity .2s ease;
-    z-index: 9998;
-  }
-  #scs-{{ sid }} .scs__overlay.is-open { opacity: 1; pointer-events: auto; }
-
   #scs-{{ sid }} .scs__dialog {
-    position: fixed; inset: 0;
-    display: flex; align-items: center; justify-content: center;
-    z-index: 9999;
-    padding: 16px;
-    opacity: 0; pointer-events: none;
-    transition: opacity .2s ease;
+    box-sizing: border-box;
+    width: min(var(--scs-mw-m, 360px), calc(100vw - 32px));
+    max-width: none;
+    max-height: calc(var(--sl-vh, 1vh) * 85);
+    padding: 0;
+    border: 0;
+    overflow: visible;
+    background: transparent;
+    text-align: start;
   }
-  #scs-{{ sid }} .scs__dialog.is-open { opacity: 1; pointer-events: auto; }
+  @media (min-width: 600px) {
+    #scs-{{ sid }} .scs__dialog { width: min(var(--scs-mw-d, 720px), calc(100vw - 32px)); }
+  }
+  #scs-{{ sid }} .scs__dialog::backdrop { background: rgba(0, 0, 0, .5); }
+  #scs-{{ sid }} .scs__dialog[open] { animation: pc-scs-in .2s ease both; }
+  @keyframes pc-scs-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  /* In the builder the chart opens in the page, under its trigger */
+  #scs-{{ sid }} .scs__dialog[open]:not(:modal) { position: relative; inset: auto; display: block; margin: 12px 0 0; z-index: auto; }
 
   #scs-{{ sid }} .scs__modal {
+    --sz-bg: var(--scs-bg, var(--color-background));
+    --sz-border: var(--scs-tb, var(--color-border));
+    --sz-head-bg: var(--scs-ts, color-mix(in srgb, var(--color-text) 5%, var(--color-background)));
+    --sz-head-text: var(--scs-title, var(--color-heading));
+    --sz-text: var(--scs-text, var(--color-text));
+    --sz-stripe: var(--scs-ts, color-mix(in srgb, var(--color-text) 5%, var(--color-background)));
+    box-sizing: border-box;
     width: 100%;
-    max-width: var(--scs-mw-m);
-    max-height: 85vh;
+    max-height: calc(var(--sl-vh, 1vh) * 85);
     overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0,0,0,.3);
-    transform: translateY(8px);
-    transition: transform .2s ease;
+    overscroll-behavior: contain;
+    padding: var(--scs-pad, 24px);
+    background: var(--scs-bg, var(--color-background));
+    color: var(--scs-text, var(--color-text));
+    border-radius: var(--scs-radius, var(--rounded-radius, 8px));
+    font-family: var(--scs-bf, var(--body-font, inherit));
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .3);
   }
-  #scs-{{ sid }} .scs__dialog.is-open .scs__modal { transform: translateY(0); }
-  @media (min-width: 600px) {
-    #scs-{{ sid }} .scs__modal { max-width: var(--scs-mw-d); }
-  }
-
-  #scs-{{ sid }} .scs__head {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 16px;
-  }
+  #scs-{{ sid }} .scs__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
   #scs-{{ sid }} .scs__title {
     margin: 0 !important;
+    border: 0;
+    color: var(--scs-title, var(--color-heading));
+    font-size: var(--scs-title-fs, 20px);
+    font-family: var(--scs-hf, var(--heading-font, inherit));
     font-weight: var(--heading-weight, 700);
     line-height: var(--heading-line-height, 1.2);
-    letter-spacing: var(--heading-letter-spacing, normal);
-    text-transform: var(--heading-text-transform, none);
   }
   #scs-{{ sid }} .scs__close {
-    background: transparent; border: 0;
-    width: 32px; height: 32px;
-    display: inline-flex; align-items: center; justify-content: center;
+    flex: 0 0 auto;
+    background: transparent;
+    border: 0;
+    width: 44px;
+    height: 44px;
+    margin: -10px -10px -10px 0;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
     border-radius: 8px;
+    color: var(--scs-title, var(--color-heading));
     transition: background .15s ease;
   }
-  #scs-{{ sid }} .scs__close:hover { background: rgba(0,0,0,.06); }
-  #scs-{{ sid }} .scs__close:focus-visible { outline: 2px solid #000; outline-offset: 2px; }
+  #scs-{{ sid }} .scs__close:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
+  #scs-{{ sid }} .scs__close:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; }
   #scs-{{ sid }} .scs__close svg { width: 18px; height: 18px; }
 
-  #scs-{{ sid }} .scs__body {
-    display: flex; flex-direction: column; gap: 16px;
-    font-size: 15px; line-height: 1.55;
-  }
-  #scs-{{ sid }} .scs__table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  #scs-{{ sid }} .scs__table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 14px;
-  }
-  #scs-{{ sid }} .scs__table th,
-  #scs-{{ sid }} .scs__table td {
+  #scs-{{ sid }} .scs__body { display: flex; flex-direction: column; gap: 16px; font-size: 15px; line-height: 1.55; }
+  #scs-{{ sid }} .scs__body :is(p, li) { font-family: inherit; }
+  #scs-{{ sid }} .scs__table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+  #scs-{{ sid }} .scs__table-wrap[hidden] { display: none; }
+  #scs-{{ sid }} .scs__table-wrap:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+  #scs-{{ sid }} .scs__table { width: 100%; margin: 0; border-collapse: collapse; font-size: 14px; color: inherit; }
+  #scs-{{ sid }} .scs__table :is(th, td) {
     padding: 10px 12px;
-    border: 1px solid var(--scs-tb);
+    border: 1px solid var(--scs-tb, var(--color-border));
     text-align: start;
     white-space: nowrap;
   }
-  #scs-{{ sid }} .scs__table th {
-    background: var(--scs-ts);
+  #scs-{{ sid }} .scs__table thead th {
+    background: var(--scs-ts, color-mix(in srgb, var(--color-text) 5%, var(--color-background)));
     font-weight: var(--subheading-weight, 700);
-    color: var(--scs-th);
+    color: var(--scs-title, var(--color-heading));
   }
-  #scs-{{ sid }} .scs__table tbody tr:nth-child(even) td {
-    background: var(--scs-ts);
-  }
+  #scs-{{ sid }} .scs__table tbody th { font-weight: var(--subheading-weight, 700); }
+  #scs-{{ sid }} .scs__table tbody tr:nth-child(even) :is(td, th) { background: var(--scs-ts, color-mix(in srgb, var(--color-text) 5%, var(--color-background))); }
   #scs-{{ sid }} .scs__html { font-size: 14px; line-height: 1.55; }
   #scs-{{ sid }} .scs__html table { width: 100%; border-collapse: collapse; }
-  #scs-{{ sid }} .scs__html th, #scs-{{ sid }} .scs__html td { padding: 10px 12px; border: 1px solid var(--scs-tb); text-align: left; }
-  #scs-{{ sid }} .scs__html th { background: var(--scs-ts); font-weight: var(--subheading-weight, 700); }
+  #scs-{{ sid }} .scs__html :is(th, td) { padding: 10px 12px; border: 1px solid var(--scs-tb, var(--color-border)); text-align: left; }
+  #scs-{{ sid }} .scs__html th { background: var(--scs-ts, color-mix(in srgb, var(--color-text) 5%, var(--color-background))); font-weight: var(--subheading-weight, 700); }
   #scs-{{ sid }} .scs__notes { font-size: 14px; line-height: 1.6; }
   #scs-{{ sid }} .scs__notes p { margin: 0; }
   #scs-{{ sid }} .scs__notes p + p { margin-top: 8px; }
-  #scs-{{ sid }} .scs__empty { color: #6B7280; margin: 0; font-style: italic; }
-
-  html.scs-lock { overflow: hidden; }
+  #scs-{{ sid }} .scs__empty { opacity: .7; margin: 0; font-style: italic; }
+  @media (prefers-reduced-motion: reduce) {
+    #scs-{{ sid }} .scs__dialog[open], #scs-{{ sid }} .scs__close { animation: none !important; transition: none !important; }
+  }
+  html.pc-lock { overflow: hidden; }
 {% comment %}{% endcomment %}</style>
-
-<script>
-(function(){
-  var root = document.getElementById('scs-{{ sid }}');
-  if (!root || root.__scsInit) return;
-  root.__scsInit = true;
-
-  var trigger = root.querySelector('[data-scs-open]');
-  var overlay = root.querySelector('[data-scs-overlay]');
-  var dialog  = root.querySelector('[data-scs-dialog]');
-  var modal   = root.querySelector('[data-scs-modal]');
-  var closeBtn= root.querySelector('[data-scs-close]');
-  var lastFocus = null;
-
-  if (!trigger || !overlay || !dialog || !modal || !closeBtn) return;
-
-  function open(){
-    lastFocus = document.activeElement;
-    overlay.hidden = false;
-    dialog.hidden = false;
-    requestAnimationFrame(function(){
-      overlay.classList.add('is-open');
-      dialog.classList.add('is-open');
-      trigger.setAttribute('aria-expanded','true');
-      document.documentElement.classList.add('scs-lock');
-      closeBtn.focus();
-    });
-    document.addEventListener('keydown', onKey);
-    dialog.addEventListener('click', onOutside);
-  }
-  function close(){
-    overlay.classList.remove('is-open');
-    dialog.classList.remove('is-open');
-    trigger.setAttribute('aria-expanded','false');
-    document.documentElement.classList.remove('scs-lock');
-    setTimeout(function(){
-      overlay.hidden = true;
-      dialog.hidden = true;
-      if (lastFocus && typeof lastFocus.focus === 'function') {
-        lastFocus.focus({preventScroll:true});
-      }
-    }, 200);
-    document.removeEventListener('keydown', onKey);
-    dialog.removeEventListener('click', onOutside);
-  }
-  function onOutside(e){ if (!modal.contains(e.target)) close(); }
-  function onKey(e){ if (e.key === 'Escape') { e.preventDefault(); close(); } }
-
-  trigger.addEventListener('click', open);
-  closeBtn.addEventListener('click', close);
-  overlay.addEventListener('click', close);
-})();
-{% comment %}{% endcomment %}</script>
-
-
-
 </template>
 
 <schema>
@@ -639,7 +638,142 @@
     "settings": [
       {
         "type": "header",
-        "content": "Trigger button"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "header",
+        "content": "Content"
+      },
+      {
+        "type": "text",
+        "id": "trig_text",
+        "label": "Button text",
+        "default": "Size Guide"
+      },
+      {
+        "type": "text",
+        "id": "modal_title",
+        "label": "Title",
+        "default": "Size Guide"
+      },
+      {
+        "type": "checkbox",
+        "id": "use_product_chart",
+        "label": "Use the product's size chart",
+        "default": true,
+        "info": "When the product has a size chart in Storelib (Products > Size charts), it is shown instead of the rows below."
+      },
+      {
+        "type": "text",
+        "id": "headers",
+        "label": "Column headers",
+        "default": "Size|Chest (in)|Waist (in)|Hips (in)",
+        "info": "Separate with |, for example Size|Chest|Waist. Add one Row block per size."
+      },
+      {
+        "type": "text",
+        "id": "row_1",
+        "label": "Row 1 (separate with |)",
+        "default": "S|34-36|28-30|34-36",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Row block."
+      },
+      {
+        "type": "text",
+        "id": "row_2",
+        "label": "Row 2 (separate with |)",
+        "default": "M|38-40|32-34|38-40",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Row block."
+      },
+      {
+        "type": "text",
+        "id": "row_3",
+        "label": "Row 3 (separate with |)",
+        "default": "L|42-44|36-38|42-44",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Row block."
+      },
+      {
+        "type": "text",
+        "id": "row_4",
+        "label": "Row 4 (separate with |)",
+        "default": "XL|46-48|40-42|46-48",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Row block."
+      },
+      {
+        "type": "text",
+        "id": "row_5",
+        "label": "Row 5 (separate with |)",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Row block."
+      },
+      {
+        "type": "text",
+        "id": "row_6",
+        "label": "Row 6 (separate with |)",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Row block."
+      },
+      {
+        "type": "text",
+        "id": "row_7",
+        "label": "Row 7 (separate with |)",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Row block."
+      },
+      {
+        "type": "text",
+        "id": "row_8",
+        "label": "Row 8 (separate with |)",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Row block."
+      },
+      {
+        "type": "html",
+        "id": "html",
+        "label": "Custom HTML",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Custom HTML block."
+      },
+      {
+        "type": "richtext",
+        "id": "notes",
+        "label": "Notes",
+        "default": "<p>All measurements are in inches. Sizes may vary slightly by style.</p>",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no Notes block."
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "align",
+        "label": "Alignment",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
       },
       {
         "type": "checkbox",
@@ -650,30 +784,179 @@
       {
         "type": "checkbox",
         "id": "underline_text",
-        "label": "Underline trigger text",
+        "label": "Underline the text",
         "default": false
       },
       {
-        "type": "text",
-        "id": "trig_text",
-        "label": "Trigger text",
-        "default": "Size Guide"
+        "type": "range",
+        "id": "icon_size",
+        "label": "Icon size",
+        "min": 12,
+        "max": 28,
+        "step": 1,
+        "unit": "px",
+        "default": 18,
+        "visible_if": "{{ section.settings.show_icon }}"
+      },
+      {
+        "type": "range",
+        "id": "trig_gap",
+        "label": "Gap between icon and text",
+        "min": 0,
+        "max": 24,
+        "step": 1,
+        "unit": "px",
+        "default": 8,
+        "visible_if": "{{ section.settings.show_icon }}"
+      },
+      {
+        "type": "range",
+        "id": "trig_pad_y",
+        "label": "Padding top and bottom",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 8
+      },
+      {
+        "type": "range",
+        "id": "trig_pad_x",
+        "label": "Padding left and right",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "modal_width_d",
+        "label": "Popup width (desktop)",
+        "min": 360,
+        "max": 1100,
+        "step": 10,
+        "unit": "px",
+        "default": 720
+      },
+      {
+        "type": "range",
+        "id": "modal_width_m",
+        "label": "Popup width (mobile)",
+        "min": 260,
+        "max": 640,
+        "step": 10,
+        "unit": "px",
+        "default": 360
+      },
+      {
+        "type": "range",
+        "id": "modal_padding",
+        "label": "Popup padding",
+        "min": 12,
+        "max": 48,
+        "step": 1,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "header",
+        "content": "Appearance"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Enable custom styling",
+        "default": false
       },
       {
         "type": "color",
         "id": "trig_color",
-        "label": "Trigger text color",
-        "default": "#111111"
+        "label": "Button text",
+        "default": "#111111",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
       },
       {
         "type": "color",
         "id": "icon_color",
-        "label": "Trigger icon color (override)"
+        "label": "Icon",
+        "visible_if": "{{ section.settings.enable_custom_style }}",
+        "info": "Empty follows the button text."
+      },
+      {
+        "type": "color",
+        "id": "title_color",
+        "label": "Title and table header",
+        "default": "#111111",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "modal_bg",
+        "label": "Popup background",
+        "default": "#FFFFFF",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "text_color",
+        "label": "Text",
+        "default": "#1F2937",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "table_border_color",
+        "label": "Table borders",
+        "default": "#E5E7EB",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "table_stripe_color",
+        "label": "Header and striped rows",
+        "default": "#F9FAFB",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "range",
+        "id": "modal_radius",
+        "label": "Popup corner radius",
+        "min": 0,
+        "max": 32,
+        "step": 1,
+        "unit": "px",
+        "default": 16,
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Custom fonts",
+        "default": false
+      },
+      {
+        "type": "font_picker",
+        "id": "heading_font",
+        "label": "Title font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Text font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
       },
       {
         "type": "range",
         "id": "trig_size",
-        "label": "Trigger font size",
+        "label": "Button text size",
         "min": 10,
         "max": 28,
         "step": 1,
@@ -683,7 +966,7 @@
       {
         "type": "select",
         "id": "trig_weight",
-        "label": "Trigger font weight",
+        "label": "Button text weight",
         "default": "600",
         "options": [
           {
@@ -706,82 +989,6 @@
       },
       {
         "type": "range",
-        "id": "icon_size",
-        "label": "Icon size",
-        "min": 12,
-        "max": 28,
-        "step": 1,
-        "unit": "px",
-        "default": 18
-      },
-      {
-        "type": "range",
-        "id": "trig_gap",
-        "label": "Gap icon → text",
-        "min": 0,
-        "max": 24,
-        "step": 1,
-        "unit": "px",
-        "default": 8
-      },
-      {
-        "type": "range",
-        "id": "trig_pad_y",
-        "label": "Trigger padding y",
-        "min": 0,
-        "max": 40,
-        "step": 1,
-        "unit": "px",
-        "default": 8
-      },
-      {
-        "type": "range",
-        "id": "trig_pad_x",
-        "label": "Trigger padding x",
-        "min": 0,
-        "max": 40,
-        "step": 1,
-        "unit": "px",
-        "default": 0
-      },
-      {
-        "type": "select",
-        "id": "align",
-        "label": "Trigger alignment",
-        "default": "left",
-        "options": [
-          {
-            "value": "left",
-            "label": "Left"
-          },
-          {
-            "value": "center",
-            "label": "Center"
-          },
-          {
-            "value": "right",
-            "label": "Right"
-          }
-        ]
-      },
-      {
-        "type": "header",
-        "content": "Modal title"
-      },
-      {
-        "type": "text",
-        "id": "modal_title",
-        "label": "Modal title",
-        "default": "Size Guide"
-      },
-      {
-        "type": "color",
-        "id": "title_color",
-        "label": "Title color",
-        "default": "#111111"
-      },
-      {
-        "type": "range",
         "id": "title_size",
         "label": "Title size",
         "min": 14,
@@ -792,155 +999,12 @@
       },
       {
         "type": "header",
-        "content": "Size chart table",
-        "info": "Enter column headers separated by | (pipe). Add up to 8 rows the same way."
-      },
-      {
-        "type": "text",
-        "id": "headers",
-        "label": "Column headers (separate with |)",
-        "default": "Size|Chest (in)|Waist (in)|Hips (in)"
-      },
-      {
-        "type": "text",
-        "id": "row_1",
-        "label": "Row 1 (separate with |)",
-        "default": "S|34-36|28-30|34-36"
-      },
-      {
-        "type": "text",
-        "id": "row_2",
-        "label": "Row 2 (separate with |)",
-        "default": "M|38-40|32-34|38-40"
-      },
-      {
-        "type": "text",
-        "id": "row_3",
-        "label": "Row 3 (separate with |)",
-        "default": "L|42-44|36-38|42-44"
-      },
-      {
-        "type": "text",
-        "id": "row_4",
-        "label": "Row 4 (separate with |)",
-        "default": "XL|46-48|40-42|46-48"
-      },
-      {
-        "type": "text",
-        "id": "row_5",
-        "label": "Row 5 (separate with |)"
-      },
-      {
-        "type": "text",
-        "id": "row_6",
-        "label": "Row 6 (separate with |)"
-      },
-      {
-        "type": "text",
-        "id": "row_7",
-        "label": "Row 7 (separate with |)"
-      },
-      {
-        "type": "text",
-        "id": "row_8",
-        "label": "Row 8 (separate with |)"
-      },
-      {
-        "type": "header",
-        "content": "Custom HTML (optional)",
-        "info": "If you need a more advanced layout, paste raw HTML here. Renders below the table."
-      },
-      {
-        "type": "html",
-        "id": "html",
-        "label": "Custom HTML"
-      },
-      {
-        "type": "header",
-        "content": "Notes (optional)"
-      },
-      {
-        "type": "richtext",
-        "id": "notes",
-        "label": "Notes",
-        "default": "<p>All measurements are in inches. Sizes may vary slightly by style.</p>"
-      },
-      {
-        "type": "header",
-        "content": "Modal style"
-      },
-      {
-        "type": "color",
-        "id": "modal_bg",
-        "label": "Modal background",
-        "default": "#FFFFFF"
-      },
-      {
-        "type": "color",
-        "id": "text_color",
-        "label": "Body text color",
-        "default": "#1F2937"
-      },
-      {
-        "type": "color",
-        "id": "table_border_color",
-        "label": "Table border color",
-        "default": "#E5E7EB"
-      },
-      {
-        "type": "color",
-        "id": "table_stripe_color",
-        "label": "Header / stripe row color",
-        "default": "#F9FAFB"
-      },
-      {
-        "type": "range",
-        "id": "modal_radius",
-        "label": "Modal corner radius",
-        "min": 0,
-        "max": 32,
-        "step": 1,
-        "unit": "px",
-        "default": 16
-      },
-      {
-        "type": "range",
-        "id": "modal_padding",
-        "label": "Modal inner padding",
-        "min": 12,
-        "max": 48,
-        "step": 1,
-        "unit": "px",
-        "default": 24
-      },
-      {
-        "type": "range",
-        "id": "modal_width_d",
-        "label": "Modal width (desktop)",
-        "min": 360,
-        "max": 1100,
-        "step": 10,
-        "unit": "px",
-        "default": 720
-      },
-      {
-        "type": "range",
-        "id": "modal_width_m",
-        "label": "Modal width (mobile)",
-        "min": 260,
-        "max": 640,
-        "step": 10,
-        "unit": "px",
-        "default": 360
-      },
-      {
-        "type": "header",
         "content": "Spacing"
       },
       {
         "type": "range",
         "id": "margin_top",
-        "label": "Section margin top",
+        "label": "Top margin",
         "min": -40,
         "max": 80,
         "step": 2,
@@ -950,7 +1014,7 @@
       {
         "type": "range",
         "id": "margin_bottom",
-        "label": "Section margin bottom",
+        "label": "Bottom margin",
         "min": -40,
         "max": 80,
         "step": 2,
@@ -961,14 +1025,84 @@
     "presets": [
       {
         "name": "Size Chart Popup",
-        "category": "Product"
+        "category": "Product",
+        "blocks": [
+          {
+            "type": "row",
+            "settings": {
+              "cells": "S|34-36|28-30|34-36"
+            }
+          },
+          {
+            "type": "row",
+            "settings": {
+              "cells": "M|38-40|32-34|38-40"
+            }
+          },
+          {
+            "type": "row",
+            "settings": {
+              "cells": "L|42-44|36-38|42-44"
+            }
+          },
+          {
+            "type": "row",
+            "settings": {
+              "cells": "XL|46-48|40-42|46-48"
+            }
+          },
+          {
+            "type": "notes"
+          }
+        ]
       }
     ],
     "enabled_on": {
       "templates": [
         "product"
       ]
-    }
+    },
+    "blocks": [
+      {
+        "type": "row",
+        "name": "Row",
+        "settings": [
+          {
+            "type": "text",
+            "id": "cells",
+            "label": "Cells",
+            "default": "S|34-36|28-30|34-36",
+            "info": "Separate with |. The first cell is the size."
+          }
+        ]
+      },
+      {
+        "type": "html",
+        "name": "Custom HTML",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "html",
+            "id": "html",
+            "label": "HTML",
+            "info": "Shown below the table, exactly as typed."
+          }
+        ]
+      },
+      {
+        "type": "notes",
+        "name": "Notes",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "richtext",
+            "id": "text",
+            "label": "Notes",
+            "default": "<p>All measurements are in inches. Sizes may vary slightly by style.</p>"
+          }
+        ]
+      }
+    ]
   }
 }
 </schema>

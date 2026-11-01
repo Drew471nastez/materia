@@ -1,18 +1,23 @@
 <template compat="shopify">
 {% render 'theme-type' %}
+{%- comment -%}
+  Materia Themes. Order notification: a small card in a bottom corner that
+  names one of the products picked in the Orders block. Products, titles,
+  pictures and links are the store's own (Orders > Products); buyer names are
+  only what the creator types in Buyers, never made up here.
+
+  All the settings live in its blocks (one of each, limit 1). A missing block
+  falls back to the values below, so the card never breaks. The look is CSS
+  variables and data attributes on the card, written the same way by
+  shopify/assets/live-popups-code.js on a live edit, which also runs the
+  timing: first card after "First one after", each shown for "Each shows
+  for" with the progress bar filling, then a pause of "Gap between". The
+  timer stops while the tab is hidden and under reduced motion the card
+  shows without moving. In the builder nothing runs on a timer: the card
+  shows while the section or one of its blocks is selected or edited.
+{%- endcomment -%}
 {%- liquid
   assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
--%}
-{%- liquid
-  comment
-    ═══════════════════════════════════════════════════════════════════════
-    ORDER NOTIFICATION PRO 1 — block-organised section.
-    All configuration lives inside section blocks (no flat
-    section.settings). The preset adds all 6 blocks automatically;
-    each block has limit:1 so it can only appear once. If a merchant
-    removes a block, the section falls back to the defaults assigned
-    below, so the notification never breaks visually.
-  endcomment
   assign layout_block   = section.blocks | where: 'type', 'layout'     | first
   assign anim_block     = section.blocks | where: 'type', 'animation'  | first
   assign products_block = section.blocks | where: 'type', 'products'   | first
@@ -20,262 +25,193 @@
   assign bg_block       = section.blocks | where: 'type', 'background' | first
   assign colors_block   = section.blocks | where: 'type', 'colors'     | first
 
-  comment
-    ── Layout & position
-  endcomment
+  assign position = 'left'
+  assign border_radius = 5
+  assign show_on_mobile = true
+  assign disable_progress_bar = false
   if layout_block
-    assign position             = layout_block.settings.position             | default: 'left'
-    assign border_radius        = layout_block.settings.border_radius        | default: 5
-    assign show_on_mobile       = layout_block.settings.show_on_mobile_fake_order
-    assign disable_progress_bar = layout_block.settings.disable_progress_bar
-  else
-    assign position             = 'left'
-    assign border_radius        = 5
-    assign show_on_mobile       = true
-    assign disable_progress_bar = false
-  endif
-  if show_on_mobile == null
-    assign show_on_mobile = true
-  endif
-  if disable_progress_bar == null
-    assign disable_progress_bar = false
+    assign position = layout_block.settings.position | default: 'left'
+    assign border_radius = layout_block.settings.border_radius | default: 5
+    if layout_block.settings.show_on_mobile_fake_order == false
+      assign show_on_mobile = false
+    endif
+    if layout_block.settings.disable_progress_bar
+      assign disable_progress_bar = true
+    endif
   endif
 
-  comment
-    ── Animation & timing
-  endcomment
-  if anim_block
-    assign notification_animation = anim_block.settings.notification_animation | default: 'Fade-in Fade Out'
-    assign animation_duration     = anim_block.settings.animation_duration     | default: 15000
-    assign delay_time             = anim_block.settings.delay_time             | default: '500'
-    assign show_gap_seconds       = anim_block.settings.show_gap_seconds       | default: 10
-  else
-    assign notification_animation = 'Fade-in Fade Out'
-    assign animation_duration     = 15000
-    assign delay_time             = '500'
-    assign show_gap_seconds       = 10
-  endif
+  assign notification_animation = anim_block.settings.notification_animation | default: 'Fade-in Fade Out'
+  assign animation_duration = anim_block.settings.animation_duration | default: 15000
+  assign delay_time = anim_block.settings.delay_time | default: '500'
+  assign show_gap_seconds = anim_block.settings.show_gap_seconds | default: 10
+  case notification_animation
+    when 'None'
+      assign fo_anim = 'none'
+    when 'Zoom in - Zoom Out'
+      assign fo_anim = 'zoom'
+    when 'Fade Up - Fade Down'
+      assign fo_anim = 'up'
+    when 'Slide In - Slide Out'
+      assign fo_anim = 'slide'
+    when 'Normal Original Animation'
+      assign fo_anim = 'rise'
+    when 'Reveal In - Reveal Out'
+      assign fo_anim = 'reveal'
+    else
+      assign fo_anim = 'fade'
+  endcase
 
-  comment
-    ── Products & user pool
-  endcomment
-  if products_block
-    assign list_product_fake = products_block.settings.fake_product
-    assign list_user         = products_block.settings.fake_user
-  endif
+  assign list_product_fake = products_block.settings.fake_product
   assign product_available = list_product_fake | where: 'available'
-  assign products          = product_available.first
-  assign list_user         = list_user | default: 'Liam (USA) | Ethan (USA) | Matteo (USA) | Owen (Canada) | Lucas (Canada) | Rafael (USA) | Mason (USA) | Alex (UK) | Luca (Italy) | Hugo (France) | Elias (Germany) | Sofia (Spain) | Jakob (Sweden) | Matei (Romania) | Ivan (Russia) | Niko (Greece) | Marko (Croatia) | Erik (Norway) | Felix (Denmark) | Tomáš (Czech Republic) | Arnaud (Belgium) | Finn (Ireland)'
-  assign list_user         = list_user | replace: ' | ', '|' | replace: ' |', '|' | replace: '| ', '|' | split: '|'
+  assign products = product_available.first
+  assign buyer_fallback = products_block.settings.buyer_fallback | default: 'Someone'
+  assign list_user = products_block.settings.fake_user | default: '' | strip | replace: ' | ', '|' | replace: ' |', '|' | replace: '| ', '|' | split: '|'
 
-  comment
-    ── Text content (heading, verify CTA, close button)
-  endcomment
+  assign heading_text = 'Latest Orders'
+  assign text_verify = 'Verify'
+  assign verify_text_url = '/'
+  assign enable_verify_arrow = true
+  assign enable_underline_product_name_title = false
+  assign enable_close_button = true
+  assign purchased_text = 'fake_order.purchased' | t
+  assign time_text = 'fake_order.time_minutes' | t
   if text_block
-    assign heading_text                       = text_block.settings.heading_text                       | default: 'Latest Orders'
-    assign text_verify                        = text_block.settings.text_verify                        | default: 'Verify'
-    assign enable_verify_arrow                = text_block.settings.enable_verify_arrow
-    assign verify_text_url                    = text_block.settings.verify_text_url                    | default: '/'
-    assign verify_text_color_setting          = text_block.settings.verify_text_color
-    assign verify_text_hover_color_setting    = text_block.settings.verify_text_hover_color
-    assign enable_underline_product_name_title = text_block.settings.enable_underline_product_name_title
-    assign enable_close_button                = text_block.settings.enable_close_button
-    assign close_button_color_setting         = text_block.settings.close_button_color
-  else
-    assign heading_text                       = 'Latest Orders'
-    assign text_verify                        = 'Verify'
-    assign enable_verify_arrow                = true
-    assign verify_text_url                    = '/'
-    assign enable_underline_product_name_title = false
-    assign enable_close_button                = true
-  endif
-  if enable_verify_arrow == null
-    assign enable_verify_arrow = true
-  endif
-  if enable_underline_product_name_title == null
-    assign enable_underline_product_name_title = false
-  endif
-  if enable_close_button == null
-    assign enable_close_button = true
+    assign heading_text = text_block.settings.heading_text | default: 'Latest Orders'
+    assign text_verify = text_block.settings.text_verify
+    assign verify_text_url = text_block.settings.verify_text_url
+    if text_block.settings.enable_verify_arrow == false
+      assign enable_verify_arrow = false
+    endif
+    if text_block.settings.enable_underline_product_name_title
+      assign enable_underline_product_name_title = true
+    endif
+    if text_block.settings.enable_close_button == false
+      assign enable_close_button = false
+    endif
+    if text_block.settings.purchased_text != blank
+      assign purchased_text = text_block.settings.purchased_text
+    endif
+    if text_block.settings.time_text != blank
+      assign time_text = text_block.settings.time_text
+    endif
   endif
 
-  comment
-    ── Background — gradient + glassmorphism
-  endcomment
+  assign fo_bg = 'gradient'
+  assign gradient_degrees = bg_block.settings.gradient_degrees | default: '45'
+  assign glassmorphism_blur = bg_block.settings.glassmorphism_blur | default: 10
+  assign glassmorphism_brightness = bg_block.settings.glassmorphism_brightness | default: 0.9
+  assign glassmorphism_border_width = bg_block.settings.glassmorphism_border_width | default: 1
   if bg_block
-    assign enable_gradient            = bg_block.settings.enable_gradient
-    assign gradient_degrees           = bg_block.settings.gradient_degrees      | default: '45'
-    assign enable_glassmorphism       = bg_block.settings.enable_glassmorphism
-    assign glassmorphism_blur         = bg_block.settings.glassmorphism_blur         | default: 10
-    assign glassmorphism_brightness   = bg_block.settings.glassmorphism_brightness   | default: 0.9
-    assign glassmorphism_border_width = bg_block.settings.glassmorphism_border_width | default: 1
-  else
-    assign enable_gradient            = true
-    assign gradient_degrees           = '45'
-    assign enable_glassmorphism       = false
-    assign glassmorphism_blur         = 10
-    assign glassmorphism_brightness   = 0.9
-    assign glassmorphism_border_width = 1
-  endif
-  if enable_gradient == null
-    assign enable_gradient = true
-  endif
-  if enable_glassmorphism == null
-    assign enable_glassmorphism = false
+    if bg_block.settings.enable_glassmorphism
+      assign fo_bg = 'glass'
+    elsif bg_block.settings.enable_gradient == false
+      assign fo_bg = 'solid'
+    endif
   endif
 
   comment
-    ── Colors (background, text, progress bar)
+    Colours are the colour scheme's until a block's own "Custom colors" is on.
   endcomment
--%}
-{%- comment -%} Colours left empty follow the colour scheme. {%- endcomment -%}
-{%- capture background_color -%}{% render 'scheme-color', color: colors_block.settings.background_color, fallback: 'var(--color-background)' %}{%- endcapture -%}
-{%- capture text_color -%}{% render 'scheme-color', color: colors_block.settings.text_color, fallback: 'var(--color-text)' %}{%- endcapture -%}
-{%- capture progress_bar_color -%}{% render 'scheme-color', color: colors_block.settings.progress_bar_color, fallback: 'var(--color-primary)' %}{%- endcapture -%}
-{%- capture verify_text_color -%}{% render 'scheme-color', color: verify_text_color_setting, fallback: 'var(--color-primary)' %}{%- endcapture -%}
-{%- capture verify_text_hover_color -%}{% render 'scheme-color', color: verify_text_hover_color_setting, fallback: 'var(--color-heading)' %}{%- endcapture -%}
-{%- capture close_button_color -%}{% render 'scheme-color', color: close_button_color_setting, fallback: 'var(--color-heading)' %}{%- endcapture -%}
-{%- capture gradient_start_color -%}{% render 'scheme-color', color: bg_block.settings.gradient_start_color, fallback: 'var(--color-background)' %}{%- endcapture -%}
-{%- capture gradient_middle_color -%}{% render 'scheme-color', color: bg_block.settings.gradient_middle_color, fallback: 'var(--color-background)' %}{%- endcapture -%}
-{%- capture gradient_end_color -%}{% render 'scheme-color', color: bg_block.settings.gradient_end_color, fallback: 'var(--color-background)' %}{%- endcapture -%}
-{%- capture glassmorphism_border_color -%}{% render 'scheme-color', color: bg_block.settings.glassmorphism_border_color, fallback: 'var(--color-border)' %}{%- endcapture -%}
-{%- liquid
+  assign c_colors = false
+  if colors_block.settings.enable_custom_style
+    assign c_colors = true
+  endif
+  assign c_text = false
+  if text_block.settings.enable_custom_style
+    assign c_text = true
+  endif
+  assign c_bg = false
+  if bg_block.settings.enable_custom_style
+    assign c_bg = true
+  endif
+  assign fo_fonts = false
+  if text_block.settings.enable_custom_fonts
+    assign fo_fonts = true
+  endif
+  assign fo_size = false
+  if text_block.settings.enable_custom_size
+    assign fo_size = true
+  endif
+  assign fo_title_weight = text_block.settings.title_weight | default: 'theme'
 
-  comment
-    ── Master enable toggle. Lives at section.settings level so it's
-    always visible at the top of the panel, regardless of which blocks
-    the merchant has added. When OFF, the section renders nothing —
-    no markup, no JS, no CSS — so it stays in the editor (un-deletable
-    from the overlay group) but has zero runtime cost when hidden.
-  endcomment
-  assign section_enabled = section.settings.section_enabled
-  if section_enabled == null
-    assign section_enabled = true
+  assign section_enabled = true
+  if section.settings.section_enabled == false
+    assign section_enabled = false
   endif
 -%}
+{%- capture fo_vars -%}
+--fo-radius: {{ border_radius }}px; --fo-dur: {{ animation_duration }}ms; --fo-angle: {{ gradient_degrees }}deg; --fo-blur: {{ glassmorphism_blur }}px; --fo-bright: {{ glassmorphism_brightness }}; --fo-gb-w: {{ glassmorphism_border_width }}px;
+{%- if c_colors -%}
+--fo-bg: {% render 'scheme-color', color: colors_block.settings.background_color, fallback: 'var(--color-background)' %}; --fo-text: {% render 'scheme-color', color: colors_block.settings.text_color, fallback: 'var(--color-text)' %}; --fo-progress: {% render 'scheme-color', color: colors_block.settings.progress_bar_color, fallback: 'var(--color-primary)' %};
+{%- endif -%}
+{%- if c_text -%}
+--fo-link: {% render 'scheme-color', color: text_block.settings.verify_text_color, fallback: 'var(--color-primary)' %}; --fo-link-hover: {% render 'scheme-color', color: text_block.settings.verify_text_hover_color, fallback: 'var(--color-heading)' %}; --fo-close: {% render 'scheme-color', color: text_block.settings.close_button_color, fallback: 'var(--color-heading)' %}; --fo-title: {% render 'scheme-color', color: text_block.settings.title_color, fallback: 'var(--color-heading)' %};
+{%- endif -%}
+{%- if c_bg -%}
+--fo-g1: {% render 'scheme-color', color: bg_block.settings.gradient_start_color, fallback: 'var(--color-background)' %}; --fo-g2: {% render 'scheme-color', color: bg_block.settings.gradient_middle_color, fallback: 'var(--color-background)' %}; --fo-g3: {% render 'scheme-color', color: bg_block.settings.gradient_end_color, fallback: 'var(--color-background)' %}; --fo-gb-c: {% render 'scheme-color', color: bg_block.settings.glassmorphism_border_color, fallback: 'var(--color-border)' %};
+{%- endif -%}
+{%- if fo_fonts -%}
+{%- if text_block.settings.font.family != blank -%}--fo-font: {{ text_block.settings.font.family }}, {{ text_block.settings.font.fallback_families }};{%- endif -%}
+{%- if text_block.settings.title_font.family != blank -%}--fo-title-font: {{ text_block.settings.title_font.family }}, {{ text_block.settings.title_font.fallback_families }};{%- endif -%}
+{%- endif -%}
+{%- if fo_size -%}
+--fo-fs: {{ text_block.settings.text_size | default: 13 }}px; --fo-title-fs: {{ text_block.settings.title_size | default: 15 }}px;
+{%- endif -%}
+{%- if fo_title_weight != 'theme' -%}--fo-title-fw: {{ fo_title_weight }};{%- endif -%}
+{%- endcapture -%}
 
-{%- if section_enabled and product_available.size > 0 -%}
+{%- if section_enabled and product_available.size > 0 or section_enabled and request.design_mode -%}
+  {%- if fo_fonts -%}
+    <style>
+      {{ text_block.settings.font | font_face: font_display: 'swap' }}
+      {{ text_block.settings.title_font | font_face: font_display: 'swap' }}
+    {% comment %}{% endcomment %}</style>
+  {%- endif -%}
   <style>
-    /* Scoped Styles for Fake Order Section */
+    /* Order notification {{ section.id }}: every value is a variable on the card */
     .bls-fake-order-section-{{ section.id }} {
+      --fo-bottom: max(33px, calc(var(--materia-bottom-inset, 0px) + 12px));
       position: fixed;
       z-index: 999;
+      box-sizing: border-box;
       padding: 10px;
-      border-radius: {{ border_radius }}px;
-      font-size: calc(var(--base-font-size) - 2px);
-      box-shadow: 0px 5px 30px rgba(0, 0, 0, 0.05);
-      transition: all {{ animation_duration }}ms ease;
-      color: {{ text_color }};
-
-      {% if enable_glassmorphism %}
-        background: rgba(255, 255, 255, 0.4);
-        filter: brightness({{ glassmorphism_brightness }});
-        backdrop-filter: blur({{ glassmorphism_blur }}px);
-        -webkit-backdrop-filter: blur({{ glassmorphism_blur }}px);
-        border: {{ glassmorphism_border_width }}px solid {{ glassmorphism_border_color }};
-      {% elsif enable_gradient %}
-        background: linear-gradient({{ gradient_degrees }}deg, {{ gradient_start_color }}, {{ gradient_middle_color }}, {{ gradient_end_color }});
-      {% else %}
-        background-color: {{ background_color }};
-      {% endif %}
-
+      border-radius: var(--fo-radius, 5px);
+      font-size: var(--fo-fs, inherit);
+      font-family: var(--fo-font, var(--body-font, inherit));
+      box-shadow: 0 5px 30px rgba(0, 0, 0, 0.05);
+      color: var(--fo-text, var(--color-text));
+      background: var(--fo-bg, var(--color-background));
       width: 42rem;
       max-width: 120%;
       min-height: 10rem;
-      left: {% if position == 'right' %}unset{% else %}30px{% endif %};
-      right: {% if position == 'right' %}35px{% else %}unset{% endif %};
-      /* Above the mobile navigation bar and an open cookie banner (materia-popups.js). */
-      bottom: max(33px, calc(var(--materia-bottom-inset, 0px) + 12px));
-      display: none; /* Initially hidden */
-
-      {% if notification_animation == 'None' %}
-        /* No animation */
-      {% elsif notification_animation == 'Fade-in Fade Out' %}
-        animation: fadeInFadeOut {{ animation_duration }}ms forwards;
-      {% elsif notification_animation == 'Zoom in - Zoom Out' %}
-        animation: zoomInZoomOut {{ animation_duration }}ms forwards;
-      {% elsif notification_animation == 'Fade Up - Fade Down' %}
-        animation: fadeUpFadeDown {{ animation_duration }}ms forwards;
-      {% elsif notification_animation == 'Slide In - Slide Out' %}
-        animation: slideInSlideOut {{ animation_duration }}ms forwards;
-      {% elsif notification_animation == 'Normal Original Animation' %}
-        /* Original animation */
-        animation: bls-fake-order-{{ section.id }} {{ animation_duration }}ms ease;
-      {% elsif notification_animation == 'Reveal In - Reveal Out' %}
-        animation: revealInRevealOut {{ animation_duration }}ms forwards;
-      {% endif %}
-    }
-
-    .bls-fake-order-section-{{ section.id }}.hidden-mobile {
+      left: 30px;
+      right: auto;
+      bottom: var(--fo-bottom);
       display: none;
     }
+    .bls-fake-order-section-{{ section.id }}[data-fo-side='right'] { left: auto; right: 35px; }
+    .bls-fake-order-section-{{ section.id }}[data-fo-bg='gradient'] {
+      background: linear-gradient(var(--fo-angle, 45deg), var(--fo-g1, var(--color-background)), var(--fo-g2, var(--color-background)), var(--fo-g3, var(--color-background)));
+    }
+    .bls-fake-order-section-{{ section.id }}[data-fo-bg='glass'] {
+      background: rgba(255, 255, 255, 0.4);
+      filter: brightness(var(--fo-bright, 0.9));
+      backdrop-filter: blur(var(--fo-blur, 10px));
+      -webkit-backdrop-filter: blur(var(--fo-blur, 10px));
+      border: var(--fo-gb-w, 1px) solid var(--fo-gb-c, var(--color-border));
+    }
+    .bls-fake-order-section-{{ section.id }}[data-fo-state='shown'] { display: block; }
+    .bls-fake-order-section-{{ section.id }}[data-fo-state='shown'][data-fo-anim='fade'] { animation: pc-fo-fade var(--fo-dur, 15000ms) forwards; }
+    .bls-fake-order-section-{{ section.id }}[data-fo-state='shown'][data-fo-anim='zoom'] { animation: pc-fo-zoom var(--fo-dur, 15000ms) forwards; }
+    .bls-fake-order-section-{{ section.id }}[data-fo-state='shown'][data-fo-anim='up'] { animation: pc-fo-up var(--fo-dur, 15000ms) forwards; }
+    .bls-fake-order-section-{{ section.id }}[data-fo-state='shown'][data-fo-anim='slide'] { animation: pc-fo-slide var(--fo-dur, 15000ms) forwards; }
+    .bls-fake-order-section-{{ section.id }}[data-fo-state='shown'][data-fo-anim='rise'] { animation: pc-fo-rise var(--fo-dur, 15000ms) ease forwards; }
+    .bls-fake-order-section-{{ section.id }}[data-fo-state='shown'][data-fo-anim='reveal'] { animation: pc-fo-reveal var(--fo-dur, 15000ms) forwards; }
+    /* In the builder the card stays in view (no fade out) while you edit it */
+    .bls-fake-order-section-{{ section.id }}[data-fo-preview] { animation-duration: 1ms !important; animation-fill-mode: none !important; }
+    .bls-fake-order-section-{{ section.id }}[data-fo-preview] [data-progressbar] { animation-play-state: paused !important; width: 60% !important; }
 
-    .bls-fake-order-section-{{ section.id }} .fake-order-close path {
-      fill: {{ close_button_color }};
-      transition: fill 0.3s ease-in-out;
-    }
-    .bls-fake-order-section-{{ section.id }} .fake-order-close:hover path {
-      fill: {{ close_button_color }};
-      opacity: .7;
-    }
-
-    .bls-fake-order-section-{{ section.id }} .product-fake-order {
-      display: flex;
-      gap: 15px;
-      align-items: center;
-    }
-
-    /* Ensure the SVG icon color updates dynamically */
-    .bls-fake-order-section-{{ section.id }} .verify-arrow path {
-      stroke: {{ verify_text_color }};
-      transition: stroke 0.3s ease-in-out;
-    }
-    .bls-fake-order-section-{{ section.id }} .text-verify:hover .verify-arrow path {
-      stroke: {{ verify_text_hover_color }};
-    }
-    .verify-arrow {
-      width: 15px;
-      height: 15px;
-      margin-bottom: 1px;
-      margin-right: 3px;
-    }
-
-    /* Product Name Title underline toggle */
-    .bls-fake-order-section-{{ section.id }} .product-order-title a {
-      text-decoration: {% if enable_underline_product_name_title %}underline{% else %}none{% endif %};
-      display: block;
-      font-size: var(--base-font-size);
-      line-height: 1.5;
-      width: 100%;
-      text-align: start;
-      margin: 0 0 0.7rem;
-      font-weight: var(--heading-weight, 600) !important;
-      color: var(--color-heading);
-    }
-
-    .bls-fake-order-section-{{ section.id }} .minutes-ago {
-      display: inline-flex;
-      margin-bottom: 0;
-      margin-right: 15px;
-      color: {{ text_color }};
-    }
-
-    /* VERIFY TEXT */
-    .bls-fake-order-section-{{ section.id }} .text-verify {
-      text-transform: capitalize;
-      display: inline-flex;
-      align-items: center;
-      gap: 0 4px;
-      text-decoration: none !important;
-      color: {{ verify_text_color }};
-      cursor: pointer;
-    }
-    .bls-fake-order-section-{{ section.id }} .text-verify:hover {
-      color: {{ verify_text_hover_color }};
-      text-decoration: none;
-    }
-
-    /* Close button */
+    .bls-fake-order-section-{{ section.id }} .product-fake-order { display: flex; gap: 15px; align-items: center; }
     .bls-fake-order-section-{{ section.id }} .fake-order-close {
       position: absolute;
       top: -4px;
@@ -290,398 +226,194 @@
       align-items: center;
       justify-content: center;
       z-index: 2;
+      color: var(--fo-close, var(--color-heading));
     }
-    .bls-fake-order-section-{{ section.id }} .fake-order-close svg {
-      width: 17px;
-      height: 17px;
-      display: block;
-    }
+    .bls-fake-order-section-{{ section.id }} .fake-order-close svg { width: 17px; height: 17px; display: block; }
+    .bls-fake-order-section-{{ section.id }} .fake-order-close path { fill: currentColor; transition: opacity 0.3s ease-in-out; }
+    .bls-fake-order-section-{{ section.id }} .fake-order-close:hover path { opacity: .7; }
     .bls-fake-order-section-{{ section.id }} .fake-order-close:focus-visible { outline: 2px solid currentColor; outline-offset: -6px; }
-    @media (prefers-reduced-motion: reduce) {
-      .bls-fake-order-section-{{ section.id }} { animation: none !important; transition: none !important; }
-    }
-
-    .bls-fake-order-section-{{ section.id }} [data-img] {
+    .bls-fake-order-section-{{ section.id }} .fake-order-image a { display: block; }
+    .bls-fake-order-section-{{ section.id }} [data-img],
+    .bls-fake-order-section-{{ section.id }} .fake-order-image svg {
+      display: block;
       border-radius: 5px;
       width: 60px;
       height: 80px;
       object-fit: cover;
     }
-
-    .bls-fake-order-section-{{ section.id }} .user-purchase {
-      color: {{ text_color }};
+    .bls-fake-order-section-{{ section.id }} .fake-order-image svg { color: var(--fo-text, var(--color-text)); }
+    .bls-fake-order-section-{{ section.id }} .fake-order-info { min-width: 0; flex: 1 1 auto; }
+    .bls-fake-order-section-{{ section.id }} .fake-list { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+    .bls-fake-order-section-{{ section.id }} .user-purchase { color: var(--fo-text, var(--color-text)); }
+    .bls-fake-order-section-{{ section.id }} .fo-purchased { opacity: .75; }
+    .bls-fake-order-section-{{ section.id }} .product-order-title a {
+      text-decoration: none;
+      display: block;
+      font-size: var(--fo-title-fs, inherit);
+      font-family: var(--fo-title-font, inherit);
+      line-height: 1.5;
+      width: 100%;
+      text-align: start;
+      margin: 0 0 0.7rem;
+      font-weight: var(--fo-title-fw, var(--heading-weight, 600)) !important;
+      color: var(--fo-title, var(--color-heading));
+      overflow-wrap: anywhere;
     }
-
-    .bls-fake-order-section-{{ section.id }} .fake-list {
-      display: flex;
-      gap: 3px;
+    .bls-fake-order-section-{{ section.id }}[data-fo-underline='true'] .product-order-title a { text-decoration: underline; }
+    .bls-fake-order-section-{{ section.id }} .fo-row { display: flex; flex-wrap: wrap; align-items: center; }
+    .bls-fake-order-section-{{ section.id }} .minutes-ago { display: inline-flex; margin-bottom: 0; margin-right: 15px; color: var(--fo-text, var(--color-text)); }
+    .bls-fake-order-section-{{ section.id }} .text-verify {
+      text-transform: capitalize;
+      display: inline-flex;
       align-items: center;
+      gap: 0 4px;
+      min-height: 24px;
+      text-decoration: none !important;
+      color: var(--fo-link, var(--color-primary));
+      cursor: pointer;
     }
+    .bls-fake-order-section-{{ section.id }} .text-verify:hover { color: var(--fo-link-hover, var(--color-heading)); }
+    .bls-fake-order-section-{{ section.id }} .verify-arrow { width: 15px; height: 15px; margin-bottom: 1px; margin-right: 3px; }
+    .bls-fake-order-section-{{ section.id }} .verify-arrow path { stroke: currentColor; }
+    .bls-fake-order-section-{{ section.id }} .fake-order-progressbar {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      height: 2px;
+      width: 100%;
+      z-index: 1;
+      border-radius: 5px;
+      overflow: hidden;
+      background: color-mix(in srgb, var(--fo-text, var(--color-text)) 18%, transparent);
+    }
+    .bls-fake-order-section-{{ section.id }} .fake-order-progressbar span {
+      display: block;
+      height: 100%;
+      width: 0;
+      border-radius: 0 0 3px 3px;
+      background: var(--fo-progress, var(--color-primary));
+    }
+    .bls-fake-order-section-{{ section.id }}[data-fo-state='shown'] .fake-order-progressbar span { animation: pc-fo-progress var(--fo-dur, 15000ms) linear forwards; }
 
-    {% unless disable_progress_bar %}
-      .bls-fake-order-section-{{ section.id }} .fake-order-progressbar {
-        position: absolute;
-        left: 0;
-        bottom: 0;
-        height: 2px;
-        width: 100%;
-        z-index: 1;
-        box-shadow: 0px 7px 30px rgba(0, 0, 0, 0.05);
-        border-radius: 5px;
-        overflow: hidden;
-        background: #e0e0e0;
-      }
-      .bls-fake-order-section-{{ section.id }} .fake-order-progressbar span {
-        display: block;
-        height: 100%;
-        width: 0;
-        border-radius: 0 0 3px 3px;
-        background: {{ progress_bar_color }};
-        animation: bls-progressbar-{{ section.id }} linear forwards;
-      }
-    {% endunless %}
+    @keyframes pc-fo-progress { from { width: 0%; } to { width: 100%; } }
+    @keyframes pc-fo-fade { 0% { opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { opacity: 0; } }
+    @keyframes pc-fo-zoom { 0% { transform: scale(0); opacity: 0; } 50% { transform: scale(1); opacity: 1; } 100% { transform: scale(0); opacity: 0; } }
+    @keyframes pc-fo-up { 0% { opacity: 0; transform: translateY(20px); } 10% { opacity: 1; transform: translateY(0); } 90% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(20px); } }
+    @keyframes pc-fo-slide { 0% { transform: translateX(100%); opacity: 0; } 10% { transform: translateX(0); opacity: 1; } 90% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(100%); opacity: 0; } }
+    @keyframes pc-fo-rise { 0% { transform: translateY(calc(100% + 40px)); } 8% { transform: translateY(0); } 92% { transform: translateY(0); } 100% { transform: translateY(calc(100% + 40px)); } }
+    @keyframes pc-fo-reveal { 0% { clip-path: inset(0 100% 0 0); opacity: 0; } 10% { clip-path: inset(0 0 0 0); opacity: 1; } 90% { clip-path: inset(0 0 0 0); opacity: 1; } 100% { clip-path: inset(0 100% 0 0); opacity: 0; } }
 
-    .bls-fake-order-section-{{ section.id }} .w-60 {
-      width: 60px;
-    }
-    .bls-fake-order-section-{{ section.id }} .h-80 {
-      height: 80px;
-    }
-
-    @keyframes bls-progressbar-{{ section.id }} {
-      from { width: 0%; }
-      to { width: 100%; }
-    }
-
-    /* Notification Animations */
-    @keyframes fadeInFadeOut {
-      0% { opacity: 0; }
-      10% { opacity: 1; }
-      90% { opacity: 1; }
-      100% { opacity: 0; }
-    }
-    @keyframes zoomInZoomOut {
-      0% { transform: scale(0); opacity: 0; }
-      50% { transform: scale(1); opacity: 1; }
-      100% { transform: scale(0); opacity: 0; }
-    }
-    @keyframes fadeUpFadeDown {
-      0% { opacity: 0; transform: translateY(20px); }
-      10% { opacity: 1; transform: translateY(0); }
-      90% { opacity: 1; transform: translateY(0); }
-      100% { opacity: 0; transform: translateY(20px); }
-    }
-    @keyframes slideInSlideOut {
-      0% { transform: translateX(100%); opacity: 0; }
-      10% { transform: translateX(0); opacity: 1; }
-      90% { transform: translateX(0); opacity: 1; }
-      100% { transform: translateX(100%); opacity: 0; }
-    }
-    @keyframes revealInRevealOut {
-      0% { clip-path: inset(0 100% 0 0); opacity: 0; }
-      10% { clip-path: inset(0 0 0 0); opacity: 1; }
-      90% { clip-path: inset(0 0 0 0); opacity: 1; }
-      100% { clip-path: inset(0 100% 0 0); opacity: 0; }
-    }
-
-    /* ── Mobile responsive — tablet (≤ 767px) ─────────────────────────
-       Tighten the notification so it doesn't overflow the viewport on
-       small screens. The desktop version uses a fixed 42rem width — on
-       phones that's wider than the device, so we switch to a
-       calc(100vw - 24px) max-width and adjust insets to a 12px gutter
-       from whichever edge the merchant chose. Padding + image size
-       trimmed too so text doesn't wrap awkwardly. */
+    /* Phones: narrower card, 12px from the chosen edge, above the mobile bar */
     @media (max-width: 767px) {
       .bls-fake-order-section-{{ section.id }} {
-        width: auto !important;
-        max-width: calc(100vw - 24px) !important;
-        left: {% if position == 'right' %}unset{% else %}12px{% endif %} !important;
-        right: {% if position == 'right' %}12px{% else %}unset{% endif %} !important;
-        bottom: max(73px, calc(var(--materia-bottom-inset, 0px) + 12px + env(safe-area-inset-bottom, 0px)));
+        width: auto;
+        max-width: calc(100vw - 24px);
+        left: 12px;
+        right: auto;
+        --fo-bottom: max(73px, calc(var(--materia-bottom-inset, 0px) + 12px + env(safe-area-inset-bottom, 0px)));
         padding: 8px 10px;
-        transform: none;
+        font-size: var(--fo-fs, 12px);
       }
-      .bls-fake-order-section-{{ section.id }} .product-fake-order {
-        gap: 10px;
-      }
-      .bls-fake-order-section-{{ section.id }} [data-img] {
-        width: 48px;
-        height: 64px;
-      }
-      .bls-fake-order-section-{{ section.id }} .product-order-title a {
-        font-size: 13px;
-        margin: 0 0 0.4rem;
-      }
-      .bls-fake-order-section-{{ section.id }} .fake-list,
-      .bls-fake-order-section-{{ section.id }} .minutes-ago,
-      .bls-fake-order-section-{{ section.id }} .text-verify {
-        font-size: 12px;
-      }
-      .bls-fake-order-section-{{ section.id }} .fake-order-close {
-        top: -6px;
-        right: -6px;
-      }
+      .bls-fake-order-section-{{ section.id }}[data-fo-side='right'] { left: auto; right: 12px; }
+      .bls-fake-order-section-{{ section.id }} .product-fake-order { gap: 10px; }
+      .bls-fake-order-section-{{ section.id }} [data-img],
+      .bls-fake-order-section-{{ section.id }} .fake-order-image svg { width: 48px; height: 64px; }
+      .bls-fake-order-section-{{ section.id }} .product-order-title a { font-size: var(--fo-title-fs, 13px); margin: 0 0 0.4rem; }
+      .bls-fake-order-section-{{ section.id }} .fake-order-close { top: -6px; right: -6px; }
     }
-
-    /* ── Mobile responsive — small phones (≤ 575px) ───────────────────
-       Even more compact. Also honours the "show on mobile" toggle —
-       when off, the notification is removed entirely on phones. */
     @media (max-width: 575px) {
-      .bls-fake-order-section-{{ section.id }} {
-        bottom: max(80px, calc(var(--materia-bottom-inset, 0px) + 12px + env(safe-area-inset-bottom, 0px)));
-      }
-      .bls-fake-order-section-{{ section.id }} [data-img] {
-        width: 44px;
-        height: 56px;
-      }
-      {% if show_on_mobile == false %}
-        .bls-fake-order-section-{{ section.id }} {
-          display: none !important;
-        }
-      {% endif %}
+      .bls-fake-order-section-{{ section.id }} { --fo-bottom: max(80px, calc(var(--materia-bottom-inset, 0px) + 12px + env(safe-area-inset-bottom, 0px))); }
+      .bls-fake-order-section-{{ section.id }} [data-img],
+      .bls-fake-order-section-{{ section.id }} .fake-order-image svg { width: 44px; height: 56px; }
+      .bls-fake-order-section-{{ section.id }}[data-fo-mobile='false'] { display: none !important; }
     }
-{% comment %}{% endcomment %}  </style>
+    @media (prefers-reduced-motion: reduce) {
+      .bls-fake-order-section-{{ section.id }},
+      .bls-fake-order-section-{{ section.id }} * { animation: none !important; transition: none !important; }
+      .bls-fake-order-section-{{ section.id }} .fake-order-progressbar span { width: 100%; }
+    }
+  {% comment %}{% endcomment %}</style>
 
   <div
     id="bls__fake-order-{{ section.id }}"
-    class="bls-fake-order-section-{{ section.id }} fake-order color-{{ color_scheme }} {% unless show_on_mobile %}hidden-mobile{% endunless %}"
+    class="bls-fake-order-section-{{ section.id }} fake-order color-{{ color_scheme }}"
     role="status"
+    aria-live="polite"
     aria-label="{{ heading_text | strip_html | escape }}"
+    data-pc-root="fake-order"
+    data-pc-section="{{ section.id }}"
+    data-pc-settings="{{ section.settings | json | escape }}"
     data-section-id="{{ section.id }}"
+    data-fo-i18n='{"purchased":{{ 'fake_order.purchased' | t | json | escape }},"time":{{ 'fake_order.time_minutes' | t | json | escape }}}'
+    data-fo-state="{% if request.design_mode %}shown{% else %}hidden{% endif %}"{% if request.design_mode %} data-fo-preview{% endif %}
+    data-fo-side="{{ position }}"
+    data-fo-mobile="{{ show_on_mobile }}"
+    data-fo-anim="{{ fo_anim }}"
+    data-fo-bg="{{ fo_bg }}"
+    data-fo-underline="{{ enable_underline_product_name_title }}"
+    data-fo-enabled="{{ section_enabled }}"
     data-time-delay="{{ delay_time }}"
     data-show-gap="{{ show_gap_seconds }}"
     data-anim-duration="{{ animation_duration }}"
+    style="{{ fo_vars | strip | strip_newlines }}"
   >
-    {%- if enable_close_button %}
-      <button type="button" class="fake-order-close" aria-label="{{ 'accessibility.close' | t }}">
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
-          <g id="SVGRepo_iconCarrier">
-            <path fill-rule="evenodd" clip-rule="evenodd" d="M5.29289 5.29289C5.68342 4.90237 6.31658 4.90237 6.70711 5.29289L12 10.5858L17.2929 5.29289C17.6834 4.90237 18.3166 4.90237 18.7071 5.29289C19.0976 5.68342 19.0976 6.31658 18.7071 6.70711L13.4142 12L18.7071 17.2929C19.0976 17.6834 19.0976 18.3166 18.7071 18.7071C18.3166 19.0976 17.6834 19.0976 17.2929 18.7071L12 13.4142L6.70711 18.7071C6.31658 19.0976 5.68342 19.0976 5.29289 18.7071C4.90237 18.3166 4.90237 17.6834 5.29289 17.2929L10.5858 12L5.29289 6.70711C4.90237 6.31658 4.90237 5.68342 5.29289 5.29289Z" fill="{{ close_button_color }}"></path>
-          </g>
-        </svg>
-      </button>
-    {%- endif %}
+    {%- for block in section.blocks -%}
+      {%- if block.type == 'products' -%}
+        <i hidden data-pc-block="{{ block.id }}" data-pc-type="products" data-pc-settings='{"fake_user":{{ block.settings.fake_user | default: '' | json | escape }},"buyer_fallback":{{ block.settings.buyer_fallback | default: '' | json | escape }}}' {{ block.shopify_attributes }}></i>
+      {%- else -%}
+        <i hidden data-pc-block="{{ block.id }}" data-pc-type="{{ block.type }}" data-pc-settings="{{ block.settings | json | escape }}" {{ block.shopify_attributes }}></i>
+      {%- endif -%}
+    {%- endfor -%}
+    <button type="button" class="fake-order-close" aria-label="{{ 'accessibility.close' | t }}" data-fo-close{% unless enable_close_button %} hidden{% endunless %}>
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M5.29289 5.29289C5.68342 4.90237 6.31658 4.90237 6.70711 5.29289L12 10.5858L17.2929 5.29289C17.6834 4.90237 18.3166 4.90237 18.7071 5.29289C19.0976 5.68342 19.0976 6.31658 18.7071 6.70711L13.4142 12L18.7071 17.2929C19.0976 17.6834 19.0976 18.3166 18.7071 18.7071C18.3166 19.0976 17.6834 19.0976 17.2929 18.7071L12 13.4142L6.70711 18.7071C6.31658 19.0976 5.68342 19.0976 5.29289 18.7071C4.90237 18.3166 4.90237 17.6834 5.29289 17.2929L10.5858 12L5.29289 6.70711C4.90237 6.31658 4.90237 5.68342 5.29289 5.29289Z"></path>
+      </svg>
+    </button>
 
     <div class="product-fake-order">
       <div class="fake-order-image">
-        {%- if products.featured_image != blank -%}
-          <a href="{{ products.url }}" data-url>
-            <img
-              data-img
-              src="{{ products.featured_image | image_url }}"
-              alt="{{ products.title }}"
-              loading="lazy"
-            >
-          </a>
-        {%- else -%}
-          <a href="#" data-url>
-            {%- render 'responsive-image', cls: 'w-60 h-80' -%}
-          </a>
-        {%- endif -%}
+        <a href="{{ products.url | default: '#' }}" data-url tabindex="-1" aria-hidden="true">
+          {%- if products.featured_image != blank -%}
+            <img data-img src="{{ products.featured_image | image_url: width: 160 }}" alt="" width="60" height="80" loading="lazy" decoding="async">
+          {%- else -%}
+            {{ 'product-1' | placeholder_svg_tag: 'fo-placeholder' }}
+          {%- endif -%}
+        </a>
       </div>
 
       <div class="fake-order-info">
         <div class="fake-list">
-          <span data-user class="user-purchase">{{ list_user[0] }}</span>
-          <span style="color: {{ text_color }}; opacity: .75;">{{ 'fake_order.purchased' | t }}</span>
+          <span data-user class="user-purchase">{{ list_user.first | default: buyer_fallback }}</span>
+          <span class="fo-purchased" data-fo-purchased>{{ purchased_text }}</span>
         </div>
-
         <div class="product-order-title">
-          <a href="#" data-url data-title-fake>{{ 'general.product_name' | t }}</a>
+          <a href="{{ products.url | default: '#' }}" data-url data-title-fake>{% if products %}{{ products.title }}{% else %}Pick products in the Orders block{% endif %}</a>
         </div>
-
-        <div class="flex">
+        <div class="fo-row">
           <div class="minutes-ago">
-            <span><span data-time class="minutes-number">8</span> {{ 'fake_order.time_minutes' | t }}</span>
+            <span><span data-time class="minutes-number">8</span> <span data-fo-time-text>{{ time_text }}</span></span>
           </div>
-          <a href="{{ verify_text_url }}" class="text-verify" data-url>
-            <span class="lnr lnr-checkmark-circle mr-5"></span>
-            {{ text_verify }}
-            {%- if enable_verify_arrow -%}
-              <svg class="verify-arrow" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M7 17L17 7M17 7H8M17 7V16" stroke="{{ verify_text_color }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-              </svg>
-            {%- endif -%}
+          <a href="{{ verify_text_url | default: '/' }}" class="text-verify" data-fo-verify{% if text_verify == blank %} hidden{% endif %}>
+            <span class="lnr lnr-checkmark-circle mr-5" aria-hidden="true"></span>
+            <span data-fo-verify-text>{{ text_verify }}</span>
+            <svg class="verify-arrow" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" data-fo-arrow{% unless enable_verify_arrow %} hidden{% endunless %}>
+              <path d="M7 17L17 7M17 7H8M17 7V16" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
           </a>
         </div>
       </div>
 
-      {% unless disable_progress_bar %}
-        <div class="fake-order-progressbar">
-          <span data-progressbar></span>
-        </div>
-      {% endunless %}
+      <div class="fake-order-progressbar" data-fo-progress{% if disable_progress_bar %} hidden{% endif %}>
+        <span data-progressbar></span>
+      </div>
     </div>
 
     <script src="{{ 'materia-popups.js' | asset_url }}" defer="defer"></script>
-    <script type="application/json" id="bls__data-title-{{ section.id }}">
-      {{- product_available | map: 'title' | json -}}
-{% comment %}{% endcomment %}    </script>
-    <script type="application/json" id="bls__data-url-{{ section.id }}">
-      {{- product_available | map: 'url' | json -}}
-{% comment %}{% endcomment %}    </script>
-    <script type="application/json" id="bls__data-img-{{ section.id }}">
-      {{- product_available | map: 'featured_image' | json -}}
-{% comment %}{% endcomment %}    </script>
-    <script type="application/json" id="bls__data-user-{{ section.id }}">
-      {{- list_user | json -}}
-{% comment %}{% endcomment %}    </script>
-
-    <script>
-      (function() {
-        var BlsFakeOrder = {
-          init: function() {
-            this.showFakeOrderSequence();
-          },
-          showFakeOrderSequence: function() {
-            var sectionId = '{{ section.id }}';
-            var prd = document.querySelector('#bls__fake-order-' + sectionId);
-            if (!prd) return;
-
-            // Time before the first notification shows
-            var delayTime = parseInt(prd.dataset.timeDelay) || 5000;
-            // The interval between notifications (in seconds)
-            var showGap = parseInt(prd.dataset.showGap) || 10;
-            // The progress duration (in ms) – how long the notification stays and the progress bar fills.
-            var animDuration = parseInt(prd.dataset.animDuration) || {{ animation_duration }};
-            var lastRandomNumber = -1;
-            var isManuallyClosed = false;
-
-            // Data
-            var u = JSON.parse(document.querySelector('#bls__data-url-' + sectionId).textContent);
-            var t = JSON.parse(document.querySelector('#bls__data-title-' + sectionId).textContent);
-            var i = JSON.parse(document.querySelector('#bls__data-img-' + sectionId).textContent);
-            var c = JSON.parse(document.querySelector('#bls__data-user-' + sectionId).textContent);
-
-            // Elements
-            var title = prd.querySelector('[data-title-fake]');
-            var urls = prd.querySelectorAll('[data-url]');
-            var image = prd.querySelector('[data-img]');
-            var user = prd.querySelector('[data-user]');
-            var time = prd.querySelector('[data-time]');
-            {% unless disable_progress_bar %}
-              var prog = prd.querySelector('[data-progressbar]');
-            {% endunless %}
-            var close = prd.querySelector('.fake-order-close');
-
-            if (close) {
-              close.addEventListener('click', function() {
-                isManuallyClosed = true;
-                clearTimeout(displayTimeout);
-                clearTimeout(currentTimeout);
-                prd.style.display = 'none';
-                {% unless disable_progress_bar %}
-                  prog.style.animation = '';
-                  prog.style.background = '';
-                {% endunless %}
-              });
-            }
-
-            function randomData() {
-              if (isManuallyClosed) return;
-
-              if (u.length > 0) {
-                prd.style.display = 'block';
-
-                // Handle animation classes based on the chosen animation style
-                {% if notification_animation == 'None' %}
-                  // No animation
-                {% elsif notification_animation == 'Fade-in Fade Out' %}
-                  prd.classList.remove('animate__fadeInDown','animate__zoomIn','animate__fadeUp','animate__slideIn','animate__revealIn');
-                  prd.classList.add('animate__fadeInUp');
-                {% elsif notification_animation == 'Zoom in - Zoom Out' %}
-                  prd.classList.remove('animate__fadeInDown','animate__fadeInUp','animate__fadeUp','animate__slideIn','animate__revealIn');
-                  prd.classList.add('animate__zoomIn');
-                {% elsif notification_animation == 'Fade Up - Fade Down' %}
-                  prd.classList.remove('animate__fadeInDown','animate__fadeInUp','animate__zoomIn','animate__slideIn','animate__revealIn');
-                  prd.classList.add('animate__fadeUp');
-                {% elsif notification_animation == 'Slide In - Slide Out' %}
-                  prd.classList.remove('animate__fadeInDown','animate__fadeInUp','animate__zoomIn','animate__fadeUp','animate__revealIn');
-                  prd.classList.add('animate__slideIn');
-                {% elsif notification_animation == 'Normal Original Animation' %}
-                  prd.classList.remove('animate__fadeInDown','animate__fadeInUp','animate__zoomIn','animate__fadeUp','animate__slideIn');
-                  prd.classList.add('animate__original');
-                {% elsif notification_animation == 'Reveal In - Reveal Out' %}
-                  prd.classList.remove('animate__fadeInDown','animate__fadeInUp','animate__zoomIn','animate__fadeUp','animate__slideIn');
-                  prd.classList.add('animate__revealIn');
-                {% endif %}
-
-                var randomNumber, randomImg;
-                do {
-                  randomNumber = Math.floor(Math.random() * c.length);
-                  randomImg = Math.floor(Math.random() * i.length);
-                } while (randomNumber === lastRandomNumber && randomImg === lastRandomNumber);
-                lastRandomNumber = randomNumber;
-
-                // Update content
-                title.textContent = t[randomImg];
-                user.textContent = c[randomNumber];
-                if (image) {
-                  image.src = i[randomImg];
-                  image.alt = t[randomImg];
-                }
-                urls.forEach(function(link) {
-                  link.href = u[randomImg];
-                });
-
-                // Fake minutes
-                var fakeTimeOrder = Math.floor(Math.random() * 60 + randomNumber);
-                time.textContent = fakeTimeOrder;
-
-                // Set up the progress bar duration to be controlled solely by the animation duration
-                {% unless disable_progress_bar %}
-                  var barDuration = animDuration;
-                  prog.style.animationDuration = barDuration + 'ms';
-                  prog.style.animationName = 'bls-progressbar-' + sectionId;
-                  prog.style.animationFillMode = 'forwards';
-                  prog.style.animationTimingFunction = 'linear';
-                  prog.style.background = '{{ progress_bar_color }}';
-                {% endunless %}
-
-                // Hide notification after animDuration ms and then schedule the next notification after showGap seconds
-                displayTimeout = setTimeout(function() {
-                  {% if notification_animation != 'None' %}
-                    prd.classList.remove('animate__fadeInUp','animate__zoomIn','animate__fadeUp','animate__slideIn','animate__revealIn');
-                    prd.classList.add('animate__fadeInDown');
-                  {% endif %}
-                  {% unless disable_progress_bar %}
-                    prog.style.animation = '';
-                    prog.style.background = '';
-                  {% endunless %}
-                  prd.style.display = 'none';
-
-                  // Schedule the next notification after the specified show popup gap (in seconds)
-                  currentTimeout = setTimeout(randomData, showGap * 1000);
-                }, animDuration);
-              }
-            }
-
-            // First appearance after the initial delayTime
-            var displayTimeout;
-            var currentTimeout = setTimeout(randomData, delayTime);
-          }
-        };
-
-        function boot() {
-          var el = document.getElementById('bls__fake-order-{{ section.id }}');
-          if (!el || el.dataset.foInit) return;
-          el.dataset.foInit = '1';
-          BlsFakeOrder.init();
-        }
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', boot);
-        } else {
-          boot();
-        }
-        document.addEventListener('storelib:section-load', function(e) {
-          if (e.detail && String(e.detail.sectionId) === '{{ section.id }}') boot();
-        });
-      })();
-{% comment %}{% endcomment %}    </script>
+    <script type="application/json" data-fo-items>
+      [{%- for p in product_available -%}{"title":{{ p.title | json }},"url":{{ p.url | json }},"img":{% if p.featured_image != blank %}{{ p.featured_image | image_url: width: 160 | json }}{% else %}""{% endif %}}{% unless forloop.last %},{% endunless %}{%- endfor -%}]
+    {% comment %}{% endcomment %}</script>
   </div>
 {%- endif -%}
-
-
 </template>
 
 <schema>
@@ -1091,16 +823,20 @@
     "name": "Order Notification Pro 1",
     "settings": [
       {
-        "type": "checkbox",
-        "id": "section_enabled",
-        "label": "Show notifications",
-        "default": true
+        "type": "header",
+        "content": "General"
       },
       {
         "type": "color_scheme",
         "id": "color_scheme",
         "label": "Color scheme",
         "default": "default-color-scheme"
+      },
+      {
+        "type": "checkbox",
+        "id": "section_enabled",
+        "label": "Show notifications",
+        "default": true
       }
     ],
     "blocks": [
@@ -1109,6 +845,10 @@
         "name": "Layout",
         "limit": 1,
         "settings": [
+          {
+            "type": "header",
+            "content": "Layout"
+          },
           {
             "type": "select",
             "id": "position",
@@ -1136,10 +876,18 @@
             "unit": "px"
           },
           {
+            "type": "header",
+            "content": "Mobile"
+          },
+          {
             "type": "checkbox",
             "id": "show_on_mobile_fake_order",
             "label": "Show on phones",
             "default": true
+          },
+          {
+            "type": "header",
+            "content": "Progress bar"
           },
           {
             "type": "checkbox",
@@ -1154,6 +902,36 @@
         "name": "Timing",
         "limit": 1,
         "settings": [
+          {
+            "type": "header",
+            "content": "Timing"
+          },
+          {
+            "type": "text",
+            "id": "delay_time",
+            "label": "First one after (ms)",
+            "default": "500"
+          },
+          {
+            "type": "number",
+            "id": "animation_duration",
+            "label": "Each shows for (ms)",
+            "default": 15000
+          },
+          {
+            "type": "range",
+            "id": "show_gap_seconds",
+            "label": "Gap between",
+            "min": 10,
+            "max": 1000,
+            "step": 10,
+            "default": 10,
+            "unit": "s"
+          },
+          {
+            "type": "header",
+            "content": "Animation"
+          },
           {
             "type": "select",
             "id": "notification_animation",
@@ -1188,29 +966,8 @@
                 "label": "Reveal In - Reveal Out"
               }
             ],
-            "default": "Fade-in Fade Out"
-          },
-          {
-            "type": "text",
-            "id": "delay_time",
-            "label": "First one after (ms)",
-            "default": "500"
-          },
-          {
-            "type": "number",
-            "id": "animation_duration",
-            "label": "Each shows for (ms)",
-            "default": 15000
-          },
-          {
-            "type": "range",
-            "id": "show_gap_seconds",
-            "label": "Gap between",
-            "min": 10,
-            "max": 1000,
-            "step": 10,
-            "default": 10,
-            "unit": "s"
+            "default": "Fade-in Fade Out",
+            "info": "Off under reduced motion."
           }
         ]
       },
@@ -1220,16 +977,27 @@
         "limit": 1,
         "settings": [
           {
+            "type": "header",
+            "content": "Content"
+          },
+          {
             "type": "product_list",
             "id": "fake_product",
-            "label": "Products"
+            "label": "Products",
+            "info": "Only products that are in stock are shown."
           },
           {
             "type": "textarea",
             "id": "fake_user",
             "label": "Buyers",
-            "default": "Liam (USA) | Ethan (USA) | Matteo (USA) | Owen (Canada) | Lucas (Canada) | Rafael (USA) | Mason (USA) | Alex (UK) | Luca (Italy) | Hugo (France) | Elias (Germany) | Sofia (Spain) | Jakob (Sweden) | Matei (Romania) | Ivan (Russia) | Niko (Greece) | Marko (Croatia) | Erik (Norway) | Felix (Denmark) | Tomáš (Czech Republic) | Arnaud (Belgium) | Finn (Ireland)",
-            "info": "Shown to visitors as real buyers. List only real recent orders."
+            "default": "",
+            "info": "Real first names you may show, separated by |. Left empty, the card shows the text below."
+          },
+          {
+            "type": "text",
+            "id": "buyer_fallback",
+            "label": "Buyer when none typed",
+            "default": "Someone"
           }
         ]
       },
@@ -1245,8 +1013,20 @@
           {
             "type": "inline_richtext",
             "id": "heading_text",
-            "label": "Heading",
+            "label": "Name read by screen readers",
             "default": "Latest Orders"
+          },
+          {
+            "type": "text",
+            "id": "purchased_text",
+            "label": "Text after the buyer",
+            "info": "Empty uses the store language (purchased)."
+          },
+          {
+            "type": "text",
+            "id": "time_text",
+            "label": "Text after the minutes",
+            "info": "Empty uses the store language (minutes ago)."
           },
           {
             "type": "inline_richtext",
@@ -1280,22 +1060,121 @@
           },
           {
             "type": "header",
-            "content": "Style"
+            "content": "Colors"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "title_color",
+            "label": "Product name",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}"
           },
           {
             "type": "color",
             "id": "verify_text_color",
-            "label": "Link color"
+            "label": "Link color",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}"
           },
           {
             "type": "color",
             "id": "verify_text_hover_color",
-            "label": "Link hover"
+            "label": "Link hover",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}"
           },
           {
             "type": "color",
             "id": "close_button_color",
-            "label": "Close icon"
+            "label": "Close icon",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Custom fonts",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Text font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts == true }}"
+          },
+          {
+            "type": "font_picker",
+            "id": "title_font",
+            "label": "Product name font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts == true }}"
+          },
+          {
+            "type": "select",
+            "id": "title_weight",
+            "label": "Product name weight",
+            "default": "theme",
+            "options": [
+              {
+                "value": "theme",
+                "label": "Theme"
+              },
+              {
+                "value": "400",
+                "label": "Regular"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semibold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              },
+              {
+                "value": "800",
+                "label": "Extra bold"
+              }
+            ]
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_size",
+            "label": "Custom text size",
+            "default": false
+          },
+          {
+            "type": "range",
+            "id": "text_size",
+            "label": "Text size",
+            "min": 10,
+            "max": 20,
+            "step": 1,
+            "unit": "px",
+            "default": 13,
+            "visible_if": "{{ block.settings.enable_custom_size == true }}"
+          },
+          {
+            "type": "range",
+            "id": "title_size",
+            "label": "Product name size",
+            "min": 10,
+            "max": 24,
+            "step": 1,
+            "unit": "px",
+            "default": 15,
+            "visible_if": "{{ block.settings.enable_custom_size == true }}"
           }
         ]
       },
@@ -1313,24 +1192,6 @@
             "id": "enable_gradient",
             "label": "Gradient",
             "default": true
-          },
-          {
-            "type": "color",
-            "id": "gradient_start_color",
-            "label": "Start",
-            "visible_if": "{{ block.settings.enable_gradient == true }}"
-          },
-          {
-            "type": "color",
-            "id": "gradient_middle_color",
-            "label": "Middle",
-            "visible_if": "{{ block.settings.enable_gradient == true }}"
-          },
-          {
-            "type": "color",
-            "id": "gradient_end_color",
-            "label": "End",
-            "visible_if": "{{ block.settings.enable_gradient == true }}"
           },
           {
             "type": "select",
@@ -1428,10 +1289,40 @@
             "visible_if": "{{ block.settings.enable_glassmorphism == true }}"
           },
           {
+            "type": "header",
+            "content": "Colors"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "gradient_start_color",
+            "label": "Start",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}",
+            "info": "Used with Gradient."
+          },
+          {
+            "type": "color",
+            "id": "gradient_middle_color",
+            "label": "Middle",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}"
+          },
+          {
+            "type": "color",
+            "id": "gradient_end_color",
+            "label": "End",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}"
+          },
+          {
             "type": "color",
             "id": "glassmorphism_border_color",
             "label": "Border color",
-            "visible_if": "{{ block.settings.enable_glassmorphism == true }}"
+            "visible_if": "{{ block.settings.enable_custom_style == true }}",
+            "info": "Used with Frosted glass."
           }
         ]
       },
@@ -1441,19 +1332,29 @@
         "limit": 1,
         "settings": [
           {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
             "type": "color",
             "id": "background_color",
-            "label": "Background"
+            "label": "Background",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}",
+            "info": "Used when Gradient and Frosted glass are off."
           },
           {
             "type": "color",
             "id": "text_color",
-            "label": "Text"
+            "label": "Text",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}"
           },
           {
             "type": "color",
             "id": "progress_bar_color",
-            "label": "Progress bar"
+            "label": "Progress bar",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}"
           }
         ]
       }

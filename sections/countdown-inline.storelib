@@ -1,93 +1,30 @@
 <template compat="shopify">
 {% render 'theme-type' %}
-{%- liquid
-  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
--%}
-<style>
-  /* Section width */
-  {%- case section.settings.section_width -%}
-    {%- when 'container' -%}
-      #shopify-section-{{ section.id }} {
-        max-width: calc(var(--page-width, 1300px) + 3rem);
-        margin-inline: auto;
-        padding-inline: 1.5rem;
-        box-sizing: border-box;
-      }
-    {%- when 'fluid_container' -%}
-      #shopify-section-{{ section.id }} {
-        max-width: calc(var(--fluid-container-width, 1500px) + 3rem);
-        margin-inline: auto;
-        padding-inline: 1.5rem;
-        box-sizing: border-box;
-      }
-    {%- when 'stretch_width' -%}
-      #shopify-section-{{ section.id }} {
-        padding-inline: 1.5rem;
-        box-sizing: border-box;
-      }
-      @media (min-width: 1200px) {
-        #shopify-section-{{ section.id }} { padding-inline: 3rem; }
-      }
-    {%- when 'full_width' -%}
-      /* full bleed */
-  {%- endcase -%}
-{% comment %}{% endcomment %}</style>
-{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
-{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
-<style>
-  #shopify-section-{{ section.id }}.scroll-trigger {
-    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
-    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
-  }
-{% comment %}{% endcomment %}</style>
-<script>
-  (function(){
-    var el = document.getElementById('shopify-section-{{ section.id }}');
-    if (!el || el.classList.contains('scroll-trigger')) return;
-    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
-  })();
-{% comment %}{% endcomment %}</script>
-{%- endif -%}
-<style data-rs-bulletproof>
-  {%- if section.settings.reset_spacing -%}
-    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
-    #shopify-section-{{ section.id }},
-    #shopify-section-{{ section.id }} > .section,
-    #shopify-section-{{ section.id }} > section,
-    #shopify-section-{{ section.id }} > div,
-    #shopify-section-{{ section.id }} > div > .section {
-      margin-top: 0 !important;
-      margin-bottom: 0 !important;
-    }
-    #shopify-section-{{ section.id }} + .shopify-section,
-    #shopify-section-{{ section.id }} + section,
-    .shopify-section + #shopify-section-{{ section.id }} {
-      margin-top: 0 !important;
-    }
-  {%- endif -%}
-{% comment %}{% endcomment %}</style>
 {%- comment -%}
-  Materia Themes — Countdown Timer Inline
-  Compact pill-shaped countdown banner. Numbers and labels render
-  inline on a single horizontal line, ideal for top-of-page sale
-  banners, sticky bars, or compact mid-page CTAs. Distinct from the
-  card-based timers (Flip / Pro 1-3) — no boxes around digits, just
-  bold typography on a pill bar with optional eyebrow + CTA.
-
-  Renders fully without JavaScript — server prints initial digits.
-  JS recomputes each second. Block-organized for the eyebrow,
-  message text, and CTA button.
+  Materia Themes. Countdown Timer Inline: one bar with an eyebrow chip, a
+  message, the time left (days, hours, minutes, seconds on one line) and a
+  button. The timer runs in shopify/assets/live-countdown.js, one per section,
+  paused while the section is off screen or the tab is hidden, and every
+  setting below is applied live there too (data-cd-root, data-cd-settings,
+  data-cd-block). Theme first: colours follow the colour scheme until Enable
+  custom styling is on, fonts follow Theme settings > Typography until Custom
+  fonts is on, and the button is a theme button (data-theme-button) with its
+  own shape only when Use theme button style is off (data-own-shape). No end
+  date: the editor shows zeros and a hint, visitors see nothing. An ended
+  timer shows the ended message.
+  The timer's date rule, the same one live-countdown.js uses:
+  function calendarOk(s){var m=/^\s*(\d{4})-(\d{1,2})-(\d{1,2})/.exec(String(s||''));if(!m)return true;var y=+m[1],mo=+m[2],d=+m[3];return mo>=1&&mo<=12&&d>=1&&d<=new Date(Date.UTC(y,mo,0)).getUTCDate();}
 {%- endcomment -%}
-
 {%- liquid
-  assign st  = section.settings
+  assign st = section.settings
   assign sid = section.id
-  assign cta = nil
-  for b in section.blocks
-    if b.type == 'cta' and cta == nil
-      assign cta = b
-    endif
-  endfor
+  assign color_scheme = st.color_scheme.id | default: st.color_scheme | default: 'default-color-scheme'
+  assign own = st.enable_custom_style
+  assign fonts = st.enable_custom_fonts
+  assign shape = false
+  if st.use_theme_button == false
+    assign shape = true
+  endif
   assign align = st.align | default: 'center'
   case align
     when 'left'
@@ -97,343 +34,168 @@
     else
       assign flex_align = 'center'
   endcase
-
-  assign end_iso = st.end_iso | default: ''
-  assign initial_seconds = 86400
+  assign end_iso = st.end_iso | default: '' | strip
+  assign left = 0
+  assign state = 'unset'
   if end_iso != blank
-    assign end_time_t = end_iso | date: '%s' | plus: 0
+    assign state = 'running'
+    assign end_t = end_iso | date: '%s' | plus: 0
     assign now_t = 'now' | date: '%s' | plus: 0
-    assign initial_seconds = end_time_t | minus: now_t
-    if initial_seconds < 0
-      assign initial_seconds = 0
+    if end_t > 0 and now_t > 0
+      assign left = end_t | minus: now_t
+      if left <= 0
+        assign left = 0
+        assign state = 'expired'
+      endif
     endif
   endif
-  assign d = initial_seconds | divided_by: 86400
-  assign rem = initial_seconds | modulo: 86400
+  assign d = left | divided_by: 86400
+  assign rem = left | modulo: 86400
   assign h = rem | divided_by: 3600
   assign rem = rem | modulo: 3600
   assign m = rem | divided_by: 60
   assign s = rem | modulo: 60
+  assign cta = section.blocks | where: 'type', 'cta' | first
+  assign digit_box = false
+  if own and st.digit_bg != blank and st.digit_bg.alpha != 0 and st.digit_bg != 'transparent' and st.digit_bg != 'rgba(0,0,0,0)' and st.digit_bg != 'rgba(0, 0, 0, 0)'
+    assign digit_box = true
+  endif
 -%}
-
+{%- capture cin_vars -%}
+--cin-bg:{% render 'countdown-live-color', on: own, color: st.section_bg, fallback: 'var(--color-background)' %};
+--cin-pt-m:{{ st.padding_top_mobile | default: 0 }}px;--cin-pb-m:{{ st.padding_bottom_mobile | default: 0 }}px;--cin-pt-d:{{ st.padding_top_desktop | default: 0 }}px;--cin-pb-d:{{ st.padding_bottom_desktop | default: 0 }}px;
+--cin-w-m:{{ st.section_max_width_mobile | default: 560 }}px;--cin-w-t:{{ st.section_max_width_tablet | default: 900 }}px;--cin-w-d:{{ st.section_max_width_desktop | default: 1200 }}px;
+--cin-flex:{{ flex_align }};--cin-gap-m:{{ st.gap_inline_mobile | default: 13 }}px;--cin-gap-d:{{ st.gap_inline | default: 16 }}px;--cin-timer-gap:{{ st.timer_gap | default: 10 }}px;
+--cin-bar-bg:{% render 'countdown-live-color', on: own, color: st.bar_bg, fallback: 'var(--color-heading)' %};
+--cin-bar-text:{% render 'countdown-live-color', on: own, color: st.bar_text, fallback: 'var(--color-background)' %};
+--cin-bar-border:{% render 'countdown-live-color', on: own, color: st.bar_border_color, fallback: 'var(--color-heading)' %};
+--cin-bar-bw:{{ st.bar_border_width | default: 0 }}px;--cin-r-m:{{ st.bar_radius_mobile | default: 0 }}px;--cin-r-d:{{ st.bar_radius | default: 0 }}px;
+--cin-px-m:{{ st.bar_pad_x_mobile | default: 22 }}px;--cin-py-m:{{ st.bar_pad_y_mobile | default: 14 }}px;--cin-px-d:{{ st.bar_pad_x_desktop | default: 32 }}px;--cin-py-d:{{ st.bar_pad_y_desktop | default: 18 }}px;
+--cin-eb-bg:{% render 'countdown-live-color', on: own, color: st.eyebrow_bg, fallback: 'color-mix(in srgb, var(--color-background) 12%, transparent)' %};
+--cin-eb-c:{% render 'countdown-live-color', on: own, color: st.eyebrow_color, fallback: 'var(--color-background)' %};
+--cin-dot:{% render 'countdown-live-color', on: own, color: st.eyebrow_dot_color, fallback: 'var(--color-primary)' %};
+--cin-mw:{{ st.message_weight | default: 600 }};--cin-ms-m:{{ st.message_size_mobile | default: 14 }}px;--cin-ms-d:{{ st.message_size_desktop | default: 16 }}px;
+--cin-digit:{% render 'countdown-live-color', on: own, color: st.digit_color, fallback: 'var(--color-background)' %};
+--cin-digit-bg:{% render 'countdown-live-color', on: own, color: st.digit_bg, fallback: 'transparent' %};
+--cin-digit-pad:{% if digit_box %}4px 8px{% else %}0px{% endif %};
+--cin-dw:{{ st.digit_weight | default: 800 }};--cin-ds-m:{{ st.digit_size_mobile | default: 18 }}px;--cin-ds-d:{{ st.digit_size_desktop | default: 22 }}px;
+--cin-unit:{% render 'countdown-live-color', on: own, color: st.unit_label_color, fallback: 'color-mix(in srgb, var(--color-background) 65%, transparent)' %};
+--cin-uw:{{ st.unit_label_weight | default: 600 }};--cin-us:{{ st.unit_label_size | default: 12 }}px;
+--cin-expired:{% render 'countdown-live-color', on: own, color: st.expired_color, fallback: 'inherit' %};
+{%- if fonts and st.heading_font.family != blank -%}--cin-hf:{{ st.heading_font.family }}, {{ st.heading_font.fallback_families }};{%- endif -%}
+{%- if fonts and st.body_font.family != blank -%}--cin-bf:{{ st.body_font.family }}, {{ st.body_font.fallback_families }};{%- endif -%}
+{%- endcapture -%}
+{%- if fonts -%}<style>{{ st.heading_font | font_face: font_display: 'swap' }}{{ st.body_font | font_face: font_display: 'swap' }}{% comment %}{% endcomment %}</style>{%- endif -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
 <style>
-  /* Section isolation */
-  #shopify-section-{{ sid }} { isolation: isolate; position: relative; }
-  :where(#shopify-section-{{ sid }}) { font-family: var(--body-font, inherit); }
-  #shopify-section-{{ sid }} *, #shopify-section-{{ sid }} *:before, #shopify-section-{{ sid }} *:after { box-sizing: border-box; }
-
-  /* Margins */
-  #shopify-section-{{ sid }} {
-    margin-top: {{ st.section_margin_top_mobile | default: 0 }}px;
-    margin-bottom: {{ st.section_margin_bottom_mobile | default: 0 }}px;
-  }
-  @media (min-width: 768px) {
-    #shopify-section-{{ sid }} {
-      margin-top: {{ st.section_margin_top_desktop | default: 0 }}px;
-      margin-bottom: {{ st.section_margin_bottom_desktop | default: 0 }}px;
-    }
-  }
-  {%- if st.reset_spacing -%}
-    #shopify-section-{{ sid }} { margin-top: 0 !important; margin-bottom: 0 !important; }
-    #shopify-section-{{ sid }} + .shopify-section { margin-top: 0 !important; }
-  {%- endif -%}
-
-  /* Outer */
-  #shopify-section-{{ sid }} .cin {
-    background: {% render 'scheme-color', color: st.section_bg, fallback: 'var(--color-background)' %} !important;
-    padding-top: {{ st.padding_top_mobile | default: 16 }}px;
-    padding-bottom: {{ st.padding_bottom_mobile | default: 16 }}px;
-  }
-  @media (min-width: 768px) {
-    #shopify-section-{{ sid }} .cin {
-      padding-top: {{ st.padding_top_desktop | default: 24 }}px;
-      padding-bottom: {{ st.padding_bottom_desktop | default: 24 }}px;
-    }
-  }
-
-  #shopify-section-{{ sid }} .cin__inner {
-    max-width: {{ st.section_max_width_mobile | default: 560 }}px;
-    margin-inline: auto;
-    padding-inline: 1rem;
-  }
-  @media (min-width: 768px) {
-    #shopify-section-{{ sid }} .cin__inner {
-      max-width: {{ st.section_max_width_tablet | default: 900 }}px;
-      padding-inline: 1.5rem;
-    }
-  }
-  @media (min-width: 1024px) {
-    #shopify-section-{{ sid }} .cin__inner {
-      max-width: {{ st.section_max_width_desktop | default: 1200 }}px;
-    }
-  }
-
-  /* The pill bar — stacks vertically on narrow mobile, lays out
-     horizontally on tablet+. */
-  #shopify-section-{{ sid }} .cin__bar {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: {{ st.gap_inline_mobile | default: 13 }}px;
-    background: {% render 'scheme-color', color: st.bar_bg, fallback: 'var(--color-heading)' %};
-    color: {% render 'scheme-color', color: st.bar_text, fallback: 'var(--color-background)' %};
-    border: {{ st.bar_border_width | default: 0 }}px solid {% render 'scheme-color', color: st.bar_border_color, fallback: 'var(--color-heading)' %};
-    border-radius: {{ st.bar_radius_mobile | default: 24 }}px;
-    padding: {{ st.bar_pad_y_mobile | default: 14 }}px {{ st.bar_pad_x_mobile | default: 22 }}px;
-    text-align: center;
-  }
-  @media (min-width: 600px) {
-    #shopify-section-{{ sid }} .cin__bar {
-      flex-direction: row;
-      flex-wrap: wrap;
-      justify-content: {{ flex_align }};
-      gap: {{ st.gap_inline | default: 16 }}px;
-      text-align: inherit;
-      border-radius: {{ st.bar_radius | default: 100 }}px;
-    }
-  }
-  @media (min-width: 768px) {
-    #shopify-section-{{ sid }} .cin__bar {
-      padding: {{ st.bar_pad_y_desktop | default: 18 }}px {{ st.bar_pad_x_desktop | default: 32 }}px;
-    }
-  }
-
-  /* Eyebrow chip (optional) */
-  #shopify-section-{{ sid }} .cin__eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: {% render 'scheme-color', color: st.eyebrow_bg, fallback: 'color-mix(in srgb, var(--color-background) 12%, transparent)' %};
-    color: {% render 'scheme-color', color: st.eyebrow_color, fallback: 'var(--color-background)' %};
-    border-radius: 999px;
-    padding: 4px 10px;
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-  #shopify-section-{{ sid }} .cin__eyebrow-dot {
-    width: 6px; height: 6px;
-    background: {% render 'scheme-color', color: st.eyebrow_dot_color, fallback: 'var(--color-primary)' %};
-    border-radius: 999px;
-    animation: cin-pulse 1.6s ease-in-out infinite;
-  }
-  @keyframes cin-pulse {
-    0%,100% { opacity: 1; transform: scale(1); }
-    50%     { opacity: 0.5; transform: scale(1.3); }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    #shopify-section-{{ sid }} .cin__eyebrow-dot { animation: none; }
-  }
-
-  /* Message text */
-  #shopify-section-{{ sid }} .cin__message {
-    font-weight: {{ st.message_weight | default: 600 }};
-    font-size: {{ st.message_size_mobile | default: 14 }}px;
-    line-height: 1.3;
-  }
-  @media (min-width: 768px) {
-    #shopify-section-{{ sid }} .cin__message {
-      font-size: {{ st.message_size_desktop | default: 16 }}px;
-    }
-  }
-  #shopify-section-{{ sid }} .cin__message > * { margin: 0 !important; }
-
-  /* Inline timer — digits + units on one line */
-  #shopify-section-{{ sid }} .cin__timer {
-    display: inline-flex;
-    flex-wrap: wrap;
-    max-width: 100%;
-    align-items: baseline;
-    gap: {{ st.timer_gap | default: 10 }}px;
-    font-variant-numeric: tabular-nums;
-  }
-  #shopify-section-{{ sid }} .cin__unit {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 2px;
-  }
-  #shopify-section-{{ sid }} .cin__digits {
-    color: {% render 'scheme-color', color: st.digit_color, fallback: 'var(--color-background)' %};
-    background: {% render 'scheme-color', color: st.digit_bg, fallback: 'transparent' %};
-    {% if st.digit_bg != blank and st.digit_bg.alpha != 0 and st.digit_bg != 'transparent' and st.digit_bg != 'rgba(0,0,0,0)' %}
-    padding: 4px 8px;
-    border-radius: 6px;
-    {% endif %}
-    font-weight: {{ st.digit_weight | default: 800 }};
-    font-size: {{ st.digit_size_mobile | default: 18 }}px;
-    line-height: 1;
-  }
-  @media (min-width: 768px) {
-    #shopify-section-{{ sid }} .cin__digits {
-      font-size: {{ st.digit_size_desktop | default: 22 }}px;
-    }
-  }
-  #shopify-section-{{ sid }} .cin__unit-label {
-    font-size: {{ st.unit_label_size | default: 12 }}px;
-    font-weight: {{ st.unit_label_weight | default: 600 }};
-    color: {% render 'scheme-color', color: st.unit_label_color, fallback: 'color-mix(in srgb, var(--color-background) 65%, transparent)' %};
-    text-transform: lowercase;
-    line-height: 1;
-  }
-
-  /* CTA: a theme button (theme-button-contract.css). Theme settings > Buttons
-     draw it; colours set here, and the shape when the theme style is off, are
-     --mb-* tokens. */
-  #shopify-section-{{ sid }} .cin__cta {
-    text-decoration: none;
-    white-space: nowrap;
-    {% render 'button-overrides', bg: st.cta_bg, text: st.cta_color, border: st.cta_border_color, hover_bg: st.cta_bg_hover, hover_text: st.cta_color_hover %}
-    {%- unless st.use_theme_button %}
-    --btn-border-width: {{ st.cta_border_width | default: 0 }}px;
-    --mb-padding-y: {{ st.cta_pad_y | default: 8 }}px;
-    --mb-padding-x: {{ st.cta_pad_x | default: 18 }}px;
-    --mb-radius: {{ st.cta_radius | default: 100 }}px;
-    --mb-font-size: {{ st.cta_size | default: 13 }}px;
-    {%- endunless %}
-  }
-
-  /* Show / hide by device */
-  {%- if st.show_section_on == 'mobile' -%}
-    #shopify-section-{{ sid }} .cin { display: none; }
-    @media (max-width: 767px) { #shopify-section-{{ sid }} .cin { display: block; } }
-  {%- elsif st.show_section_on == 'desktop' -%}
-    #shopify-section-{{ sid }} .cin { display: none; }
-    @media (min-width: 768px) { #shopify-section-{{ sid }} .cin { display: block; } }
-  {%- endif -%}
-
-  /* Expired state */
-  #shopify-section-{{ sid }}.cin-expired .cin__timer,
-  #shopify-section-{{ sid }}.cin-expired .cin__cta { display: none; }
-  #shopify-section-{{ sid }} .cin__expired { display: none; }
-  #shopify-section-{{ sid }}.cin-expired .cin__expired {
-    display: inline-block;
-    color: {% render 'scheme-color', color: st.expired_color, fallback: 'inherit' %};
+  #shopify-section-{{ sid }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
   }
 {% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ sid }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+<style>
+  #shopify-section-{{ sid }} { isolation: isolate; position: relative; margin-top: {{ st.section_margin_top_mobile | default: 0 }}px; margin-bottom: {{ st.section_margin_bottom_mobile | default: 0 }}px; }
+  @media (min-width: 768px) { #shopify-section-{{ sid }} { margin-top: {{ st.section_margin_top_desktop | default: 0 }}px; margin-bottom: {{ st.section_margin_bottom_desktop | default: 0 }}px; } }
+  {%- if st.reset_spacing %}
+  #shopify-section-{{ sid }} { margin-top: 0 !important; margin-bottom: 0 !important; }
+  #shopify-section-{{ sid }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif %}
+  #shopify-section-{{ sid }} .cin [hidden] { display: none !important; }
+  #shopify-section-{{ sid }} .cin, #shopify-section-{{ sid }} .cin *, #shopify-section-{{ sid }} .cin *::before, #shopify-section-{{ sid }} .cin *::after { box-sizing: border-box; }
+  #shopify-section-{{ sid }} .cin { display: block; background: var(--cin-bg); padding-top: var(--cin-pt-m); padding-bottom: var(--cin-pb-m); font-family: var(--cin-bf, var(--body-font, inherit)); }
+  #shopify-section-{{ sid }} .cin[data-cin-width='container'] { max-width: calc(var(--page-width, 1300px) + 3rem); margin-inline: auto; }
+  #shopify-section-{{ sid }} .cin[data-cin-width='fluid_container'] { max-width: calc(var(--fluid-container-width, 1500px) + 3rem); margin-inline: auto; }
+  #shopify-section-{{ sid }} .cin[data-cin-width='stretch_width'] { padding-inline: 1.5rem; }
+  #shopify-section-{{ sid }} .cin[data-cd-state='unset']:not([data-cd-editor]) { display: none !important; }
+  #shopify-section-{{ sid }} .cin__inner { max-width: var(--cin-w-m); margin-inline: auto; padding-inline: 1rem; }
+  #shopify-section-{{ sid }} .cin__bar { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--cin-gap-m); background: var(--cin-bar-bg); color: var(--cin-bar-text); border: var(--cin-bar-bw) solid var(--cin-bar-border); border-radius: var(--cin-r-m); padding: var(--cin-py-m) var(--cin-px-m); text-align: center; }
+  #shopify-section-{{ sid }} .cin__eyebrow { display: inline-flex; align-items: center; gap: 6px; background: var(--cin-eb-bg); color: var(--cin-eb-c); border-radius: 999px; padding: 4px 10px; font-family: var(--cin-ebf, inherit); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  #shopify-section-{{ sid }} .cin__eyebrow-dot { width: 6px; height: 6px; background: var(--cin-dot); border-radius: 999px; animation: cin-pulse 1.6s ease-in-out infinite; }
+  #shopify-section-{{ sid }} .cin[data-cd-paused] .cin__eyebrow-dot { animation-play-state: paused; }
+  @keyframes cin-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.3); } }
+  #shopify-section-{{ sid }} .cin__message { color: var(--cim-c, inherit); font-family: var(--cim-ff, inherit); font-weight: var(--cin-mw); font-size: var(--cin-ms-m); line-height: 1.3; }
+  #shopify-section-{{ sid }} .cin__message > * { margin: 0; }
+  #shopify-section-{{ sid }} .cin__timer { display: inline-flex; flex-wrap: wrap; justify-content: center; max-width: 100%; align-items: baseline; gap: var(--cin-timer-gap); font-variant-numeric: tabular-nums; }
+  #shopify-section-{{ sid }} .cin__unit { display: inline-flex; align-items: baseline; gap: 2px; }
+  #shopify-section-{{ sid }} .cin__digits { color: var(--cin-digit); background: var(--cin-digit-bg); padding: var(--cin-digit-pad); border-radius: 6px; font-family: var(--cin-hf, inherit); font-weight: var(--cin-dw); font-size: var(--cin-ds-m); line-height: 1; }
+  #shopify-section-{{ sid }} .cin__unit-label { font-size: var(--cin-us); font-weight: var(--cin-uw); color: var(--cin-unit); text-transform: lowercase; line-height: 1; }
+  #shopify-section-{{ sid }} .cin__cta { text-decoration: none; white-space: nowrap; }
+  #shopify-section-{{ sid }} .cin__expired { display: none; color: var(--cin-expired); }
+  #shopify-section-{{ sid }} .cin[data-cd-state='expired'] :is(.cin__timer, .cin__cta) { display: none; }
+  #shopify-section-{{ sid }} .cin[data-cd-state='expired'] .cin__expired:not([hidden]) { display: inline-block; }
+  #shopify-section-{{ sid }} .cin__hint { display: none; margin: 8px 0 0; font-size: 13px; color: var(--color-text); text-align: center; }
+  #shopify-section-{{ sid }} .cin[data-cd-state='unset'] .cin__hint { display: block; }
+  @media (prefers-reduced-motion: reduce) { #shopify-section-{{ sid }} .cin__eyebrow-dot { animation: none; } }
+  @media (max-width: 767px) { #shopify-section-{{ sid }} .cin[data-cin-show='desktop'] { display: none; } }
+  @media (min-width: 600px) {
+    #shopify-section-{{ sid }} .cin__bar { flex-direction: row; flex-wrap: wrap; justify-content: var(--cin-flex); gap: var(--cin-gap-d); text-align: inherit; border-radius: var(--cin-r-d); }
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .cin { padding-top: var(--cin-pt-d); padding-bottom: var(--cin-pb-d); }
+    #shopify-section-{{ sid }} .cin[data-cin-show='mobile'] { display: none; }
+    #shopify-section-{{ sid }} .cin__inner { max-width: var(--cin-w-t); padding-inline: 1.5rem; }
+    #shopify-section-{{ sid }} .cin__bar { padding: var(--cin-py-d) var(--cin-px-d); }
+    #shopify-section-{{ sid }} .cin__message { font-size: var(--cin-ms-d); }
+    #shopify-section-{{ sid }} .cin__digits { font-size: var(--cin-ds-d); }
+  }
+  @media (min-width: 1024px) { #shopify-section-{{ sid }} .cin__inner { max-width: var(--cin-w-d); } }
+  @media (min-width: 1200px) { #shopify-section-{{ sid }} .cin[data-cin-width='stretch_width'] { padding-inline: 3rem; } }
+{% comment %}{% endcomment %}</style>
 
-<section class="cin color-{{ color_scheme }} gradient {{ section.settings.section_width }}" id="cin-{{ sid }}">
+<section class="cin color-{{ color_scheme }} gradient" data-cd-root="countdown-inline" data-cd-section="{{ sid }}" data-cd-settings="{{ st | json | escape }}" data-cd-state="{{ state }}"{% if request.design_mode %} data-cd-editor{% endif %} data-cin-width="{{ st.section_width }}" data-cin-show="{{ st.show_section_on | default: 'all' }}" style="{{ cin_vars | strip_newlines }}">
   <div class="cin__inner">
-    <div class="cin__bar" data-cin-bar data-end="{{ end_iso | escape }}">
-
+    <div class="cin__bar">
       {%- for block in section.blocks -%}
         {%- assign bs = block.settings -%}
         {%- case block.type -%}
-
           {%- when 'eyebrow' -%}
-            {%- if bs.text != blank -%}
-              <span class="cin__eyebrow" id="block-{{ block.id }}" {{ block.shopify_attributes }}>
-                {%- if bs.show_dot -%}<span class="cin__eyebrow-dot" aria-hidden="true"></span>{%- endif -%}
-                <span>{{ bs.text }}</span>
-              </span>
-            {%- endif -%}
-
+            {%- if bs.enable_custom_fonts -%}<style>{{ bs.font | font_face: font_display: 'swap' }}{% comment %}{% endcomment %}</style>{%- endif -%}
+            <span class="cin__eyebrow" data-cd-block="{{ block.id }}" data-cd-type="eyebrow" data-cd-settings="{{ bs | json | escape }}"{% if bs.enable_custom_fonts %} data-own-font{% endif %}{% if bs.text == blank %} hidden{% endif %} style="{% if bs.enable_custom_fonts and bs.font.family != blank %}--cin-ebf:{{ bs.font.family }}, {{ bs.font.fallback_families }};{% endif %}" {{ block.shopify_attributes }}>
+              <span class="cin__eyebrow-dot" aria-hidden="true" data-cd-dot{% unless bs.show_dot %} hidden{% endunless %}></span>
+              <span data-cd-text>{{ bs.text }}</span>
+            </span>
           {%- when 'message' -%}
-            {%- if bs.text != blank -%}
-              <div class="cin__message" id="block-{{ block.id }}" {{ block.shopify_attributes }}>{{ bs.text }}</div>
-            {%- endif -%}
-
+            {%- capture mv -%}
+              {%- if bs.enable_custom_style -%}--cim-c:{% render 'scheme-color', color: bs.color, fallback: 'var(--cin-bar-text)' %};{%- endif -%}
+              {%- if bs.enable_custom_fonts and bs.font.family != blank -%}--cim-ff:{{ bs.font.family }}, {{ bs.font.fallback_families }};{%- endif -%}
+            {%- endcapture -%}
+            {%- if bs.enable_custom_fonts -%}<style>{{ bs.font | font_face: font_display: 'swap' }}{% comment %}{% endcomment %}</style>{%- endif -%}
+            <div class="cin__message" data-cd-block="{{ block.id }}" data-cd-type="message" data-cd-settings="{{ bs | json | escape }}"{% if fonts or bs.enable_custom_fonts %} data-own-font{% endif %}{% if bs.text == blank %} hidden{% endif %} style="{{ mv | strip_newlines }}" {{ block.shopify_attributes }}>{{ bs.text }}</div>
         {%- endcase -%}
       {%- endfor -%}
 
-      {%- comment -%}========== INLINE TIMER ==========={%- endcomment -%}
-      <div class="cin__timer">
-        {%- if st.show_days -%}
-          <span class="cin__unit">
-            <span class="cin__digits" data-cin-d>{%- if d < 10 -%}0{%- endif -%}{{ d }}</span>
-            <span class="cin__unit-label">{{ st.label_days | default: 'd' }}</span>
-          </span>
-        {%- endif -%}
-        {%- if st.show_hours -%}
-          <span class="cin__unit">
-            <span class="cin__digits" data-cin-h>{%- if h < 10 -%}0{%- endif -%}{{ h }}</span>
-            <span class="cin__unit-label">{{ st.label_hours | default: 'h' }}</span>
-          </span>
-        {%- endif -%}
-        {%- if st.show_minutes -%}
-          <span class="cin__unit">
-            <span class="cin__digits" data-cin-m>{%- if m < 10 -%}0{%- endif -%}{{ m }}</span>
-            <span class="cin__unit-label">{{ st.label_minutes | default: 'm' }}</span>
-          </span>
-        {%- endif -%}
-        {%- if st.show_seconds -%}
-          <span class="cin__unit">
-            <span class="cin__digits" data-cin-s>{%- if s < 10 -%}0{%- endif -%}{{ s }}</span>
-            <span class="cin__unit-label">{{ st.label_seconds | default: 's' }}</span>
-          </span>
-        {%- endif -%}
+      <div class="cin__timer" role="timer" data-cd-clock>
+        <span class="cin__unit" data-cd-show="d"{% unless st.show_days %} hidden{% endunless %}><span class="cin__digits" data-cd-unit="d">{% if d < 10 %}0{% endif %}{{ d }}</span><span class="cin__unit-label" data-cd-label="d" data-cd-fallback="d">{{ st.label_days | default: 'd' }}</span></span>
+        <span class="cin__unit" data-cd-show="h"{% unless st.show_hours %} hidden{% endunless %}><span class="cin__digits" data-cd-unit="h">{% if h < 10 %}0{% endif %}{{ h }}</span><span class="cin__unit-label" data-cd-label="h" data-cd-fallback="h">{{ st.label_hours | default: 'h' }}</span></span>
+        <span class="cin__unit" data-cd-show="m"{% unless st.show_minutes %} hidden{% endunless %}><span class="cin__digits" data-cd-unit="m">{% if m < 10 %}0{% endif %}{{ m }}</span><span class="cin__unit-label" data-cd-label="m" data-cd-fallback="m">{{ st.label_minutes | default: 'm' }}</span></span>
+        <span class="cin__unit" data-cd-show="s"{% unless st.show_seconds %} hidden{% endunless %}><span class="cin__digits" data-cd-unit="s">{% if s < 10 %}0{% endif %}{{ s }}</span><span class="cin__unit-label" data-cd-label="s" data-cd-fallback="s">{{ st.label_seconds | default: 's' }}</span></span>
       </div>
+      <span class="cin__expired" data-cd-expired{% if st.expired_message == blank %} hidden{% endif %}>{{ st.expired_message }}</span>
 
-      {%- if st.expired_message != blank -%}
-        <span class="cin__expired">{{ st.expired_message }}</span>
+      {%- if cta -%}
+        {%- assign cs = cta.settings -%}
+        {%- capture bv -%}
+          {%- if own -%}--mb-bg:{% render 'scheme-color', color: st.cta_bg, fallback: 'var(--btn-primary-bg-color)' %};--mb-text:{% render 'scheme-color', color: st.cta_color, fallback: 'var(--btn-primary-color)' %};--mb-border:{% render 'scheme-color', color: st.cta_border_color, fallback: 'var(--btn-primary-border-color, var(--btn-primary-bg-color))' %};--mb-hover-bg:{% render 'scheme-color', color: st.cta_bg_hover, fallback: 'var(--btn-primary-hover-bg-color)' %};--mb-hover-text:{% render 'scheme-color', color: st.cta_color_hover, fallback: 'var(--btn-primary-hover-color)' %};{%- endif -%}
+          {%- if shape -%}--mb-radius:{{ st.cta_radius | default: 0 }}px;--mb-padding-y:{{ st.cta_pad_y | default: 8 }}px;--mb-padding-x:{{ st.cta_pad_x | default: 18 }}px;--mb-font-size:{{ st.cta_size | default: 13 }}px;--mb-border-width:{{ st.cta_border_width | default: 0 }}px;{%- endif -%}
+        {%- endcapture -%}
+        {%- if cs.link != blank -%}
+          <a class="cin__cta" href="{{ cs.link }}" data-cd-btn data-cd-block="{{ cta.id }}" data-cd-type="cta" data-cd-settings="{{ cs | json | escape }}" data-theme-button="primary" data-sl-button{% if shape %} data-own-shape{% endif %}{% if cs.text == blank %} hidden{% endif %} style="{{ bv | strip_newlines }}" {{ cta.shopify_attributes }}>{{ cs.text }}</a>
+        {%- else -%}
+          <button class="cin__cta" type="button" data-cd-btn data-cd-block="{{ cta.id }}" data-cd-type="cta" data-cd-settings="{{ cs | json | escape }}" data-theme-button="primary" data-sl-button{% if shape %} data-own-shape{% endif %}{% if cs.text == blank %} hidden{% endif %} style="{{ bv | strip_newlines }}" {{ cta.shopify_attributes }}>{{ cs.text }}</button>
+        {%- endif -%}
       {%- endif -%}
-
-      {%- if cta and cta.settings.text != blank -%}
-        <a class="cin__cta" data-theme-button="primary" data-sl-button data-button-role="primary" href="{{ cta.settings.link | default: '#' }}" id="block-{{ cta.id }}" {{ cta.shopify_attributes }}>{{ cta.settings.text }}</a>
-      {%- endif -%}
-
     </div>
+    {%- if request.design_mode -%}<p class="cin__hint" data-cd-hint>Add an end date in the section settings to start the timer.</p>{%- endif -%}
   </div>
 </section>
-
-<script>
-(function(){
-function init(){
-  var root = document.getElementById('shopify-section-{{ sid }}');
-  if (!root) return;
-  var __el = root.querySelector('[data-cin-bar]');
-  if (!__el || __el.__cinInit) return;
-  __el.__cinInit = true;
-  if (root.__cinIv) clearInterval(root.__cinIv);
-  root.classList.remove('cin-expired');
-
-  var bar = root.querySelector('[data-cin-bar]');
-  if (!bar) return;
-  var endRaw = bar.getAttribute('data-end');
-  if (!endRaw) return;
-  function calendarOk(s){var m=/^\s*(\d{4})-(\d{1,2})-(\d{1,2})/.exec(String(s||''));if(!m)return true;var y=+m[1],mo=+m[2],d=+m[3];return mo>=1&&mo<=12&&d>=1&&d<=new Date(Date.UTC(y,mo,0)).getUTCDate();}
-  var end = calendarOk(endRaw) ? Date.parse(endRaw) : NaN;
-  if (isNaN(end)) return;
-
-  var dEl = bar.querySelector('[data-cin-d]');
-  var hEl = bar.querySelector('[data-cin-h]');
-  var mEl = bar.querySelector('[data-cin-m]');
-  var sEl = bar.querySelector('[data-cin-s]');
-
-  function pad(n){ n = String(Math.max(0, Math.floor(n))); return n.length < 2 ? '0' + n : n; }
-
-  function tick(){
-    var diff = Math.max(0, Math.floor((end - Date.now()) / 1000));
-    var d = Math.floor(diff / 86400);
-    var h = Math.floor((diff % 86400) / 3600);
-    var m = Math.floor((diff % 3600) / 60);
-    var s = diff % 60;
-    if (dEl) dEl.textContent = pad(d);
-    if (hEl) hEl.textContent = pad(h);
-    if (mEl) mEl.textContent = pad(m);
-    if (sEl) sEl.textContent = pad(s);
-    if (diff <= 0) {
-      root.classList.add('cin-expired');
-      clearInterval(iv);
-    }
-  }
-  var iv = setInterval(tick, 1000);
-  root.__cinIv = iv;
-  tick();
-}
-init();
-if (!window['__cinLoad_{{ sid }}']) {
-  window['__cinLoad_{{ sid }}'] = true;
-  document.addEventListener('storelib:section-load', function(e){
-    if (e.detail && String(e.detail.sectionId) === '{{ sid }}') init();
-  });
-}
-})();
-{% comment %}{% endcomment %}</script>
-
-
-
 </template>
 
 <schema>
@@ -1178,7 +940,13 @@ if (!window['__cinLoad_{{ sid }}']) {
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "select",
@@ -1205,74 +973,100 @@ if (!window['__cinLoad_{{ sid }}']) {
         "default": "full_width"
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
-      },
-      {
-        "type": "checkbox",
-        "id": "reset_spacing",
-        "label": "Remove section spacing",
-        "default": true
-      },
-      {
-        "type": "header",
-        "content": "General"
-      },
-      {
         "type": "select",
         "id": "show_section_on",
-        "label": "Show section on",
+        "label": "Show on",
         "default": "all",
         "options": [
           {
             "value": "all",
-            "label": "All Devices"
+            "label": "All"
           },
           {
             "value": "mobile",
-            "label": "Only Mobile"
+            "label": "Mobile"
           },
           {
             "value": "desktop",
-            "label": "Only Desktop"
+            "label": "Desktop"
           }
         ]
       },
       {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove space between sections",
+        "default": true
+      },
+      {
         "type": "header",
-        "content": "Content width"
+        "content": "Content"
       },
       {
-        "type": "range",
-        "id": "section_max_width_desktop",
-        "label": "Section width (desktop ≥1024px)",
-        "min": 600,
-        "max": 1500,
-        "step": 10,
-        "unit": "px",
-        "default": 1200
+        "type": "text",
+        "id": "end_iso",
+        "label": "End date and time",
+        "default": "",
+        "info": "Format: 2026-12-31T23:59:00, or 2026-12-31T23:59:00+02:00 for one moment everywhere. An impossible date such as 2026-02-30 hides the timer. A date with an offset (+02:00) stays fixed; one without counts to the visitor's own clock.",
+        "placeholder": "2026-12-31T23:59:00"
       },
       {
-        "type": "range",
-        "id": "section_max_width_tablet",
-        "label": "Section width (tablet ≥768px)",
-        "min": 400,
-        "max": 1100,
-        "step": 10,
-        "unit": "px",
-        "default": 900
+        "type": "text",
+        "id": "expired_message",
+        "label": "Message when ended",
+        "default": "This offer has ended."
       },
       {
-        "type": "range",
-        "id": "section_max_width_mobile",
-        "label": "Section width (mobile)",
-        "min": 280,
-        "max": 800,
-        "step": 10,
-        "unit": "px",
-        "default": 560
+        "type": "checkbox",
+        "id": "show_days",
+        "label": "Show days",
+        "default": true
+      },
+      {
+        "type": "text",
+        "id": "label_days",
+        "label": "Days suffix",
+        "default": "d",
+        "visible_if": "{{ section.settings.show_days }}"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_hours",
+        "label": "Show hours",
+        "default": true
+      },
+      {
+        "type": "text",
+        "id": "label_hours",
+        "label": "Hours suffix",
+        "default": "h",
+        "visible_if": "{{ section.settings.show_hours }}"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_minutes",
+        "label": "Show minutes",
+        "default": true
+      },
+      {
+        "type": "text",
+        "id": "label_minutes",
+        "label": "Minutes suffix",
+        "default": "m",
+        "visible_if": "{{ section.settings.show_minutes }}"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_seconds",
+        "label": "Show seconds",
+        "default": true
+      },
+      {
+        "type": "text",
+        "id": "label_seconds",
+        "label": "Seconds suffix",
+        "default": "s",
+        "visible_if": "{{ section.settings.show_seconds }}"
       },
       {
         "type": "header",
@@ -1281,7 +1075,7 @@ if (!window['__cinLoad_{{ sid }}']) {
       {
         "type": "select",
         "id": "align",
-        "label": "Bar alignment",
+        "label": "Alignment",
         "default": "center",
         "options": [
           {
@@ -1300,8 +1094,28 @@ if (!window['__cinLoad_{{ sid }}']) {
       },
       {
         "type": "range",
+        "id": "section_max_width_desktop",
+        "label": "Content width (desktop)",
+        "min": 600,
+        "max": 1500,
+        "step": 10,
+        "unit": "px",
+        "default": 1200
+      },
+      {
+        "type": "range",
+        "id": "section_max_width_tablet",
+        "label": "Content width (tablet)",
+        "min": 400,
+        "max": 1100,
+        "step": 10,
+        "unit": "px",
+        "default": 900
+      },
+      {
+        "type": "range",
         "id": "gap_inline",
-        "label": "Gap between bar items (desktop)",
+        "label": "Gap between items (desktop)",
         "min": 4,
         "max": 40,
         "step": 1,
@@ -1310,126 +1124,13 @@ if (!window['__cinLoad_{{ sid }}']) {
       },
       {
         "type": "range",
-        "id": "gap_inline_mobile",
-        "label": "Gap between bar items (mobile)",
-        "min": 4,
-        "max": 30,
-        "step": 1,
-        "unit": "px",
-        "default": 13
-      },
-      {
-        "type": "range",
         "id": "timer_gap",
-        "label": "Gap between timer units",
+        "label": "Gap between units",
         "min": 4,
         "max": 30,
         "step": 1,
         "unit": "px",
         "default": 10
-      },
-      {
-        "type": "header",
-        "content": "End time"
-      },
-      {
-        "type": "text",
-        "id": "end_iso",
-        "label": "End date and time",
-        "default": "2026-12-31T23:59:00",
-        "info": "Format: 2026-12-31T23:59:00"
-      },
-      {
-        "type": "text",
-        "id": "expired_message",
-        "label": "Expired message",
-        "default": "This offer has ended."
-      },
-      {
-        "type": "color",
-        "id": "expired_color",
-        "label": "Expired text color"
-      },
-      {
-        "type": "header",
-        "content": "Units shown"
-      },
-      {
-        "type": "checkbox",
-        "id": "show_days",
-        "label": "Show days",
-        "default": true
-      },
-      {
-        "type": "checkbox",
-        "id": "show_hours",
-        "label": "Show hours",
-        "default": true
-      },
-      {
-        "type": "checkbox",
-        "id": "show_minutes",
-        "label": "Show minutes",
-        "default": true
-      },
-      {
-        "type": "checkbox",
-        "id": "show_seconds",
-        "label": "Show seconds",
-        "default": true
-      },
-      {
-        "type": "text",
-        "id": "label_days",
-        "label": "Days suffix",
-        "default": "d"
-      },
-      {
-        "type": "text",
-        "id": "label_hours",
-        "label": "Hours suffix",
-        "default": "h"
-      },
-      {
-        "type": "text",
-        "id": "label_minutes",
-        "label": "Minutes suffix",
-        "default": "m"
-      },
-      {
-        "type": "text",
-        "id": "label_seconds",
-        "label": "Seconds suffix",
-        "default": "s"
-      },
-      {
-        "type": "header",
-        "content": "Bar style"
-      },
-      {
-        "type": "color",
-        "id": "bar_bg",
-        "label": "Bar background"
-      },
-      {
-        "type": "color",
-        "id": "bar_text",
-        "label": "Bar text color"
-      },
-      {
-        "type": "color",
-        "id": "bar_border_color",
-        "label": "Bar border color"
-      },
-      {
-        "type": "range",
-        "id": "bar_border_width",
-        "label": "Bar border width",
-        "min": 0,
-        "max": 4,
-        "step": 1,
-        "unit": "px",
-        "default": 0
       },
       {
         "type": "range",
@@ -1443,18 +1144,8 @@ if (!window['__cinLoad_{{ sid }}']) {
       },
       {
         "type": "range",
-        "id": "bar_radius_mobile",
-        "label": "Bar corner radius (mobile)",
-        "min": 0,
-        "max": 100,
-        "step": 1,
-        "unit": "px",
-        "default": 24
-      },
-      {
-        "type": "range",
         "id": "bar_pad_x_desktop",
-        "label": "Bar padding x (desktop)",
+        "label": "Bar side padding (desktop)",
         "min": 8,
         "max": 60,
         "step": 1,
@@ -1464,7 +1155,7 @@ if (!window['__cinLoad_{{ sid }}']) {
       {
         "type": "range",
         "id": "bar_pad_y_desktop",
-        "label": "Bar padding y (desktop)",
+        "label": "Bar top and bottom padding (desktop)",
         "min": 4,
         "max": 32,
         "step": 1,
@@ -1473,226 +1164,129 @@ if (!window['__cinLoad_{{ sid }}']) {
       },
       {
         "type": "range",
-        "id": "bar_pad_x_mobile",
-        "label": "Bar padding x (mobile)",
-        "min": 8,
-        "max": 40,
+        "id": "bar_border_width",
+        "label": "Bar border width",
+        "min": 0,
+        "max": 4,
         "step": 1,
         "unit": "px",
-        "default": 22
-      },
-      {
-        "type": "range",
-        "id": "bar_pad_y_mobile",
-        "label": "Bar padding y (mobile)",
-        "min": 4,
-        "max": 28,
-        "step": 1,
-        "unit": "px",
-        "default": 14
+        "default": 0
       },
       {
         "type": "header",
-        "content": "Eyebrow style"
+        "content": "Appearance"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Enable custom styling",
+        "default": false
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Section background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "bar_bg",
+        "label": "Bar background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "bar_text",
+        "label": "Bar text colour",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "bar_border_color",
+        "label": "Bar border colour",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
       },
       {
         "type": "color",
         "id": "eyebrow_bg",
-        "label": "Eyebrow background"
+        "label": "Eyebrow background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
       },
       {
         "type": "color",
         "id": "eyebrow_color",
-        "label": "Eyebrow text color"
+        "label": "Eyebrow text colour",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
       },
       {
         "type": "color",
         "id": "eyebrow_dot_color",
-        "label": "Eyebrow pulsing dot"
-      },
-      {
-        "type": "header",
-        "content": "Message text"
-      },
-      {
-        "type": "select",
-        "id": "message_weight",
-        "label": "Message weight",
-        "default": "600",
-        "options": [
-          {
-            "value": "400",
-            "label": "Normal"
-          },
-          {
-            "value": "500",
-            "label": "Medium"
-          },
-          {
-            "value": "600",
-            "label": "Semi-bold"
-          },
-          {
-            "value": "700",
-            "label": "Bold"
-          },
-          {
-            "value": "800",
-            "label": "Extra-bold"
-          }
-        ]
-      },
-      {
-        "type": "range",
-        "id": "message_size_desktop",
-        "label": "Message size (desktop)",
-        "min": 12,
-        "max": 24,
-        "step": 1,
-        "unit": "px",
-        "default": 16
-      },
-      {
-        "type": "range",
-        "id": "message_size_mobile",
-        "label": "Message size (mobile)",
-        "min": 11,
-        "max": 20,
-        "step": 1,
-        "unit": "px",
-        "default": 14
-      },
-      {
-        "type": "header",
-        "content": "Digit style"
+        "label": "Eyebrow dot colour",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
       },
       {
         "type": "color",
         "id": "digit_color",
-        "label": "Digit color"
+        "label": "Number colour",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
       },
       {
         "type": "color",
         "id": "digit_bg",
-        "label": "Digit background"
-      },
-      {
-        "type": "select",
-        "id": "digit_weight",
-        "label": "Digit weight",
-        "default": "800",
-        "options": [
-          {
-            "value": "600",
-            "label": "Semi-bold"
-          },
-          {
-            "value": "700",
-            "label": "Bold"
-          },
-          {
-            "value": "800",
-            "label": "Extra-bold"
-          },
-          {
-            "value": "900",
-            "label": "Black"
-          }
-        ]
-      },
-      {
-        "type": "range",
-        "id": "digit_size_desktop",
-        "label": "Digit size (desktop)",
-        "min": 14,
-        "max": 40,
-        "step": 1,
-        "unit": "px",
-        "default": 22
-      },
-      {
-        "type": "range",
-        "id": "digit_size_mobile",
-        "label": "Digit size (mobile)",
-        "min": 12,
-        "max": 32,
-        "step": 1,
-        "unit": "px",
-        "default": 18
+        "label": "Number background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
       },
       {
         "type": "color",
         "id": "unit_label_color",
-        "label": "Unit suffix color"
+        "label": "Unit colour",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
       },
       {
-        "type": "select",
-        "id": "unit_label_weight",
-        "label": "Unit suffix weight",
-        "default": "600",
-        "options": [
-          {
-            "value": "400",
-            "label": "Normal"
-          },
-          {
-            "value": "500",
-            "label": "Medium"
-          },
-          {
-            "value": "600",
-            "label": "Semi-bold"
-          },
-          {
-            "value": "700",
-            "label": "Bold"
-          }
-        ]
+        "type": "color",
+        "id": "expired_color",
+        "label": "Ended message colour",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
       },
       {
-        "type": "range",
-        "id": "unit_label_size",
-        "label": "Unit suffix size",
-        "min": 9,
-        "max": 16,
-        "step": 1,
-        "unit": "px",
-        "default": 12
+        "type": "color",
+        "id": "cta_bg",
+        "label": "Button background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "cta_color",
+        "label": "Button text",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "cta_bg_hover",
+        "label": "Button background (hover)",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "cta_color_hover",
+        "label": "Button text (hover)",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "cta_border_color",
+        "label": "Button border",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
       },
       {
         "type": "header",
-        "content": "CTA button"
+        "content": "Button"
       },
       {
         "type": "checkbox",
         "id": "use_theme_button",
         "label": "Use theme button style",
         "default": true
-      },
-      {
-        "type": "color",
-        "id": "cta_bg",
-        "label": "Background"
-      },
-      {
-        "type": "color",
-        "id": "cta_color",
-        "label": "Text color"
-      },
-      {
-        "type": "color",
-        "id": "cta_bg_hover",
-        "label": "Background (hover)"
-      },
-      {
-        "type": "color",
-        "id": "cta_color_hover",
-        "label": "Text color (hover)"
-      },
-      {
-        "type": "color",
-        "id": "cta_border_color",
-        "label": "Border color"
       },
       {
         "type": "range",
@@ -1730,7 +1324,7 @@ if (!window['__cinLoad_{{ sid }}']) {
       {
         "type": "range",
         "id": "cta_pad_x",
-        "label": "Padding x",
+        "label": "Side padding",
         "min": 8,
         "max": 40,
         "step": 1,
@@ -1741,7 +1335,7 @@ if (!window['__cinLoad_{{ sid }}']) {
       {
         "type": "range",
         "id": "cta_pad_y",
-        "label": "Padding y",
+        "label": "Top and bottom padding",
         "min": 4,
         "max": 20,
         "step": 1,
@@ -1751,21 +1345,142 @@ if (!window['__cinLoad_{{ sid }}']) {
       },
       {
         "type": "header",
-        "content": "Style"
+        "content": "Typography"
       },
       {
-        "type": "color",
-        "id": "section_bg",
-        "label": "Section background"
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Custom fonts",
+        "default": false
+      },
+      {
+        "type": "font_picker",
+        "id": "heading_font",
+        "label": "Number font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Text font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "range",
+        "id": "message_size_desktop",
+        "label": "Message size (desktop)",
+        "min": 12,
+        "max": 24,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "select",
+        "id": "message_weight",
+        "label": "Message weight",
+        "default": "600",
+        "options": [
+          {
+            "value": "400",
+            "label": "Normal"
+          },
+          {
+            "value": "500",
+            "label": "Medium"
+          },
+          {
+            "value": "600",
+            "label": "Semi-bold"
+          },
+          {
+            "value": "700",
+            "label": "Bold"
+          },
+          {
+            "value": "800",
+            "label": "Extra-bold"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "digit_size_desktop",
+        "label": "Number size (desktop)",
+        "min": 14,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 22
+      },
+      {
+        "type": "select",
+        "id": "digit_weight",
+        "label": "Number weight",
+        "default": "800",
+        "options": [
+          {
+            "value": "600",
+            "label": "Semi-bold"
+          },
+          {
+            "value": "700",
+            "label": "Bold"
+          },
+          {
+            "value": "800",
+            "label": "Extra-bold"
+          },
+          {
+            "value": "900",
+            "label": "Black"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "unit_label_size",
+        "label": "Unit size",
+        "min": 9,
+        "max": 16,
+        "step": 1,
+        "unit": "px",
+        "default": 12
+      },
+      {
+        "type": "select",
+        "id": "unit_label_weight",
+        "label": "Unit weight",
+        "default": "600",
+        "options": [
+          {
+            "value": "400",
+            "label": "Normal"
+          },
+          {
+            "value": "500",
+            "label": "Medium"
+          },
+          {
+            "value": "600",
+            "label": "Semi-bold"
+          },
+          {
+            "value": "700",
+            "label": "Bold"
+          }
+        ]
       },
       {
         "type": "header",
-        "content": "Layout & Spacing"
+        "content": "Desktop spacing"
       },
       {
         "type": "range",
         "id": "padding_top_desktop",
-        "label": "Top padding (desktop)",
+        "label": "Top padding",
         "min": 0,
         "max": 200,
         "step": 4,
@@ -1775,7 +1490,7 @@ if (!window['__cinLoad_{{ sid }}']) {
       {
         "type": "range",
         "id": "padding_bottom_desktop",
-        "label": "Bottom padding (desktop)",
+        "label": "Bottom padding",
         "min": 0,
         "max": 200,
         "step": 4,
@@ -1785,20 +1500,22 @@ if (!window['__cinLoad_{{ sid }}']) {
       {
         "type": "range",
         "id": "section_margin_top_desktop",
-        "label": "Top margin (desktop px)",
+        "label": "Top margin",
         "min": -200,
         "max": 300,
         "step": 5,
-        "default": 0
+        "default": 0,
+        "visible_if": "{{ section.settings.reset_spacing == false }}"
       },
       {
         "type": "range",
         "id": "section_margin_bottom_desktop",
-        "label": "Bottom margin (desktop px)",
+        "label": "Bottom margin",
         "min": -200,
         "max": 300,
         "step": 5,
-        "default": 0
+        "default": 0,
+        "visible_if": "{{ section.settings.reset_spacing == false }}"
       },
       {
         "type": "header",
@@ -1806,8 +1523,78 @@ if (!window['__cinLoad_{{ sid }}']) {
       },
       {
         "type": "range",
+        "id": "section_max_width_mobile",
+        "label": "Content width",
+        "min": 280,
+        "max": 800,
+        "step": 10,
+        "unit": "px",
+        "default": 560
+      },
+      {
+        "type": "range",
+        "id": "gap_inline_mobile",
+        "label": "Gap between items",
+        "min": 4,
+        "max": 30,
+        "step": 1,
+        "unit": "px",
+        "default": 13
+      },
+      {
+        "type": "range",
+        "id": "bar_radius_mobile",
+        "label": "Bar corner radius",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "default": 24
+      },
+      {
+        "type": "range",
+        "id": "bar_pad_x_mobile",
+        "label": "Bar side padding",
+        "min": 8,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 22
+      },
+      {
+        "type": "range",
+        "id": "bar_pad_y_mobile",
+        "label": "Bar top and bottom padding",
+        "min": 4,
+        "max": 28,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "range",
+        "id": "message_size_mobile",
+        "label": "Message size",
+        "min": 11,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "range",
+        "id": "digit_size_mobile",
+        "label": "Number size",
+        "min": 12,
+        "max": 32,
+        "step": 1,
+        "unit": "px",
+        "default": 18
+      },
+      {
+        "type": "range",
         "id": "padding_top_mobile",
-        "label": "Top padding (mobile)",
+        "label": "Top padding",
         "min": 0,
         "max": 200,
         "step": 2,
@@ -1817,12 +1604,34 @@ if (!window['__cinLoad_{{ sid }}']) {
       {
         "type": "range",
         "id": "padding_bottom_mobile",
-        "label": "Bottom padding (mobile)",
+        "label": "Bottom padding",
         "min": 0,
         "max": 200,
         "step": 2,
         "unit": "px",
         "default": 16
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_mobile",
+        "label": "Top margin",
+        "min": -200,
+        "max": 300,
+        "step": 5,
+        "unit": "px",
+        "default": 0,
+        "visible_if": "{{ section.settings.reset_spacing == false }}"
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_mobile",
+        "label": "Bottom margin",
+        "min": -200,
+        "max": 300,
+        "step": 5,
+        "unit": "px",
+        "default": 0,
+        "visible_if": "{{ section.settings.reset_spacing == false }}"
       }
     ],
     "blocks": [
@@ -1842,6 +1651,23 @@ if (!window['__cinLoad_{{ sid }}']) {
             "id": "show_dot",
             "label": "Show pulsing dot",
             "default": true
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Custom font",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
           }
         ]
       },
@@ -1855,6 +1681,40 @@ if (!window['__cinLoad_{{ sid }}']) {
             "id": "text",
             "label": "Message",
             "default": "Sale ends in"
+          },
+          {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Colour",
+            "default": "",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Custom font",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
           }
         ]
       },

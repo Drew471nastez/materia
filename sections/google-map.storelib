@@ -90,32 +90,7 @@
           named inner wrapper. The padding-inline sets the max content
           area while the wrapper itself stays 100% wide so any background
           stays edge-to-edge. */
-  {%- case section.settings.section_width -%}
-    {%- when 'container' -%}
-      #shopify-section-{{ section.id }} .container,
-      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
-        max-width: calc(var(--page-width, 1300px) + 3rem) !important;
-        margin-inline: auto !important;
-        box-sizing: border-box !important;
-      }
-    {%- when 'fluid_container' -%}
-      #shopify-section-{{ section.id }} .fluid_container,
-      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
-        max-width: calc(var(--fluid-container-width, 1500px) + 3rem) !important;
-        margin-inline: auto !important;
-        box-sizing: border-box !important;
-      }
-    {%- when 'stretch_width' -%}
-      /* Stretched: no max-width; tighter side padding handled below */
-      @media (min-width: 1200px) {
-        #shopify-section-{{ section.id }} .stretch_width,
-        #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
-          padding-inline: 3rem;
-        }
-      }
-    {%- when 'full_width' -%}
-      /* full bleed — no constraints */
-  {%- endcase -%}
+  {%- render 'contact-live-width', sid: section.id -%}
   /* Reset spacing */
   {%- if section.settings.reset_spacing -%}
     #shopify-section-{{ section.id }} { margin-bottom: 0 !important; margin-top: 0 !important; }
@@ -125,13 +100,16 @@
 <!-- ti-theme:start -->
 {%- comment -%}
   Materia Themes. Developed By Materia Themes.
+  Google map: an optional heading and subheading (blocks; the older Heading
+  and Description settings show when there are none), then the map from the
+  embed code pasted in Map embed code, as pasted. live-contact.js applies
+  live edits (colour scheme, width, height, alignment, spacing, header
+  blocks); a new embed code is drawn by the builder's redraw.
 {%- endcomment -%}
 {%- liquid
   assign section_st = section.settings
   assign section_width = section_st.section_width
   assign color_scheme = section_st.color_scheme.id | default: section_st.color_scheme | default: 'default-color-scheme'
-  assign heading = section_st.heading
-  assign description = section_st.description
   assign header_size = ''
   if section_st.header_size == 'small'
     assign header_size = 'h3'
@@ -145,77 +123,81 @@
   if section_st.reveal == false
     assign scroll_animation = 'none'
   endif
+  assign sec_font = false
+  if section_st.enable_custom_fonts
+    assign sec_font = true
+  endif
+  assign gm_has_header = false
+  for b in section.blocks
+    if b.settings.text != blank
+      assign gm_has_header = true
+    endif
+  endfor
+  assign gm_heading_blocks = section.blocks | where: 'type', 'heading'
+  assign gm_sub_blocks = section.blocks | where: 'type', 'subheading'
+  if gm_heading_blocks.size == 0 and section_st.heading != blank
+    assign gm_has_header = true
+  endif
+  if gm_sub_blocks.size == 0 and section_st.description != blank
+    assign gm_has_header = true
+  endif
+  assign gm_map_h = section_st.map_height | default: 500
+  assign gm_map_h_m = section_st.map_height_mobile | default: 0
+  if gm_map_h_m == 0
+    assign gm_map_h_m = gm_map_h
+  endif
 -%}
-{%- capture style -%}
+{%- capture gm_vars -%}
   --section-pt: {{ section_st.padding_top }}; --section-pb: {{ section_st.padding_bottom }};
+  {%- if sec_font and section_st.heading_font.family != blank %} --ct-hf: {{ section_st.heading_font.family }}, {{ section_st.heading_font.fallback_families }};{%- endif -%}
+  {%- if sec_font and section_st.body_font.family != blank %} --ct-bf: {{ section_st.body_font.family }}, {{ section_st.body_font.fallback_families }};{%- endif -%}
 {%- endcapture -%}
-{%- style -%}
-  .sec__google-map iframe {
+{%- if sec_font -%}<style>{{ section_st.heading_font | font_face: font_display: 'swap' }}{{ section_st.body_font | font_face: font_display: 'swap' }}{% comment %}{% endcomment %}</style>{%- endif -%}
+<style>
+  #shopify-section-{{ section.id }} .sec__google-map .sec__content { border-radius: var(--gm-radius, 0px); overflow: hidden; }
+  #shopify-section-{{ section.id }} .sec__google-map .sec__content iframe {
     width: 100%;
-    height: var(--map-height);
+    height: var(--map-height-m, var(--map-height));
   }
-{%- endstyle -%}
+  #shopify-section-{{ section.id }} .ct-map__empty {
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 12px;
+    height: var(--map-height-m, var(--map-height));
+    padding: 24px;
+    text-align: center;
+    color: var(--color-text);
+    background: color-mix(in srgb, var(--color-text) 6%, var(--color-background));
+    border: 1px dashed color-mix(in srgb, var(--color-text) 30%, transparent);
+    box-sizing: border-box;
+  }
+  #shopify-section-{{ section.id }} .ct-map__empty svg { width: 40px; height: 40px; opacity: .6; }
+  @media (min-width: 768px) {
+    #shopify-section-{{ section.id }} .sec__google-map .sec__content iframe,
+    #shopify-section-{{ section.id }} .ct-map__empty { height: var(--map-height); }
+  }
+{% comment %}{% endcomment %}</style>
 <div
   class="section{% if section_st.padding_top < 30 %} pt-min{% endif %}{% if section_st.padding_bottom < 30 %} pb-min{% endif %} sec__google-map color-{{ color_scheme }} gradient{{ reset_spacing }}"
-  style="{{ style | strip | strip_newlines }}"
+  data-ct-root="google-map" data-ct-section="{{ section.id }}" data-ct-settings="{{ section.settings | json | escape }}" data-ct-w="{{ section_width }}"
+  style="{{ gm_vars | strip | strip_newlines }}"
 >
-  <div class="{{ section_width }}">
-    <div class="sec__inner relative" style="--map-height: {{ section_st.map_height }}px">
-      {%- if heading != blank or description != blank -%}
-        <div class="section__header mb-33 mb-sm-20 text-{{ section_st.header_alignment }}{% if section_st.section_width == 'full_width' %} px-20{% endif %}">
-          {%- if section_st.heading != blank -%}
-            <motion-element
-              data-motion="fade-up-lg"
-              {% if scroll_animation != 'slide_in' %}
-                hold
-              {% endif %}
-              data-motion-delay="50"
-              class="block {% if scroll_animation != 'none' %} scroll-trigger {{ scroll_animation }}{% endif %}"
-              style="
-                {%- if scroll_animation != 'none' -%}
-                  --animation-order: 0;
-                {% endif %}
-              "
-            >
-            <h2
-              class="section__header-heading  heading-letter-spacing {{ header_size  }} mt-0{% if section_st.description != blank %} mb-10{% else %} mb-0{% endif %}"
-              style="
-                {%- if scroll_animation != 'none' -%}
-                  --animation-order: 0
-                {% endif %}
-              "
-            >
-              {{ section_st.heading }}
-            </h2>
-          </motion-element>
-          {% endif %}
-          {%- if section_st.description != blank -%}
-            <motion-element
-              data-motion="fade-up-lg"
-              data-motion-delay="150"
-              {% if scroll_animation != 'slide_in' %}
-                hold
-              {% endif %}
-              class="section__header-des block {% if scroll_animation != 'none' %} scroll-trigger {{ scroll_animation }} {% endif %} rich__text-m0"
-              style="
-                {%- if scroll_animation != 'none' -%}
-                  --animation-order: 1
-                {% endif %}
-              "
-            >
-              {{ section_st.description }}
-            </motion-element>
-          {% endif %}
-        </div>
-      {% endif %}
-      <div class="sec__content">
+  <div class="{{ section_width }}" data-ct-width>
+    <div class="sec__inner relative" data-ct-inner style="--map-height: {{ gm_map_h }}px;{% if gm_map_h_m != gm_map_h %} --map-height-m: {{ gm_map_h_m }}px;{% endif %}{% if section_st.map_radius > 0 %} --gm-radius: {{ section_st.map_radius }}px;{% endif %}">
+      <div class="section__header ct-header mb-33 mb-sm-20 text-{{ section_st.header_alignment }}{% if section_st.section_width == 'full_width' %} px-20{% endif %}" data-ct-header{% unless gm_has_header %} hidden{% endunless %}>
+        {%- render 'contact-live-header', section: section, anim: scroll_animation, size_class: header_size, sec_font: sec_font -%}
+      </div>
+      <div class="sec__content" data-ct-map>
         {%- if section_st.map_iframe != blank -%}
           {{ section_st.map_iframe }}
-        {%- else -%}
-          <span>
-            {{ 'section.google_map.no_iframe' | t }}
-          </span>
-        {% endif %}
+        {%- elsif request.design_mode -%}
+          {%- comment -%} Builder only: where the map goes until an embed code is pasted. {%- endcomment -%}
+          <div class="ct-map__empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/></svg>
+            <span>Paste the map's embed code in Map embed code.</span>
+          </div>
+        {%- endif -%}
       </div>
     </div>
   </div>
@@ -438,7 +420,7 @@
     ]
   },
   "shopify": {
-    "name": "t:sections.google_map.name",
+    "name": "Google map",
     "tag": "section",
     "disabled_on": {
       "groups": [
@@ -450,7 +432,13 @@
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "select",
@@ -477,66 +465,10 @@
         ]
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
-      },
-      {
         "type": "checkbox",
         "id": "reset_spacing",
-        "label": "Remove section spacing",
+        "label": "Remove space between sections",
         "default": true
-      },
-      {
-        "type": "header",
-        "content": "General"
-      },
-      {
-        "type": "checkbox",
-        "id": "reveal",
-        "label": "Reveal on scroll",
-        "default": true
-      },
-      {
-        "type": "select",
-        "id": "header_size",
-        "label": "t:sections.all.section_header.header_size.label",
-        "default": "medium",
-        "options": [
-          {
-            "value": "small",
-            "label": "t:sections.all.section_header.header_size.small.label"
-          },
-          {
-            "value": "medium",
-            "label": "t:sections.all.section_header.header_size.medium.label"
-          },
-          {
-            "value": "large",
-            "label": "t:sections.all.section_header.header_size.large.label"
-          }
-        ]
-      },
-      {
-        "type": "select",
-        "id": "header_alignment",
-        "label": "t:sections.all.section_header.alignment.label",
-        "default": "center",
-        "options": [
-          {
-            "value": "left",
-            "label": "t:sections.all.content_settings.content_alignment.left.label"
-          },
-          {
-            "value": "center",
-            "label": "t:sections.all.content_settings.content_alignment.center.label"
-          },
-          {
-            "value": "right",
-            "label": "t:sections.all.content_settings.content_alignment.right.label"
-          }
-        ]
       },
       {
         "type": "header",
@@ -546,21 +478,46 @@
         "type": "text",
         "id": "heading",
         "default": "Google map",
-        "label": "t:sections.all.section_header.heading.label"
+        "label": "Heading",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no heading block"
       },
       {
         "type": "richtext",
         "id": "description",
-        "label": "t:sections.all.section_header.description.label"
+        "label": "Description",
+        "hidden": true,
+        "info": "Legacy: used only when the section has no subheading block"
       },
       {
         "type": "textarea",
         "id": "map_iframe",
-        "label": "Map embed code"
+        "label": "Map embed code",
+        "info": "Google Maps > Share > Embed a map > Copy HTML, then paste it here."
       },
       {
         "type": "header",
-        "content": "Map Settings"
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "header_alignment",
+        "label": "Header alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
       },
       {
         "type": "range",
@@ -570,16 +527,91 @@
         "step": 10,
         "unit": "px",
         "default": 500,
-        "label": "t:sections.google_map.map_height.label"
+        "label": "Map height (desktop)"
+      },
+      {
+        "type": "range",
+        "id": "map_height_mobile",
+        "label": "Map height (mobile)",
+        "min": 0,
+        "max": 1000,
+        "step": 10,
+        "unit": "px",
+        "default": 0,
+        "info": "0 uses the desktop height."
+      },
+      {
+        "type": "range",
+        "id": "map_radius",
+        "label": "Map corner radius",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 0
       },
       {
         "type": "header",
-        "content": "Layout & Spacing"
+        "content": "Typography"
+      },
+      {
+        "type": "select",
+        "id": "header_size",
+        "label": "Heading size",
+        "default": "medium",
+        "options": [
+          {
+            "value": "small",
+            "label": "Small"
+          },
+          {
+            "value": "medium",
+            "label": "Medium"
+          },
+          {
+            "value": "large",
+            "label": "Large"
+          }
+        ]
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Enable custom fonts",
+        "default": false
+      },
+      {
+        "type": "font_picker",
+        "default": "assistant_n4",
+        "id": "heading_font",
+        "label": "Heading font",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "font_picker",
+        "default": "assistant_n4",
+        "id": "body_font",
+        "label": "Body font",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "header",
+        "content": "Animation"
+      },
+      {
+        "type": "checkbox",
+        "id": "reveal",
+        "label": "Reveal on scroll",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Desktop spacing"
       },
       {
         "type": "range",
         "id": "padding_top",
-        "label": "t:sections.all.section_padding.top.label",
+        "label": "Top padding",
         "default": 0,
         "min": 0,
         "max": 100,
@@ -589,7 +621,7 @@
       {
         "type": "range",
         "id": "padding_bottom",
-        "label": "t:sections.all.section_padding.bottom.label",
+        "label": "Bottom padding",
         "default": 0,
         "min": 0,
         "max": 100,
@@ -599,20 +631,24 @@
       {
         "type": "range",
         "id": "section_margin_top_desktop",
-        "label": "Top margin (desktop px)",
+        "label": "Top margin (desktop)",
         "min": 0,
         "max": 300,
         "step": 4,
-        "default": 0
+        "default": 0,
+        "unit": "px",
+        "visible_if": "{{ section.settings.reset_spacing == false }}"
       },
       {
         "type": "range",
         "id": "section_margin_bottom_desktop",
-        "label": "Bottom margin (desktop px)",
+        "label": "Bottom margin (desktop)",
         "min": 0,
         "max": 300,
         "step": 4,
-        "default": 0
+        "default": 0,
+        "unit": "px",
+        "visible_if": "{{ section.settings.reset_spacing == false }}"
       },
       {
         "type": "header",
@@ -621,26 +657,300 @@
       {
         "type": "range",
         "id": "section_margin_top_mobile",
-        "label": "Top margin (mobile px)",
+        "label": "Top margin (mobile)",
         "min": 0,
         "max": 300,
         "step": 4,
-        "default": 0
+        "default": 0,
+        "unit": "px",
+        "visible_if": "{{ section.settings.reset_spacing == false }}"
       },
       {
         "type": "range",
         "id": "section_margin_bottom_mobile",
-        "label": "Bottom margin (mobile px)",
+        "label": "Bottom margin (mobile)",
         "min": 0,
         "max": 300,
         "step": 4,
-        "default": 0
+        "default": 0,
+        "unit": "px",
+        "visible_if": "{{ section.settings.reset_spacing == false }}"
       }
     ],
     "presets": [
       {
-        "name": "Layout — Google Map",
-        "category": "Contact"
+        "name": "Google map",
+        "category": "Contact",
+        "blocks": [
+          {
+            "type": "heading"
+          },
+          {
+            "type": "subheading"
+          }
+        ]
+      }
+    ],
+    "blocks": [
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "inline_richtext",
+            "id": "text",
+            "label": "Heading",
+            "default": "Find us"
+          },
+          {
+            "type": "select",
+            "id": "tag",
+            "label": "HTML tag",
+            "default": "h2",
+            "hidden": true,
+            "info": "Legacy: the heading is always an h2 (the hero holds the page's h1).",
+            "options": [
+              {
+                "value": "h2",
+                "label": "H2"
+              },
+              {
+                "value": "h3",
+                "label": "H3"
+              }
+            ]
+          },
+          {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom font",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "default": "assistant_n4",
+            "id": "font",
+            "label": "Font",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
+          },
+          {
+            "type": "checkbox",
+            "id": "weight_enable",
+            "label": "Custom font weight",
+            "default": false
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Weight",
+            "default": "700",
+            "visible_if": "{{ block.settings.weight_enable }}",
+            "options": [
+              {
+                "value": "300",
+                "label": "300"
+              },
+              {
+                "value": "400",
+                "label": "400"
+              },
+              {
+                "value": "500",
+                "label": "500"
+              },
+              {
+                "value": "600",
+                "label": "600"
+              },
+              {
+                "value": "700",
+                "label": "700"
+              },
+              {
+                "value": "800",
+                "label": "800"
+              }
+            ]
+          },
+          {
+            "type": "checkbox",
+            "id": "size_enable",
+            "label": "Custom size",
+            "default": false
+          },
+          {
+            "type": "range",
+            "id": "size_desktop",
+            "label": "Size (desktop)",
+            "min": 16,
+            "max": 80,
+            "step": 1,
+            "unit": "px",
+            "default": 36,
+            "visible_if": "{{ block.settings.size_enable }}"
+          },
+          {
+            "type": "range",
+            "id": "size_mobile",
+            "label": "Size (mobile)",
+            "min": 14,
+            "max": 56,
+            "step": 1,
+            "unit": "px",
+            "default": 26,
+            "visible_if": "{{ block.settings.size_enable }}"
+          },
+          {
+            "type": "range",
+            "id": "line_height",
+            "label": "Line height",
+            "min": 0.9,
+            "max": 2,
+            "step": 0.05,
+            "default": 1.15,
+            "visible_if": "{{ block.settings.size_enable }}"
+          },
+          {
+            "type": "range",
+            "id": "tracking",
+            "label": "Letter spacing",
+            "min": -2,
+            "max": 6,
+            "step": 0.5,
+            "unit": "px",
+            "default": 0,
+            "visible_if": "{{ block.settings.size_enable }}"
+          }
+        ]
+      },
+      {
+        "type": "subheading",
+        "name": "Subheading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "richtext",
+            "id": "text",
+            "label": "Text",
+            "default": "<p>Visit the store or get directions on the map.</p>"
+          },
+          {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom font",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "default": "assistant_n4",
+            "id": "font",
+            "label": "Font",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
+          },
+          {
+            "type": "checkbox",
+            "id": "weight_enable",
+            "label": "Custom font weight",
+            "default": false
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Weight",
+            "default": "400",
+            "visible_if": "{{ block.settings.weight_enable }}",
+            "options": [
+              {
+                "value": "300",
+                "label": "300"
+              },
+              {
+                "value": "400",
+                "label": "400"
+              },
+              {
+                "value": "500",
+                "label": "500"
+              },
+              {
+                "value": "600",
+                "label": "600"
+              },
+              {
+                "value": "700",
+                "label": "700"
+              }
+            ]
+          },
+          {
+            "type": "checkbox",
+            "id": "size_enable",
+            "label": "Custom size",
+            "default": false
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "label": "Size",
+            "min": 12,
+            "max": 28,
+            "step": 1,
+            "unit": "px",
+            "default": 16,
+            "visible_if": "{{ block.settings.size_enable }}"
+          },
+          {
+            "type": "range",
+            "id": "line_height",
+            "label": "Line height",
+            "min": 1,
+            "max": 2,
+            "step": 0.05,
+            "default": 1.5,
+            "visible_if": "{{ block.settings.size_enable }}"
+          }
+        ]
       }
     ]
   }

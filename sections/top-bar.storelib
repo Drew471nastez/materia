@@ -66,13 +66,13 @@
   }
   /* Section margin sliders (mobile-first) */
   #shopify-section-{{ section.id }} {
-    margin-top: {{ section.settings.section_margin_top_mobile | default: 0 }}px;
-    margin-bottom: {{ section.settings.section_margin_bottom_mobile | default: 0 }}px;
+    margin-top: var(--tb-mt, {{ section.settings.section_margin_top_mobile | default: 0 }}px);
+    margin-bottom: var(--tb-mb, {{ section.settings.section_margin_bottom_mobile | default: 0 }}px);
   }
   @media (min-width: 768px) {
     #shopify-section-{{ section.id }} {
-      margin-top: {{ section.settings.section_margin_top_desktop | default: 0 }}px;
-      margin-bottom: {{ section.settings.section_margin_bottom_desktop | default: 0 }}px;
+      margin-top: var(--tb-mt-d, {{ section.settings.section_margin_top_desktop | default: 0 }}px);
+      margin-bottom: var(--tb-mb-d, {{ section.settings.section_margin_bottom_desktop | default: 0 }}px);
     }
   }
   /* Section wrapper spans its parent's full width without breaking out of
@@ -200,16 +200,21 @@
     {%- endif -%}
 
 
-    {%- if enable_custom_position and desktop_horizontal_offset != 0 -%}
-      /* Custom desktop horizontal offset — shifts the announcement messages
-         left/right within the bar on desktop only. Mobile stays centered. */
-      @media (min-width: 1025px) {
-        #topbar-{{ section.id }} .topbar-item.text-slide {
-          transform: translateX({{ desktop_horizontal_offset }}%);
-          will-change: transform;
-        }
+    /* Custom desktop horizontal offset: shifts the messages left or right
+       within the bar on desktop only (--tb-offset, written on the bar while
+       Custom position is on). Mobile stays centred. */
+    @media (min-width: 1025px) {
+      #topbar-{{ section.id }}[data-tb-offset] .topbar-item.text-slide {
+        transform: translateX(var(--tb-offset, 0%));
+        will-change: transform;
       }
-    {%- endif -%}
+    }
+    /* Custom font (Typography): the bar's text keeps it over the theme font. */
+    #topbar-{{ section.id }} .topbar__section-inner[data-own-font] { font-family: var(--tb-font, inherit); }
+    /* A Message block's own colour wins over the bar's text and link colours. */
+    #topbar-{{ section.id }} [data-tb-own-color],
+    #topbar-{{ section.id }} [data-tb-own-color] :is(.topbar-text-cell, .topbar-text, a) { color: var(--tb-msg-color) !important; }
+    #topbar-{{ section.id }} .topbar-message__link { color: inherit; text-decoration-line: underline; text-underline-offset: 3px; }
 
     /* Navigation occupies real columns outside the clipped Swiper viewport. */
     #shopify-section-{{ section.id }}:has(.button-localization.open) { z-index: 25; }
@@ -255,8 +260,8 @@
       grid-area: 1 / 1;
       min-width: 0;
       align-items: center;
-      justify-content: {% if text_align == 'left' %}flex-start{% elsif text_align == 'right' %}flex-end{% else %}center{% endif %};
-      text-align: {{ text_align }};
+      justify-content: var(--tb-justify, center);
+      text-align: var(--tb-align, center);
       height: auto;
       white-space: normal;
       overflow-wrap: anywhere;
@@ -337,14 +342,29 @@
       #topbar-{{ section.id }} .text-slide { max-width: 100%; }
     }
   {%- endstyle -%}
+  {%- liquid
+    case text_align
+      when 'left'
+        assign tb_justify = 'flex-start'
+      when 'right'
+        assign tb_justify = 'flex-end'
+      else
+        assign tb_justify = 'center'
+    endcase
+    assign tb_font = blank
+    if section_st.enable_custom_fonts and section_st.font != blank
+      assign tb_font = section_st.font.family | append: ', ' | append: section_st.font.fallback_families
+    endif
+  -%}
+  {%- if tb_font != blank -%}{% style %}{{ section_st.font | font_face: font_display: 'swap' }}{% endstyle %}{%- endif -%}
   {%- capture style -%}
-    --section-pt: {{ section_st.padding_top }}; --section-pb: {{ section_st.padding_bottom }};--swiper-navigation-color: var(--color-text);
+    --section-pt: {{ section_st.padding_top }}; --section-pb: {{ section_st.padding_bottom }};--swiper-navigation-color: var(--color-text);--tb-justify: {{ tb_justify }};--tb-align: {{ text_align }};{% if enable_custom_position and desktop_horizontal_offset != 0 %}--tb-offset: {{ desktop_horizontal_offset }}%;{% endif %}
   {%- endcapture -%}
   {%- liquid
     assign hidden_block = true
     for block in section.blocks
       assign block_st = block.settings
-      if block_st.hidden_on_mobile == false
+      if block_st.hidden_on_mobile != true
         assign hidden_block = false
         break
       endif
@@ -352,15 +372,17 @@
   -%}
   <div
     id="topbar-{{ section.id }}" data-announcement-three="{{ section.id }}" data-pro-three-settings="{{ section_st | json | escape }}"
-    data-sticky-announcement="{{ sticky_top }}"
+    data-sticky-announcement="{{ sticky_top }}"{% if enable_custom_position and desktop_horizontal_offset != 0 %} data-tb-offset{% endif %}
+    data-tb-blocks="{% for b in section.blocks %}{{ b.id }}:{{ b.type }} {% endfor %}" data-tb-border="{{ border_position }}:{{ border_width }}" data-tb-pos="{{ enable_custom_position }}:{{ desktop_horizontal_offset }}"{% if section_st.show_mobile == blank %} data-tb-off-mobile{% endif %}{% if hidden_block == true %} data-tb-all-hidden{% endif %}
     class="topbar gradient{% if section_st.padding_top < 30 %} pt-min{% endif %}{% if section_st.padding_bottom < 30 %} pb-min{% endif %} section remove_spacing color-{{ color_scheme }}{% if hidden_block == true %} hidden block-1025{% endif %}{% if section_st.show_separator_line and border_position == blank %} border-bottom{% endif %}{% if section_st.uppercase %} uppercase{% endif %}{% if section_st.show_mobile == blank %} hidden block-1025{% endif %}"
     style="{{ style | strip | strip_newlines }}"
   >
     <div class="{{ section_width }}">
       <div
         class="flex flex-wrap flex-md-nowrap gap justify-center justify-between-1025 align-center topbar__section-inner gap-10 gap-lg-25 fs-custom {{ section_st.font_weight }}"
-        style="--font-size: {{ section_st.font_size }};"
+        style="--font-size: {{ section_st.font_size }};{% if tb_font != blank %}--tb-font: {{ tb_font }};{% endif %}"{% if tb_font != blank %} data-own-font{% endif %}{% if section_st.font != blank %} data-tb-font="{{ section_st.font.family }}, {{ section_st.font.fallback_families }}"{% endif %}
       >
+        {%- assign tb_messages_drawn = false -%}
         {%- for block in section.blocks -%}
           {%- liquid
             assign block_st = block.settings
@@ -368,7 +390,7 @@
           {%- case block.type -%}
             {%- when 'store_information' -%}
               {% if theme_st.store_email != blank or theme_st.store_phone != blank %}
-                <div class="topbar-item{% if block_st.hidden_on_mobile %} hidden flex-1025{% else %} flex{% endif %} gap-10">
+                <div class="topbar-item{% if block_st.hidden_on_mobile %} hidden flex-1025{% else %} flex{% endif %} gap-10" data-tb-block="{{ block.id }}">
                   {%- if block_st.show_phone and theme_st.store_phone != blank -%}
                     <a
                       class="no-underline"
@@ -402,12 +424,64 @@
                 or settings.tumblr != blank
                 or settings.snapchat != blank
               -%}
-                <div class="topbar-item{% if block_st.hidden_on_mobile %} hidden block-1025{% endif %}">
+                <div class="topbar-item{% if block_st.hidden_on_mobile %} hidden block-1025{% endif %}" data-tb-block="{{ block.id }}">
                   {%- render 'social-icons' -%}
                 </div>
               {% endif %}
+            {%- when 'message' -%}
+              {%- comment -%}
+                Message blocks: one message each, drawn together in one
+                rotator where the first of them sits; Time per message is the
+                section's. The rotator is shopify/assets/live-header.js.
+              {%- endcomment -%}
+              {%- unless tb_messages_drawn -%}
+                {%- assign tb_messages_drawn = true -%}
+                <div class="topbar-item text-slide{% if show_arrows %} topbar-has-arrows{% endif %}{% if show_arrows_mobile %} topbar-mobile-arrows{% endif %}" data-tb-messages>
+                  {%- if show_arrows -%}
+                    <button type="button" class="topbar-slider-arrow topbar-slider-arrow--prev" aria-label="{{ 'accessibility.previous' | t }}" aria-controls="topbar-messages-{{ section.id }}">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M9 3 4 7l5 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                  {%- endif -%}
+                  <announcement-rotator-v2
+                    id="topbar-messages-{{ section.id }}"
+                    class="topbar-slider"
+                    data-section-id="{{ section.id }}"
+                    data-delay="{{ section_st.change_every | default: 5 }}"
+                    data-duration="{{ section_st.transition_speed | default: 700 }}"
+                  >
+                    <div class="topbar-track">
+                      {%- assign tb_first = true -%}
+                      {%- for msg in section.blocks -%}
+                        {%- if msg.type != 'message' -%}{%- continue -%}{%- endif -%}
+                        {%- liquid
+                          assign msg_st = msg.settings
+                          assign msg_mobile = msg_st.text_mobile | default: msg_st.text
+                          assign msg_color = blank
+                          if msg_st.enable_custom_style and msg_st.text_color != blank and msg_st.text_color.alpha != 0
+                            assign msg_color = msg_st.text_color
+                          endif
+                        -%}
+                        <div class="topbar-message{% if tb_first %} is-active{% endif %} lh-normal" data-tb-block="{{ msg.id }}" {{ msg.shopify_attributes }}{% if msg_st.text_mobile != blank %} data-tb-mobile-own{% endif %}{% if msg_st.text_color != blank and msg_st.text_color.alpha != 0 %} data-tb-color="{{ msg_st.text_color }}"{% endif %}{% if msg_color != blank %} data-tb-own-color style="--tb-msg-color: {{ msg_color }};"{% endif %}>
+                          <div class="px-10 topbar-text-cell">
+                            {%- if msg_st.link != blank -%}<a class="topbar-message__link" href="{{ msg_st.link }}" data-tb-link>{%- endif -%}
+                            <span class="topbar-text topbar-text--lg" data-tb-text>{{- msg_st.text -}}</span>
+                            <span class="topbar-text topbar-text--sm" data-tb-text-mobile>{{- msg_mobile -}}</span>
+                            {%- if msg_st.link != blank -%}</a>{%- endif -%}
+                          </div>
+                        </div>
+                        {%- assign tb_first = false -%}
+                      {%- endfor -%}
+                    </div>
+                  </announcement-rotator-v2>
+                  {%- if show_arrows -%}
+                    <button type="button" class="topbar-slider-arrow topbar-slider-arrow--next" aria-label="{{ 'accessibility.next' | t }}" aria-controls="topbar-messages-{{ section.id }}">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="m5 3 5 4-5 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                  {%- endif -%}
+                </div>
+              {%- endunless -%}
             {%- when 'text_slider' -%}
-              <div class="topbar-item text-slide{% if show_arrows %} topbar-has-arrows{% endif %}{% if show_arrows_mobile %} topbar-mobile-arrows{% endif %}{% if block_st.hidden_on_mobile %} hidden block-1025{% endif %}">
+              <div class="topbar-item text-slide{% if show_arrows %} topbar-has-arrows{% endif %}{% if show_arrows_mobile %} topbar-mobile-arrows{% endif %}{% if block_st.hidden_on_mobile %} hidden block-1025{% endif %}" data-tb-block="{{ block.id }}">
                 {%- if show_arrows -%}
                   <button type="button" class="topbar-slider-arrow topbar-slider-arrow--prev" aria-label="{{ 'accessibility.previous' | t }}" aria-controls="topbar-messages-{{ section.id }}-{{ block.id }}">
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M9 3 4 7l5 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -422,40 +496,40 @@
                 >
                   <div class="topbar-track">
                     {%- if block_st.text1 != blank or block_st.text1_mobile != blank -%}
-                      <div class="topbar-message is-active lh-normal">
+                      <div class="topbar-message is-active lh-normal" data-tb-slide="1"{% if block_st.text1_mobile != blank %} data-tb-mobile-own{% endif %}>
                         <div class="px-10 topbar-text-cell">
                           {%- if block_st.text1 != blank -%}
-                            <span class="topbar-text topbar-text--lg">{{- block_st.text1 -}}</span>
+                            <span class="topbar-text topbar-text--lg" data-tb-text>{{- block_st.text1 -}}</span>
                           {%- endif -%}
                           {%- assign mobile1 = block_st.text1_mobile | default: block_st.text1 -%}
                           {%- if mobile1 != blank -%}
-                            <span class="topbar-text topbar-text--sm">{{- mobile1 -}}</span>
+                            <span class="topbar-text topbar-text--sm" data-tb-text-mobile>{{- mobile1 -}}</span>
                           {%- endif -%}
                         </div>
                       </div>
                     {% endif %}
                     {%- if block_st.text2 != blank or block_st.text2_mobile != blank -%}
-                      <div class="topbar-message{% if block_st.text1 == blank and block_st.text1_mobile == blank %} is-active{% endif %} lh-normal">
+                      <div class="topbar-message{% if block_st.text1 == blank and block_st.text1_mobile == blank %} is-active{% endif %} lh-normal" data-tb-slide="2"{% if block_st.text2_mobile != blank %} data-tb-mobile-own{% endif %}>
                         <div class="px-10 topbar-text-cell">
                           {%- if block_st.text2 != blank -%}
-                            <span class="topbar-text topbar-text--lg">{{- block_st.text2 -}}</span>
+                            <span class="topbar-text topbar-text--lg" data-tb-text>{{- block_st.text2 -}}</span>
                           {%- endif -%}
                           {%- assign mobile2 = block_st.text2_mobile | default: block_st.text2 -%}
                           {%- if mobile2 != blank -%}
-                            <span class="topbar-text topbar-text--sm">{{- mobile2 -}}</span>
+                            <span class="topbar-text topbar-text--sm" data-tb-text-mobile>{{- mobile2 -}}</span>
                           {%- endif -%}
                         </div>
                       </div>
                     {% endif %}
                     {%- if block_st.text3 != blank or block_st.text3_mobile != blank -%}
-                      <div class="topbar-message{% if block_st.text1 == blank and block_st.text1_mobile == blank and block_st.text2 == blank and block_st.text2_mobile == blank %} is-active{% endif %} lh-normal">
+                      <div class="topbar-message{% if block_st.text1 == blank and block_st.text1_mobile == blank and block_st.text2 == blank and block_st.text2_mobile == blank %} is-active{% endif %} lh-normal" data-tb-slide="3"{% if block_st.text3_mobile != blank %} data-tb-mobile-own{% endif %}>
                         <div class="px-10 topbar-text-cell">
                           {%- if block_st.text3 != blank -%}
-                            <span class="topbar-text topbar-text--lg">{{- block_st.text3 -}}</span>
+                            <span class="topbar-text topbar-text--lg" data-tb-text>{{- block_st.text3 -}}</span>
                           {%- endif -%}
                           {%- assign mobile3 = block_st.text3_mobile | default: block_st.text3 -%}
                           {%- if mobile3 != blank -%}
-                            <span class="topbar-text topbar-text--sm">{{- mobile3 -}}</span>
+                            <span class="topbar-text topbar-text--sm" data-tb-text-mobile>{{- mobile3 -}}</span>
                           {%- endif -%}
                         </div>
                       </div>
@@ -476,7 +550,7 @@
                   {%- endif -%}
               </div>
             {%- when 'cur_lang' -%}
-              <div class="lang__currency-desktop justify-content-center justity-md-unset topbar-item{% if block_st.hidden_on_mobile %} hidden flex-1025{% else %} flex{% endif %} flex-wrap gap-10 gap-lg-25 align-center row-gap-0">
+              <div class="lang__currency-desktop justify-content-center justity-md-unset topbar-item{% if block_st.hidden_on_mobile %} hidden flex-1025{% else %} flex{% endif %} flex-wrap gap-10 gap-lg-25 align-center row-gap-0" data-tb-block="{{ block.id }}">
                 {%- if block_st.show_currency -%}
                   {%- render 'country-switcher', compact: true -%}
                 {% endif %}
@@ -1145,6 +1219,20 @@
         "default": 0
       },
       {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Custom font",
+        "default": false,
+        "info": "Off: the bar uses the theme body font."
+      },
+      {
+        "type": "font_picker",
+        "id": "font",
+        "label": "Font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
         "type": "header",
         "content": "Colors & appearance"
       },
@@ -1252,6 +1340,17 @@
         "default": 700
       },
       {
+        "type": "range",
+        "id": "change_every",
+        "label": "Time per message",
+        "min": 2,
+        "max": 12,
+        "step": 1,
+        "unit": "s",
+        "default": 5,
+        "info": "For Message blocks."
+      },
+      {
         "type": "header",
         "content": "Layout & spacing"
       },
@@ -1338,7 +1437,7 @@
         "default": true
       }
     ],
-    "max_blocks": 3,
+    "max_blocks": 10,
     "blocks": [
       {
         "type": "store_information",
@@ -1399,19 +1498,62 @@
         ]
       },
       {
+        "type": "message",
+        "name": "Message",
+        "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "inline_richtext",
+            "id": "text",
+            "label": "Text",
+            "default": "Announce shipping, returns or a new arrival here"
+          },
+          {
+            "type": "inline_richtext",
+            "id": "text_mobile",
+            "label": "Text on phones",
+            "info": "Empty: the text above."
+          },
+          {
+            "type": "url",
+            "id": "link",
+            "label": "Link"
+          },
+          {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Custom colour",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "text_color",
+            "label": "Text",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          }
+        ]
+      },
+      {
         "type": "text_slider",
         "name": "Announcement messages",
         "limit": 1,
         "settings": [
           {
             "type": "header",
-            "content": "Content — Slide 1"
+            "content": "Slide 1"
           },
           {
             "type": "inline_richtext",
             "id": "text1",
             "label": "Text 1 (desktop)",
-            "default": "Free shipping on orders over $99 — no code needed"
+            "default": "Free shipping on orders over $99"
           },
           {
             "type": "inline_richtext",
@@ -1420,13 +1562,13 @@
           },
           {
             "type": "header",
-            "content": "Content — Slide 2"
+            "content": "Slide 2"
           },
           {
             "type": "inline_richtext",
             "id": "text2",
             "label": "Text 2 (desktop)",
-            "default": "New season collection — explore the latest drop"
+            "default": "New season collection"
           },
           {
             "type": "inline_richtext",
@@ -1435,7 +1577,7 @@
           },
           {
             "type": "header",
-            "content": "Content — Slide 3"
+            "content": "Slide 3"
           },
           {
             "type": "inline_richtext",
@@ -1512,7 +1654,16 @@
         "name": "Announcement Bar Pro 3",
         "blocks": [
           {
-            "type": "text_slider"
+            "type": "message",
+            "settings": {
+              "text": "Announce shipping, returns or a new arrival here"
+            }
+          },
+          {
+            "type": "message",
+            "settings": {
+              "text": "Add a second message, it shows next"
+            }
           },
           {
             "type": "cur_lang"
