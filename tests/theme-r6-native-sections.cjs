@@ -8,7 +8,7 @@
 const fs = require('fs'), path = require('path'), assert = require('node:assert/strict');
 const {Liquid} = require(process.env.LIQUIDJS || 'liquidjs');
 const {chromium} = require('playwright');
-const ROOT = path.join(__dirname, '..');
+const ROOT = process.env.NATIVE_ROOT || path.join(__dirname, '..');
 const SHOTS = process.env.SHOTS || '';
 const NAMES = ['category_tabs','dropship_hero','faq_pants_down','feature_bento_grid','foundation_benefits','foundation_bento','foundation_comparison','foundation_cta','grouped_questions','help_centre_faq','storefront_hero'];
 const SCHEMES = {
@@ -49,7 +49,7 @@ const FILL = {
   storefront_hero: {settings: {product: PRODUCTS[1].settings, show_price_card: true}, blocks: () => [{}, {icon: 'truck'}, {icon: 'return'}]},
 };
 
-const engine = new Liquid({strictFilters: true});
+const engine = new Liquid({strictFilters: true, jsTruthy: true}); // native: an empty string is false
 engine.registerFilter('url', v => { v = v == null ? '' : String(v); return v === '' || /^(\/(?!\/)|https?:|mailto:|tel:|#)/.test(v) ? v : '#'; });
 engine.registerFilter('asset', v => v);
 engine.registerFilter('raw', v => v);
@@ -65,7 +65,8 @@ async function render(name, {scheme = 'light', inEditor = false, filled = true, 
   const blocks = [];
   if (filled && FILL[name].blocks) FILL[name].blocks().forEach((extra, i) => { const type = schema.blocks[0]; blocks.push({id: 'b' + i, type: type.type, settings: Object.assign(settingsOf(type.settings, sc), extra)}); });
   const ctx = {settings, blocks, section: {id: 'sec_' + name, type: name, settings, blocks}, scheme: sc, theme: {radius: {medium: 12}, typography: {heading: 'Georgia'}, colors: {}}, page: {in_editor: inEditor, template: 'index'}, products: PRODUCTS};
-  const strip = s => s.replace(/\{#[\s\S]*?#\}/g, '');
+  // liquidjs ignores a filter on a for loop's list, the native engine does not: assign it first.
+  const strip = s => s.replace(/\{#[\s\S]*?#\}/g, '').replace(/\{%\s*for (\w+) in ([\w.]+) \| lines\s*%\}/g, '{% assign __$1 = $2 | lines %}{% for $1 in __$1 %}');
   const html = await engine.parseAndRender(strip(template), ctx);
   const css = await engine.parseAndRender(strip(style), ctx);
   return {html, css, settings, blocks};
@@ -128,7 +129,7 @@ function ratio(a, b) { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); re
             if (b.height < 43.5 && !el.closest('p,li') ) out.small.push(el.className + ' ' + Math.round(b.height));
             if (b.height < 43.5 && el.closest('p,li')) out.small.push('[inline] ' + el.className + ' ' + Math.round(b.height));
           }
-          const bgOf = el => { for (let e = el; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (c && !/rgba\(0, 0, 0, 0\)|transparent/.test(c) && !/rgba\([^)]*, 0\)/.test(c)) return {c, img: getComputedStyle(e).backgroundImage !== 'none' || !!e.querySelector(':scope > img')}; } return {c: 'rgb(255, 255, 255)'}; };
+          const bgOf = el => { for (let e = el; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (c && !/transparent/.test(c) && !/rgba\(|\/ /.test(c)) return {c, img: getComputedStyle(e).backgroundImage !== 'none' || !!e.querySelector(':scope > img')}; } return {c: 'rgb(255, 255, 255)'}; };
           for (const el of document.querySelectorAll('h1,h2,h3,p,li,a,summary,th,td,strong,small,span,label')) {
             if (![...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) continue;
             const b = el.getBoundingClientRect(); if (!b.width) continue;
@@ -162,6 +163,11 @@ function ratio(a, b) { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); re
     // Live with nothing set: no editor notes reach a visitor.
     const live = await render(name, {filled: false});
     ok(!/sidebar|Choose a product|Add (a|the|your|cards|questions|benefit|comparison)/i.test(live.html.replace(/<[^>]+>/g, ' ')), `${name}: no editor prompt on the live site`);
+    // First frame: every word is visible before any animation has run (Add a section cards, scripts off).
+    { const p0 = await ctxs[1366].newPage(); await p0.setContent(page(await render(name, {inEditor: true})));
+      const hidden = await p0.evaluate(() => { document.getAnimations().forEach(a => { a.pause(); a.currentTime = 0; });
+        return [...document.querySelectorAll('h1,h2,h3,p,a,li,summary,img,th,td')].filter(e => { for (let x = e; x; x = x.parentElement) { const c = getComputedStyle(x); if (+c.opacity < 0.5 || c.visibility === 'hidden') return true; } return false; }).filter(e => !e.closest('details:not([open]) > :not(summary)')).map(e => e.tagName + '.' + e.className); });
+      ok(hidden.length === 0, `${name}: nothing hidden in the first frame ${hidden.slice(0, 4).join(',')}`); await p0.close(); }
     // Reduced motion: nothing keeps moving.
     const rm = await browser.newContext({viewport: {width: 1366, height: 900}, reducedMotion: 'reduce'});
     const pg = await rm.newPage(); await pg.setContent(page(await render(name, {}))); await pg.waitForTimeout(100);
@@ -173,7 +179,7 @@ function ratio(a, b) { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); re
   {
     const c = ctxs[1366]; const pg = await c.newPage();
     await pg.setContent(page(await render('dropship_hero', {}))); 
-    ok(await pg.locator('.dh__now').innerText() === '130 RON', 'dropship_hero: the chosen product\'s live price draws (was read from product.settings.*, which a product_picker does not have)');
+    ok((await pg.locator('.dh__now').count()) === 1 && (await pg.locator('.dh__now').innerText()) === '130 RON', 'dropship_hero: the chosen product\'s live price draws (was read from product.settings.*, which a product_picker does not have)');
     ok(await pg.locator('.dh__btn').getAttribute('href') === '/products/pants-down-1', 'dropship_hero: button goes to the product page');
     await pg.setContent(page(await render('dropship_hero', {override: {product: product(9, {available: false, tag: 'Sold out'}).settings}})));
     ok(await pg.locator('.dh__btn').count() === 0 && (await pg.locator('.dh__tag').innerText()) === 'Sold out', 'dropship_hero: a product that cannot be bought shows its tag and no button');
@@ -187,6 +193,8 @@ function ratio(a, b) { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); re
     ok(await pg.locator('.hc__item[open]').count() === 1, 'help_centre_faq: one answer open at a time');
     await pg.setContent(page(await render('grouped_questions', {})));
     ok(await pg.locator('h3.gq__topic').count() === 2, 'grouped_questions: topics draw');
+    await pg.setContent(page(await render('feature_bento_grid', {})));
+    ok(await pg.locator('.fbg__chip').count() === 3 && await pg.locator('.fbg__badge').count() === 2, 'feature_bento_grid: one chip and one badge per line');
     await pg.close();
   }
   await browser.close();
