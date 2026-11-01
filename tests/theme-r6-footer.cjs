@@ -251,7 +251,7 @@ const M_LIVE = new Set(['color_scheme', 'height', 'icon_size', 'radius_top', 'sh
         for (const s of sch.settings) {
           if (!s.id) continue;
           const with_ = st => blocks.map(x => x.id === b.id ? {...x, settings: st} : x);
-          const v = s.id === 'label' ? 'Tab ' + b.type : L.changed(s, b.settings[s.id]);
+          const v = s.id === 'label' ? 'Tab ' + b.type : s.options.find(o => o.value !== 'auto' && o.value !== b.settings[s.id] && o.value !== s.default).value;
           await draw(settings);
           const before = await sig(p, BSEL);
           await emit(p, {section: r.bid, block: b.id, settings: {[s.id]: v}});

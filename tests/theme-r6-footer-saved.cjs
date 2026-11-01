@@ -54,7 +54,7 @@ async function state(browser, opts, width, mode) {
       ok(JSON.stringify(a.errors) === JSON.stringify(b.errors), `${tag}: no new page errors (${b.errors.join('; ')})`);
       if (mode === 'closed') {
         /* Without the toggle only the Big text colour falls back to the scheme heading colour. */
-        const c = await state(browser, {design_mode}, width, mode);
+        const c = await state(browser, {design_mode, footer: {enable_custom_style: false}}, width, mode);
         const dc = L.diff(b.sig, c.sig);
         ok(dc.length >= 1 && dc.every(([i]) => /footer__custom-text|DIV/.test(b.sig[i]) && b.sig[i].includes('Prime1')), `${tag}: without Enable custom styling only the Big text differs\n` + L.explain(dc));
       }
