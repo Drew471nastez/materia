@@ -101,7 +101,7 @@ run({
       });
       const look = await savedLook(browser, {name: 'marquee-bar', file: 'templates/home.json', key: 'marquee_bar_jp8byW', width, toggles: {enable_custom_style: true}, probe});
       eq(look.new, look.old, 'saved home marquee ' + width + ' looks as before');
-      const plain = await savedLook(browser, {name: 'marquee-bar', file: 'templates/home.json', key: 'marquee_bar_jp8byW', width, probe});
+      const plain = await savedLook(browser, {name: 'marquee-bar', file: 'templates/home.json', key: 'marquee_bar_jp8byW', width, toggles: {enable_custom_style: false}, probe});
       eq(plain.new.items.map(x => x[1])[0], 'rgb(204, 204, 204)', 'saved home marquee ' + width + ' without the switch follows the scheme');
     }
     return 0;
