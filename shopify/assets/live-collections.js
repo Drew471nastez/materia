@@ -392,14 +392,15 @@
         if (!down) return; const d = down; down = null;
         row.classList.remove('is-grabbing');
         if (!d.moved) return;
-        row.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); }, {capture: true, once: true});
+        const guard = ev => { ev.preventDefault(); ev.stopPropagation(); };
+        row.addEventListener('click', guard, {capture: true, once: true});
+        setTimeout(() => row.removeEventListener('click', guard, {capture: true}), 0);
         /* Carry on from where the chips were left. */
         const dur = Math.max(1, num(st.s.scroll_duration, 40));
         let progress = Math.min(0.999, Math.max(0, -(d.v ?? d.start) / d.p));
         if (row.dataset.direction === 'right') progress = 1 - progress;
         track.style.transform = ''; track.style.animation = '';
         track.style.animationDelay = -(progress * dur) + 's';
-        setTimeout(() => { if (row.contains(track)) row.addEventListener('click', () => {}, {once: true}); }, 0);
       };
       row.addEventListener('pointerup', end, sig); row.addEventListener('pointercancel', end, sig);
       row.addEventListener('dragstart', e => e.preventDefault(), sig);
@@ -498,8 +499,9 @@
         if (!down) return; const d = down; down = null;
         if (!d.moved) return;
         track.classList.remove('is-dragging');
-        track.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); }, {capture: true, once: true});
-        setTimeout(() => track.dispatchEvent(new Event('lcb-dragend')), 0);
+        const guard = ev => { ev.preventDefault(); ev.stopPropagation(); };
+        track.addEventListener('click', guard, {capture: true, once: true});
+        setTimeout(() => track.removeEventListener('click', guard, {capture: true}), 0);
         const s = step() || 1; track.scrollTo({left: Math.min(max(), Math.round(track.scrollLeft / s) * s), behavior: behavior()});
       };
       track.addEventListener('pointerup', end, sig); track.addEventListener('pointercancel', end, sig);

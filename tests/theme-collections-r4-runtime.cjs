@@ -190,14 +190,14 @@ async function video(browser) {
 async function displayCarousel(browser) {
   /* The theme's carousel is built by global.js; a stand-in exposes the same globalSlide.autoplay API. */
   const name = 'collection-list';
-  const t = await mount(browser, name, {width: 1366, editing: false, settings: {display_mode: 'carousel', autoplay: true}, blocks: preset(name), assets: [], inlineScripts: false});
+  const t = await mount(browser, name, {width: 1366, editing: true, settings: {display_mode: 'carousel', autoplay: true}, blocks: preset(name), assets: [], inlineScripts: false});
   await t.page.evaluate(() => { const el = document.querySelector('[data-cl-slider]'); el.globalSlide = {destroyed: false, params: {speed: 500}, autoplay: {running: false, start() { this.running = true; }, stop() { this.running = false; }}}; });
   await t.page.addScriptTag({path: require('path').join(__dirname, '../shopify/assets', ASSET)}); await t.page.waitForTimeout(400);
   eq(await t.page.evaluate(() => document.querySelector('[data-cl-slider]').globalSlide.autoplay.running), true, 'collections display: autoplay runs on screen');
   await spacer(t.page); await t.page.waitForTimeout(300);
   eq(await t.page.evaluate(() => document.querySelector('[data-cl-slider]').globalSlide.autoplay.running), false, 'collections display: autoplay stops off screen');
   await t.page.close();
-  const r = await mount(browser, name, {width: 1366, editing: false, settings: {display_mode: 'carousel', autoplay: true}, blocks: preset(name), assets: [], reducedMotion: 'reduce'});
+  const r = await mount(browser, name, {width: 1366, editing: true, settings: {display_mode: 'carousel', autoplay: true}, blocks: preset(name), assets: [], reducedMotion: 'reduce'});
   await r.page.evaluate(() => { const el = document.querySelector('[data-cl-slider]'); el.globalSlide = {destroyed: false, params: {speed: 500}, autoplay: {running: true, start() { this.running = true; }, stop() { this.running = false; }}}; });
   await r.page.addScriptTag({path: require('path').join(__dirname, '../shopify/assets', ASSET)}); await r.page.waitForTimeout(400);
   eq(await r.page.evaluate(() => [document.querySelector('[data-cl-slider]').globalSlide.autoplay.running, document.querySelector('[data-cl-slider]').globalSlide.params.speed]), [false, 0], 'collections display: reduced motion stops autoplay and slides without easing');
