@@ -29,7 +29,10 @@ const read = f => fs.readFileSync(path.join(root, f), 'utf8');
 const FILES = fs.readdirSync(path.join(root, 'sections')).filter(f => /^[a-l][\w-]*\.storelib$/.test(f)).sort();
 
 // file -> { 'block/id' or 'section/id': reason }
-const ALLOW = {};
+const ALLOW = {
+  // Read as rs['svg_' | append: k] in the row loop over the two columns a and b.
+  'comparison-table-3.storelib': { 'row/svg_a': "rs['svg_' | append: k], k in a,b", 'row/svg_b': "rs['svg_' | append: k], k in a,b" },
+};
 // Storelib-format sections: the engine applies its own `animation` select.
 const ENGINE_IDS = new Set(['animation']);
 
@@ -149,6 +152,28 @@ function settingsOf(schema) {
   return out;
 }
 
+// An id named in a quoted comma list that the section hands to a snippet
+// (assign sc = 'table_bg,feature_color' ... render 'features-b-vars', c: sc),
+// which turns each listed setting into a CSS variable.
+function listRead(id, markup) {
+  if (!/\{%-?\s*render\s+'[\w-]+'[^%]*\b\w+:\s*\w+/.test(markup)) return false;
+  const item = '(?:^|,)' + esc(id) + '(?::[^,]*)?(?:,|$)';
+  for (const m of markup.matchAll(/(?:assign\s+(\w+)\s*=\s*|\b\w+:\s*)'([\w%:,-]*,[\w%:,-]*|[\w-]+)'/g)) {
+    if (!new RegExp(item).test(m[2])) continue;
+    if (!m[1]) return true; // passed straight to the render
+    if (new RegExp('render\\s+\'[\\w-]+\'[^%]*:\\s*' + m[1] + '\\b').test(markup)) return true;
+    // or split and looped: {% for k in sa_list %} data-{{ k }}="{{ st[k] }}"
+    const split = markup.match(new RegExp('assign\\s+(\\w+)\\s*=\\s*' + m[1] + '\\s*\\|\\s*split'));
+    if (split && new RegExp('for\\s+(\\w+)\\s+in\\s+' + split[1] + '\\b[\\s\\S]*?\\[\\s*\\1\\s*\\]').test(markup)) return true;
+  }
+  // A list inside a captured spec the script reads: {% capture bspec %}{"row":{"t":"label,text_b"}}{% endcapture %} ... data-fb-bspec="{{ bspec
+  for (const c of markup.matchAll(/\{%-?\s*capture\s+(\w+)\s*-?%\}([\s\S]*?)\{%-?\s*endcapture/g)) {
+    if (!new RegExp('data-[\\w-]+="\\{\\{\\s*' + c[1] + '\\b').test(markup)) continue;
+    for (const q of c[2].matchAll(/"([\w%:,-]+)"/g)) if (new RegExp(item).test(q[1])) return true;
+  }
+  return false;
+}
+
 function readers(markup) {
   const aliases = new Set(['settings']);
   let grew = true;
@@ -222,6 +247,7 @@ for (const f of FILES) {
     seen.add(key);
     if (isRead(s.id, all, norm, al)) continue;
     if (assetRead(s.id, assets) || builtRead(s.id, all + assets)) continue;
+    if (listRead(s.id, all)) continue;
     const reason = (ALLOW[f] || {})[key];
     if (reason) { allowed.push(`${f} ${key}: ${reason}`); continue; }
     if (s.hidden) continue; // retired, hidden from the panel, kept for stored content
