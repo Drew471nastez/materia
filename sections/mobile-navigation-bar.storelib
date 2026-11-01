@@ -45,8 +45,8 @@
   @media (min-width:1200px){#shopify-section-{{ section.id }} .stretch_width,#shopify-section-{{ section.id }}:not(.no-section-width-wrap)>:is(div,section,header,footer,aside,main,article):first-child{padding-inline:3rem}}
   {%- endcase %}
   #shopify-section-{{ section.id }},#shopify-section-{{ section.id }}.scroll-trigger,#shopify-section-{{ section.id }}.scroll-trigger--offscreen,#shopify-section-{{ section.id }}.scroll-trigger--cancel,#shopify-section-{{ section.id }}.invisible{opacity:1!important;visibility:visible!important;animation:none!important;animation-name:none!important;animation-duration:0s!important;animation-delay:0s!important;transform:none!important;filter:none!important;perspective:none!important;will-change:auto!important;pointer-events:auto!important}
-  @media (max-width:768px){body{--mnb-offset:{{ section.settings.height | default: 62 }}px;padding-bottom:calc({{ section.settings.height | default: 62 }}px + env(safe-area-inset-bottom, 0px))!important}}
 {% comment %}{% endcomment %}</style>
+<style data-mnb-space="{{ section.id }}">@media (max-width:768px){body{--mnb-offset:{{ section.settings.height | default: 62 }}px;padding-bottom:calc({{ section.settings.height | default: 62 }}px + env(safe-area-inset-bottom, 0px))!important}}{% comment %}{% endcomment %}</style>
 <!-- ti-theme:start -->
 {%- comment -%}
   Materia Themes. Developed By Materia Themes.
@@ -64,6 +64,12 @@
   assign border_color = sec_st.border_color
   assign shadow_enabled = sec_st.shadow_enabled
   assign radius_top = sec_st.radius_top | default: 0
+  assign mnb_scheme = sec_st.color_scheme.id | default: sec_st.color_scheme | default: 'default'
+  assign mnb_font = ''
+  if sec_st.enable_custom_fonts and sec_st.label_font.family != blank
+    assign mnb_fb = sec_st.label_font.fallback_families | default: 'sans-serif'
+    assign mnb_font = sec_st.label_font.family | append: ', ' | append: mnb_fb
+  endif
 
   assign has_bg = false
   if use_custom and nav_bg != blank and nav_bg != 'rgba(0,0,0,0)'
@@ -104,6 +110,9 @@
   --mnb-border: {% if has_border %}{{ border_color }}{% else %}rgba(0,0,0,0.06){% endif %};
   --mnb-radius: {{ radius_top }}px;
   --mnb-icon-size: {{ sec_st.icon_size | default: 22 }}px;
+  {%- if mnb_font != blank %}
+  --mnb-font: {{ mnb_font }};
+  {%- endif %}
 {%- endcapture -%}
 
 {% if section.blocks.size > 0 %}
@@ -120,14 +129,32 @@
     Also fixed the `algin-center` typo (was inert; now `align-center`).
   {%- endcomment -%}
   <mobile-navigation-bar
-    class="mobile-navigation-bar transition flex align-center hidden-md fixed bottom-0 inset-x-0 z-10 px-15 show color-{{ sec_st.color_scheme | default: 'default' }}"
+    class="mobile-navigation-bar transition flex align-center hidden-md fixed bottom-0 inset-x-0 z-10 px-15 show color-{{ mnb_scheme }}"
     style="{{ style | strip | strip_newlines }}"{% if border_top %} data-mnb-border-top{% endif %}{% if shadow_enabled %} data-mnb-shadow{% endif %}{% unless show_labels %} data-mnb-labels-hidden{% endunless %}
+    data-mnb-section="{{ section.id }}"{% if mnb_font != blank %} data-own-font{% endif %}{% if request.design_mode %} data-mnb-settings="{{ sec_st | json | escape }}"{% endif %}
   >
+  {%- if mnb_font != blank -%}<style>{{ sec_st.label_font | font_face: font_display: 'swap' }}{% comment %}{% endcomment %}</style>{%- endif -%}
     {% for block in section.blocks %}
       {%- liquid
         assign b = block.settings
         assign icon_key = b.icon | default: 'auto'
         assign custom_label = b.label
+        case block.type
+          when 'homepage'
+            assign _std = 'mobile_navbar.homepage' | t
+          when 'shop'
+            assign _std = 'mobile_navbar.shop' | t
+          when 'account'
+            assign _std = 'mobile_navbar.account' | t
+          when 'cart'
+            assign _std = 'mobile_navbar.cart' | t
+          when 'wishlist'
+            assign _std = 'mobile_navbar.wishlist' | t
+          when 'search'
+            assign _std = 'general.search.search' | t
+          else
+            assign _std = ''
+        endcase
       -%}
       {% case block.type %}
         {% when 'homepage' %}
@@ -141,10 +168,11 @@
             id="homepage-icon-bubble"
             class="no-underline lh-normal inline-flex content-center flex-column text-center px-5{% if request.path == "/" %} active{% endif %}"
             aria-label="{{ _label }}"
+            data-mnb-block="{{ block.id }}" data-mnb-type="{{ block.type }}"
             {{ block.shopify_attributes }}
           >
             {% render 'mnb-icon', icon: icon_key, fallback: 'home' %}
-            <span class="block mnb-label heading-style">
+            <span class="block mnb-label heading-style" data-mnb-label data-mnb-std="{{ _std | escape }}">
               {{- _label -}}
             </span>
           </a>
@@ -158,10 +186,11 @@
             href="{{ collections.all.url }}"
             class="no-underline lh-normal inline-flex content-center flex-column text-center px-5{% if request.path == "/collections/all" %} active{% endif %}"
             aria-label="{{ _label }}"
+            data-mnb-block="{{ block.id }}" data-mnb-type="{{ block.type }}"
             {{ block.shopify_attributes }}
           >
             {% render 'mnb-icon', icon: icon_key, fallback: 'shop' %}
-            <span class="block mnb-label heading-style">{{ _label }}</span>
+            <span class="block mnb-label heading-style" data-mnb-label data-mnb-std="{{ _std | escape }}">{{ _label }}</span>
           </a>
         {% when 'account' %}
           {%- if custom_label != blank -%}
@@ -173,10 +202,11 @@
             href="{%- if customer -%}{{ routes.account_url }}{%- else -%}{{ routes.account_login_url }}{% endif %}"
             class="no-underline lh-normal inline-flex content-center flex-column text-center px-5{% if request.path == "/account/login" or request.path == "/account" %} active{% endif %}"
             aria-label="{{ _label }}"
+            data-mnb-block="{{ block.id }}" data-mnb-type="{{ block.type }}"
             {{ block.shopify_attributes }}
           >
             {% render 'mnb-icon', icon: icon_key, fallback: 'user' %}
-            <span class="block mnb-label heading-style">{{ _label }}</span>
+            <span class="block mnb-label heading-style" data-mnb-label data-mnb-std="{{ _std | escape }}">{{ _label }}</span>
           </a>
         {% when 'cart' %}
           {%- if custom_label != blank -%}
@@ -189,6 +219,7 @@
             href="{{ routes.cart_url }}"
             class="no-underline lh-normal inline-flex content-center flex-column text-center{% if request.path == "/cart" %} active{% endif %}"
             aria-label="{{ _label }}"
+            data-mnb-block="{{ block.id }}" data-mnb-type="{{ block.type }}"
             {{ block.shopify_attributes }}
           >
             <span class="relative inline-flex">
@@ -208,7 +239,7 @@
                 </span>
               {% endif %}
             </span>
-            <span class="block mnb-label heading-style">{{ _label }}</span>
+            <span class="block mnb-label heading-style" data-mnb-label data-mnb-std="{{ _std | escape }}">{{ _label }}</span>
           </a>
         {% when 'wishlist' %}
           {%- if custom_label != blank -%}
@@ -221,6 +252,7 @@
             href="/pages/wishlist"
             class="wishlist-icon-bubble no-underline lh-normal inline-flex content-center flex-column text-center"
             aria-label="{{ _label }}"
+            data-mnb-block="{{ block.id }}" data-mnb-type="{{ block.type }}"
             {{ block.shopify_attributes }}
           >
             <span class="relative inline-flex">
@@ -229,7 +261,7 @@
                 0
               </span>
             </span>
-            <span class="block mnb-label heading-style">
+            <span class="block mnb-label heading-style" data-mnb-label data-mnb-std="{{ _std | escape }}">
               {{- _label -}}
             </span>
           </a>
@@ -243,17 +275,18 @@
             href="{{ routes.search_url }}"
             class="no-underline lh-normal inline-flex content-center flex-column text-center px-5"
             aria-label="{{ _label }}"
+            data-mnb-block="{{ block.id }}" data-mnb-type="{{ block.type }}"
             {{ block.shopify_attributes }}
           >
             {% render 'mnb-icon', icon: icon_key, fallback: 'search' %}
-            <span class="block mnb-label heading-style">{{ _label }}</span>
+            <span class="block mnb-label heading-style" data-mnb-label data-mnb-std="{{ _std | escape }}">{{ _label }}</span>
           </a>
         {% when 'currency' %}
-          <div class="lang__currency-on-nav mobile-navigation__currency lh-normal inline-flex content-center flex-column text-center" {{ block.shopify_attributes }}>
+          <div class="lang__currency-on-nav mobile-navigation__currency lh-normal inline-flex content-center flex-column text-center" data-mnb-block="{{ block.id }}" data-mnb-type="{{ block.type }}" {{ block.shopify_attributes }}>
             {%- render 'country-switcher', type: 'mobile-navigation' -%}
           </div>
         {% when 'language' %}
-          <div class="lang__currency-on-nav mobile-navigation__currency lh-normal inline-flex content-center flex-column text-center" {{ block.shopify_attributes }}>
+          <div class="lang__currency-on-nav mobile-navigation__currency lh-normal inline-flex content-center flex-column text-center" data-mnb-block="{{ block.id }}" data-mnb-type="{{ block.type }}" {{ block.shopify_attributes }}>
             {% render 'language-switcher', type: 'mobile-navigation' %}
           </div>
       {% endcase %}
@@ -788,7 +821,7 @@
     ]
   },
   "shopify": {
-    "name": "t:sections.mobile-navigation-bar.name",
+    "name": "Mobile navigation bar",
     "tag": "section",
     "limit": 1,
     "enabled_on": {
@@ -799,7 +832,7 @@
     "settings": [
       {
         "type": "header",
-        "content": "Basics"
+        "content": "General"
       },
       {
         "type": "color_scheme",
@@ -810,7 +843,7 @@
       {
         "type": "select",
         "id": "section_width",
-        "label": "Section width",
+        "label": "Width",
         "default": "full_width",
         "options": [
           {
@@ -829,90 +862,33 @@
             "value": "full_width",
             "label": "Full width"
           }
-        ]
+        ],
+        "hidden": true,
+        "info": "Not used: the bar always spans the screen."
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove space between sections",
+        "default": true
+      },
+      {
+        "type": "paragraph",
+        "content": "Shows on phones only, fixed to the bottom of the screen. Each block is one tab."
+      },
+      {
+        "type": "header",
+        "content": "Content"
       },
       {
         "type": "checkbox",
         "id": "show_labels",
-        "label": "Show labels under icons",
+        "label": "Show labels",
         "default": true
       },
       {
-        "type": "checkbox",
-        "id": "border_top",
-        "label": "Show top border",
-        "default": true
-      },
-      {
-        "type": "checkbox",
-        "id": "use_custom_colors",
-        "label": "Enable custom colors",
-        "default": false
-      },
-      {
         "type": "header",
-        "content": "Typography"
-      },
-      {
-        "type": "color",
-        "id": "active_color",
-        "label": "Active / hover"
-      },
-      {
-        "type": "header",
-        "content": "Colors & appearance"
-      },
-      {
-        "type": "checkbox",
-        "id": "shadow_enabled",
-        "label": "Drop shadow",
-        "default": true
-      },
-      {
-        "type": "range",
-        "id": "radius_top",
-        "min": 0,
-        "max": 32,
-        "step": 2,
-        "unit": "px",
-        "label": "Top corner radius",
-        "default": 0
-      },
-      {
-        "type": "color",
-        "id": "background_color",
-        "label": "Background"
-      },
-      {
-        "type": "color",
-        "id": "icon_color",
-        "label": "Icon"
-      },
-      {
-        "type": "color",
-        "id": "label_color",
-        "label": "Label"
-      },
-      {
-        "type": "color",
-        "id": "border_color",
-        "label": "Top border"
-      },
-      {
-        "type": "header",
-        "content": "Behavior & animation"
-      },
-      {
-        "type": "checkbox",
-        "id": "reveal",
-        "label": "Reveal on scroll",
-        "info": "Not used: the bar stays fixed on screen and never animates in.",
-        "default": true,
-        "visible_if": "{{ false }}"
-      },
-      {
-        "type": "header",
-        "content": "Layout & spacing"
+        "content": "Layout"
       },
       {
         "type": "range",
@@ -921,56 +897,8 @@
         "max": 96,
         "step": 2,
         "unit": "px",
-        "label": "Minimum height",
+        "label": "Height",
         "default": 62
-      },
-      {
-        "type": "range",
-        "id": "section_margin_top_desktop",
-        "label": "Top margin (desktop px)",
-        "min": 0,
-        "max": 300,
-        "step": 4,
-        "default": 0
-      },
-      {
-        "type": "range",
-        "id": "section_margin_bottom_desktop",
-        "label": "Bottom margin (desktop px)",
-        "min": 0,
-        "max": 300,
-        "step": 4,
-        "default": 0
-      },
-      {
-        "type": "header",
-        "content": "Mobile layout"
-      },
-      {
-        "type": "range",
-        "id": "section_margin_top_mobile",
-        "label": "Top margin (mobile px)",
-        "min": 0,
-        "max": 300,
-        "step": 4,
-        "default": 0
-      },
-      {
-        "type": "range",
-        "id": "section_margin_bottom_mobile",
-        "label": "Bottom margin (mobile px)",
-        "min": 0,
-        "max": 300,
-        "step": 4,
-        "default": 0
-      },
-      {
-        "type": "header",
-        "content": "Advanced"
-      },
-      {
-        "type": "paragraph",
-        "content": "t:sections.mobile-navigation-bar.info"
       },
       {
         "type": "range",
@@ -983,20 +911,149 @@
         "default": 22
       },
       {
+        "type": "range",
+        "id": "radius_top",
+        "min": 0,
+        "max": 32,
+        "step": 2,
+        "unit": "px",
+        "label": "Top corner radius",
+        "default": 0
+      },
+      {
         "type": "header",
-        "content": "Advanced spacing"
+        "content": "Appearance"
       },
       {
         "type": "checkbox",
-        "id": "reset_spacing",
-        "label": "Remove default space between sections",
+        "id": "border_top",
+        "label": "Show top border",
         "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "shadow_enabled",
+        "label": "Shadow",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "use_custom_colors",
+        "label": "Enable custom styling",
+        "default": false
+      },
+      {
+        "type": "color",
+        "id": "background_color",
+        "label": "Background",
+        "visible_if": "{{ section.settings.use_custom_colors }}"
+      },
+      {
+        "type": "color",
+        "id": "icon_color",
+        "label": "Icons",
+        "visible_if": "{{ section.settings.use_custom_colors }}"
+      },
+      {
+        "type": "color",
+        "id": "label_color",
+        "label": "Labels",
+        "visible_if": "{{ section.settings.use_custom_colors }}"
+      },
+      {
+        "type": "color",
+        "id": "active_color",
+        "label": "Current page and hover",
+        "visible_if": "{{ section.settings.use_custom_colors }}"
+      },
+      {
+        "type": "color",
+        "id": "border_color",
+        "label": "Top border",
+        "visible_if": "{{ section.settings.use_custom_colors and section.settings.border_top }}"
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Enable custom fonts",
+        "default": false
+      },
+      {
+        "type": "font_picker",
+        "id": "label_font",
+        "label": "Label font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "header",
+        "content": "Animation"
+      },
+      {
+        "type": "checkbox",
+        "id": "reveal",
+        "label": "Reveal on scroll",
+        "info": "Not used: the bar stays fixed on screen and never animates in.",
+        "default": true,
+        "visible_if": "{{ false }}"
+      },
+      {
+        "type": "header",
+        "content": "Desktop spacing"
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0,
+        "hidden": true,
+        "info": "Not used: the bar shows on phones only."
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0,
+        "hidden": true,
+        "info": "Not used: the bar shows on phones only."
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_mobile",
+        "label": "Top margin",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_mobile",
+        "label": "Bottom margin",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
       }
     ],
     "blocks": [
       {
         "type": "homepage",
-        "name": "t:sections.mobile-navigation-bar.blocks.homepage",
+        "name": "Home",
         "limit": 1,
         "settings": [
           {
@@ -1006,11 +1063,12 @@
           {
             "type": "text",
             "id": "label",
-            "label": "Label override"
+            "label": "Label",
+            "info": "Leave empty for the standard label"
           },
           {
             "type": "header",
-            "content": "Advanced"
+            "content": "Icon"
           },
           {
             "type": "select",
@@ -1052,7 +1110,7 @@
       },
       {
         "type": "shop",
-        "name": "t:sections.mobile-navigation-bar.blocks.shop",
+        "name": "Shop",
         "limit": 1,
         "settings": [
           {
@@ -1062,11 +1120,12 @@
           {
             "type": "text",
             "id": "label",
-            "label": "Label override"
+            "label": "Label",
+            "info": "Leave empty for the standard label"
           },
           {
             "type": "header",
-            "content": "Advanced"
+            "content": "Icon"
           },
           {
             "type": "select",
@@ -1104,7 +1163,7 @@
       },
       {
         "type": "account",
-        "name": "t:sections.mobile-navigation-bar.blocks.account",
+        "name": "Account",
         "limit": 1,
         "settings": [
           {
@@ -1114,11 +1173,12 @@
           {
             "type": "text",
             "id": "label",
-            "label": "Label override"
+            "label": "Label",
+            "info": "Leave empty for the standard label"
           },
           {
             "type": "header",
-            "content": "Advanced"
+            "content": "Icon"
           },
           {
             "type": "select",
@@ -1148,7 +1208,7 @@
       },
       {
         "type": "cart",
-        "name": "t:sections.mobile-navigation-bar.blocks.cart",
+        "name": "Cart",
         "limit": 1,
         "settings": [
           {
@@ -1158,11 +1218,12 @@
           {
             "type": "text",
             "id": "label",
-            "label": "Label override"
+            "label": "Label",
+            "info": "Leave empty for the standard label"
           },
           {
             "type": "header",
-            "content": "Advanced"
+            "content": "Icon"
           },
           {
             "type": "select",
@@ -1192,7 +1253,7 @@
       },
       {
         "type": "wishlist",
-        "name": "t:sections.mobile-navigation-bar.blocks.wishlist",
+        "name": "Wishlist",
         "limit": 1,
         "settings": [
           {
@@ -1202,11 +1263,12 @@
           {
             "type": "text",
             "id": "label",
-            "label": "Label override"
+            "label": "Label",
+            "info": "Leave empty for the standard label"
           },
           {
             "type": "header",
-            "content": "Advanced"
+            "content": "Icon"
           },
           {
             "type": "select",
@@ -1246,11 +1308,12 @@
           {
             "type": "text",
             "id": "label",
-            "label": "Label override"
+            "label": "Label",
+            "info": "Leave empty for the standard label"
           },
           {
             "type": "header",
-            "content": "Advanced"
+            "content": "Icon"
           },
           {
             "type": "select",
@@ -1276,13 +1339,13 @@
       },
       {
         "type": "currency",
-        "name": "t:sections.mobile-navigation-bar.blocks.currency",
+        "name": "Country and currency",
         "limit": 1,
         "settings": []
       },
       {
         "type": "language",
-        "name": "t:sections.mobile-navigation-bar.blocks.language",
+        "name": "Language",
         "limit": 1,
         "settings": []
       }
