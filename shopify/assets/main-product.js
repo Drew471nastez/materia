@@ -460,6 +460,9 @@ customElements.define("sold-product", SoldProduct);
         // Skip Shop Pay / Apple Pay / Google Pay branded buttons.
         if (btn.classList.contains("shopify-payment-button__button--branded")) return;
         const target = btn.querySelector("[data-btn-label], .btn-label") || btn;
+        // Already "Buy Now": rewriting it (every 100ms here for 3s) replaced
+        // the text node each time and made the browser re-style the page.
+        if (target.textContent === TARGET) return;
         const text = (target.textContent || "").trim();
         if (text && REPLACE_RX.test(text)) {
           target.textContent = TARGET;

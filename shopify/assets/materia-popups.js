@@ -385,13 +385,23 @@
     }
     return Math.round(inset);
   }
+  // Every rule reads it as var(--materia-bottom-inset, 0px), so while nothing
+  // sits at the bottom it stays unset: writing 0px on <html> re-styled the
+  // whole page during load. The event still fires once for it.
+  var insetSaid = null;
   function measureInset() {
     insetFrame = 0;
     var v = bottomInset() + 'px';
-    if (document.documentElement.style.getPropertyValue('--materia-bottom-inset') !== v) {
-      document.documentElement.style.setProperty('--materia-bottom-inset', v);
-      emit('materia:bottom-inset', { inset: parseInt(v, 10) });
+    var style = document.documentElement.style;
+    var now = style.getPropertyValue('--materia-bottom-inset');
+    if (now === v) return;
+    if (now === '' && v === '0px') {
+      if (insetSaid === v) return;
+    } else {
+      style.setProperty('--materia-bottom-inset', v);
     }
+    insetSaid = v;
+    emit('materia:bottom-inset', { inset: parseInt(v, 10) });
   }
   function queueInset() { if (!insetFrame) insetFrame = requestAnimationFrame(measureInset); }
   window.addEventListener('resize', queueInset, { passive: true });
