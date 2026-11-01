@@ -127,6 +127,24 @@ const CFG = {
     imgBlock: 'collection', imgKey: 'image_desktop', imgSel: '.cbn__img',
     data: {picked: () => ({blocks: [{type: 'collection', settings: {collection: COLL}}]}), empty: () => ({blocks: [{type: 'collection'}, {type: 'collection', settings: {heading: 'Only a title'}}]})},
   },
+  'collection-list': {
+    blocks: () => [...presetBlocks('collection-list'), {type: 'button', settings: {text: 'View all', link: '/collections/all'}}],
+    lifeBlocks: () => presetBlocks('collection-list'),
+    desk: ['items_per_row'], mob: ['items_per_row_mobile'], bp: 768,
+    pre: {}, preBlock: {},
+    redraw: ['display_mode', 'items_per_row', 'column_gap', 'show_arrow', 'carousel_pagination', 'pagination_style', 'pagination_position', 'infinite', 'autoplay', 'autorotate_speed', 'reveal',
+      'items_per_row_mobile', 'image_ratio', 'custom_ratio', 'rounded_image', 'image_custom_width', 'image_width', 'information_spacing', 'design', 'collection_information_position',
+      'show_product_count', 'show_icon', 'show_description', 'font_size', 'font_weight', 'text_alignment', 'section_width', 'collection', 'collection_image', 'collection_title'],
+    behaviour: ['autoplay', 'autorotate_speed', 'infinite', 'reveal', 'pagination_style'],
+    hoverSel: '.collection-item', hover: ['card_hover_effect'],
+    same: [['image_ratio', 'square', 'adapt']],
+    theme: {heading: '.cdl__heading', text: '.cdl__desc', toggle: 'enable_custom_bg', bg: 'custom_section_bg'},
+    life: {section: {padding_top: 12, enable_custom_bg: true, custom_section_bg: '#abcdef'}, block: {type: 'heading', settings: {text: 'Only in A'}},
+      check: (page, u) => page.evaluate(u => document.querySelector('#shopify-section-' + u + ' .cdl__heading').textContent === 'Only in A', u),
+      unrelated: {header_spacing: 40}, added: [{type: 'button', settings: {text: 'Added', link: '/collections/all'}}],
+      addedEdit: {settings: {text: 'Edited added', link: '/pages/x'}, check: (page, id) => page.evaluate(id => { const b = document.querySelector('[data-cl-block="' + id + '"]'); return b.textContent.trim() === 'Edited added' && b.getAttribute('href') === '/pages/x'; }, id)}},
+    data: {picked: () => ({blocks: [{type: 'collection', settings: {collection: COLL}}]}), empty: () => ({blocks: [{type: 'collection'}]})},
+  },
 };
 const COMMON_PRE = {section_margin_top_mobile: {reset_spacing: false}, section_margin_bottom_mobile: {reset_spacing: false}, section_margin_top_desktop: {reset_spacing: false}, section_margin_bottom_desktop: {reset_spacing: false}, reset_spacing: {section_margin_top_mobile: 20, section_margin_top_desktop: 20}, enable_custom_fonts: {heading_font: FONT, body_font: FONT}, heading_font: {enable_custom_fonts: true, body_font: {family: 'Courier New'}}, body_font: {enable_custom_fonts: true, heading_font: {family: 'Courier New'}}};
 const STRUCTURAL = ['reset_spacing'];
@@ -349,8 +367,8 @@ async function lifecycle(browser, name) {
   const cfg = CFG[name];
   for (const width of [375, 1366]) {
     const tag = name + ' @' + width;
-    const withImg = cfg.blocks().map(b => cfg.imgBlock && cfg.imgBlock === b.type ? {...b, settings: {...b.settings, [cfg.imgKey || 'image']: IMG}} : b);
-    const t = await mount(browser, name, {width, editing: true, instances: [{uid: 'a', blocks: withImg}, {uid: 'b', blocks: cfg.blocks()}], assets: [ASSET], globals: cfg.globals || {}});
+    const withImg = (cfg.lifeBlocks || cfg.blocks)().map(b => cfg.imgBlock && cfg.imgBlock === b.type ? {...b, settings: {...b.settings, [cfg.imgKey || 'image']: IMG}} : b);
+    const t = await mount(browser, name, {width, editing: true, instances: [{uid: 'a', blocks: withImg}, {uid: 'b', blocks: (cfg.lifeBlocks || cfg.blocks)()}], assets: [ASSET], globals: cfg.globals || {}});
     await addFp(t.page);
     await settle(t.page);
     const b0 = await fp(t, 'b');
@@ -394,7 +412,7 @@ async function collections(browser, name) {
     if (cfg.data.count) ok(got.text.includes(String(COLL.products_count)), tag + ' collection count');
     await t.page.close();
     const e = await mount(browser, name, {width, editing, ...cfg.data.empty(), assets: [ASSET], globals: cfg.globals || {}});
-    const st = await e.page.evaluate(() => { const r = document.querySelector('[data-cl-root]'); return {ph: r.querySelectorAll('[data-cl-ph], .placeholder-svg, svg[data-placeholder]').length, h: r.getBoundingClientRect().height, dead: [...r.querySelectorAll('a')].filter(a => !a.getAttribute('href') || a.getAttribute('href') === '#').length, broken: [...r.querySelectorAll('img')].filter(i => !i.getAttribute('src')).length}; });
+    const st = await e.page.evaluate(() => { const r = document.querySelector('[data-cl-root]'); return {ph: r.querySelectorAll('[data-cl-ph], .placeholder-svg, svg[data-placeholder], .placeholder-image').length, h: r.getBoundingClientRect().height, dead: [...r.querySelectorAll('a')].filter(a => !a.getAttribute('href') || a.getAttribute('href') === '#').length, broken: [...r.querySelectorAll('img')].filter(i => !i.getAttribute('src')).length}; });
     if (editing) ok(st.ph > 0, tag + ' empty picker: placeholder in the editor');
     else eq(st.ph, 0, tag + ' empty picker: no placeholder art on the storefront');
     eq(st.dead, 0, tag + ' no dead links');
