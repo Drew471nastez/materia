@@ -88,7 +88,7 @@ function savedMain(tree = repo) {
 
 /* blocks: [{id, type, settings}] or omitted for the saved ones. Settings get the schema defaults first.
    more: further Main product instances on the same page, [{id, settings, blocks}]. */
-async function renderMain({tree = repo, settings = {}, blocks, product = R5.PANTS, design = false, id, extraHead = '', script = true, more = []} = {}) {
+async function renderMain({tree = repo, settings = {}, blocks, product = R5.PANTS, design = false, id, extraHead = '', script = true, more = [], sectionOnly = false} = {}) {
   const sch = mainSchema(tree);
   const saved = savedMain(tree);
   const all = JSON.parse(readIn(tree, 'config/settings.json'));
@@ -118,6 +118,7 @@ async function renderMain({tree = repo, settings = {}, blocks, product = R5.PANT
   const first = await one(sid, settings, blocks);
   const others = [];
   for (const m of more) others.push({id: m.id, ...(await one(m.id, m.settings || {}, m.blocks || blocks))});
+  if (sectionOnly) return {sectionHtml: first.html, id: sid, settings: first.settings, blocks: first.blocks, more: others, schemes};
   const header = JSON.parse(readIn(tree, 'sections/header-group.json'));
   const hset = {...header.sections.header.settings, mega_menu: {handle: 'main-menu', links: [{title: 'Home', url: '/', links: []}, {title: 'Shop', url: '/collections/all', links: []}]}};
   hset.color_scheme = {...(schemes.find(s => s.id === hset.color_scheme) || schemes[0])};

@@ -61,6 +61,8 @@
     for (const c of [...el.classList]) if (c.startsWith('color-')) el.classList.remove(c);
     el.classList.add('color-' + id);
   };
+  /* The theme's small-padding classes (padding under 30px). */
+  const pads = (root, s) => { root.classList.toggle('pt-min', num(s.padding_top) < 30); root.classList.toggle('pb-min', num(s.padding_bottom) < 30); };
   const WIDTHS = ['container', 'fluid_container', 'stretch_width', 'full_width', 'default'];
   const width = (el, w) => { if (el && w) swap(el, WIDTHS, w); };
   const ALIGN = {left: 'flex-start', center: 'center', right: 'flex-end'};
@@ -126,9 +128,9 @@
         if (touched) text(h, String(b.page_title || '').trim() ? b.page_title : h.dataset.lcpFallback || '');
         swap(h, SIZES, b.header_size === 'small' ? 'h3' : b.header_size === 'large' ? 'h1-size' : '');
         blockFont(h, b);
+        prop(h, 'font-size', b.header_size === 'medium' ? num(b.heading_font_size, 34) + 'px' : '');
         if (kind === 'page') {
           prop(h, 'margin-bottom', num(b.vertical_gap) + 'px');
-          prop(h, 'font-size', b.header_size === 'medium' ? num(b.heading_font_size, 34) + 'px' : '');
           prop(h, 'color', bool(b.enable_heading_color) ? color(b.heading_color, 'var(--color-heading)') : '');
         }
       } else if (el.dataset.lcpBlockType === 'description') {
@@ -149,6 +151,112 @@
   };
   T['page-heading'] = heading('page');
   T['main-collection-heading'] = heading('collection');
+
+  /* ---------- Blog posts page (main-blog) ---------- */
+  const RATIO = {square: '1/1', landscape: '4/3', portrait: '3/4'};
+  /* The grid sums sections/main-blog prints on #blog-articles. */
+  function gridVars(el, s, rowGap) {
+    if (!el) return;
+    const d = num(s.items_per_row, 4), m = num(s.items_per_row_mobile, 1), gap = num(s.column_gap, 30);
+    setVar(el, '--col-desktop', String(d)); setVar(el, '--col-number', String(m));
+    setVar(el, '--col-tablet', String(d > 3 ? 3 : d)); setVar(el, '--col-mobile', String(m));
+    setVar(el, '--col-gap', (gap < 15 ? gap : 15) + 'px'); setVar(el, '--col-gap-desktop', gap + 'px');
+    if (rowGap) setVar(el, '--row-gap', rowGap);
+  }
+  function fonts(root, s, headVar, bodyVar) {
+    const on = bool(s.enable_custom_fonts);
+    attr(root, 'data-own-font', on);
+    setVar(root, headVar, on ? font(s.heading_font) : '');
+    setVar(root, bodyVar, on ? font(s.body_font) : '');
+  }
+  T['main-blog'] = (root, st) => {
+    const s = st.s, custom = bool(s.enable_custom_style), align = s.content_alignment || 'center';
+    scheme(root, s);
+    width(root.firstElementChild, s.section_width);
+    setVar(root, '--section-mt', num(s.margin_top) + 'px');
+    setVar(root, '--section-mb', num(s.margin_bottom) + 'px');
+    setVar(root, '--badge-vertical-position', num(s.badge_vertical_position) + 'px');
+    setVar(root, '--badge-horizontal-position', num(s.badge_horizontal_position) + 'px');
+    setVar(root, '--badge-width', num(s.badge_width) + 'px');
+    setVar(root, '--badge-height', num(s.badge_height) + 'px');
+    setVar(root, '--badge-font-size', num(s.badge_text_font_size) + 'px');
+    setVar(root, '--badge-radius', num(s.badge_border_radius) + 'px');
+    setVar(root, '--badge-bg', custom ? color(s.badge_background_color, 'var(--color-primary)') : 'var(--color-primary)');
+    setVar(root, '--badge-color', custom ? color(s.badge_text_color, 'var(--btn-primary-color)') : 'var(--btn-primary-color)');
+    for (const b of root.querySelectorAll('[data-mbl-badge]')) text(b, s.badge_text);
+    fonts(root, s, '--mbl-heading-font', '--mbl-body-font');
+    gridVars(root.querySelector('#blog-articles'), s);
+    for (const el of root.querySelectorAll('.blog-posts-info, .blog-posts-category')) swapPrefix(el, 'text-', align);
+    for (const el of root.querySelectorAll('.blog-posts-bottom')) swapPrefix(el, 'justify-content-', align);
+    for (const el of root.querySelectorAll('.blog-posts-readmore')) swap(el, ['btn-primary', 'btn-secondary'], 'btn-' + (s.readmore_type || 'primary'));
+    let ratio = RATIO[s.image_ratio] || '3/2';
+    if (s.image_ratio === 'custom' && String(s.custom_ratio || '').trim()) ratio = String(s.custom_ratio).replace(':', '/');
+    if (s.image_ratio !== 'adapt') for (const el of root.querySelectorAll('.blog-posts-image > a')) setVar(el, '--aspect-ratio', ratio);
+    const empty = root.querySelector('[data-main-blog-empty]');
+    if (empty) {
+      attr(empty, 'data-align', true, align);
+      const h = empty.querySelector('.main-blog-empty__title'), p = empty.querySelector('.main-blog-empty__text'), a = empty.querySelector('.main-blog-empty__action');
+      if (st.touched.has('empty_heading')) { text(h, s.empty_heading); h.hidden = !String(s.empty_heading || '').trim(); }
+      if (st.touched.has('empty_text')) { rich(p, s.empty_text, st.cache); p.hidden = !String(s.empty_text || '').replace(/<[^>]*>/g, '').trim(); }
+      if (a) { if (st.touched.has('empty_button_label')) { text(a, s.empty_button_label); a.hidden = !String(s.empty_button_label || '').trim(); } if (st.touched.has('empty_button_url')) link(a, s.empty_button_url, '/collections/all'); }
+    }
+  };
+
+  /* ---------- Blog post (main-article) ---------- */
+  const HERO = ['adapt', 'small', 'medium', 'large'];
+  function emptyNote(box, s, st, prefix, fallbackUrl) {
+    if (!box) return;
+    const h = box.querySelector('.' + prefix + '__title'), p = box.querySelector('.' + prefix + '__text'), a = box.querySelector('.' + prefix + '__action');
+    if (h && st.touched.has('empty_heading')) { text(h, s.empty_heading); h.hidden = !String(s.empty_heading || '').trim(); }
+    if (p && st.touched.has('empty_text')) { rich(p, s.empty_text, st.cache); p.hidden = !String(s.empty_text || '').replace(/<[^>]*>/g, '').trim(); }
+    if (a && st.touched.has('empty_button_label')) { text(a, s.empty_button_label); a.hidden = !String(s.empty_button_label || '').trim(); }
+    if (a && st.touched.has('empty_button_url')) link(a, s.empty_button_url, fallbackUrl);
+  }
+  T['main-article'] = (root, st) => {
+    const s = st.s;
+    scheme(root, s);
+    width(root.firstElementChild, s.section_width);
+    setVar(root, '--section-pt', String(num(s.padding_top)));
+    setVar(root, '--section-pb', String(num(s.padding_bottom)));
+    pads(root, s);
+    setVar(root, '--ma-content-width', num(s.content_width_desktop, 800) + 'px');
+    setVar(root, '--ma-author-ml', num(s.author_margin_left) + 'px');
+    setVar(root, '--ma-author-mr', num(s.author_margin_right) + 'px');
+    emptyNote(root.querySelector('[data-ma-empty]'), s, st, 'ma-empty', root.dataset.lcpBack || '/');
+    for (const [el, b] of blocksIn(root, st)) {
+      const custom = bool(b.enable_custom_style);
+      switch (el.dataset.lcpBlockType) {
+        case 'title': setVar(el, '--ma-title-size', num(b.blog_title_font_size, 40) + 'px'); blockFont(el.querySelector('h1'), b); break;
+        case 'category':
+          setVar(el, '--ma-pill-bg', custom ? color(b.category_background_color, 'rgba(var(--color-text-rgb), 0.06)') : 'rgba(var(--color-text-rgb), 0.06)');
+          setVar(el, '--ma-pill-radius', num(b.category_border_radius) + 'px'); break;
+        case 'blog_meta':
+          setVar(el, '--ma-meta-bg', custom ? color(b.blog_meta_background_color, 'rgba(var(--color-text-rgb), 0.06)') : 'rgba(var(--color-text-rgb), 0.06)');
+          setVar(el, '--ma-date-bg', custom ? color(b.date_pill_background_color, 'rgba(var(--color-text-rgb), 0.1)') : 'rgba(var(--color-text-rgb), 0.1)');
+          setVar(el, '--ma-meta-radius', num(b.blog_meta_border_radius) + 'px'); break;
+        case 'content_article': blockFont(el, b); break;
+        case 'featured_image': {
+          prop(el, 'padding-top', num(b.featured_image_top_padding) + 'px');
+          prop(el, 'padding-bottom', num(b.featured_image_bottom_padding) + 'px');
+          setVar(el, '--ma-hero-radius', num(b.featured_image_border_radius) + 'px');
+          const hero = el.querySelector('[data-ma-hero]');
+          if (hero) {
+            const hgt = HERO.includes(b.image_height) ? b.image_height : 'adapt';
+            swap(hero, HERO.map(x => 'article-template__hero-' + x), 'article-template__hero-' + hgt);
+            setVar(hero, '--aspect-ratio', hgt === 'adapt' ? (hero.querySelector('img:not(.placeholder-svg)') ? 'adapt' : '16/9') : '');
+          }
+          break;
+        }
+        case 'author_highlight': {
+          setVar(el, '--ma-author-size', num(b.author_image_size, 80) + 'px');
+          const img = el.querySelector('img.author-highlight__image');
+          if (img) { attr(img, 'width', true, num(b.author_image_size, 80)); attr(img, 'height', true, num(b.author_image_size, 80)); }
+          if (st.touchedBlocks.has(el.dataset.lcpBlock)) text(el.querySelector('[data-ma-author-text]'), b.author_text);
+          break;
+        }
+      }
+    }
+  };
 
   /* ---------- Shared wiring ---------- */
   const S = new Map();

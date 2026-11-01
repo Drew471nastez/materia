@@ -60,7 +60,26 @@
 {%- capture style -%}
   --section-pt: {{ section_st.padding_top }}; 
   --section-pb: {{ section_st.padding_bottom }};
+  --ma-content-width: {{ section_st.content_width_desktop }}px;
+  --ma-author-ml: {{ section_st.author_margin_left }}px;
+  --ma-author-mr: {{ section_st.author_margin_right }}px;
 {%- endcapture -%}
+{%- liquid
+  comment
+    Storelib has no blog posts yet: an article page with no post shows a short
+    note on the storefront, and in the builder each block as a quiet outline
+    of where the post's title, picture and text go. Nothing is made up.
+  endcomment
+  assign ma_has_article = false
+  if article.title != blank or article.content != blank
+    assign ma_has_article = true
+  endif
+  assign ma_blog_url = blog.url | default: routes.root_url | default: '/'
+  assign ma_back_url = section_st.empty_button_url | default: ma_blog_url
+-%}
+{%- for block in section.blocks -%}
+  {%- if block.settings.enable_custom_fonts -%}<style>{{ block.settings.font | font_face: font_display: 'swap' }}{% comment %}{% endcomment %}</style>{%- endif -%}
+{%- endfor -%}
 
 <!-- Desktop Content-Width Control -->
 <style>
@@ -69,27 +88,60 @@
   }
   #shopify-section-{{ section.id }} .article-category-pill {
     transition: background-color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease), color var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease);
+    background-color: var(--ma-pill-bg) !important;
+    border-radius: var(--ma-pill-radius) !important;
   }
   #shopify-section-{{ section.id }} .article-category-pill:hover { color: var(--color-primary); }
+  #shopify-section-{{ section.id }} .blog-meta-pill { background-color: var(--ma-meta-bg) !important; border-radius: var(--ma-meta-radius) !important; padding: 15px !important; margin: 0 auto; gap: 3px; }
+  #shopify-section-{{ section.id }} .date-pill { background-color: var(--ma-date-bg) !important; padding: 3px 8px; border-radius: 999px; }
+  #shopify-section-{{ section.id }} .article-template__title { font-size: var(--ma-title-size) !important; }
+  #shopify-section-{{ section.id }} [data-ma-hero] { border-radius: var(--ma-hero-radius) !important; }
   #shopify-section-{{ section.id }} .author-highlight__image {
     border-radius: 50%;
     object-fit: cover;
     flex: none;
     overflow: hidden;
     background: rgba(var(--color-text-rgb), 0.08);
+    width: var(--ma-author-size);
+    height: var(--ma-author-size);
   }
+  #shopify-section-{{ section.id }} .ma-skeleton { display: block; border-radius: 6px; background: color-mix(in srgb, var(--color-text) 12%, transparent); }
+  #shopify-section-{{ section.id }} .ma-skeleton--title { height: 0.9em; width: min(70%, 640px); margin: 0.1em auto; }
+  #shopify-section-{{ section.id }} .ma-skeleton--pill { height: 34px; width: 110px; border-radius: 999px; }
+  #shopify-section-{{ section.id }} .ma-skeleton--line { height: 14px; margin-block: 14px; }
+  #shopify-section-{{ section.id }} .ma-skeleton--line:nth-child(3n) { width: 82%; }
+  #shopify-section-{{ section.id }} .ma-empty { max-width: 64rem; margin-inline: auto; padding: 56px 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  #shopify-section-{{ section.id }} .ma-empty [hidden] { display: none !important; }
+  #shopify-section-{{ section.id }} .ma-empty__title { margin: 0; }
+  #shopify-section-{{ section.id }} .ma-empty__text { color: var(--color-text); max-width: 46ch; }
+  #shopify-section-{{ section.id }} .ma-empty__text > :last-child { margin-bottom: 0; }
+  #shopify-section-{{ section.id }} .ma-empty__action { margin-top: 8px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+  #shopify-section-{{ section.id }} .ma-builder-note { margin: 0 auto 8px; text-align: center; font-size: 13px; color: color-mix(in srgb, var(--color-text) 75%, transparent); }
   @media (prefers-reduced-motion: reduce) {
     #shopify-section-{{ section.id }} .article-category-pill { transition: none; }
+  }
+  /* Phones: the featured picture is 16:9 whatever its height setting. */
+  @media (max-width: 767px) {
+    #shopify-section-{{ section.id }} [data-ma-hero] {
+      --aspect-ratio: 16/9 !important;
+      padding-left: 10px !important;
+      padding-right: 10px !important;
+    }
+    #shopify-section-{{ section.id }} [data-ma-hero] img {
+      object-fit: cover !important;
+      width: 100% !important;
+      height: 100% !important;
+    }
   }
 
   @media (min-width: 992px) {
     #shopify-section-{{ section.id }} .content-desktop-width {
-      max-width: {{ section_st.content_width_desktop }}px;
+      max-width: var(--ma-content-width);
       margin: 0 auto;
     }
     #shopify-section-{{ section.id }} .author-highlight {
-      margin-left: {{ section_st.author_margin_left }}px;
-      margin-right: {{ section_st.author_margin_right }}px;
+      margin-left: var(--ma-author-ml);
+      margin-right: var(--ma-author-mr);
     }
   }
 {% comment %}{% endcomment %}</style>
@@ -98,116 +150,127 @@
   id="singleBlogPost"
   class="section{% if section_st.padding_top < 30 %} pt-min{% endif %}{% if section_st.padding_bottom < 30 %} pb-min{% endif %} sec__article color-{{ color_scheme }} gradient"
   style="{{ style | strip | strip_newlines }}"
+  data-lcp="main-article"
+  data-lcp-id="{{ section.id }}"
+  data-lcp-back="{{ ma_blog_url }}"
+  data-lcp-settings="{{ section.settings | json | escape }}"
 >
   <div class="{{ section_width }}">
+    {%- if ma_has_article == false and request.design_mode != true -%}
+      <div class="ma-empty" data-ma-empty>
+        <h1 class="ma-empty__title h3"{% if section_st.empty_heading == blank %} hidden{% endif %}>{{ section_st.empty_heading | escape }}</h1>
+        <div class="ma-empty__text"{% if section_st.empty_text == blank %} hidden{% endif %}>{{ section_st.empty_text }}</div>
+        <a class="ma-empty__action btn btn-primary" href="{{ ma_back_url }}" data-theme-button="primary" data-sl-button{% if section_st.empty_button_label == blank %} hidden{% endif %}>{{ section_st.empty_button_label | escape }}</a>
+      </div>
+    {%- else -%}
+    {%- if ma_has_article == false -%}
+      <p class="ma-builder-note">Preview: a post's title, picture and text show here. With no post, visitors see the note set in this section.</p>
+    {%- endif -%}
     <!-- BEGIN: Main Article Content (No Sidebar) -->
     <article class="article-template single__post-content" itemscope itemtype="http://schema.org/BlogPosting">
       {%- for block in section.blocks -%}
-        {% assign block_st = block.settings %}
+        {%- liquid
+          assign block_st = block.settings
+          assign block_font = ''
+          if block_st.enable_custom_fonts and block_st.font.family != blank
+            assign block_font = block_st.font.family
+            if block_st.font.fallback_families != blank
+              assign block_font = block_font | append: ', ' | append: block_st.font.fallback_families
+            endif
+          endif
+        -%}
         {%- case block.type -%}
           {%- when 'title' -%}
-            <div {{ block.shopify_attributes }} class="single__post-header text-center page-title container-min">
+            <div {{ block.shopify_attributes }} class="single__post-header text-center page-title container-min" data-lcp-block="{{ block.id }}" data-lcp-block-type="title" data-lcp-block-settings="{{ block.settings | json | escape }}" style="--ma-title-size: {{ block_st.blog_title_font_size }}px;">
               <h1
                 class="heading-letter-spacing article-template__title mb-15 h0 mt-15"
                 itemprop="headline"
-                style="font-size: {{ block_st.blog_title_font_size }}px !important;"
+                {%- if block_font != blank %} data-own-font style="font-family: {{ block_font }};"{% endif %}
               >
-                {{ article.title | escape }}
+                {%- if ma_has_article -%}
+                  {{ article.title | escape }}
+                {%- else -%}
+                  <span class="ma-skeleton ma-skeleton--title" aria-hidden="true"></span>
+                {%- endif -%}
               </h1>
             </div>
 
           {%- when 'category' -%}
-            <div class="lh-normal flex flex-wrap gap-10 justify-content-center mt-30 container-min">
+            <div class="lh-normal flex flex-wrap gap-10 justify-content-center mt-30 container-min" data-lcp-block="{{ block.id }}" data-lcp-block-type="category" data-lcp-block-settings="{{ block.settings | json | escape }}" {{ block.shopify_attributes }} style="--ma-pill-bg: {% if block_st.enable_custom_style %}{% render 'scheme-color', color: block_st.category_background_color, fallback: 'rgba(var(--color-text-rgb), 0.06)' %}{% else %}rgba(var(--color-text-rgb), 0.06){% endif %}; --ma-pill-radius: {{ block_st.category_border_radius }}px;">
               {% assign blog_name = article.handle | split: '/' | first %}
               {% if blog_name != blank %}
                 <a
                   href="{{ blog.url }}"
                   aria-label="{{ blog_name | capitalize }}"
                   class="article-category-pill inline-flex fs-13 btn-rounded py-8 px-20 lh-normal no-underline heading-color"
-                  style="
-                    background-color: {% render 'scheme-color', color: block_st.category_background_color, fallback: 'rgba(var(--color-text-rgb), 0.06)' %} !important;
-                    border-radius: {{ block_st.category_border_radius }}px !important;
-                  "
                 >
                   <span>{{ blog_name | capitalize }}</span>
                 </a>
+              {% elsif ma_has_article == false %}
+                <span class="article-category-pill ma-skeleton ma-skeleton--pill" aria-hidden="true"></span>
               {% endif %}
             </div>
 
           {%- when 'blog_meta' -%}
             <div
               class="article_meta lh-normal flex flex-wrap align-center justify-content-center mt-15 container-min blog-meta-pill"
-              style="
-                background-color: {% render 'scheme-color', color: block_st.blog_meta_background_color, fallback: 'rgba(var(--color-text-rgb), 0.06)' %} !important;
-                border-radius: {{ block_st.blog_meta_border_radius }}px !important;
-                padding: 15px !important;
-                margin: 0 auto;
-                gap: 3px;
-              "
+              data-lcp-block="{{ block.id }}" data-lcp-block-type="blog_meta" data-lcp-block-settings="{{ block.settings | json | escape }}"
+              {{ block.shopify_attributes }}
+              style="--ma-meta-bg: {% if block_st.enable_custom_style %}{% render 'scheme-color', color: block_st.blog_meta_background_color, fallback: 'rgba(var(--color-text-rgb), 0.06)' %}{% else %}rgba(var(--color-text-rgb), 0.06){% endif %}; --ma-meta-radius: {{ block_st.blog_meta_border_radius }}px; --ma-date-bg: {% if block_st.enable_custom_style %}{% render 'scheme-color', color: block_st.date_pill_background_color, fallback: 'rgba(var(--color-text-rgb), 0.1)' %}{% else %}rgba(var(--color-text-rgb), 0.1){% endif %};"
             >
-              <div class="article-card-author inline-flex align-center">
-                {{- 'blog_post.post_by' | t }}
-                <span class="primary-color heading_weight ms-5">{{ article.author }}</span>
-              </div>
-              <div
-                class="article-card-date inline-flex align-center date-pill"
-                itemprop="dateCreated pubdate datePublished"
-                style="
-                  background-color: {% render 'scheme-color', color: block_st.date_pill_background_color, fallback: 'rgba(var(--color-text-rgb), 0.1)' %} !important;
-                  padding: 3px 8px;
-                  border-radius: 999px;
-                "
-              >
-                {{ article.published_at | date: '%b %d %Y' }}
-              </div>
+              {%- if ma_has_article -%}
+                <div class="article-card-author inline-flex align-center">
+                  {{- 'blog_post.post_by' | t }}
+                  <span class="primary-color heading_weight ms-5">{{ article.author }}</span>
+                </div>
+                <div
+                  class="article-card-date inline-flex align-center date-pill"
+                  itemprop="dateCreated pubdate datePublished"
+                >
+                  {{ article.published_at | date: '%b %d %Y' }}
+                </div>
+              {%- else -%}
+                <span class="ma-skeleton" style="width: 120px; height: 14px;" aria-hidden="true"></span>
+                <span class="date-pill" aria-hidden="true" style="display: inline-block; width: 84px; height: 20px;"></span>
+              {%- endif -%}
             </div>
 
           {%- when 'featured_image' -%}
-            {%- if article.image -%}
+            {%- if article.image or ma_has_article == false -%}
               <div
                 class="text-center mb-40"
                 itemprop="image"
+                data-lcp-block="{{ block.id }}" data-lcp-block-type="featured_image" data-lcp-block-settings="{{ block.settings | json | escape }}"
+                {{ block.shopify_attributes }}
                 style="
                   padding-top: {{ block_st.featured_image_top_padding }}px;
                   padding-bottom: {{ block_st.featured_image_bottom_padding }}px;
+                  --ma-hero-radius: {{ block_st.featured_image_border_radius }}px;
                 "
               >
-                <!-- Mobile-specific aspect ratio and padding -->
-                <style>
-                  @media (max-width: 767px) {
-                    .article-template__hero-{{ block_st.image_height }} {
-                      --aspect-ratio: 16/9 !important;
-                      padding-left: 10px !important;
-                      padding-right: 10px !important;
-                    }
-                    .article-template__hero-{{ block_st.image_height }} img {
-                      object-fit: cover !important;
-                      width: 100% !important;
-                      height: 100% !important;
-                    }
-                  }
-{% comment %}{% endcomment %}                </style>
 
                 <div
                   class="rounded-corner-item relative article-template__hero-{{ block_st.image_height }} overflow-hidden media"
-                  style="
-                    border-radius: {{ block_st.featured_image_border_radius }}px !important;
-                    {% if block_st.image_height == 'adapt' %}
-                      --aspect-ratio: adapt;
-                    {% endif %}
-                  "
+                  data-ma-hero
+                  {% if block_st.image_height == 'adapt' %}
+                    style="--aspect-ratio: {% if article.image %}adapt{% else %}16/9{% endif %};"
+                  {% endif %}
                 >
-                  {%- assign image_alt = article.image.alt | default: 'article' -%}
-                  {% render 'responsive-image',
-                    type: 'banner',
-                    class: 'absolute h-full inset-0 object-fit-cover',
-                    container: section_width,
-                    image: article.image,
-                    image_alt: image_alt,
-                    lazy_load: true,
-                    width: 1920,
-                    height: 1080
-                  %}
+                  {%- if article.image -%}
+                    {%- assign image_alt = article.image.alt | default: 'article' -%}
+                    {% render 'responsive-image',
+                      type: 'banner',
+                      class: 'absolute h-full inset-0 object-fit-cover',
+                      container: section_width,
+                      image: article.image,
+                      image_alt: image_alt,
+                      lazy_load: true,
+                      width: 1920,
+                      height: 1080
+                    %}
+                  {%- else -%}
+                    {{ 'image' | placeholder_svg_tag: 'absolute inset-0 w-full h-full placeholder-svg' }}
+                  {%- endif -%}
                 </div>
               </div>
             {% endif %}
@@ -216,13 +279,19 @@
             <div
               class="container-min article-template__content mt-40 rte content-desktop-width"
               itemprop="articleBody"
+              data-lcp-block="{{ block.id }}" data-lcp-block-type="content_article" data-lcp-block-settings="{{ block.settings | json | escape }}"
+              {%- if block_font != blank %} data-own-font style="font-family: {{ block_font }};"{% endif %}
               {{ block.shopify_attributes }}
             >
-              {{ article.content }}
+              {%- if ma_has_article -%}
+                {{ article.content }}
+              {%- else -%}
+                <div aria-hidden="true">{% for i in (1..6) %}<span class="ma-skeleton ma-skeleton--line"></span>{% endfor %}</div>
+              {%- endif -%}
             </div>
 
           {%- when 'author_highlight' -%}
-            <div class="single__post-content-inner container-min">
+            <div class="single__post-content-inner container-min" data-lcp-block="{{ block.id }}" data-lcp-block-type="author_highlight" data-lcp-block-settings="{{ block.settings | json | escape }}" {{ block.shopify_attributes }} style="--ma-author-size: {{ block_st.author_image_size }}px;">
               <div class="author-highlight" style="display: flex; align-items: center; gap: 10px; margin-top: 40px;">
                 {%- if block_st.author_image != blank -%}
                   <img
@@ -233,18 +302,19 @@
                     height="{{ block_st.author_image_size }}"
                     loading="lazy"
                     decoding="async"
-                    style="width: {{ block_st.author_image_size }}px; height: {{ block_st.author_image_size }}px;"
                   >
                 {%- else -%}
-                  <span class="author-highlight__image inline-flex" style="width: {{ block_st.author_image_size }}px; height: {{ block_st.author_image_size }}px;" aria-hidden="true">
+                  <span class="author-highlight__image inline-flex" aria-hidden="true">
                     {{ 'image' | placeholder_svg_tag: 'w-full h-full' }}
                   </span>
                 {%- endif -%}
                 <div>
-                  <p style="margin: 0 0 5px;">{{ block_st.author_text }}</p>
-                  <p style="margin: 0;">
-                    Written by <strong>{{ article.author }}</strong>
-                  </p>
+                  <p style="margin: 0 0 5px;" data-ma-author-text>{{ block_st.author_text }}</p>
+                  {%- if article.author != blank -%}
+                    <p style="margin: 0;">
+                      Written by <strong>{{ article.author }}</strong>
+                    </p>
+                  {%- endif -%}
                 </div>
               </div>
             </div>
@@ -252,11 +322,13 @@
       {%- endfor -%}
     </article>
     <!-- END: Main Article Content (No Sidebar) -->
+    {%- endif -%}
   </div>
 </div>
 
 <script src="{{ 'blog.js' | asset_url }}" defer="defer"></script>
 
+{%- if ma_has_article -%}
 <script type="application/ld+json">
   {
     "@context": "http://schema.org",
@@ -287,7 +359,7 @@
     }
   }
 {% comment %}{% endcomment %}</script>
-
+{%- endif -%}
 
 
 </template>
@@ -563,13 +635,19 @@
     }
   ],
   "shopify": {
-    "name": "Main Blog Article",
+    "name": "Blog post",
     "tag": "section",
     "class": "section",
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Colour scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "select",
@@ -596,12 +674,6 @@
         "label": "Section width"
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
-      },
-      {
         "type": "checkbox",
         "id": "reset_spacing",
         "label": "Remove default space between sections",
@@ -609,36 +681,41 @@
       },
       {
         "type": "header",
-        "content": "Layout & Spacing"
+        "content": "Content"
       },
       {
-        "type": "range",
-        "id": "padding_top",
-        "label": "Padding top",
-        "default": 0,
-        "min": 0,
-        "max": 100,
-        "step": 2,
-        "unit": "px"
+        "type": "text",
+        "id": "empty_heading",
+        "label": "Heading when the post is missing",
+        "default": "This post is not available"
       },
       {
-        "type": "range",
-        "id": "padding_bottom",
-        "label": "Padding bottom",
-        "default": 0,
-        "min": 0,
-        "max": 100,
-        "step": 2,
-        "unit": "px"
+        "type": "richtext",
+        "id": "empty_text",
+        "label": "Text when the post is missing",
+        "default": "<p>It may have moved or is not published yet.</p>"
+      },
+      {
+        "type": "text",
+        "id": "empty_button_label",
+        "label": "Button when the post is missing",
+        "default": "Back to the blog",
+        "info": "Leave empty to hide the button."
+      },
+      {
+        "type": "url",
+        "id": "empty_button_url",
+        "label": "Button link when the post is missing",
+        "info": "Empty links to the blog."
       },
       {
         "type": "header",
-        "content": "Other"
+        "content": "Layout"
       },
       {
         "type": "range",
         "id": "content_width_desktop",
-        "label": "Content width",
+        "label": "Text width (desktop)",
         "default": 800,
         "min": 600,
         "max": 2000,
@@ -648,7 +725,7 @@
       {
         "type": "range",
         "id": "author_margin_left",
-        "label": "Author margin left",
+        "label": "Author box shift left (desktop)",
         "default": 0,
         "min": -200,
         "max": 100,
@@ -658,20 +735,61 @@
       {
         "type": "range",
         "id": "author_margin_right",
-        "label": "Author margin right",
+        "label": "Author box shift right (desktop)",
         "default": 0,
         "min": 0,
         "max": 100,
         "step": 1,
+        "unit": "px"
+      },
+      {
+        "type": "header",
+        "content": "Desktop spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top padding",
+        "default": 0,
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "unit": "px"
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom padding",
+        "default": 0,
+        "min": 0,
+        "max": 100,
+        "step": 2,
         "unit": "px"
       }
     ],
     "blocks": [
       {
         "type": "title",
-        "name": "Article Title",
+        "name": "Title",
         "limit": 1,
         "settings": [
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom font",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Title font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
+          },
           {
             "type": "range",
             "id": "blog_title_font_size",
@@ -686,13 +804,24 @@
       },
       {
         "type": "category",
-        "name": "Category Display",
+        "name": "Blog name",
         "limit": 1,
         "settings": [
           {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
             "type": "color",
             "id": "category_background_color",
-            "label": "Background"
+            "label": "Background",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           },
           {
             "type": "range",
@@ -708,13 +837,30 @@
       },
       {
         "type": "blog_meta",
-        "name": "Blog Metadata",
+        "name": "Author and date",
         "limit": 1,
         "settings": [
           {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
             "type": "color",
             "id": "blog_meta_background_color",
-            "label": "Background"
+            "label": "Background",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "date_pill_background_color",
+            "label": "Date background",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           },
           {
             "type": "range",
@@ -725,47 +871,69 @@
             "max": 50,
             "step": 1,
             "unit": "px"
-          },
-          {
-            "type": "color",
-            "id": "date_pill_background_color",
-            "label": "Date background"
           }
         ]
       },
       {
         "type": "content_article",
-        "name": "Article Content",
-        "limit": 1
+        "name": "Post text",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom font",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Text font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
+          }
+        ]
       },
       {
         "type": "featured_image",
-        "name": "Featured Image",
+        "name": "Featured picture",
         "limit": 1,
         "settings": [
+          {
+            "type": "header",
+            "content": "Layout"
+          },
           {
             "type": "select",
             "id": "image_height",
             "options": [
               {
                 "value": "adapt",
-                "label": "Adapt Height"
+                "label": "Picture shape"
               },
               {
                 "value": "small",
-                "label": "Small Height"
+                "label": "Small"
               },
               {
                 "value": "medium",
-                "label": "Medium Height"
+                "label": "Medium"
               },
               {
                 "value": "large",
-                "label": "Large Height"
+                "label": "Large"
               }
             ],
             "default": "adapt",
-            "label": "Image height"
+            "label": "Picture height"
+          },
+          {
+            "type": "header",
+            "content": "Appearance"
           },
           {
             "type": "range",
@@ -778,9 +946,13 @@
             "unit": "px"
           },
           {
+            "type": "header",
+            "content": "Spacing"
+          },
+          {
             "type": "range",
             "id": "featured_image_top_padding",
-            "label": "Padding top",
+            "label": "Space above",
             "default": 0,
             "min": 0,
             "max": 100,
@@ -790,7 +962,7 @@
           {
             "type": "range",
             "id": "featured_image_bottom_padding",
-            "label": "Padding bottom",
+            "label": "Space below",
             "default": 0,
             "min": 0,
             "max": 100,
@@ -801,13 +973,27 @@
       },
       {
         "type": "author_highlight",
-        "name": "Author Highlight",
+        "name": "Author note",
         "limit": 1,
         "settings": [
+          {
+            "type": "header",
+            "content": "Content"
+          },
+          {
+            "type": "text",
+            "id": "author_text",
+            "label": "Message",
+            "default": "Hope you enjoyed this article and stay tuned!"
+          },
           {
             "type": "image_picker",
             "id": "author_image",
             "label": "Author photo"
+          },
+          {
+            "type": "header",
+            "content": "Layout"
           },
           {
             "type": "range",
@@ -818,12 +1004,6 @@
             "max": 200,
             "step": 5,
             "unit": "px"
-          },
-          {
-            "type": "text",
-            "id": "author_text",
-            "label": "Message",
-            "default": "Hope you enjoyed this article and stay tuned!"
           }
         ]
       }

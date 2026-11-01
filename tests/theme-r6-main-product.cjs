@@ -94,7 +94,7 @@ const OLD = 'c098384';
     /* ---- every section setting, live and after a redraw */
     const M = {
       rootBg: `getComputedStyle(R).backgroundColor + ' ' + [...R.classList].filter(c => c.startsWith('color-')).join()`,
-      wrapWidth: `Math.round(R.firstElementChild.getBoundingClientRect().width) + ' ' + getComputedStyle(R.firstElementChild).paddingLeft`,
+      wrapWidth: `Math.round(W.getBoundingClientRect().width) + ' ' + getComputedStyle(W).paddingLeft`,
       rootClass: `R.className`,
       gallery: `(R.querySelector('media-gallery [data-thumb-direction]') || {}).outerHTML ? R.querySelector('media-gallery').getAttribute('data-mt-gallery-config') + ' ' + R.querySelector('[data-thumb-direction]').dataset.thumbDirection : R.querySelector('media-gallery').getAttribute('data-mt-gallery-config')`,
       mediaWidth: `Math.round(R.querySelector('.product-detail__media').getBoundingClientRect().width)`,
@@ -144,7 +144,7 @@ const OLD = 'c098384';
       S('sticky_show_title', false, M.barShown('.product-item__information'), {live: true, widths: [1366]}),
       S('sticky_show_reviews', true, M.barReviews, {product: REVIEWED}),
       S('sticky_show_variant_picker', false, M.barShown('.product-detail__variant-picker'), {live: true}),
-      S('sticky_show_quantity', false, M.barShown('.product-form__quantity'), {live: true}),
+      S('sticky_show_quantity', false, M.barShown('.product-form__quantity'), {live: true, widths: [1366]}),
       S('sticky_padding_y', 20, M.barPad, {live: true}),
       S('sticky_use_theme_button', false, M.barBtn, {live: true, base: {sticky_button_radius: 0}}),
       S('sticky_button_radius', 0, M.barBtn, {live: true, base: {sticky_use_theme_button: false}}),
@@ -154,16 +154,16 @@ const OLD = 'c098384';
       S('text_color', '#3355aa', M.text, {live: true, base: {enable_custom_style: true}}),
       S('sticky_bar_bg', '#ffeedd', M.barPaint, {live: true, base: {enable_custom_style: true}}),
       S('sticky_border_color', '#ff0000', M.barPaint, {live: true, base: {enable_custom_style: true}}),
-      S('enable_custom_fonts', true, M.title, {live: true, base: {heading_font: 'georgia_n4'}}),
-      S('heading_font', 'georgia_n4', M.title, {live: true, base: {enable_custom_fonts: true}}),
-      S('body_font', 'courier_new_n4', M.text, {live: true, base: {enable_custom_fonts: true}}),
+      S('enable_custom_fonts', true, M.title, {live: true, base: {heading_font: {family: 'Georgia', fallback_families: 'serif'}}}),
+      S('heading_font', {family: 'Georgia', fallback_families: 'serif'}, M.title, {live: true, base: {enable_custom_fonts: true}}),
+      S('body_font', {family: 'Courier New', fallback_families: 'monospace'}, M.text, {live: true, base: {enable_custom_fonts: true}}),
       S('padding_top', 60, M.pad, {live: true}),
       S('padding_bottom', 20, M.pad, {live: true}),
       S('enable_custom_padding', true, M.wrapWidth, {live: true, base: {padding_left_desktop: 60, padding_left_mobile: 30}}),
       S('padding_left_desktop', 60, M.wrapWidth, {live: true, widths: [1366], base: {enable_custom_padding: true}}),
-      S('padding_right_desktop', 60, `getComputedStyle(R.firstElementChild).paddingRight`, {live: true, widths: [1366], base: {enable_custom_padding: true}}),
+      S('padding_right_desktop', 60, `getComputedStyle(W).paddingRight`, {live: true, widths: [1366], base: {enable_custom_padding: true}}),
       S('padding_left_mobile', 30, M.wrapWidth, {live: true, widths: [375], base: {enable_custom_padding: true}}),
-      S('padding_right_mobile', 30, `getComputedStyle(R.firstElementChild).paddingRight`, {live: true, widths: [375], base: {enable_custom_padding: true}}),
+      S('padding_right_mobile', 30, `getComputedStyle(W).paddingRight`, {live: true, widths: [375], base: {enable_custom_padding: true}}),
       S('section_width_mobile', 'container', M.wrapWidth, {widths: [375]}),
       S('mobile_options', 'hidden_thumbnail', M.thumbs, {widths: [375]}),
       S('mobile_slides_per_view', '2', M.perView, {widths: [375]}),
@@ -172,7 +172,7 @@ const OLD = 'c098384';
     const schema = L.mainSchema();
     for (const s of schema.settings) if (s.id && !s.hidden && s.visible_if !== '{{ false }}') ok(CASES.some(c => c.id === s.id), 'a check for every section setting: ' + s.id);
 
-    const measure = (p, id, expr) => p.evaluate(([ID, expr]) => { const R = document.getElementById('MainProduct-' + ID), SEC = document.getElementById('shopify-section-' + ID); return String(eval(expr)); }, [id, expr]);
+    const measure = (p, id, expr) => p.evaluate(([ID, expr]) => { const R = document.getElementById('MainProduct-' + ID), SEC = document.getElementById('shopify-section-' + ID), W = R.querySelector(':scope > :is(.container, .fluid_container, .stretch_width, .full_width, skeleton-page)'); return String(eval(expr)); }, [id, expr]);
     for (const design of [true, false]) for (const width of [375, 1366]) {
       const groups = new Map();
       for (const c of CASES) if (c.widths.includes(width) && !(design && c.editorRedraw === false)) { const k = JSON.stringify([c.base, c.product ? 1 : 0]); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(c); }

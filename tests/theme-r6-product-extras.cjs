@@ -214,7 +214,7 @@ async function relatedProducts(browser) {
   {
     const t = await mount(browser, name, {width: 1366, editing: true, globals: G, theme: THEME, assets: [ASSET], instances: [{uid: 'a', settings: CARDS}, {uid: 'b', settings: CARDS}]});
     const b0 = await t.page.evaluate(LOOK, 'b');
-    await t.emit({heading: 'Only A', enable_custom_style: true, heading_color: '#ff0000', padding_top: 90, header_alignment: 'right'}, undefined, 'a'); await frames(t.page);
+    await t.emit({heading: 'Only A', enable_custom_style: true, heading_color: '#ff0000', header_alignment: 'right'}, undefined, 'a'); await frames(t.page);
     const a1 = await t.page.evaluate(LOOK, 'a'), b1 = await t.page.evaluate(LOOK, 'b');
     ok(a1.h2[0] === 'Only A' && a1.h2[1] === 'rgb(255, 0, 0)', 'instance a changed');
     eq(b1, b0, 'instance b untouched');

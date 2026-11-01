@@ -112,6 +112,8 @@ async function storefront(browser, type, width) {
   await t.page.keyboard.press('Escape'); await wait(t, 900);
   const sa2 = await state(t, 'a'), sb2 = await state(t, 'b');
   ok(sa2.open !== sb2.open && sa2.open === !sa.open, tag + ' the second opens once the first is closed');
+  await t.emit({color_scheme: 'alt-scheme'}, undefined, 'a'); await wait(t, 60);
+  ok(await t.page.evaluate(() => document.querySelector('#shopify-section-a [data-pg-root]').classList.contains('color-alt-scheme') && !document.querySelector('#shopify-section-b [data-pg-root]').classList.contains('color-alt-scheme')), tag + ' a live edit to one popup leaves the other');
   ok(await t.page.evaluate(() => !!localStorage.getItem('materia:popup:a') !== !!localStorage.getItem('materia:popup:b') || (!!localStorage.getItem('materia:popup:a') && !!localStorage.getItem('materia:popup:b'))), tag + ' remembered per section');
   await t.page.close();
 
@@ -171,7 +173,7 @@ async function styling(browser, type, width) {
   let t = await mount(browser, type, {width, editing: false, settings, blocks: base.blocks, assets: ASSETS});
   await wait(t, 300);
   const offBg = await cardBg(t);
-  ok(/rgb\(24, 32, 40\)/.test(offBg) || type === 'promonewsletterpopup-2' || type === 'promotionalpopup2', tag + ' off: the card follows the scheme background (' + offBg + ')');
+  ok(/rgb\(24, 32, 40\)/.test(offBg), tag + ' off: the card follows the scheme background (' + offBg + ')');
   if (p.heading) {
     const ff = await t.css(q(p.heading, 'test'), 'fontFamily');
     ok(/Georgia/.test(ff), tag + ' off: the heading uses the theme heading font (' + ff + ')');
@@ -243,6 +245,7 @@ async function savedLook(browser, type, width) {
 async function backToTop(browser, width) {
   const tag = 'back-to-top-pro @' + width;
   const base = saved('back-to-top-pro');
+  const bg = t => t.page.evaluate(() => getComputedStyle(document.querySelector('.top-circle-test'), '::after').backgroundColor);
   for (const editing of [false, true]) {
     const t = await mount(browser, 'back-to-top-pro', {width, editing, settings: {...base.settings, enable_custom_style: true}, assets: ASSETS});
     await t.page.evaluate(() => { const d = document.createElement('main'); d.id = 'MainContent'; d.style.height = '4000px'; document.body.prepend(d); });
@@ -250,15 +253,15 @@ async function backToTop(browser, width) {
     const bb = await t.root('[data-back-to-top]').boundingBox();
     ok(bb && bb.width >= 44 && bb.height >= 44, tag + ' 44px target');
     ok(await t.root('[data-back-to-top]').evaluate(b => b.classList.contains('is-visible')), tag + ' shows after scrolling');
-    eq(await t.css('.top-circle-test', 'backgroundColor'), 'rgb(255, 255, 255)', tag + ' saved colour with custom colours on');
+    eq(await bg(t), 'rgb(255, 255, 255)', tag + ' saved colour with custom colours on');
     /* a redraw does not stack scroll listeners */
     for (let i = 0; i < 3; i++) await t.redraw({settings: {}});
     await t.page.evaluate(() => window.scrollTo(0, 0)); await wait(t, 150);
     ok(await t.root('[data-back-to-top]').evaluate(b => !b.classList.contains('is-visible')), tag + ' hides at the top after redraws');
-    await t.redraw({settings: {enable_custom_style: false}});
-    eq(await t.css('.top-circle-test', 'backgroundColor'), 'rgb(24, 32, 40)', tag + ' custom colours off: the scheme background');
-    await t.emit({color_scheme: 'alt-scheme'}); await wait(t, 60);
-    eq(await t.css('.top-circle-test', 'backgroundColor'), 'rgb(250, 250, 250)', tag + ' colour scheme swaps live');
+    await t.redraw({settings: {enable_custom_style: false}}); await wait(t, 700);
+    eq(await bg(t), 'rgb(24, 32, 40)', tag + ' custom colours off: the scheme background');
+    await t.emit({color_scheme: 'alt-scheme'}); await wait(t, 700);
+    eq(await bg(t), 'rgb(250, 250, 250)', tag + ' colour scheme swaps live');
     ok(!t.errors.length, tag + ' no errors ' + t.errors.join('; '));
     await t.page.close();
   }

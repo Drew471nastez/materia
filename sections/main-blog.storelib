@@ -75,7 +75,10 @@
   endif
 
   assign image_ratio = section_st.image_ratio
-  assign custom_ratio = section_st.custom_ratio
+  comment
+    Custom shape with nothing typed: the 3:2 the cards use elsewhere, not a picture with no height.
+  endcomment
+  assign custom_ratio = section_st.custom_ratio | default: '3:2'
   assign content_alignment = section_st.content_alignment
   assign show_date = section_st.show_date
   assign show_excerpt = section_st.show_excerpt
@@ -175,13 +178,84 @@
     #shopify-section-{{ section.id }} .blog-posts-readmore::after { transition: none; }
   }
 {% comment %}{% endcomment %}</style>
+{%- liquid
+  comment
+    Theme first: the badge takes the scheme's primary colour and the theme's
+    button text colour; a colour picked here applies only while Enable custom
+    styling is on. Custom fonts reach the post titles and text through
+    data-own-font, so the theme's "Use in every section" rule leaves them.
+  endcomment
+  assign mb_badge_bg = 'var(--color-primary)'
+  assign mb_badge_text = 'var(--btn-primary-color)'
+  if section_st.enable_custom_style
+    capture mb_badge_bg
+      render 'scheme-color', color: section_st.badge_background_color, fallback: mb_badge_bg
+    endcapture
+    capture mb_badge_text
+      render 'scheme-color', color: section_st.badge_text_color, fallback: mb_badge_text
+    endcapture
+  endif
+  assign mb_heading_font = ''
+  assign mb_body_font = ''
+  if section_st.enable_custom_fonts
+    if section_st.heading_font.family != blank
+      assign mb_heading_font = section_st.heading_font.family
+      if section_st.heading_font.fallback_families != blank
+        assign mb_heading_font = mb_heading_font | append: ', ' | append: section_st.heading_font.fallback_families
+      endif
+    endif
+    if section_st.body_font.family != blank
+      assign mb_body_font = section_st.body_font.family
+      if section_st.body_font.fallback_families != blank
+        assign mb_body_font = mb_body_font | append: ', ' | append: section_st.body_font.fallback_families
+      endif
+    endif
+  endif
+  assign mb_has_posts = false
+  if selected_blog and selected_blog.articles.size > 0
+    assign mb_has_posts = true
+  endif
+-%}
+{%- if section_st.enable_custom_fonts -%}<style>{{ section_st.heading_font | font_face: font_display: 'swap' }}{{ section_st.body_font | font_face: font_display: 'swap' }}{% comment %}{% endcomment %}</style>{%- endif -%}
+<style>
+  #shopify-section-{{ section.id }} .article-badge {
+    position: absolute; z-index: 2;
+    top: var(--badge-vertical-position); left: var(--badge-horizontal-position);
+    width: var(--badge-width); height: var(--badge-height);
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    padding: 0.4rem 0.8rem;
+    font-size: var(--badge-font-size);
+    border-radius: var(--badge-radius);
+    background-color: var(--badge-bg) !important;
+    color: var(--badge-color) !important;
+  }
+  #shopify-section-{{ section.id }} [data-own-font] :is(.blog-posts-title, .blog-posts-title a, .main-blog-empty__title) { font-family: var(--mbl-heading-font, var(--heading-font)); }
+  #shopify-section-{{ section.id }} [data-own-font] :is(.blog-posts-content, .blog-posts-bottom, .blog-posts-readmore, .main-blog-empty__text, .main-blog-empty__text p) { font-family: var(--mbl-body-font, var(--body-font)); }
+  #shopify-section-{{ section.id }} .main-blog-empty {
+    width: 100%; max-width: 64rem; margin-inline: auto; padding: 56px 24px;
+    border: 1px solid var(--color-border); border-radius: var(--rounded-radius, 8px);
+    display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center;
+  }
+  #shopify-section-{{ section.id }} .main-blog-empty[data-align="left"] { align-items: flex-start; text-align: start; margin-inline: 0 auto; }
+  #shopify-section-{{ section.id }} .main-blog-empty[data-align="right"] { align-items: flex-end; text-align: end; margin-inline: auto 0; }
+  #shopify-section-{{ section.id }} .main-blog-empty__title { margin: 0; color: var(--color-heading); }
+  #shopify-section-{{ section.id }} .main-blog-empty__text { color: var(--color-text); max-width: 46ch; }
+  #shopify-section-{{ section.id }} .main-blog-empty__text > :last-child { margin-bottom: 0; }
+  #shopify-section-{{ section.id }} .main-blog-empty [hidden] { display: none !important; }
+  #shopify-section-{{ section.id }} .main-blog-empty__action { margin-top: 8px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+  @media (max-width: 767px) { #shopify-section-{{ section.id }} .main-blog-empty { padding: 40px 20px; } }
+{% comment %}{% endcomment %}</style>
 <div
   class="section{% if section_st.padding_top < 30 %} pt-min{% endif %}{% if section_st.padding_bottom < 30 %} pb-min{% endif %} sec__blog-list color-{{ color_scheme }} gradient"
-  style="{{ style | strip | strip_newlines }}"
+  style="{{ style | strip | strip_newlines }} --badge-bg: {{ mb_badge_bg | strip }}; --badge-color: {{ mb_badge_text | strip }}; --badge-radius: {{ section_st.badge_border_radius }}px;{% if mb_heading_font != blank %} --mbl-heading-font: {{ mb_heading_font }};{% endif %}{% if mb_body_font != blank %} --mbl-body-font: {{ mb_body_font }};{% endif %}"
+  data-lcp="main-blog"
+  data-lcp-id="{{ section.id }}"
+  data-lcp-settings="{{ section.settings | json | escape }}"
+  {%- if section_st.enable_custom_fonts %} data-own-font{% endif %}
 >
   <div class="{{ section_width }}">
     <div class="blog-grid-container flex flex-wrap gap-40 justify-between">
-      {%- if selected_blog and selected_blog.articles.size > 0 -%}
+      {%- if mb_has_posts -%}
         {%- paginate selected_blog.articles by items_to_show -%}
           <div class="main-blog w-full">
             <div
@@ -197,35 +271,11 @@
               >
                 {%- for article in selected_blog.articles -%}
                   {% comment %}
-                    We wrap the article-card in a conditional:
-                    If the article.handle == the user’s badge reference setting,
-                    we show the badge. Otherwise, just render normally.
+                    The post whose handle is the badge setting gets the badge.
                   {% endcomment %}
                   {% if article.handle == section_st.blog_post_badge_reference %}
                     <div style="position: relative;">
-                      <div
-                        class="article-badge"
-                        style="
-                                                background-color: {% render 'scheme-color', color: section_st.badge_background_color, fallback: 'var(--color-primary)' %} !important;
-                                                color: {% render 'scheme-color', color: section_st.badge_text_color, fallback: 'var(--btn-primary-color)' %} !important;
-                                                border-radius: {{ section_st.badge_border_radius }}px;
-                                                padding: 0.4rem 0.8rem;
-                                                position: absolute;
-                                                top: var(--badge-vertical-position);
-                                                left: var(--badge-horizontal-position);
-                                                width: var(--badge-width);
-                                                height: var(--badge-height);
-                                                font-size: var(--badge-font-size);
-                                               display: flex;
-                          align-items: center;
-                          justify-content: center;
-                          text-align: center;
-                          z-index: 2;
-                                                z-index: 2;
-                        "
-                      >
-                        {{ section_st.badge_text }}
-                      </div>
+                      <div class="article-badge" data-mbl-badge>{{ section_st.badge_text }}</div>
                       {%- render 'article-card',
                         article: article,
                         show_date: show_date,
@@ -279,7 +329,18 @@
         {%- endpaginate -%}
 
       {%- else -%}
-        <p>{{ 'blogs.article.empty' | t }}</p>
+        {%- comment -%}
+          No posts yet (a Storelib blog has none): a short note in the
+          creator's words and one way on, never a made-up post.
+        {%- endcomment -%}
+        <div class="main-blog-empty" data-main-blog-empty data-align="{{ content_alignment | default: 'center' }}">
+          <h2 class="main-blog-empty__title h4"{% if section_st.empty_heading == blank %} hidden{% endif %}>{{ section_st.empty_heading | escape }}</h2>
+          <div class="main-blog-empty__text"{% if section_st.empty_text == blank %} hidden{% endif %}>{{ section_st.empty_text }}</div>
+          {%- liquid
+            assign mb_empty_url = section_st.empty_button_url | default: routes.all_products_collection_url | default: '/collections/all'
+          -%}
+          <a class="main-blog-empty__action btn btn-primary" href="{{ mb_empty_url }}" data-theme-button="primary" data-sl-button{% if section_st.empty_button_label == blank %} hidden{% endif %}>{{ section_st.empty_button_label | escape }}</a>
+        </div>
       {% endif %}
     </div>
   </div>
@@ -786,13 +847,19 @@
     }
   ],
   "shopify": {
-    "name": "t:sections.main-blog.name",
+    "name": "Blog posts page",
     "tag": "section",
     "class": "section",
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Colour scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "select",
@@ -819,12 +886,6 @@
         "default": "stretch_width"
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
-      },
-      {
         "type": "checkbox",
         "id": "reset_spacing",
         "label": "Remove default space between sections",
@@ -832,7 +893,121 @@
       },
       {
         "type": "header",
-        "content": "General"
+        "content": "Content"
+      },
+      {
+        "type": "blog",
+        "id": "blog_select",
+        "label": "Blog",
+        "info": "Empty shows the blog being read."
+      },
+      {
+        "type": "checkbox",
+        "id": "show_date",
+        "label": "Show date",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_excerpt",
+        "label": "Show the start of each post",
+        "default": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_readmore",
+        "label": "Show Read more",
+        "default": true
+      },
+      {
+        "type": "select",
+        "id": "readmore_type",
+        "label": "Read more style",
+        "options": [
+          {
+            "value": "primary",
+            "label": "Button"
+          },
+          {
+            "value": "secondary",
+            "label": "Text link"
+          }
+        ],
+        "default": "primary",
+        "visible_if": "{{ section.settings.show_readmore }}"
+      },
+      {
+        "type": "text",
+        "id": "empty_heading",
+        "label": "Heading with no posts",
+        "default": "No posts yet"
+      },
+      {
+        "type": "richtext",
+        "id": "empty_text",
+        "label": "Text with no posts",
+        "default": "<p>New posts show here as soon as they are published.</p>"
+      },
+      {
+        "type": "text",
+        "id": "empty_button_label",
+        "label": "Button with no posts",
+        "default": "Shop all products",
+        "info": "Leave empty to hide the button."
+      },
+      {
+        "type": "url",
+        "id": "empty_button_url",
+        "label": "Button link with no posts",
+        "default": "/collections/all"
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "layout",
+        "label": "Layout",
+        "options": [
+          {
+            "value": "grid",
+            "label": "Grid"
+          },
+          {
+            "value": "list",
+            "label": "List"
+          }
+        ],
+        "default": "grid"
+      },
+      {
+        "type": "range",
+        "id": "items_per_row",
+        "label": "Posts per row",
+        "min": 1,
+        "max": 4,
+        "step": 1,
+        "default": 4
+      },
+      {
+        "type": "range",
+        "id": "items_to_show",
+        "label": "Posts per page",
+        "min": 1,
+        "max": 10,
+        "step": 1,
+        "default": 4
+      },
+      {
+        "type": "range",
+        "id": "column_gap",
+        "label": "Gap between posts",
+        "min": 0,
+        "max": 50,
+        "step": 5,
+        "default": 30,
+        "unit": "px"
       },
       {
         "type": "select",
@@ -855,35 +1030,44 @@
         ]
       },
       {
-        "type": "checkbox",
-        "id": "show_date",
-        "label": "Show date",
-        "default": true
+        "type": "select",
+        "id": "pagination",
+        "label": "Pagination",
+        "default": "default",
+        "options": [
+          {
+            "value": "default",
+            "label": "Page numbers"
+          },
+          {
+            "value": "load_more_button",
+            "label": "Load-more button"
+          },
+          {
+            "value": "infinit_scrolling",
+            "label": "Infinite scroll"
+          }
+        ]
       },
       {
-        "type": "checkbox",
-        "id": "show_excerpt",
-        "label": "Show excerpt",
-        "default": true
-      },
-      {
-        "type": "checkbox",
-        "id": "show_readmore",
-        "label": "Show read more",
-        "default": true
+        "type": "text",
+        "id": "button_show_more",
+        "label": "Load more button text",
+        "default": "Load more",
+        "visible_if": "{{ section.settings.pagination == 'load_more_button' }}"
       },
       {
         "type": "header",
-        "content": "Image / Media"
+        "content": "Media"
       },
       {
         "type": "select",
         "id": "image_ratio",
-        "label": "Image ratio",
+        "label": "Picture shape",
         "options": [
           {
             "value": "adapt",
-            "label": "Adapt (Original)"
+            "label": "Original"
           },
           {
             "value": "square",
@@ -907,177 +1091,48 @@
       {
         "type": "text",
         "id": "custom_ratio",
-        "label": "Custom ratio",
-        "info": "Format 2:3",
+        "label": "Custom shape",
+        "info": "Width:height, for example 16:9",
         "visible_if": "{{ section.settings.image_ratio == 'custom' }}"
       },
       {
         "type": "header",
-        "content": "Content"
-      },
-      {
-        "type": "blog",
-        "id": "blog_select",
-        "label": "Blog"
-      },
-      {
-        "type": "select",
-        "id": "pagination",
-        "label": "Pagination style",
-        "default": "default",
-        "options": [
-          {
-            "value": "default",
-            "label": "Page numbers"
-          },
-          {
-            "value": "load_more_button",
-            "label": "Load-more button"
-          },
-          {
-            "value": "infinit_scrolling",
-            "label": "Infinite scroll"
-          }
-        ]
+        "content": "Badge"
       },
       {
         "type": "text",
-        "id": "button_show_more",
-        "label": "Load-more text",
-        "default": "Load more",
-        "visible_if": "{{ section.settings.pagination == 'load_more_button' }}"
+        "id": "blog_post_badge_reference",
+        "label": "Post with a badge",
+        "info": "The post handle, for example news/our-new-studio. Empty shows no badge."
       },
       {
         "type": "text",
         "id": "badge_text",
         "label": "Badge text",
-        "default": "Recent"
-      },
-      {
-        "type": "text",
-        "id": "blog_post_badge_reference",
-        "label": "Badge article handle"
-      },
-      {
-        "type": "header",
-        "content": "Typography"
-      },
-      {
-        "type": "color",
-        "id": "badge_text_color",
-        "label": "Badge text"
-      },
-      {
-        "type": "range",
-        "id": "badge_text_font_size",
-        "label": "Badge text size",
-        "min": 10,
-        "max": 30,
-        "step": 1,
-        "default": 14,
-        "unit": "px"
-      },
-      {
-        "type": "header",
-        "content": "Buttons"
-      },
-      {
-        "type": "select",
-        "id": "readmore_type",
-        "label": "Read more style",
-        "options": [
-          {
-            "value": "primary",
-            "label": "Primary Button"
-          },
-          {
-            "value": "secondary",
-            "label": "Text Button"
-          }
-        ],
-        "default": "primary"
-      },
-      {
-        "type": "header",
-        "content": "Style & Colors"
-      },
-      {
-        "type": "color",
-        "id": "badge_background_color",
-        "label": "Badge background"
-      },
-      {
-        "type": "range",
-        "id": "badge_border_radius",
-        "label": "Badge radius",
-        "min": 0,
-        "max": 50,
-        "step": 1,
-        "default": 20,
-        "unit": "px"
-      },
-      {
-        "type": "header",
-        "content": "Layout & Spacing"
-      },
-      {
-        "type": "range",
-        "id": "items_per_row",
-        "label": "Articles per row",
-        "min": 1,
-        "max": 4,
-        "step": 1,
-        "default": 4
-      },
-      {
-        "type": "range",
-        "id": "column_gap",
-        "label": "Column gap",
-        "min": 0,
-        "max": 50,
-        "step": 5,
-        "default": 30,
-        "unit": "px"
-      },
-      {
-        "type": "range",
-        "id": "margin_top",
-        "label": "Margin top",
-        "default": 0,
-        "min": 0,
-        "max": 100,
-        "step": 2,
-        "unit": "px"
-      },
-      {
-        "type": "range",
-        "id": "margin_bottom",
-        "label": "Margin bottom",
-        "default": 0,
-        "min": 0,
-        "max": 100,
-        "step": 2,
-        "unit": "px"
+        "default": "Recent",
+        "visible_if": "{{ section.settings.blog_post_badge_reference != blank }}"
       },
       {
         "type": "range",
         "id": "badge_vertical_position",
-        "label": "Badge top",
+        "label": "Badge distance from top",
         "min": 0,
         "max": 100,
         "step": 1,
         "default": 12,
-        "unit": "px"
+        "unit": "px",
+        "visible_if": "{{ section.settings.blog_post_badge_reference != blank }}"
       },
       {
         "type": "range",
         "id": "badge_horizontal_position",
-        "label": "Badge left",
+        "label": "Badge distance from the side",
         "min": 0,
         "max": 100,
         "step": 1,
         "default": 12,
-        "unit": "px"
+        "unit": "px",
+        "visible_if": "{{ section.settings.blog_post_badge_reference != blank }}"
       },
       {
         "type": "range",
@@ -1087,7 +1142,8 @@
         "max": 300,
         "step": 10,
         "default": 100,
-        "unit": "px"
+        "unit": "px",
+        "visible_if": "{{ section.settings.blog_post_badge_reference != blank }}"
       },
       {
         "type": "range",
@@ -1097,7 +1153,103 @@
         "max": 100,
         "step": 5,
         "default": 40,
-        "unit": "px"
+        "unit": "px",
+        "visible_if": "{{ section.settings.blog_post_badge_reference != blank }}"
+      },
+      {
+        "type": "range",
+        "id": "badge_border_radius",
+        "label": "Badge corner radius",
+        "min": 0,
+        "max": 50,
+        "step": 1,
+        "default": 20,
+        "unit": "px",
+        "visible_if": "{{ section.settings.blog_post_badge_reference != blank }}"
+      },
+      {
+        "type": "range",
+        "id": "badge_text_font_size",
+        "label": "Badge text size",
+        "min": 10,
+        "max": 30,
+        "step": 1,
+        "default": 14,
+        "unit": "px",
+        "visible_if": "{{ section.settings.blog_post_badge_reference != blank }}"
+      },
+      {
+        "type": "header",
+        "content": "Appearance"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Enable custom styling",
+        "default": false
+      },
+      {
+        "type": "color",
+        "id": "badge_background_color",
+        "label": "Badge background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "badge_text_color",
+        "label": "Badge text colour",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Enable custom fonts",
+        "default": false
+      },
+      {
+        "type": "font_picker",
+        "id": "heading_font",
+        "label": "Titles font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Text font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "header",
+        "content": "Desktop spacing"
+      },
+      {
+        "type": "range",
+        "id": "margin_top",
+        "label": "Top margin",
+        "default": 0,
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "unit": "px",
+        "visible_if": "{{ section.settings.reset_spacing == false }}",
+        "info": "Applies when Remove default space between sections is off."
+      },
+      {
+        "type": "range",
+        "id": "margin_bottom",
+        "label": "Bottom margin",
+        "default": 0,
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "unit": "px",
+        "visible_if": "{{ section.settings.reset_spacing == false }}"
       },
       {
         "type": "header",
@@ -1106,40 +1258,11 @@
       {
         "type": "range",
         "id": "items_per_row_mobile",
-        "label": "Articles per row",
+        "label": "Posts per row (mobile)",
         "min": 1,
         "max": 3,
         "step": 1,
         "default": 1
-      },
-      {
-        "type": "header",
-        "content": "Advanced"
-      },
-      {
-        "type": "select",
-        "id": "layout",
-        "label": "Layout",
-        "options": [
-          {
-            "value": "grid",
-            "label": "Grid"
-          },
-          {
-            "value": "list",
-            "label": "List"
-          }
-        ],
-        "default": "grid"
-      },
-      {
-        "type": "range",
-        "id": "items_to_show",
-        "label": "Articles per page",
-        "min": 1,
-        "max": 10,
-        "step": 1,
-        "default": 4
       }
     ],
     "blocks": []

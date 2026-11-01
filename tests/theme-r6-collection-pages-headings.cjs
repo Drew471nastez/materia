@@ -119,7 +119,7 @@ async function savedAll(browser) {
           'description.font': {block: {enable_custom_fonts: true, font: L.MONO}}, 'description.enable_custom_fonts': {block: {font: L.MONO}}, 'description.description_color': {block: {enable_custom_style: true}}, height: {background_image: {src: 'https://theme.test/b.png', url: 'https://theme.test/b.png', width: 1600, height: 400, aspect_ratio: 4, alt: ''}}, overlay_opacity: {background_image: {src: 'https://theme.test/b.png', url: 'https://theme.test/b.png', width: 1600, height: 400, aspect_ratio: 4, alt: ''}}},
         structural: new Set(['reset_spacing', 'background_image', 'show_collection_image', 'height', 'description.description']),
         values: {'description.description': ['<p>Edited <em>text</em></p>', '']},
-        same: {all: new Set(['heading.enable_heading_color', 'description.enable_custom_style', 'section_width:stretch_width', 'reset_spacing']), 375: new Set(['section_width:fluid_container', 'section_width:container', 'section_width:full_width'])}});
+        same: {all: new Set(['heading.enable_heading_color', 'description.enable_custom_style', ...(k === 'collection' ? ['reset_spacing'] : [])])}});
     }
     if (!parts.length || parts.includes('saved')) await savedAll(browser);
   } finally { await browser.close(); }

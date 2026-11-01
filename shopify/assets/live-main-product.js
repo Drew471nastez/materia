@@ -57,7 +57,7 @@
     }
     const bg = pick('sticky_bar_bg'), border = pick('sticky_border_color');
     out.push(`${BAR} { --sticky-pad-y: ${num(s.sticky_padding_y, 12)}px;${bg ? ` background-color: ${bg} !important;` : ''}${border ? ` border-top-color: ${border} !important;` : ''} }`);
-    if (s.sticky_use_theme_button === false || s.sticky_use_theme_button === 'false') out.push(`#StickyCart-${id} :is(.btn, .btn-primary, .btn-outline, button[type="submit"], .product-form__submit, button[name="add"], [data-sl-button]) { border-radius: ${num(s.sticky_button_radius, 8)}px !important; }`);
+    if (s.sticky_use_theme_button === false || s.sticky_use_theme_button === 'false') out.push(`#StickyCart-${id} :is(.btn, .btn-primary, .btn-outline, button[type="submit"], .product-form__submit, button[name="add"], [data-sl-button]) { --mb-radius: ${num(s.sticky_button_radius, 8)}px; border-radius: ${num(s.sticky_button_radius, 8)}px !important; }`);
     if (!bool(s.sticky_show_quantity)) out.push(`${BAR} .product-form__quantity { display: none !important; }`);
     if (!bool(s.sticky_show_variant_picker)) out.push(`${BAR} .product-detail__variant-picker { display: none !important; }`);
     if (!bool(s.sticky_show_image)) out.push(`${BAR} .product-item__inner, ${BAR} .product-item__media { display: none !important; }`);

@@ -44,7 +44,7 @@ async function sig(t, sel) {
     for (const el of [root, ...root.querySelectorAll('*')]) {
       if (el.closest('template') || el.tagName === 'STYLE' || el.tagName === 'TEMPLATE') continue;
       const cs = getComputedStyle(el); const r = el.getBoundingClientRect();
-      out.push([el.tagName, el.className && el.className.baseVal === undefined ? el.className : '', el.hidden, el.childElementCount ? '' : el.textContent.trim(), Math.round(r.width), Math.round(r.height), ...props.map(p => cs[p])].join('|'));
+      out.push([el.tagName, el.className && el.className.baseVal === undefined ? el.className : '', el.hidden, ['d', 'points', 'cx', 'r', 'x', 'width'].map(a => el.namespaceURI === 'http://www.w3.org/2000/svg' ? el.getAttribute(a) || '' : '').join(',') + (el.tagName === 'IMG' ? el.getAttribute('src') : ''), el.childElementCount ? '' : el.textContent.trim(), Math.round(r.width), Math.round(r.height), ...props.map(p => cs[p])].join('|'));
     }
     return out.join('\n');
   }, {sel, props: SIG_PROPS});
@@ -117,7 +117,7 @@ function changed(x, cur) {
     case 'textarea': return '<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"/></svg>';
     case 'color': return '#ab1234';
     case 'font_picker': return {family: 'Courier New', fallback_families: 'monospace'};
-    case 'image_picker': return IMG;
+    case 'image_picker': return cur && /a\.png/.test(cur.src || '') ? {...IMG, src: 'http://theme.test/b.png', url: 'http://theme.test/b.png'} : IMG;
     case 'url': return '/pages/changed';
   }
   return undefined;
@@ -183,7 +183,8 @@ async function selectsDistinct(browser) {
     const width = x.id === 'mobile_layout' ? 375 : 1366, looks = [];
     for (const o of x.options) {
       const base = {...context(bs.type, x.id), ...(ALL_BLOCKS.find(b => b.type === bs.type)?.settings || {}), [x.id]: o.value};
-      if (bs.type === 'benefits_pills') Object.assign(base, {pill4_enable: true, pill4_text: 'Fourth pill text'});
+      if (bs.type === 'benefits_pills') Object.assign(base, {pill4_enable: true, pill4_text: 'Fourth pill text', });
+      for (let i = 1; i <= 6; i++) if (bs.type === 'benefits_pills') Object.assign(base, {['pill' + i + '_icon_svg']: '<svg viewBox="0 0 10 10"><rect width="3" height="10"/></svg>', ['pill' + i + '_icon_image']: IMG});
       const t = await mount(browser, 'main-cart-items', {width, editing: false, blocks: [{type: bs.type, settings: base}], globals: CART_GLOBALS, assets: ASSETS});
       looks.push(await sig(t, sec('test', `[data-lcs-block="${t.blockId(bs.type)}"]`)));
       await t.page.close();
@@ -346,11 +347,11 @@ function schemaChecks() {
 (async () => {
   const browser = await launch();
   try {
-    schemaChecks();
+    if (process.env.LCS_ONLY !== 'blocks') { schemaChecks();
     await savedLooks(browser);
     await cartChecks(browser);
     await searchChecks(browser);
-    await selectsDistinct(browser);
+    await selectsDistinct(browser); }
     if (process.env.LCS_QUICK !== '1') for (const w of [375, 1366]) await blockControls(browser, w);
     console.log(`${checks} cart and search page checks passed`);
   } catch (e) { console.error(e); console.log(`failed after ${checks} checks`); process.exitCode = 1; }
