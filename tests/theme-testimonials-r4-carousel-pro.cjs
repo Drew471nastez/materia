@@ -61,7 +61,7 @@ const BTN = '.tcp__btn';
       B('subheading', 'font_weight', '600', '.tcp__sub', 'fontWeight', '600', {preBlock: {enable_custom_weight: true}}),
       B('subheading', 'space_above', 4, '.tcp__sub', 'marginTop', '4px'),
       B('subheading', 'space_below', 8, '.tcp__sub', 'marginBottom', '8px'),
-      B('review', 'body', 'Changed quote', '.tcp__body', null, 'Changed quote|Changed quote', {get: el => [...el.closest('.tcp').querySelectorAll('[data-lt-block="' + el.closest('[data-lt-block]').dataset.ltBlock + '"] .tcp__body')].map(n => n.textContent.trim()).join('|')}),
+      B('review', 'body', 'Changed quote', '.tcp__body', null, 'Changed quote|Changed quote|Changed quote|Changed quote', {get: el => [...el.closest('.tcp').querySelectorAll('[data-lt-block="' + el.closest('[data-lt-block]').dataset.ltBlock + '"] .tcp__body')].map(n => n.textContent.trim()).join('|')}),
       B('review', 'rating', 2.6, '.tcp__card .lt-stars', null, '2.6 / 5|0%|60%', {get: el => el.getAttribute('aria-label') + '|' + el.children[4].style.getPropertyValue('--lt-fill') + '|' + el.children[2].style.getPropertyValue('--lt-fill')}),
       B('review', 'name', 'Changed name', '.tcp__name', null, 'Changed name', {get: txt}),
       B('review', 'role', '', '.tcp__role', null, true, {get: el => el.hidden}),

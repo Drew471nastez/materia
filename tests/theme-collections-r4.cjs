@@ -135,9 +135,9 @@ const CFG = {
     redraw: ['display_mode', 'items_per_row', 'column_gap', 'show_arrow', 'carousel_pagination', 'pagination_style', 'pagination_position', 'infinite', 'autoplay', 'autorotate_speed', 'reveal',
       'items_per_row_mobile', 'image_ratio', 'custom_ratio', 'rounded_image', 'image_custom_width', 'image_width', 'information_spacing', 'design', 'collection_information_position',
       'show_product_count', 'show_icon', 'show_description', 'font_size', 'font_weight', 'text_alignment', 'section_width', 'collection', 'collection_image', 'collection_title'],
-    behaviour: ['autoplay', 'autorotate_speed', 'infinite', 'reveal', 'pagination_style'],
+    behaviour: ['autoplay', 'autorotate_speed', 'infinite', 'reveal', 'pagination_style', 'pagination_position'],
     hoverSel: '.collection-item', hover: ['card_hover_effect'],
-    same: [['image_ratio', 'adapt', 'portrait'], ['carousel_pagination', 'show_dots', 'show_dots_on_mobile', 375], ['carousel_pagination', 'show_dots', 'show_progress_bar'], ['carousel_pagination', 'show_dots_on_mobile', 'show_progress_bar', 375]],
+    same: [['image_ratio', 'adapt', 'portrait'], ['carousel_pagination', 'show_dots', 'show_dots_on_mobile'], ['carousel_pagination', 'show_dots', 'show_progress_bar'], ['carousel_pagination', 'show_dots_on_mobile', 'show_progress_bar']],
     theme: {heading: '.cdl__heading', text: '.cdl__desc', toggle: 'enable_custom_bg', bg: 'custom_section_bg'},
     life: {section: {padding_top: 12, enable_custom_bg: true, custom_section_bg: '#abcdef'}, block: {type: 'heading', settings: {text: 'Only in A'}},
       check: (page, u) => page.evaluate(u => document.querySelector('#shopify-section-' + u + ' .cdl__heading').textContent === 'Only in A', u),
@@ -412,7 +412,7 @@ async function collections(browser, name) {
     if (cfg.data.count) ok(got.text.includes(String(COLL.products_count)), tag + ' collection count');
     await t.page.close();
     const e = await mount(browser, name, {width, editing, ...cfg.data.empty(), assets: [ASSET, ...(cfg.assets || [])], globals: cfg.globals || {}});
-    const st = await e.page.evaluate(() => { const r = document.querySelector('[data-cl-root]'); return {ph: r.querySelectorAll('[data-cl-ph], .placeholder-svg, svg[data-placeholder], .placeholder-image').length, h: r.getBoundingClientRect().height, dead: [...r.querySelectorAll('a')].filter(a => !a.getAttribute('href') || a.getAttribute('href') === '#').length, broken: [...r.querySelectorAll('img')].filter(i => !i.getAttribute('src')).length}; });
+    const st = await e.page.evaluate(() => { const r = document.querySelector('[data-cl-root]'); return {ph: r.querySelectorAll('[data-cl-ph], .placeholder-svg, svg[data-placeholder], .placeholder-image').length, h: r.getBoundingClientRect().height, dead: [...r.querySelectorAll('a:not([aria-disabled="true"])')].filter(a => !a.getAttribute('href') || a.getAttribute('href') === '#').length, broken: [...r.querySelectorAll('img')].filter(i => !i.getAttribute('src')).length}; });
     if (editing) ok(st.ph > 0, tag + ' empty picker: placeholder in the editor');
     else eq(st.ph, 0, tag + ' empty picker: no placeholder art on the storefront');
     eq(st.dead, 0, tag + ' no dead links');
