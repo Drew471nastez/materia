@@ -133,11 +133,13 @@ async function smallTargets(t) {
 const own = (t, sel, name) => t.page.evaluate(({sel, name, id}) => { const el = document.querySelector('#shopify-section-' + id + ' ' + sel); return el ? el.hasAttribute(name) : '<missing ' + sel + '>'; }, {sel, name, id: t.section.id});
 /* Waits until every running count in the page has finished. */
 const settled = page => page.waitForFunction(() => [...(window.MateriaFeaturesD ? document.querySelectorAll('[data-fd]') : [])].every(r => !window.MateriaFeaturesD.state(r) || !window.MateriaFeaturesD.state(r).counting.size), null, {timeout: 8000});
-/* The section as it was at HEAD (git show), served to the fixture in this process only under
-   the name <name>-fdhead, so old and new can be drawn side by side. Nothing is written to disk. */
-function headCopy(name) {
+/* The section as it was before round 4 (git show BEFORE, the commit before these sections were
+   reworked), served to the fixture in this process only under the name <name>-fdhead, so old and
+   new can be drawn side by side. Nothing is written to disk. */
+const BEFORE = '4b0142b';
+function headCopy(name, ref = BEFORE) {
   const fs = require('fs'), path = require('path'), {execFileSync} = require('child_process');
-  const src = execFileSync('git', ['-C', path.join(__dirname, '..'), 'show', 'HEAD:sections/' + name + '.storelib']).toString();
+  const src = execFileSync('git', ['-C', path.join(__dirname, '..'), 'show', ref + ':sections/' + name + '.storelib']).toString();
   const tmp = name + '-fdhead', file = path.join(__dirname, '..', 'sections', tmp + '.storelib');
   if (!fs.__fdHead) { const orig = fs.readFileSync; fs.__fdHead = new Map(); fs.readFileSync = function (f, ...a) { const v = fs.__fdHead.get(path.resolve(String(f))); return v === undefined ? orig.call(this, f, ...a) : (a[0] ? v : Buffer.from(v)); }; }
   fs.__fdHead.set(path.resolve(file), src);

@@ -100,7 +100,7 @@ const CFG = {
   },
   'collection-list2': {
     blocks: () => [...presetBlocks('collection-list2').slice(0, 1), {type: 'badge'}, ...presetBlocks('collection-list2').slice(1)],
-    desk: ['align_columns', 'left_col_fr', 'center_col_fr', 'right_col_fr'], mob: ['media_max_mobile'], bp: 768,
+    desk: ['align_columns', 'left_col_fr', 'center_col_fr', 'right_col_fr'], mob: ['media_max_mobile', 'button.gap_top'], bp: 768,
     pre: {}, preBlock: {'heading.size_enable': {size_desktop: 50, size_mobile: 20, line_height: 1.6, tracking: 2}, 'description.size_enable': {size_desktop: 20, size_mobile: 18, line_height: 1.9},
       alt_text: {image: IMG}, poster: {video_url: 'https://theme.test/clip.mp4'}, 'button.use_theme_button': {radius: 2, pad_x: 40, size: 20}},
     redraw: ['video', 'video_url', 'poster'], hoverSel: '.chp__btn', hover: ['hover_anim', 'bg_hover', 'color_hover'],

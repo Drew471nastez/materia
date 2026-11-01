@@ -1,7 +1,7 @@
 /* Progress Benefits: theme inheritance, custom colours and fonts under the theme priority rules,
    every control (live and after a redraw), desktop/mobile values, two instances, added blocks,
    the once-only ring fill and count up on the storefront, final values in the editor and under
-   reduced motion, and the saved product page instance drawn as before.
+   reduced motion, and the saved product page instance drawn as it was before round 4.
    Run: node tests/theme-features-d-progress-benefits.cjs */
 const L = require('./theme-features-d-lib.cjs');
 const {assert, DESK, read} = L;

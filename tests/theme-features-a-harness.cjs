@@ -72,7 +72,7 @@ const FP = () => {
     for (const e of [root, ...root.querySelectorAll('*')]) {
       if (e.closest('template') || e.ownerSVGElement || e.tagName === 'STYLE' || e.tagName === 'SCRIPT') continue;
       const cls = typeof e.className === 'string' ? e.className : e.className.baseVal;
-      let k = (e.dataset && e.dataset.faBlock) || e.tagName + '.' + (cls.split(' ')[0] || '');
+      let k = (e.dataset && e.dataset.faBlock) || e.tagName + '.' + (cls.trim().split(/\s+/)[0] || '');
       seen[k] = (seen[k] || 0) + 1; k += '#' + seen[k];
       const cs = getComputedStyle(e), r = e.getBoundingClientRect(), o = {};
       for (const p of P) o[p] = cs[p];
@@ -176,10 +176,10 @@ async function basics(browser, cfg, width, editing) {
   /* theme first */
   const T = cfg.theme || {};
   ok(await b.css('[data-fa]', 'backgroundColor') === (T.bg || 'rgb(24, 32, 40)'), `${name} ${width}: background follows the scheme`);
-  for (const [sel, kind] of T.probes || []) {
+  for (const [sel, kind, fk = kind] of T.probes || []) {
     const [c, f] = [await b.css(sel, 'color'), await b.css(sel, 'fontFamily')];
     ok(c === (kind === 'h' ? 'rgb(255, 255, 255)' : 'rgb(204, 204, 204)') || (T.colorFree || []).includes(sel), `${name} ${width}: ${sel} takes the scheme ${kind === 'h' ? 'heading' : 'text'} colour (got ${c})`);
-    ok(kind === 'h' ? /Georgia/.test(f) : /Arial/.test(f), `${name} ${width}: ${sel} takes the theme ${kind === 'h' ? 'heading' : 'body'} font (got ${f})`);
+    ok(fk === 'h' ? /Georgia/.test(f) : /Arial/.test(f), `${name} ${width}: ${sel} takes the theme ${fk === 'h' ? 'heading' : 'body'} font (got ${f})`);
   }
   /* colour scheme live and after a redraw */
   await b.emit({color_scheme: 'alt-scheme'});
@@ -191,7 +191,7 @@ async function basics(browser, cfg, width, editing) {
   await a.page.close(); await b.page.close();
   /* priority off: the theme still decides */
   const c = await mount(browser, name, {...opts, assets: [...(cfg.assets || []), ASSET], priority: 'off'}); await prep(c, cfg);
-  for (const [sel, kind] of T.probes || []) ok(kind === 'h' ? /Georgia/.test(await c.css(sel, 'fontFamily')) : /Arial/.test(await c.css(sel, 'fontFamily')), `${name} ${width} priority off: ${sel} theme font`);
+  for (const [sel, kind, fk = kind] of T.probes || []) ok(fk === 'h' ? /Georgia/.test(await c.css(sel, 'fontFamily')) : /Arial/.test(await c.css(sel, 'fontFamily')), `${name} ${width} priority off: ${sel} theme font`);
   eq(c.errors, [], name + ' priority off: no errors');
   await c.page.close();
 }

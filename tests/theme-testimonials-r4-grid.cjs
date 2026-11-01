@@ -28,10 +28,9 @@ const slideW = el => Math.round(el.getBoundingClientRect().width);
     name: 'testimonials', root: ROOT, blocks, settings: {display_mode: 'carousel', show_arrow: true},
     assets: ['testimonials.css', 'swiper-bundle.min.css', 'swiper-bundle.min.js', 'global.js'],
     customId: 'enable_custom_colors',
-    /* motion.min.js (a module the layout loads for motion-element) is not in the fixture */
-    ignoreErrors: /Motion is not defined/,
-    /* on the storefront the theme builds a slider once it is near the screen */
-    ready: t => t.page.waitForFunction(() => [...document.querySelectorAll('slide-section')].every(s => s.globalSlide), null, {timeout: 5000}).catch(() => {}),
+    /* motion.min.js is a module the layout loads (Motion.inView, Motion.animate); the fixture gives the slider a stand in.
+       On the storefront the theme builds a slider once it is near the screen. */
+    ready: async t => { await t.page.evaluate(() => { window.Motion = window.Motion || {inView: (el, fn) => { fn(); return () => {}; }, animate: () => ({finished: Promise.resolve(), cancel() {}, stop() {}})}; }); await t.page.waitForFunction(() => [...document.querySelectorAll('slide-section')].every(s => s.globalSlide), null, {timeout: 5000}).catch(() => {}); },
     inherit: [[ROOT, 'backgroundColor', 'rgb(24, 32, 40)'], ['.tm-head--heading', 'color', 'rgb(255, 255, 255)'], ['.tm-head--heading', 'fontFamily', /Georgia/], ['.tm-card__quote p', 'fontFamily', /Arial/], ['.tm-card', 'color', 'rgb(204, 204, 204)'], ['.tm-card__rating', 'color', 'rgb(255, 255, 255)']],
     controls: [
       S('section_width', 'container', '.tm-header', null, v => v > 1290 && v < 1340, {w: D, get: el => Math.round(el.parentElement.getBoundingClientRect().width)}),

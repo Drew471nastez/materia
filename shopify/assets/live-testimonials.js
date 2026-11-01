@@ -710,7 +710,8 @@
         if (vis !== 'disable' && !pg) { sl.insertAdjacentHTML('beforeend', '<div class="swiper-pagination tm-pagination" style="--swiper-pagination-position: static;"></div>'); pg = sl.querySelector(':scope > .tm-pagination'); changed = true; }
         else if (vis === 'disable' && pg) { pg.remove(); pg = null; changed = true; }
         if (pg) pg.classList.toggle('hidden-md', vis === 'mobile');
-        if (changed && typeof sl.initSlide === 'function' && sl.globalSlide) { try { sl.globalSlide.destroy(true, true); } catch (_) {} sl.globalSlide = null; sl.initSlide(); }
+        if (sl.globalSlide) st.slBuilt = true;
+        if (changed && typeof sl.initSlide === 'function' && st.slBuilt) { try { sl.globalSlide && sl.globalSlide.destroy(true, true); } catch (_) {} sl.globalSlide = null; sl.initSlide(); }
       }
     },
   };
