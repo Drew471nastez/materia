@@ -90,6 +90,7 @@ const page = (name, extra) => L.suite(name, {mountOpts: {globals: G}, noop: NOOP
   })]);
   results.push(['login-popup', await L.suite('login-popup', {
     mountOpts: {globals: G},
+    twoInstances: {login_title: 'Only in a'},
     skip: ['error_message'],
     theme: async (t, {ok, css, tag}) => {
       ok(/Georgia/.test(await css('h2', 'fontFamily')) && await css('h2', 'color') === 'rgb(255, 255, 255)', tag + ': heading in the theme');
@@ -115,6 +116,7 @@ const page = (name, extra) => L.suite(name, {mountOpts: {globals: G}, noop: NOOP
   })]);
   results.push(['main-password-header', await L.suite('main-password-header', {
     mountOpts: {globals: G},
+    twoInstances: {padding_top: 90},
     noop: {375: ['padding_top', 'padding_bottom', 'logo_width', 'show_logo'], 1366: ['show_logo']},
     theme: async (t, {ok, css, tag}) => { ok(/Georgia/.test(await css('.ap__h', 'fontFamily')) && await css('.ap__h', 'color') === 'rgb(255, 255, 255)', tag + ': the store name in the theme heading'); },
     priority: [{name: 'name color', section: {enable_custom_style: true, heading_color: '#00ff00'}, checks: [['.ap__h', 'color', 'rgb(0, 255, 0)']], off: {section: {enable_custom_style: false}}}, fonts('.ap__h')].map(p => p.name === 'section fonts' ? {...p, checks: [p.checks[0]]} : p),
@@ -135,6 +137,7 @@ const page = (name, extra) => L.suite(name, {mountOpts: {globals: G}, noop: NOOP
   })]);
   results.push(['main-password-footer', await L.suite('main-password-footer', {
     mountOpts: {globals: G},
+    twoInstances: {padding_top: 90},
     noop: {375: ['padding_top', 'padding_bottom', 'footer_text'], 1366: ['footer_text']},
     vals: {footer_text: ['<p>Opening in spring.</p>']},
     theme: async (t, {ok, css, tag}) => { ok(/Arial/.test(await css('[data-ap-root]', 'fontFamily')) && await css('[data-ap-root]', 'color') === 'rgb(204, 204, 204)', tag + ': the theme text'); },
@@ -151,6 +154,7 @@ const page = (name, extra) => L.suite(name, {mountOpts: {globals: G}, noop: NOOP
   })]);
   results.push(['form-message', await L.suite('form-message', {
     mountOpts: {globals: G},
+    twoInstances: {color_scheme: 'alt-scheme'},
     noop: {375: ['success_text', 'error_text', 'section_width', 'color_scheme'], 1366: ['success_text', 'error_text', 'section_width', 'color_scheme']},
     vals: {section_width: ['full_width']},
     skip: ['color_scheme'],

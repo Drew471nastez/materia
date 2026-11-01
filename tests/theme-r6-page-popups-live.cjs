@@ -118,6 +118,8 @@ async function fingerprint(t) {
         return a.name + '=' + v;
       }).sort().join(' ');
       o.hidden = !!e.hidden;
+      /* the element's own CSS variables: what only shows on hover, after a copy or when the countdown ends */
+      o.vars = e.style ? [...e.style].filter(q => q.startsWith('--')).map(q => q + ':' + e.style.getPropertyValue(q).trim()).sort().join(';') : '';
       out[k] = o;
     }
     return out;

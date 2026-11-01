@@ -95,6 +95,7 @@
      open for an unrelated edit. */
   const roots = new Map();
   const TYPES = {};
+  let c0 = {};
   const parse = v => { try { return JSON.parse(v || '{}') || {}; } catch (_) { return {}; } };
   const bool = v => v === true || v === 'true';
   const off = v => v === false || v === 'false';
@@ -168,6 +169,7 @@
     put(root, '@data-pg-fonts', c.fonts); put(root, '@data-own-font', c.fonts);
     const hf = c.fonts && font(s.heading_font), bf = c.fonts && font(s.body_font);
     put(root, '--heading-font', hf || null); put(root, '--body-font', bf || null); put(root, '--btn-font', bf || null); 
+    c0 = c;
     if (st.type.derive) st.type.derive(c);
   }
   function paint(root, st) {
@@ -193,6 +195,7 @@
     st.audit = []; derive(root, st, 'audit');
     const bad = [];
     for (const [el, key, v] of st.audit) {
+      if (!root.contains(el)) continue;
       let have, want;
       if (key.startsWith('--')) { have = el.style.getPropertyValue(key).trim(); want = v == null ? '' : String(v).trim(); }
       else if (key[0] === '@') { have = el.getAttribute(key.slice(1)); if (v === true || v === false || v == null) { have = have !== null; want = !!v; } else want = String(v); }
@@ -251,7 +254,6 @@
   };
   document.addEventListener('storelib:section-load', onLoad);
   document.addEventListener('shopify:section:load', onLoad);
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scan); else scan();
   try {
     new MutationObserver(muts => { for (const m of muts) for (const n of m.addedNodes) if (n.nodeType === 1 && (n.matches(SEL) || n.querySelector(SEL))) { scan(); return; } }).observe(document.documentElement, {childList: true, subtree: true});
   } catch (_) { /* old browser */ }
@@ -355,7 +357,6 @@
     put(local, '@placeholder', ph); put(local, '@aria-label', ph);
     if (cc) { const iso = b.phone_default_country || 'US'; for (const o of cc.options) put(o, '@selected', o.dataset.iso === iso); if (!c0.recording) { const o = [...cc.options].find(q => q.dataset.iso === iso); if (o) cc.value = o.value; } }
   }
-  let c0 = {};
   /* Coupon Promo Popup */
   TYPES['coupon-promotion-newsletter-popup'] = {derive(c) {
     const {root, s, put} = c, cu = c.custom; c0 = c;
@@ -408,7 +409,83 @@
       }
     }
   }};
+  /* Promotion Popup Discount */
+  TYPES['promobanner'] = {derive(c) {
+    const {root, s, put} = c, cu = c.custom, popup = !off(s.show_as_popup);
+    const get = type => (c.first(type) || {b: {}}).b;
+    const eb = get('eyebrow'), hb = get('headline'), bb = get('body'), cb = get('coupon'), btb = get('button'), ib = get('image');
+    const wrap = root.closest('.shopify-section');
+    if (wrap) { put(wrap, '--pbp-mt-m', px(s.section_margin_top_mobile)); put(wrap, '--pbp-mb-m', px(s.section_margin_bottom_mobile)); put(wrap, '--pbp-mt-d', px(s.section_margin_top_desktop)); put(wrap, '--pbp-mb-d', px(s.section_margin_bottom_desktop)); }
+    put(root, '@data-pg-inline', !popup); put(root, '@data-pbp-reset', bool(s.reset_spacing));
+    put(root, '@data-pbp-mobile-image', ib.mobile_position || 'above'); put(root, '@data-pbp-cimg-d', bool(ib.enable_custom_desktop)); put(root, '@data-pbp-cimg-m', bool(ib.enable_custom_mobile));
+    put(root, '?promo-banner-pro--as-popup', popup);
+    for (const w of ['container', 'fluid_container', 'stretch_width', 'full_width']) put(root, '?' + w, !popup && s.section_width === w);
+    put(root, '@aria-hidden', popup ? (root.classList.contains('pbp-open') ? 'false' : 'true') : null);
+    const yes = v => bool(v) ? 'true' : 'false';
+    put(root, '@data-hide-days', s.hide_days == null ? '' : String(s.hide_days)); put(root, '@data-open-mode', s.open_mode || ''); put(root, '@data-delay', s.delay_s == null ? '' : String(s.delay_s));
+    put(root, '@data-inactivity', s.inactivity_s == null ? '' : String(s.inactivity_s)); put(root, '@data-exit-intent', yes(s.exit_intent));
+    put(root, '@data-append-discount', yes(btb.append_discount)); put(root, '@data-discount-code', cb.code || '');
+    put(root, '@data-show-once-per-session', yes(s.once_per_session)); put(root, '@data-edit-mode', yes(s.enable_edit_mode));
+    const days = num(s.hide_days, 0);
+    put(root, '@data-popup-config', JSON.stringify({design: c.design, preview: bool(s.enable_edit_mode),
+      trigger: {mode: s.open_mode || 'exit', delay: num(s.delay_s, 0), idle: num(s.inactivity_s, 10), scroll: num(s.scroll_pct, 50), views: num(s.page_views, 2), exit: bool(s.exit_intent)},
+      frequency: {mode: days > 0 ? 'after_days' : bool(s.once_per_session) ? 'session' : 'always', days, session: bool(s.once_per_session)}}));
+    const v = (k, val) => put(root, k, val);
+    v('--pbp-overlay-opacity', String(num(s.overlay_opacity) * 0.01)); v('--pbp-radius', px(s.radius)); v('--pbp-popup-radius', px(s.popup_radius)); v('--pbp-popup-w', px(s.popup_width, 750));
+    v('--pbp-pad', px(s.card_padding)); v('--pbp-top-pad', px(s.top_padding)); v('--pbp-bottom-pad', px(s.bottom_padding)); v('--pbp-mtop-pad', px(s.mobile_top_padding)); v('--pbp-mbottom-pad', px(s.mobile_bottom_padding));
+    v('--pbp-mh-pad', px(s.mobile_h_padding)); v('--pbp-gutter', px(s.mobile_side_gutter, 32)); v('--pbp-gap', px(s.col_gap));
+    v('--pbp-text-l-pad', px(s.text_left_pad_desktop)); v('--pbp-text-r-pad', px(s.text_right_pad_desktop)); v('--pbp-text-l-pad-m', px(s.text_left_pad_mobile)); v('--pbp-text-r-pad-m', px(s.text_right_pad_mobile));
+    v('--pbp-bg', cu ? color(s.card_bg, 'var(--color-background)') : 'var(--color-background)'); v('--pbp-text', cu ? color(s.text_color, 'var(--color-text)') : 'var(--color-text)');
+    v('--pbp-overlay', cu ? color(s.overlay_color, '#000000') : '#000000'); v('--pbp-close-color', cu ? color(s.close_color, 'var(--color-heading)') : 'var(--color-heading)');
+    v('--pbp-eyebrow-ls', num(eb.letter_spacing) + 'em'); v('--pbp-eyebrow-size', px(eb.size_desktop, 12)); v('--pbp-eyebrow-size-m', px(eb.size_mobile, 14)); v('--pbp-eyebrow-color', color(ownColor(eb, 'color'), 'inherit'));
+    v('--pbp-headline-size', px(hb.size_desktop, 56)); v('--pbp-headline-size-m', px(hb.size_mobile, 40)); v('--pbp-headline-w', String(hb.weight || 700)); v('--pbp-headline-color', color(ownColor(hb, 'color'), 'var(--color-heading)'));
+    v('--pbp-body-size', px(bb.size_desktop, 16)); v('--pbp-body-size-m', px(bb.size_mobile, 16)); v('--pbp-body-color', color(ownColor(bb, 'color'), 'inherit'));
+    v('--pbp-code-size', px(cb.code_size, 18));
+    const cc = (k, f) => color(ownColor(cb, k), f);
+    v('--pbp-code-bg', cc('code_bg', 'var(--color-background)')); v('--pbp-code-bg-copied', cc('code_bg_copied', 'color-mix(in srgb, var(--color-heading) 6%, var(--color-background))'));
+    v('--pbp-code-border', cc('code_border', 'var(--color-border)')); v('--pbp-code-border-copied', cc('code_border_copied', 'var(--color-heading)'));
+    v('--pbp-code-color', cc('code_color', 'var(--color-heading)')); v('--pbp-code-color-copied', cc('code_color_copied', 'var(--color-primary)'));
+    v('--pbp-copy-bg', cc('copy_bg', 'var(--color-background)')); v('--pbp-copy-bg-copied', cc('copy_bg_copied', 'var(--color-heading)'));
+    v('--pbp-copy-border', cc('copy_border', 'var(--color-border)')); v('--pbp-copy-border-copied', cc('copy_border_copied', 'var(--color-heading)'));
+    v('--pbp-copy-color', cc('copy_color', 'color-mix(in srgb, var(--color-text) 70%, transparent)')); v('--pbp-copy-color-copied', cc('copy_color_copied', 'var(--color-background)'));
+    v('--pbp-btn-w', num(btb.width) > 0 ? px(btb.width) : 'auto');
+    v('--pbp-img-radius', px(ib.radius)); v('--pbp-img-w', bool(ib.enable_custom_desktop) ? px(ib.desktop_w) : '100%'); v('--pbp-img-h', bool(ib.enable_custom_desktop) ? px(ib.desktop_h) : '100%');
+    v('--pbp-img-w-m', bool(ib.enable_custom_mobile) ? px(ib.mobile_w) : '100%'); v('--pbp-img-h-m', bool(ib.enable_custom_mobile) ? px(ib.mobile_h) : '100%');
+    put(c.q('.pbp-card'), '?pbp-card--inline', !popup);
+    const grid = c.q('.pbp-grid'); put(grid, '?image-left', (ib.side || 'image-right') === 'image-left'); put(grid, '?image-right', (ib.side || 'image-right') === 'image-right');
+    const text = c.q('.pbp-text');
+    for (const a of ['left', 'center']) { put(text, '?pbp-align-desktop-' + a, s.align_desktop === a); put(text, '?pbp-align-mobile-' + a, s.align_mobile === a); }
+    for (const x of c.blocks) {
+      const b = x.b, el = x.el;
+      if (x.type === 'eyebrow' || x.type === 'headline' || x.type === 'body') { put(el, 'hidden', blank(b.text)); put(el, 'html', b.text || ''); }
+      else if (x.type === 'coupon') {
+        put(el, 'hidden', blank(b.code) && blank(b.label));
+        const l = el.querySelector('.pbp-code-label'); put(l, 'hidden', blank(b.label)); put(l, 'html', b.label || '');
+        const code = el.querySelector('.pbp-code'); put(code, 'hidden', blank(b.code)); put(code, '@data-code', b.code || ''); put(code, 'text', b.code || '');
+        put(el.querySelector('.pbp-copy'), 'hidden', blank(b.code));
+      } else if (x.type === 'button') {
+        const custom = off(b.use_theme_button);
+        let href = b.link || '';
+        if (bool(b.append_discount) && !blank(cb.code) && !blank(href)) href = '/discount/' + cb.code + '?redirect=' + b.link;
+        if (blank(href)) href = el.dataset.pgDefaultHref || '';
+        put(el, 'hidden', blank(b.label)); put(el, 'html', b.label || ''); put(el, '@href', href); put(el, '@data-own-shape', custom);
+        buttonVars(put, el, {bg: ownColor(b, 'bg'), text: ownColor(b, 'text_color'), hover_bg: ownColor(b, 'bg_hover'), hover_text: ownColor(b, 'text_hover'), custom, radius: b.radius, font_size: b.size, weight: 800, transform: custom ? 'uppercase' : ''});
+        put(el, '--btn-anim-duration', custom ? num(b.hover_transition, 200) + 'ms' : null);
+      } else if (x.type === 'newsletter') {
+        const i18n = parse(el.dataset.pgI18n), ph = b.email_placeholder || i18n.placeholder || '';
+        put(el, '--pbp-nl-input-bg', color(ownColor(b, 'input_bg'), 'var(--input-bg)')); put(el, '--pbp-nl-input-text', color(ownColor(b, 'input_text'), 'var(--input-color)')); put(el, '--pbp-nl-input-border', color(ownColor(b, 'input_border'), 'var(--color-border)'));
+        const input = el.querySelector('.pbp-nl-email'); put(input, '@placeholder', ph); put(input, '@aria-label', ph);
+        phone(put, el.querySelector('[data-cpnb-phone]'), b);
+        const btn = el.querySelector('.pbp-nl-submit'); put(btn, 'html', b.button_label || i18n.submit || '');
+        buttonVars(put, btn, {bg: ownColor(b, 'submit_bg'), text: ownColor(b, 'submit_text'), hover_bg: ownColor(b, 'submit_bg_hover'), hover_text: ownColor(b, 'submit_text_hover')});
+        put(el.querySelector('.pbp-nl-success'), 'html', b.success_text || i18n.success || '');
+      } else if (x.type === 'image') {
+        put(el, 'img', JSON.stringify({src: imgSrc(b.image), alt: b.alt || '', lazy: true, cls: 'pbp-img-el'}));
+      }
+    }
+  }};
   /*@TYPES@*/
 
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scan); else scan();
   window.MateriaPagePopups = {NAMES, TYPES, scan, roots, dialogFor, design, audit};
 })();

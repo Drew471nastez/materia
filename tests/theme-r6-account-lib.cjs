@@ -348,7 +348,7 @@ async function suite(name, cfg = {}) {
     for (const editing of [true, false]) {
       const t = await mount(browser, name, opts({width: 1366, editing, reducedMotion: 'reduce', theme: {scroll_animation: 'fade_up', animation_duration: 700}}));
       await t.page.waitForTimeout(250);
-      const r = await t.page.evaluate(() => { const W = document.getElementById('shopify-section-test'); return [...W.querySelectorAll('h1, h2, h3, .ap__t, p, input, button')].filter(e => !e.closest('[hidden]') && !e.closest('.visually-hidden')).map(e => { let o = 1; for (let n = e; n && n !== W.parentElement; n = n.parentElement) o *= +getComputedStyle(n).opacity; return o; }); });
+      const r = await t.page.evaluate(() => { const W = document.getElementById('shopify-section-test'); return [...W.querySelectorAll('h1, h2, h3, .ap__h, .ap__t, p, a, input, button')].filter(e => !e.closest('[hidden]') && !e.closest('.visually-hidden')).map(e => { let o = 1; for (let n = e; n && n !== W.parentElement; n = n.parentElement) o *= +getComputedStyle(n).opacity; return o; }); });
       ok(r.length > 0 && r.every(o => o === 1), name + (editing ? ' builder' : ' storefront') + ': reduced motion keeps the content visible ' + JSON.stringify(r));
       eq(t.errors, [], name + ': reduced motion, no errors');
       await t.page.close();
