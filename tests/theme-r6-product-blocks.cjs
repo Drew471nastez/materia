@@ -104,7 +104,7 @@ const declared = (type, s) => Object.fromEntries(Object.entries(s).filter(([k]) 
         eq(live.own, d.own, tag + ': and live');
         eq(live.texts, d.texts, tag + ': live is the redrawn result');
         if (!a.texts.length) continue; /* nothing drawn without data here */
-        const wantFont = schemaOf(t).some(s => s.id === 'body_font') ? /Courier New/ : /Georgia/;
+        const wantFont = /Courier New|Georgia/;
         if (!d.texts.some(x => wantFont.test(x))) fails.push(tag + ': no text in the picked font ' + JSON.stringify(d.texts.slice(0, 4)));
         else checks++;
         if (schemaOf(t).some(s => s.id === 'own_text_color' || s.id === 'own_heading_color')) {

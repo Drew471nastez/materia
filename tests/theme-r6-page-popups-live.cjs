@@ -97,9 +97,9 @@ const NOCHANGE = new Map();
 const CASE_PRE = {'promotional-popup': {placeholder_url: {image: null}}};
 const EXEMPT = {reveal: 'the theme scroll reveal (Theme settings > Animation), off in the fixture'};
 
-async function fingerprint(t) {
-  return t.page.evaluate(() => {
-    const wrap = document.getElementById('shopify-section-test'), out = {}, seen = {};
+async function fingerprint(t, uid = 'test') {
+  return t.page.evaluate(uid => {
+    const wrap = document.getElementById('shopify-section-' + uid), out = {}, seen = {};
     const P = ['color', 'backgroundColor', 'backgroundImage', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'textAlign', 'textTransform', 'textDecorationLine', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight', 'display', 'visibility', 'opacity', 'width', 'height', 'maxWidth', 'borderTopLeftRadius', 'borderBottomRightRadius', 'borderTopWidth', 'borderTopColor', 'borderTopStyle', 'gap', 'justifyContent', 'alignItems', 'flexDirection', 'gridTemplateColumns', 'order', 'objectFit', 'objectPosition', 'filter', 'boxShadow', 'fill', 'stroke', 'transform', 'top', 'left', 'right', 'bottom', 'aspectRatio', 'zIndex', 'outlineColor'];
     const SKIP = ['style', 'data-pg-settings', 'data-popup-id', 'data-popup-state', 'srcset', 'sizes', 'width', 'height', 'decoding', 'fetchpriority', 'tabindex'];
     for (const e of [wrap, ...wrap.querySelectorAll('*')]) {
@@ -128,7 +128,7 @@ async function fingerprint(t) {
       out[k] = o;
     }
     return out;
-  });
+  }, uid);
 }
 const diff = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
 const explain = (a, b, keys) => keys.slice(0, 4).map(k => k + ' ' + JSON.stringify(Object.fromEntries(Object.entries(a[k] || {gone: 1}).filter(([q, v]) => JSON.stringify(v) !== JSON.stringify((b[k] || {})[q])).map(([q, v]) => [q, [v, (b[k] || {})[q]]]))).slice(0, 400)).join('\n   ');
@@ -199,6 +199,31 @@ async function run(browser, type, width, editing) {
   return cases.length;
 }
 
+/* Two of the same popup on one page: an edit to one, live or drawn again,
+   leaves the other exactly as it was, and their own values never mix
+   (every rule is scoped to its section). */
+async function independence(browser, type) {
+  const tag = type + ' two on a page';
+  const {schema} = schemaOf(type);
+  const b0 = base(type);
+  const t = await mount(browser, type, {width: 1366, editing: true, instances: [{uid: 'a', settings: b0.settings, blocks: b0.blocks}, {uid: 'b', settings: b0.settings, blocks: b0.blocks}], assets: ASSETS});
+  await t.page.addStyleTag({content: '*,*::before,*::after{transition:none!important;animation:none!important}'});
+  await t.page.evaluate(() => { for (const id of ['a', 'b']) { const d = document.querySelector('#shopify-section-' + id + ' dialog[data-pg-dialog]'); if (d && !d.open) d.setAttribute('open', ''); for (const c of ['cdp-open', 'cpnb-open', 'pbp-open', 'sw-open']) document.querySelector('#shopify-section-' + id + ' [data-popup-root]').classList.add(c); document.querySelector('#shopify-section-' + id + ' [data-popup-root]').setAttribute('data-open', 'true'); document.querySelectorAll('#shopify-section-' + id + ' .loudz__popup, #shopify-section-' + id + ' .promobanner-popup-' + id).forEach(e => e.classList.add('active')); } });
+  await t.page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+  const picks = schema.settings.filter(x => x.id && !x.hidden && /^(range|select|color|color_scheme)$/.test(x.type) && shown(x, b0.settings, b0.settings)).slice(0, 12);
+  const bBefore = await fingerprint(t, 'b'), aBefore = await fingerprint(t, 'a');
+  const change = {};
+  for (const x of picks) { const v = values(x, b0.settings[x.id])[0]; if (v !== undefined) change[x.id] = v; }
+  await t.emit(change, undefined, 'a');
+  await t.page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+  ok(diff(aBefore, await fingerprint(t, 'a')).length > 0, tag + ': a live edit changes the popup it is for');
+  ok(!diff(bBefore, await fingerprint(t, 'b')).length, tag + ': a live edit to one leaves the other');
+  await t.redraw({uid: 'a', settings: {...b0.settings, ...change}});
+  ok(!diff(bBefore, await fingerprint(t, 'b')).length, tag + ': a redraw of one leaves the other');
+  ok(!t.errors.length, tag + ' no errors ' + t.errors.join('; '));
+  await t.page.close();
+}
+
 (async () => {
   const args = process.argv.slice(2);
   const only = args.filter(a => !a.startsWith('--'));
@@ -215,6 +240,7 @@ async function run(browser, type, width, editing) {
       for (const width of widths) for (const mode of modes) { n = await run(browser, type, width, mode === 'editor'); runs++; }
       const never = [...NOCHANGE].filter(([u, k]) => k === runs && !EXEMPT[u.split('=')[0]]).map(([u]) => u);
       ok(!never.length, type + ' every setting changes something at some width or mode; these never did: ' + never.join(', '));
+      if (!args.some(a => a.startsWith('--width=') || a.startsWith('--mode='))) await independence(browser, type);
       console.log('ok', type, n + ' cases', checks);
     }
   } finally { await browser.close(); }

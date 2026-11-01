@@ -186,8 +186,8 @@
   function blockRules(scope, s) {
     const out = [], gate = bool(s.enable_custom_style) || bool(s.custom_style);
     const text = gate ? color(s.own_text_color) : '', heading = gate ? color(s.own_heading_color) : '';
-    if (text) out.push(`${scope} { --color-text: ${text}; color: ${text}; } ${scope} :is(p, li, .rte, .rte *) { color: ${text} !important; }`);
-    if (heading) out.push(`${scope} { --color-heading: ${heading}; } ${scope} :is(h1, h2, h3, h4, h5, h6, .heading, .heading-color, .product-detail__title) { color: ${heading} !important; }`);
+    if (text) out.push(`${scope} { --color-text: ${text}; color: ${text}; } ${scope} :where(p, li, span, div, a, label, strong, em, small, td, th, dt, dd, .rte *):not(.btn, [data-sl-button], button, [data-theme-button], :is(.btn, [data-sl-button], button, [data-theme-button], h1, h2, h3, h4, h5, h6, .heading, .heading-color) *) { color: ${text} !important; }`);
+    if (heading) out.push(`${scope} { --color-heading: ${heading}; } ${scope} :is(h1, h2, h3, h4, h5, h6, .heading, .heading-color, .product-detail__title), ${scope} :is(h1, h2, h3, h4, h5, h6, .heading, .heading-color, .product-detail__title) * { color: ${heading} !important; }`);
     if (bool(s.enable_custom_fonts)) {
       const hf = font(s.heading_font), bf = font(s.body_font);
       if (hf) out.push(`${scope} { --heading-font: ${hf}; }`);

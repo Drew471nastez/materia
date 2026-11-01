@@ -184,7 +184,7 @@
     st.mq = matchMedia('(min-width: 750px)');
     /* a wrapper kept across a redraw drops what an earlier live edit wrote on it */
     const wrap = root.closest('.shopify-section');
-    if (wrap && /^(promobanner|promonewsletterpopup-2|promotional-popup)$/.test(root.getAttribute('data-pg-root'))) for (const k of ['margin-top', 'margin-bottom', 'z-index']) wrap.style.removeProperty(k);
+    if (wrap && /^(promobanner|promonewsletterpopup-2|promotional-popup|promotionalpopup2)$/.test(root.getAttribute('data-pg-root'))) for (const k of ['margin-top', 'margin-bottom', 'z-index']) wrap.style.removeProperty(k);
     roots.set(root, st);
     derive(root, st, true);
   }
@@ -388,7 +388,7 @@
         put(el, 'hidden', blank(b.text)); put(el, 'html', b.text || '');
         put(el, '--cpnb-size', px(b.size_desktop, h ? 32 : 15));
         put(el, 'style:color', color(ownColor(b, 'color'), h ? 'var(--color-heading)' : 'var(--color-text)'));
-        if (h) put(el, 'style:font-weight', blank(b.weight) || b.weight === 'theme' ? 'var(--heading-weight, 800)' : String(b.weight));
+        if (h) { put(el, 'style:font-weight', blank(b.weight) || b.weight === 'theme' ? 'var(--heading-weight, 800)' : String(b.weight)); put(el, '@data-own-weight', !(blank(b.weight) || b.weight === 'theme')); }
       } else if (x.type === 'coupon') {
         for (const row of x.els) {
           put(row, 'hidden', blank(b.code));
@@ -401,7 +401,7 @@
         if (el.tagName === 'P') continue;
         const ph = b.placeholder || i18n.placeholder || '', input = el.querySelector('input[type="email"]');
         put(el.querySelector('label'), 'text', ph); put(input, '@placeholder', ph);
-        put(input, 'style:border-radius', off(b.use_theme_field) ? px(b.input_radius, 8) : null);
+        put(input, 'style:border-radius', off(b.use_theme_field) ? px(b.input_radius, 8) : null); put(input, '--mt-select-radius', off(b.use_theme_field) ? px(b.input_radius, 8) : null);
         phone(put, el.querySelector('[data-cpnb-phone]'), b);
         const btn = el.querySelector('button[type="submit"]'), custom = off(b.use_theme_button);
         put(btn, 'text', b.button_text || i18n.submit || ''); put(btn, '@data-own-shape', custom);
@@ -463,7 +463,7 @@
     for (const a of ['left', 'center']) { put(text, '?pbp-align-desktop-' + a, s.align_desktop === a); put(text, '?pbp-align-mobile-' + a, s.align_mobile === a); }
     for (const x of c.blocks) {
       const b = x.b, el = x.el;
-      if (x.type === 'eyebrow' || x.type === 'headline' || x.type === 'body') { put(el, 'hidden', blank(b.text)); put(el, 'html', b.text || ''); }
+      if (x.type === 'eyebrow' || x.type === 'headline' || x.type === 'body') { put(el, 'hidden', blank(b.text)); put(el, 'html', b.text || ''); if (x.type === 'headline') put(el, '@data-own-weight', b.weight !== 'inherit'); }
       else if (x.type === 'coupon') {
         put(el, 'hidden', blank(b.code) && blank(b.label));
         const l = el.querySelector('.pbp-code-label'); put(l, 'hidden', blank(b.label)); put(l, 'html', b.label || '');
@@ -480,6 +480,8 @@
       } else if (x.type === 'newsletter') {
         const i18n = parse(el.dataset.pgI18n), ph = b.email_placeholder || i18n.placeholder || '';
         put(el, '--pbp-nl-input-bg', color(ownColor(b, 'input_bg'), 'var(--input-bg)')); put(el, '--pbp-nl-input-text', color(ownColor(b, 'input_text'), 'var(--input-color)')); put(el, '--pbp-nl-input-border', color(ownColor(b, 'input_border'), 'var(--color-border)'));
+        const own = bool(b.enable_custom_style);
+        put(el, '--mt-select-bg', own ? color(b.input_bg, 'var(--input-bg)') : null); put(el, '--mt-select-text', own ? color(b.input_text, 'var(--input-color)') : null); put(el, '--mt-select-border', own ? color(b.input_border, 'var(--color-border)') : null);
         const input = el.querySelector('.pbp-nl-email'); put(input, '@placeholder', ph); put(input, '@aria-label', ph);
         phone(put, el.querySelector('[data-cpnb-phone]'), b);
         const btn = el.querySelector('.pbp-nl-submit'); put(btn, 'html', b.button_label || i18n.submit || '');
@@ -522,6 +524,8 @@
     v('--loudz-input-text-weight', String(fb.input_weight || 400)); v('--loudz-input-border-color', color(cu ? s.input_border_color : '', 'var(--color-border)')); v('--loudz-input-placeholder-color', color(cu ? s.input_placeholder_color : '', 'var(--input-placeholder-color)'));
     v('--loudz-input-border-radius', themeFields ? 'var(--input-border-radius, 6px)' : px(s.input_border_radius)); v('--loudz-input-border-thickness', themeFields ? 'var(--inputs-border-width, 1px)' : px(s.input_border_thickness));
     v('--loudz-input-height', themeFields ? 'var(--input-height, 0px)' : null); v('--loudz-input-padding', themeFields ? 'var(--input-padding, 16px 12px)' : null);
+    v('--mt-select-radius', themeFields ? null : px(s.input_border_radius)); v('--field-border-widths', themeFields ? null : px(s.input_border_thickness));
+    v('--mt-select-bg', cu ? color(s.input_background_color, 'var(--input-bg)') : null); v('--mt-select-text', cu ? color(s.input_color, 'var(--input-color)') : null); v('--mt-select-border', cu ? color(s.input_border_color, 'var(--color-border)') : null);
     v('--loudz-button-width', num(s.button_width, 100) + '%');
     v('--loudz-button-text-color', color(ownColor(bb, 'button_text_color'), 'var(--btn-primary-color)')); v('--loudz-button-background-color', color(ownColor(bb, 'button_background'), 'var(--btn-primary-bg-color)'));
     v('--loudz-button-text-color-hover', color(ownColor(bb, 'button_text_hover'), 'var(--btn-primary-hover-color)')); v('--loudz-button-background-color-hover', color(ownColor(bb, 'button_background_hover'), 'var(--btn-primary-hover-bg-color)'));
@@ -648,7 +652,8 @@
         put(el, '--ppd-input-placeholder', color(ownColor(b, 'input_placeholder_color'), 'var(--input-placeholder-color)'));
         put(el, '--ppd-input-radius', themeF ? 'var(--input-border-radius, 10px)' : px(b.input_radius, 10)); put(el, '--ppd-input-height', themeF ? 'var(--input-height, 50px)' : null);
         put(el, '--ppd-input-padding', themeF ? 'var(--input-padding, 14px 16px)' : px(b.input_pad_y, 14) + ' 16px'); put(el, '--ppd-input-size', themeF ? 'var(--input-font-size, 15px)' : px(b.input_size, 15));
-        put(el, '--ppd-input-border-width', themeF ? 'var(--inputs-border-width, 1px)' : null);
+        put(el, '--ppd-input-border-width', themeF ? 'var(--inputs-border-width, 1px)' : null); put(el, '--mt-select-radius', themeF ? null : px(b.input_radius, 10));
+        put(el, '--mt-select-bg', bool(b.enable_custom_style) ? color(b.input_bg, 'var(--input-bg)') : null); put(el, '--mt-select-text', bool(b.enable_custom_style) ? color(b.input_color, 'var(--input-color)') : null);
         put(el, '--ppd-success-color', color(ownColor(b, 'success_color'), 'color-mix(in srgb, #2e9e57 70%, var(--color-text))')); put(el, '--ppd-error-color', color(ownColor(b, 'error_color'), 'color-mix(in srgb, #e04848 70%, var(--color-text))'));
         put(el.querySelector('input[type="email"]'), '@placeholder', b.email_placeholder || i18n.email || '');
         const tel = el.querySelector('[data-ppd-phone]'); put(tel, '@placeholder', b.phone_placeholder || i18n.phone || ''); put(tel, 'hidden', !bool(b.show_phone)); put(tel, '@disabled', !bool(b.show_phone));
@@ -658,6 +663,62 @@
       } else if (x.type === 'dismiss') {
         put(el, 'hidden', blank(b.label)); put(el, 'text', b.label || '');
         put(el, '--ppd-dismiss-color', color(ownColor(b, 'color'), 'color-mix(in srgb, var(--color-text) 70%, transparent)')); put(el, '--ppd-dismiss-hover', color(ownColor(b, 'hover_color'), 'var(--color-text)')); put(el, 'style:font-size', px(b.size, 13));
+      }
+    }
+  }};
+  /* Promotional Popup 2 */
+  TYPES['promotionalpopup2'] = {derive(c) {
+    const {root, s, put} = c, cu = c.custom;
+    const get = type => (c.first(type) || {b: {}}).b;
+    const hb = get('heading'), db = get('description'), ib = get('image'), fb = get('form');
+    const wrap = root.closest('.shopify-section');
+    if (wrap) { const d = matchMedia('(min-width: 768px)').matches; put(wrap, 'style:margin-top', px(d ? s.section_margin_top_desktop : s.section_margin_top_mobile)); put(wrap, 'style:margin-bottom', px(d ? s.section_margin_bottom_desktop : s.section_margin_bottom_mobile)); }
+    put(root, '@data-pp2-reset', bool(s.reset_spacing));
+    put(root, '@data-popup-config', JSON.stringify({design: c.design, preview: bool(s.enable_customization_mode),
+      trigger: {mode: s.open_mode || 'delay', delay: num(s.popup_delay, 0), scroll: num(s.scroll_pct, 50), views: num(s.page_views, 2)},
+      frequency: {mode: s.after_dismiss || 'after_days', days: num(s.hide_days, 1)}}));
+    const pos = s.popup_position || 'center', ca = s.content_alignment;
+    const v = (k, val) => put(root, k, val), themeF = !off(fb.use_theme_fields), themeB = !off(fb.use_theme_button);
+    v('--pp2-pad-b', px(s.padding_block)); v('--pp2-pad-i', px(s.padding_inline));
+    v('--pp2-align-d', ['center', 'left', 'right'].includes(ca) ? 'flex-end' : 'center');
+    v('--pp2-justify-d', pos === 'left' ? 'flex-start' : pos === 'right' ? 'flex-end' : 'center');
+    v('--pp2-inset-d', pos === 'left' ? 'auto auto 40px 40px' : pos === 'right' ? 'auto 40px 40px auto' : 'auto 0 40px auto');
+    v('--pp2-height-d', pos === 'left' || pos === 'right' ? 'auto' : 'calc(var(--sl-vh, 1vh) * 100)'); v('--pp2-width-d', pos === 'left' || pos === 'right' ? 'auto' : '100vw');
+    v('--loudz-background-color', cu && !blank(s.background_gradient) ? s.background_gradient : color(cu ? s.background_color : '', 'var(--color-background)'));
+    v('--loudz-overlay-color', color(cu ? s.overlay_color : '', '#000000')); v('--loudz-overlay-opacity', String(num(s.overlay_opacity, 0)));
+    v('--loudz-border-radius', px(s.border_radius)); v('--loudz-section-width', px(s.inner_width_px, 400)); v('--loudz-content-alignment', ca || 'left');
+    v('--pp2-h-m', px(hb.size_mobile, 22)); v('--pp2-h-d', px(hb.size_desktop, 28)); v('--loudz-heading-weight', String(hb.weight || 700)); v('--loudz-heading-padding-top', px(hb.padding_top));
+    v('--loudz-heading-color', color(ownColor(hb, 'color'), 'var(--color-heading)'));
+    v('--pp2-d-m', px(db.size_mobile, 14)); v('--pp2-d-d', px(db.size_desktop, 16)); v('--loudz-description-font-weight', String(db.weight || 400)); v('--loudz-description-padding-top', px(db.padding_top));
+    v('--loudz-description-color', color(ownColor(db, 'color'), 'var(--color-text)'));
+    const inS = n => themeF ? 'var(--input-font-size, ' + n + 'px)' : n + 'px', bS = n => themeB ? 'var(--btn-font-size, ' + n + 'px)' : n + 'px';
+    v('--pp2-in-m', inS(num(fb.input_size_mobile, 14))); v('--pp2-in-d', inS(num(fb.input_size_desktop, 14))); v('--loudz-input-font-weight', String(fb.input_weight || 400)); v('--loudz-input-padding-top', px(fb.input_padding_top));
+    const fc = (k, f) => color(ownColor(fb, k), f);
+    v('--loudz-input-color', fc('input_color', 'var(--input-color)')); v('--loudz-input-background-color', fc('input_background', 'var(--input-bg)'));
+    v('--loudz-input-placeholder-color', fc('input_placeholder', 'var(--input-placeholder-color)')); v('--loudz-input-border-color', fc('input_border', 'var(--color-border)'));
+    v('--loudz-input-border-radius', themeF ? 'var(--input-border-radius, ' + num(fb.input_border_radius, 6) + 'px)' : px(fb.input_border_radius));
+    v('--loudz-input-border-width', themeF ? 'var(--inputs-border-width, 1px)' : null); v('--loudz-input-height', themeF ? 'var(--input-height, 0px)' : null); v('--loudz-input-padding', themeF ? 'var(--input-padding, 16px 18px)' : null);
+    v('--mt-select-radius', themeF ? null : px(fb.input_border_radius)); const fown = bool(fb.enable_custom_style);
+    v('--mt-select-bg', fown ? fc('input_background', 'var(--input-bg)') : null); v('--mt-select-text', fown ? fc('input_color', 'var(--input-color)') : null); v('--mt-select-border', fown ? fc('input_border', 'var(--color-border)') : null);
+    v('--pp2-b-m', bS(num(fb.button_size_mobile, 14))); v('--pp2-b-d', bS(num(fb.button_size_desktop, 16))); v('--loudz-button-padding-top', px(fb.button_padding_top));
+    v('--loudz-button-font-weight', themeB ? 'var(--btn-font-weight, ' + (fb.button_weight || 700) + ')' : String(fb.button_weight || 700));
+    v('--loudz-button-text-color', fc('button_text_color', 'var(--btn-primary-color)')); v('--loudz-button-background-color', fc('button_background', 'var(--btn-primary-bg-color)'));
+    v('--loudz-button-text-color-hover', fc('button_text_hover', 'var(--btn-primary-hover-color)')); v('--loudz-button-background-color-hover', fc('button_background_hover', 'var(--btn-primary-hover-bg-color)'));
+    v('--loudz-button-border-color', fc('button_border', 'var(--btn-primary-border-color, transparent)')); v('--loudz-button-border-color-hover', fc('button_border', 'var(--btn-primary-hover-border-color, transparent)'));
+    v('--loudz-button-border-radius', themeB ? 'var(--btn-radius, ' + num(fb.button_border_radius, 6) + 'px)' : px(fb.button_border_radius));
+    v('--loudz-button-border-width', themeB ? 'var(--btn-border-width, 1px)' : null); v('--loudz-button-padding', themeB ? 'var(--btn-padding-y, 16px) var(--btn-padding-x, 0px)' : null);
+    const frame = c.q('.loudz__popup'); for (const p2 of ['left', 'center', 'right']) put(frame, '?loudz__popup--' + p2, pos === p2);
+    const close = c.q('.loudz__close'); for (const p2 of ['left', 'right']) put(close, '?loudz__close--' + p2, (s.close_button_position || 'right') === p2);
+    for (const x of c.blocks) {
+      const b = x.b, el = x.el;
+      if (x.type === 'heading' || x.type === 'description') { put(el, 'hidden', blank(b.text)); put(el, 'html', b.text || ''); }
+      else if (x.type === 'image') {
+        put(el, 'img', JSON.stringify({src: imgSrc(b.image), alt: '', lazy: true, cls: !blank(b.filter) && b.filter !== 'none' ? 'loudz__filter--' + b.filter : ''}));
+        const im = el.querySelector('img'); if (im) for (const f of ['grayscale', 'sepia', 'invert']) put(im, '?loudz__filter--' + f, b.filter === f);
+      } else if (x.type === 'form') {
+        const input = el.querySelector('input[type="email"]'); put(input, '@placeholder', b.email_placeholder || ''); put(input, '@aria-label', b.email_placeholder || 'Email');
+        const btn = el.querySelector('.loudz__button'); put(btn, 'html', b.button_text || ''); put(btn, '@data-own-shape', off(b.use_theme_button));
+        put(el.querySelector('.loudz__success'), 'html', b.success_text || 'Thanks, you are on the list.');
       }
     }
   }};
