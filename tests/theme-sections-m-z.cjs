@@ -208,7 +208,8 @@ for (const file of files) {
   // Unique ids, then every id read.
   const groups = [['section', sch.settings || []], ...(sch.blocks || []).map(b => [b.type, b.settings || []])];
   const src = withSnippets(template);
-  const assets = linkedAssets(src);
+  // The raw file too: a section whose runtime the layout loads names it in a comment.
+  const assets = linkedAssets(template + '\n' + src);
   // A retired section (its template draws nothing) keeps its schema only for stored content.
   const retired = !STRIP_COMMENTS(template).replace(/<\/?template[^>]*>/g, '').trim();
   const aliases = new Set(['settings']);

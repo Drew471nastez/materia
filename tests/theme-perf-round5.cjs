@@ -65,6 +65,8 @@ const animationCss = read('shopify/assets/animation.css');
   const allowed = ['critical.css', 'section-isolation.css', 'animation.css', 'rtl.css', 'product-card.css', 'swiper-bundle.min.css', 'design-mode.css', 'theme.css', 'theme-button-contract.css',
     // A few hiding rules (an invalid countdown never flashes); the product blocks that use it link it too.
     'product-block-runtime.css',
+    // The header and top bar language/currency picker, drawn in the first screen (it was inline <style> before, blocking the same way).
+    'localization-controls.css',
     // Section runtimes the layout keeps ready for the builder; the sections no longer link their own copies, so these must block to avoid an unstyled flash.
     'announcement-pro-4.css', 'before-after-controls.css', 'drift-basic.min.css', 'hero-image-one.css', 'hero-pro-scrolling.css', 'hero-product-three.css', 'hero-product-two.css', 'marketing-sections.css', 'testimonial-quote.css', 'text-section-controls.css'];
   for (const f of blocking) ok(allowed.includes(f), `head: ${f} is a blocking stylesheet; only first-paint styles may hold the page`);
