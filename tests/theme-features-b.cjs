@@ -73,7 +73,7 @@ async function savedComparisonTable(browser, {ok, eq}) {
         const cs = (el, p) => el ? getComputedStyle(el)[p] : null;
         /* row labels, column titles and the highlighted column's fill, in reading order */
         const labels = all('h3, .fbct__rl, .fbct__ct').map(e => [e.textContent.trim(), cs(e, 'color')]).filter(x => x[0]);
-        const active = all('.active, .fbct__table [data-col="1"]').map(e => cs(e, 'backgroundColor'));
+        const active = all('.active, .fbct__table [data-col="1"]').map(e => cs(e, 'backgroundColor') + ' ' + cs(e, 'backgroundImage'));
         return {h: [h2.textContent.trim(), cs(h2, 'color'), cs(h2, 'fontSize'), cs(h2, 'textAlign')], sub: [sub.textContent.trim(), cs(sub, 'color'), cs(sub, 'fontSize')], labels, fill: [...new Set(active)], h2y: Math.round(h2.getBoundingClientRect().top)};
       });
       if (shot) await page.screenshot({path: shot, fullPage: true}).catch(() => {});
@@ -91,10 +91,12 @@ async function savedComparisonTable(browser, {ok, eq}) {
     eq(now.h[1], 'rgb(0, 0, 0)', width + ' saved heading takes its block colour');
     eq(now.labels.map(x => x[0]).sort(), was.labels.map(x => x[0]).sort(), width + ' saved column titles and rows');
     eq(now.labels.filter(x => /results|Black|S, M|130|Secure|minute|andrewrullz/.test(x[0])).map(x => x[1]), was.labels.filter(x => /results|Black|S, M|130|Secure|minute|andrewrullz/.test(x[0])).map(x => x[1]), width + ' saved row label colours');
-    /* the saved "enable_active_column_gradient": "" is the switch turned off; the old Liquid read the empty
-       string as on and painted the default gradient over the chosen #162746, which now shows */
-    ok(now.fill.includes('rgb(22, 39, 70)'), width + ' saved highlight colour #162746 (new ' + now.fill + ')');
-    ok(plain.fill.join() !== now.fill.join(), width + ' without the custom styling toggle the highlight follows the theme (so the toggle is needed)');
+    /* the old Liquid read the saved empty "enable_active_column_gradient" as on and painted the default
+       gradient over #162746; templates/home-new.json now sets it to true so the live look is kept */
+    ok(now.fill.some(f => /gradient/.test(f)), width + ' saved highlight keeps its gradient (new ' + now.fill + ')');
+    eq(now.fill.map(f => f.replace(/^\S+ \S+ \S+ \S+ /, '')).join(), was.fill.map(f => f.replace(/^\S+ \S+ \S+ \S+ /, '')).join(), width + ' saved highlight gradient matches the old render');
+    /* the kept gradient is drawn from the theme button colour, so it is the same with the custom styling toggle off */
+    eq(plain.fill.join(), now.fill.join(), width + ' saved highlight gradient follows the theme button colour');
   }
 }
 
