@@ -1,10 +1,20 @@
 <template compat="shopify">
+{%- comment -%} Runtime, loaded once per page by layout/theme.storelib: shopify/assets/live-collections.js. {%- endcomment -%}
 {% render 'theme-type' %}
 {%- liquid
-  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+  assign s = section.settings
+  assign sid = section.id
+  assign color_scheme = s.color_scheme.id | default: s.color_scheme | default: 'default-color-scheme'
 -%}
 {%- assign fb_accessibility_banner = 'accessibility.banner' | t -%}
-{%- comment -%} Connect this section to the theme-level animation settings (Theme settings > Animations). {%- endcomment -%}
+{%- comment -%}
+  Materia Themes. Category Banners 2: a heading, a line of text and a grid of
+  banners (a picture with a title) that link to collections. A banner with a
+  collection picked takes its title, picture and link from it; its own fields
+  replace them. Colours follow the colour scheme and the titles Theme settings
+  > Typography until Enable custom styling is on. Live builder updates are in
+  live-collections.js (loaded on every page).
+{%- endcomment -%}
 {%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
 <style>
   #shopify-section-{{ section.id }}.scroll-trigger {
@@ -20,560 +30,266 @@
   })();
 {% comment %}{% endcomment %}</script>
 {%- endif -%}
-{%- comment -%} Remove default space between sections (margins only, never padding). {%- endcomment -%}
-{%- if section.settings.reset_spacing -%}
-<style>
-  #shopify-section-{{ section.id }} { margin-top: 0 !important; margin-bottom: 0 !important; }
-  #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
-{% comment %}{% endcomment %}</style>
-{%- endif -%}
-<style>
-  /* Section width */
-  {%- case section.settings.section_width -%}
-    {%- when 'container' -%}
-      #shopify-section-{{ section.id }} {
-        max-width: calc({{ settings.page_width | default: 1300 }}px + 3rem);
-        margin-inline: auto;
-        padding-inline: 1.5rem;
-        box-sizing: border-box;
-      }
-    {%- when 'fluid_container' -%}
-      #shopify-section-{{ section.id }} {
-        max-width: calc(var(--fluid-container-width, 1500px) + 3rem);
-        margin-inline: auto;
-        padding-inline: 1.5rem;
-        box-sizing: border-box;
-      }
-    {%- when 'stretch_width' -%}
-      #shopify-section-{{ section.id }} {
-        padding-inline: 1.5rem;
-        box-sizing: border-box;
-      }
-      @media (min-width: 1200px) {
-        #shopify-section-{{ section.id }} { padding-inline: 3rem; }
-      }
-    {%- when 'full_width' -%}
-      /* full bleed */
-  {%- endcase -%}
-{% comment %}{% endcomment %}</style>
-
 {%- liquid
-  assign s   = section.settings
-  assign sid = section.id
   assign custom = s.enable_custom_styling
-
-  assign reset_spacing = ''
-  if s.reset_spacing
-    assign reset_spacing = ' remove_spacing'
-  endif
-
-  # --- Blocks: one optional heading, one optional subheading, then banners ---
   assign banner_count = 0
-  assign heading_found = false
-  assign subheading_found = false
+  assign head_count = 0
   for block in section.blocks
-    case block.type
-      when 'banner'
-        assign banner_count = banner_count | plus: 1
-      when 'heading'
-        unless heading_found
-          assign heading_block = block
-          assign heading_found = true
-        endunless
-      when 'subheading'
-        unless subheading_found
-          assign subheading_block = block
-          assign subheading_found = true
-        endunless
-    endcase
+    if block.type == 'banner'
+      assign banner_count = banner_count | plus: 1
+    elsif block.type == 'heading' and block.settings.heading != blank
+      assign head_count = head_count | plus: 1
+    elsif block.type == 'subheading' and block.settings.subheading != blank
+      assign head_count = head_count | plus: 1
+    endif
   endfor
-  if heading_found
-    assign hb = heading_block.settings
-  endif
-  if subheading_found
-    assign sb = subheading_block.settings
-  endif
-  assign show_head = false
-  if heading_found and hb.heading != blank
-    assign show_head = true
-  endif
-  if subheading_found and sb.subheading != blank
-    assign show_head = true
-  endif
-
-  # --- Section heading + subheading blocks: theme type unless the block's own style is on ---
-  assign h_custom = false
-  assign h_style = 'h2'
-  assign c_head = ''
-  if heading_found
-    assign h_style = hb.heading_size | default: 'h2'
-    if hb.custom_style
-      assign h_custom = true
-      assign c_head = hb.heading_color
-    endif
-  endif
-  assign s_custom = false
-  assign s_style = 'body'
-  assign c_headsub = ''
-  if subheading_found
-    assign s_style = sb.text_size | default: 'body'
-    if sb.custom_style
-      assign s_custom = true
-      assign c_headsub = sb.subheading_color
-    endif
-  endif
-  case h_style
-    when 'h1'
-      assign h_fb = 56
-      assign h_fb_m = 36
-    when 'h3'
-      assign h_fb = 24
-      assign h_fb_m = 20
-    else
-      assign h_fb = 36
-      assign h_fb_m = 30
-  endcase
-  case s_style
-    when 'body_large'
-      assign s_fb = 18
-    when 'body_small'
-      assign s_fb = 14
-    else
-      assign s_fb = 16
-  endcase
-
-  # --- Banner title + line: theme text styles by default ---
-  assign t_style = s.heading_style | default: 'h2'
-  case t_style
-    when 'h1'
-      assign t_fb = 56
-      assign t_fb_m = 36
-    when 'h3'
-      assign t_fb = 24
-      assign t_fb_m = 20
-    when 'h4'
-      assign t_fb = 20
-      assign t_fb_m = 18
-    else
-      assign t_fb = 36
-      assign t_fb_m = 30
-  endcase
-  assign b_style = s.sub_style | default: 'body'
-  case b_style
-    when 'body_large'
-      assign b_fb = 18
-    when 'body_small'
-      assign b_fb = 14
-    else
-      assign b_fb = 16
-  endcase
-
-  # --- Custom colours only when the creator turns them on ---
-  assign c_title = ''
-  assign c_sub = ''
-  assign c_line = ''
-  assign c_img_bg = ''
-  assign c_bg = ''
-  if custom
-    assign c_title = s.heading_color
-    assign c_sub = s.sub_color
-    assign c_line = s.underline_color
-    assign c_img_bg = s.image_bg
-    assign c_bg = s.section_bg
-  endif
-
-  # --- Grid + image sizes ---
-  assign cols = 1
+  assign img_sizes = '100vw'
   if s.layout == 'grid_2'
-    assign cols = 2
+    assign img_sizes = '(min-width: 768px) 50vw, 100vw'
   elsif s.layout == 'grid_3'
-    assign cols = 3
+    assign img_sizes = '(min-width: 768px) 33vw, 100vw'
   endif
-  assign mcols = 1
-  if s.mobile_layout == 'grid_2'
-    assign mcols = 2
+  if s.mobile_layout == 'grid_2' and s.layout == 'stack'
+    assign img_sizes = '(min-width: 768px) 100vw, 50vw'
   endif
-  case cols
-    when 2
-      assign img_sizes = '(min-width: 750px) 50vw, 100vw'
-    when 3
-      assign img_sizes = '(min-width: 750px) 33vw, 100vw'
-    else
-      assign img_sizes = '100vw'
-  endcase
-  if mcols == 2 and cols == 1
-    assign img_sizes = '(min-width: 750px) 100vw, 50vw'
-  endif
-
-  # --- Overlay: base and hover; per-banner overrides keep the same hover lift ---
-  assign ov_base = s.overlay_opacity | default: 0
-  assign ov_hover = s.overlay_opacity_hover | default: 0
-  assign ov_delta = ov_hover | minus: ov_base | divided_by: 100.0
-  assign ov_base_f = ov_base | divided_by: 100.0
 -%}
-
 <style>
   #shopify-section-{{ sid }} { isolation: isolate; position: relative; }
-  #shopify-section-{{ sid }} .cb-wrap { container-type: inline-size; container-name: cb2-{{ sid }}; }
-  #shopify-section-{{ sid }} .cb,
-  #shopify-section-{{ sid }} .cb *,
-  #shopify-section-{{ sid }} .cb *::before,
-  #shopify-section-{{ sid }} .cb *::after { box-sizing: border-box; }
+  {%- if s.reset_spacing %}
+  #shopify-section-{{ sid }} { margin-top: 0 !important; margin-bottom: 0 !important; }
+  #shopify-section-{{ sid }} + .shopify-section { margin-top: 0 !important; }
+  {%- endif %}
+  {%- if s.enable_custom_fonts -%}
+    {{ s.heading_font | font_face: font_display: 'swap' }}
+    {{ s.body_font | font_face: font_display: 'swap' }}
+  {%- endif %}
+  #shopify-section-{{ sid }} .cb2 {
+    --cb-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+    font-family: var(--body-font, inherit);
+    background: var(--cl-section_bg);
+    padding: var(--cl-padding_top) var(--cl-side_padding_mobile) var(--cl-padding_bottom);
+  }
+  #shopify-section-{{ sid }} .cb2, #shopify-section-{{ sid }} .cb2 *, #shopify-section-{{ sid }} .cb2 *::before, #shopify-section-{{ sid }} .cb2 *::after { box-sizing: border-box; }
+  #shopify-section-{{ sid }} .cb2__inner { margin-inline: auto; }
+  #shopify-section-{{ sid }} .cb2[data-width='container'] .cb2__inner { max-width: calc(var(--page-width, 1300px) + 3rem); padding-inline: 1.5rem; }
+  #shopify-section-{{ sid }} .cb2[data-width='fluid_container'] .cb2__inner { max-width: calc(var(--fluid-container-width, 1500px) + 3rem); padding-inline: 1.5rem; }
+  #shopify-section-{{ sid }} .cb2[data-width='stretch_width'] .cb2__inner { padding-inline: 1.5rem; }
 
-  /* ---- Shell + spacing ---- */
-  #shopify-section-{{ sid }} .cb {
-    background: {% render 'scheme-color', color: c_bg, fallback: 'transparent' %};
-    padding: {{ s.padding_top | default: 0 }}px {{ s.side_padding_mobile | default: 0 }}px {{ s.padding_bottom | default: 0 }}px;
-  }
-  @container cb2-{{ sid }} (min-width: 750px) {
-    #shopify-section-{{ sid }} .cb {
-      padding-left: {{ s.side_padding_desktop | default: 0 }}px;
-      padding-right: {{ s.side_padding_desktop | default: 0 }}px;
-    }
-  }
-
-  /* ---- Optional section heading + subheading (theme typography by default) ---- */
-  #shopify-section-{{ sid }} .cb__head {
-    padding-inline: 16px;
-    text-align: {% if s.header_alignment == 'left' %}left{% else %}center{% endif %};
-  }
-  #shopify-section-{{ sid }} .cb__head-title {
-    max-width: 52rem;
-    margin: 0 {% if s.header_alignment == 'left' %}0{% else %}auto{% endif %} {{ hb.space_below_mobile | default: 10 }}px;
-    font-family: var(--type-{{ h_style }}-font, var(--heading-font, inherit));
-    font-size: var(--type-{{ h_style }}-size, {{ h_fb_m }}px);
-    font-weight: var(--type-{{ h_style }}-weight, 700);
-    line-height: var(--type-{{ h_style }}-line-height, 1.2);
-    letter-spacing: var(--type-{{ h_style }}-letter-spacing, normal);
-    text-transform: var(--type-{{ h_style }}-transform, none);
-    color: {% render 'scheme-color', color: c_head, fallback: 'var(--color-heading)' %};
+  /* Heading and line of text: theme type unless the block's own style is on */
+  #shopify-section-{{ sid }} .cb2__head { padding: 32px 16px 0; text-align: center; }
+  #shopify-section-{{ sid }} .cb2[data-header-align='left'] .cb2__head { text-align: left; }
+  #shopify-section-{{ sid }} .cb2__head-title {
+    max-width: 52rem; margin: 0 auto var(--clb-space_below_mobile);
+    font-family: var(--heading-font, inherit);
+    font-size: var(--clb-heading_font_size_mobile, var(--cb-h-size-m, 30px));
+    font-weight: var(--clb-heading_font_weight, var(--heading-weight, 700));
+    color: var(--clb-heading_color);
     text-wrap: balance;
   }
-  #shopify-section-{{ sid }} .cb__head-sub {
-    max-width: 40rem;
-    margin: 0 {% if s.header_alignment == 'left' %}0{% else %}auto{% endif %} {{ sb.space_below_mobile | default: 24 }}px;
-    font-family: var(--type-{{ s_style }}-font, var(--body-font, inherit));
-    font-size: var(--type-{{ s_style }}-size, {{ s_fb }}px);
-    font-weight: var(--type-{{ s_style }}-weight, 400);
-    line-height: var(--type-{{ s_style }}-line-height, 1.6);
-    color: {% render 'scheme-color', color: c_headsub, fallback: 'var(--color-text)' %};
+  #shopify-section-{{ sid }} .cb2__head-title[data-size='lg'] { --cb-h-size-m: var(--type-h1-size, 36px); --cb-h-size: var(--type-h1-size, 56px); }
+  #shopify-section-{{ sid }} .cb2__head-title[data-size='md'] { --cb-h-size-m: var(--type-h2-size, 30px); --cb-h-size: var(--type-h2-size, 36px); }
+  #shopify-section-{{ sid }} .cb2__head-title[data-size='sm'] { --cb-h-size-m: var(--type-h3-size, 20px); --cb-h-size: var(--type-h3-size, 24px); }
+  #shopify-section-{{ sid }} .cb2__head-sub {
+    max-width: 40rem; margin: 0 auto var(--clb-space_below_mobile);
+    font-size: var(--clb-subheading_font_size_mobile, var(--cb-s-size, 16px));
+    font-weight: var(--clb-subheading_font_weight, var(--body-weight, 400));
+    line-height: var(--body-line-height, 1.6);
+    color: var(--clb-subheading_color);
     text-wrap: pretty;
   }
-  #shopify-section-{{ sid }} .cb__head-title:last-child { margin-bottom: {{ sb.space_below_mobile | default: 24 }}px; }
-  {%- if h_custom %}
-  #shopify-section-{{ sid }} .cb__head-title {
-    font-weight: {{ hb.heading_font_weight | default: '700' }};
-    font-size: {{ hb.heading_font_size_mobile | default: 26 }}px;
-    line-height: 1.2;
-  }
-  {%- endif %}
-  {%- if s_custom %}
-  #shopify-section-{{ sid }} .cb__head-sub {
-    font-weight: {{ sb.subheading_font_weight | default: '400' }};
-    font-size: {{ sb.subheading_font_size_mobile | default: 14 }}px;
-    line-height: 1.5;
-  }
-  {%- endif %}
-  @container cb2-{{ sid }} (min-width: 750px) {
-    #shopify-section-{{ sid }} .cb__head-title {
-      margin-bottom: {{ hb.space_below_desktop | default: 16 }}px;
-      {%- if h_custom %}
-      font-size: {{ hb.heading_font_size_desktop | default: 32 }}px;
-      {%- else %}
-      font-size: var(--type-{{ h_style }}-size, {{ h_fb }}px);
-      {%- endif %}
-    }
-    #shopify-section-{{ sid }} .cb__head-title:last-child { margin-bottom: {{ sb.space_below_desktop | default: 32 }}px; }
-    #shopify-section-{{ sid }} .cb__head-sub {
-      margin-bottom: {{ sb.space_below_desktop | default: 32 }}px;
-      {%- if s_custom %}
-      font-size: {{ sb.subheading_font_size_desktop | default: 16 }}px;
-      {%- endif %}
-    }
-  }
-  #shopify-section-{{ sid }} .cb__rt p { margin: 0; font: inherit; color: inherit; }
-  #shopify-section-{{ sid }} .cb__rt p + p { margin-top: 0.6em; }
-  #shopify-section-{{ sid }} .cb__rt strong,
-  #shopify-section-{{ sid }} .cb__rt b { font-weight: 700; }
-  #shopify-section-{{ sid }} .cb__rt em { font-style: italic; }
-  #shopify-section-{{ sid }} .cb__head .cb__rt a { color: inherit; text-decoration: underline; text-underline-offset: 0.15em; }
+  #shopify-section-{{ sid }} .cb2__head-sub[data-size='body_large'] { --cb-s-size: 18px; }
+  #shopify-section-{{ sid }} .cb2__head-sub[data-size='body_small'] { --cb-s-size: 14px; }
+  #shopify-section-{{ sid }} .cb2[data-header-align='left'] :is(.cb2__head-title, .cb2__head-sub) { margin-left: 0; }
+  #shopify-section-{{ sid }} .cb2__rt p { margin: 0; font: inherit; color: inherit; }
+  #shopify-section-{{ sid }} .cb2__rt p + p { margin-top: 0.6em; }
+  #shopify-section-{{ sid }} .cb2__rt a { color: inherit; text-decoration: underline; text-underline-offset: 0.15em; }
+  #shopify-section-{{ sid }} [hidden]:is(.cb2__head, .cb2__head-title, .cb2__head-sub, .cb2__heading, .cb2__sub, .cb2__content) { display: none !important; }
 
-  /* ---- Grid ---- */
-  #shopify-section-{{ sid }} .cb__list {
-    display: grid;
-    grid-template-columns: repeat({{ mcols }}, minmax(0, 1fr));
-    gap: {{ s.gap | default: 0 }}px;
-    margin: 0; padding: 0;
-    list-style: none;
-  }
-  #shopify-section-{{ sid }} .cb__list > li { margin: 0; padding: 0; min-width: 0; }
-  @container cb2-{{ sid }} (min-width: 750px) {
-    #shopify-section-{{ sid }} .cb__list { grid-template-columns: repeat({{ cols }}, minmax(0, 1fr)); }
-  }
+  /* Grid */
+  #shopify-section-{{ sid }} .cb2__list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--cl-gap); margin: 0; padding: 0; list-style: none; }
+  #shopify-section-{{ sid }} .cb2[data-mobile-layout='grid_2'] .cb2__list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #shopify-section-{{ sid }} .cb2__list > li { margin: 0; padding: 0; min-width: 0; }
 
-  /* ---- Banner ---- */
-  #shopify-section-{{ sid }} .cb__item {
-    --cb-ov: {% render 'scheme-color', color: s.overlay_color, fallback: '#000000' %};
-    --cb-ov-o: {{ ov_base_f }};
-    --cb-title: {% render 'scheme-color', color: c_title, fallback: '#ffffff' %};
-    --cb-sub: {% render 'scheme-color', color: c_sub, fallback: 'rgba(255, 255, 255, 0.92)' %};
-    --cb-dur: {{ s.hover_duration | default: 700 }}ms;
-    --cb-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
-    position: relative;
-    display: block;
-    overflow: hidden;
-    text-decoration: none;
-    color: inherit;
-    background: {% render 'scheme-color', color: c_img_bg, fallback: '#1f2937' %};
-    border-radius: {% if s.corner_style == 'theme' %}var(--media-radius, var(--image-radius, 8px)){% else %}{{ s.border_radius | default: 0 }}px{% endif %};
-    aspect-ratio: {{ s.aspect_ratio_mobile | default: '16 / 9' }};
+  /* Banner */
+  #shopify-section-{{ sid }} .cb2__item {
+    --ov-o: var(--clb-overlay_opacity, var(--cl-overlay_opacity));
+    position: relative; display: block; overflow: hidden; text-decoration: none; color: inherit;
+    background: var(--cl-image_bg);
+    border-radius: var(--cl-border_radius);
+    aspect-ratio: var(--cl-aspect_ratio_mobile);
     -webkit-tap-highlight-color: transparent;
   }
-  @container cb2-{{ sid }} (min-width: 750px) {
-    #shopify-section-{{ sid }} .cb__item { aspect-ratio: {{ s.aspect_ratio_desktop | default: '21 / 9' }}; }
-  }
-  #shopify-section-{{ sid }} a.cb__item { cursor: pointer; }
-  #shopify-section-{{ sid }} a.cb__item:focus-visible { outline: 2px solid #ffffff; outline-offset: -6px; }
-
-  #shopify-section-{{ sid }} .cb__media,
-  #shopify-section-{{ sid }} .cb__media picture { position: absolute; inset: 0; display: block; }
-  #shopify-section-{{ sid }} .cb__img {
-    position: absolute; inset: 0;
-    width: 100%; height: 100%;
-    object-fit: cover;
-    display: block;
-    transform: scale({{ s.image_base_scale | default: 100 | divided_by: 100.0 }});
-    transition: transform var(--cb-dur) var(--cb-ease);
+  #shopify-section-{{ sid }} .cb2[data-corner='theme'] .cb2__item { border-radius: var(--media-radius, var(--rounded-radius, 8px)); }
+  #shopify-section-{{ sid }} a.cb2__item { cursor: pointer; }
+  #shopify-section-{{ sid }} a.cb2__item:focus-visible { outline: 2px solid #ffffff; outline-offset: -6px; box-shadow: inset 0 0 0 4px rgba(0, 0, 0, 0.6); }
+  #shopify-section-{{ sid }} .cb2__media, #shopify-section-{{ sid }} .cb2__media picture { position: absolute; inset: 0; display: block; }
+  #shopify-section-{{ sid }} .cb2__img, #shopify-section-{{ sid }} .cb2__ph {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block;
+    transform: scale(var(--cl-image_base_scale));
+    transition: transform var(--cl-hover_duration) var(--cb-ease);
     backface-visibility: hidden;
   }
-
-  #shopify-section-{{ sid }} .cb__overlay {
-    position: absolute; inset: 0;
-    background: var(--cb-ov);
-    opacity: var(--cb-ov-o);
-    transition: opacity var(--cb-dur) ease;
-    pointer-events: none;
+  #shopify-section-{{ sid }} .cb2__ph { background: color-mix(in srgb, var(--cl-image_bg) 92%, #ffffff); fill: color-mix(in srgb, #ffffff 22%, transparent); }
+  #shopify-section-{{ sid }} .cb2__overlay {
+    position: absolute; inset: 0; pointer-events: none;
+    background: var(--clb-overlay_color, var(--cl-overlay_color)); opacity: var(--ov-o);
+    transition: opacity var(--cl-hover_duration) ease;
   }
-
-  /* ---- Text ---- */
-  #shopify-section-{{ sid }} .cb__content {
-    position: absolute; inset: 0;
-    z-index: 2;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: clamp(16px, 5cqi, 40px);
-    pointer-events: none;
+  #shopify-section-{{ sid }} .cb2__content {
+    position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    padding: clamp(16px, 5%, 40px); pointer-events: none;
   }
-  #shopify-section-{{ sid }} .cb__content--top    { justify-content: flex-start; }
-  #shopify-section-{{ sid }} .cb__content--bottom { justify-content: flex-end; }
-  #shopify-section-{{ sid }} .cb__content--left   { align-items: flex-start; text-align: left; }
-  #shopify-section-{{ sid }} .cb__content--right  { align-items: flex-end; text-align: right; }
-
-  #shopify-section-{{ sid }} .cb__heading {
-    position: relative;
-    display: inline-block;
-    max-width: 100%;
-    margin: 0;
-    color: var(--cb-title);
-    font-family: var(--type-{{ t_style }}-font, var(--heading-font, inherit));
-    font-size: var(--type-{{ t_style }}-size, {{ t_fb_m }}px);
-    font-weight: var(--type-{{ t_style }}-weight, 700);
-    line-height: var(--type-{{ t_style }}-line-height, 1.15);
-    letter-spacing: {{ s.heading_letter_spacing | default: 0 }}em;
-    text-transform: {% if s.heading_uppercase %}uppercase{% else %}none{% endif %};
-    text-shadow: {{ s.heading_shadow | default: 'none' }};
-    text-wrap: balance;
-    overflow-wrap: anywhere;
+  #shopify-section-{{ sid }} .cb2[data-text-position='top'] .cb2__content { justify-content: flex-start; }
+  #shopify-section-{{ sid }} .cb2[data-text-position='bottom'] .cb2__content { justify-content: flex-end; }
+  #shopify-section-{{ sid }} .cb2[data-text-position='left'] .cb2__content { align-items: flex-start; text-align: left; }
+  #shopify-section-{{ sid }} .cb2[data-text-position='right'] .cb2__content { align-items: flex-end; text-align: right; }
+  #shopify-section-{{ sid }} .cb2__heading {
+    position: relative; display: inline-block; max-width: 100%; margin: 0;
+    color: var(--clb-heading_color, var(--cl-heading_color));
+    font-family: var(--heading-font, inherit);
+    font-size: var(--cl-heading_size_mobile, var(--cb-t-size-m, 30px));
+    font-weight: var(--cl-heading_weight, var(--heading-weight, 700));
+    line-height: 1.15;
+    letter-spacing: var(--cl-heading_letter_spacing);
+    text-shadow: var(--cl-heading_shadow);
+    text-wrap: balance; overflow-wrap: anywhere;
   }
-  #shopify-section-{{ sid }} .cb__sub {
-    margin: 8px 0 0;
-    max-width: 34rem;
-    color: var(--cb-sub);
-    font-family: var(--type-{{ b_style }}-font, var(--body-font, inherit));
-    font-size: var(--type-{{ b_style }}-size, {{ b_fb }}px);
-    font-weight: var(--type-{{ b_style }}-weight, 400);
-    line-height: var(--type-{{ b_style }}-line-height, 1.5);
-    text-shadow: {{ s.heading_shadow | default: 'none' }};
-    text-wrap: pretty;
+  #shopify-section-{{ sid }} .cb2[data-uppercase='true'] .cb2__heading { --heading-text-transform: uppercase; text-transform: uppercase; }
+  #shopify-section-{{ sid }} .cb2__heading[data-own-size] { --heading-letter-spacing: var(--cl-heading_letter_spacing); }
+  #shopify-section-{{ sid }} .cb2[data-title-style='xl'] { --cb-t-size-m: var(--type-h1-size, 36px); --cb-t-size: var(--type-h1-size, 56px); }
+  #shopify-section-{{ sid }} .cb2[data-title-style='lg'] { --cb-t-size-m: var(--type-h2-size, 30px); --cb-t-size: var(--type-h2-size, 36px); }
+  #shopify-section-{{ sid }} .cb2[data-title-style='md'] { --cb-t-size-m: var(--type-h3-size, 20px); --cb-t-size: var(--type-h3-size, 24px); }
+  #shopify-section-{{ sid }} .cb2[data-title-style='sm'] { --cb-t-size-m: var(--type-h4-size, 18px); --cb-t-size: var(--type-h4-size, 20px); }
+  @media (max-width: 767px) {
+    #shopify-section-{{ sid }} .cb2[data-mobile-layout='grid_2'] .cb2__heading { font-size: min(var(--cl-heading_size_mobile, var(--cb-t-size-m, 30px)), 6vw); }
   }
-  {%- if custom %}
-  #shopify-section-{{ sid }} .cb__heading {
-    font-size: {{ s.heading_size_mobile | default: 28 }}px;
-    font-weight: {{ s.heading_weight | default: 700 }};
-    line-height: 1.1;
+  #shopify-section-{{ sid }} .cb2__sub {
+    margin: 8px 0 0; max-width: 34rem;
+    color: var(--clb-sub_color, var(--cl-sub_color));
+    font-size: var(--cl-sub_size, var(--cb-b-size, 16px));
+    line-height: 1.5; text-shadow: var(--cl-heading_shadow); text-wrap: pretty;
   }
-  #shopify-section-{{ sid }} .cb__sub { font-size: {{ s.sub_size | default: 14 }}px; }
-  {%- endif %}
-  {%- comment -%} Two banners per row on phones: keep titles inside half-width cards. {%- endcomment -%}
-  {%- if mcols == 2 %}
-  #shopify-section-{{ sid }} .cb__heading {
-    font-size: min({% if custom %}{{ s.heading_size_mobile | default: 28 }}px{% else %}var(--type-{{ t_style }}-size, {{ t_fb_m }}px){% endif %}, 5.5cqi);
+  #shopify-section-{{ sid }} .cb2[data-sub-style='body_large'] { --cb-b-size: 18px; }
+  #shopify-section-{{ sid }} .cb2[data-sub-style='body_small'] { --cb-b-size: 14px; }
+  #shopify-section-{{ sid }} .cb2__heading::after {
+    content: ''; position: absolute; left: 0; right: 0;
+    bottom: calc(-1 * var(--cl-underline_offset)); height: var(--cl-underline_thickness);
+    background: var(--cl-underline_color);
+    transform: scaleX(0); transform-origin: left center;
+    transition: transform var(--cl-underline_duration) var(--cb-ease);
   }
-  {%- endif %}
-  @container cb2-{{ sid }} (min-width: 750px) {
-    #shopify-section-{{ sid }} .cb__heading {
-      {%- if custom %}
-      font-size: {{ s.heading_size_desktop | default: 42 }}px;
-      {%- else %}
-      font-size: var(--type-{{ t_style }}-size, {{ t_fb }}px);
-      {%- endif %}
-    }
-  }
-
-  /* Underline that draws in on hover */
-  #shopify-section-{{ sid }} .cb__heading::after {
-    content: '';
-    position: absolute;
-    left: 0; right: 0;
-    bottom: -{{ s.underline_offset | default: 6 }}px;
-    height: {{ s.underline_thickness | default: 2 }}px;
-    background: {% render 'scheme-color', color: c_line, fallback: 'currentColor' %};
-    transform: scaleX(0);
-    transform-origin: {% if s.underline_origin == 'right' %}right{% elsif s.underline_origin == 'center' %}center{% else %}left{% endif %} center;
-    transition: transform {{ s.underline_duration | default: 350 }}ms var(--cb-ease);
-  }
-
-  /* Subheading on hover only, but always on touch screens where there is no hover */
-  {%- if s.sub_visibility != 'always' %}
+  #shopify-section-{{ sid }} .cb2[data-underline-origin='right'] .cb2__heading::after { transform-origin: right center; }
+  #shopify-section-{{ sid }} .cb2[data-underline-origin='center'] .cb2__heading::after { transform-origin: center center; }
   @media (hover: hover) {
-    #shopify-section-{{ sid }} .cb__sub {
-      opacity: 0;
-      transform: translateY(8px);
-      transition: opacity var(--cb-dur) ease 80ms, transform var(--cb-dur) var(--cb-ease) 80ms;
-    }
+    #shopify-section-{{ sid }} .cb2[data-sub-visibility='hover'] .cb2__sub { opacity: 0; transform: translateY(8px); transition: opacity var(--cl-hover_duration) ease 80ms, transform var(--cl-hover_duration) var(--cb-ease) 80ms; }
+    #shopify-section-{{ sid }} a.cb2__item:hover :is(.cb2__img, .cb2__ph) { transform: scale(var(--cl-image_hover_scale)); }
+    #shopify-section-{{ sid }} .cb2__item:hover .cb2__overlay { opacity: clamp(0, calc(var(--ov-o) + var(--cl-overlay_opacity_hover) - var(--cl-overlay_opacity)), 0.9); }
+    #shopify-section-{{ sid }} a.cb2__item:hover .cb2__heading::after { transform: scaleX(1); }
+    #shopify-section-{{ sid }} .cb2__item:hover .cb2__sub { opacity: 1; transform: none; }
   }
-  {%- endif %}
+  #shopify-section-{{ sid }} a.cb2__item:focus-visible :is(.cb2__img, .cb2__ph) { transform: scale(var(--cl-image_hover_scale)); }
+  #shopify-section-{{ sid }} .cb2__item:focus-visible .cb2__overlay { opacity: clamp(0, calc(var(--ov-o) + var(--cl-overlay_opacity_hover) - var(--cl-overlay_opacity)), 0.9); }
+  #shopify-section-{{ sid }} a.cb2__item:focus-visible .cb2__heading::after { transform: scaleX(1); }
+  #shopify-section-{{ sid }} .cb2__item:focus-visible .cb2__sub { opacity: 1; transform: none; }
+  #shopify-section-{{ sid }} .cb2__empty { margin: 0; padding: 32px 16px; text-align: center; font-size: 14px; color: var(--color-text); }
 
-  /* Hover + keyboard focus, only on devices that hover (no sticky taps on phones) */
-  @media (hover: hover) {
-    #shopify-section-{{ sid }} a.cb__item:hover .cb__img { transform: scale({{ s.image_hover_scale | default: 105 | divided_by: 100.0 }}); }
-    #shopify-section-{{ sid }} .cb__item:hover .cb__overlay { opacity: clamp(0, calc(var(--cb-ov-o) + {{ ov_delta }}), 0.9); }
-    #shopify-section-{{ sid }} a.cb__item:hover .cb__heading::after { transform: scaleX(1); }
-    #shopify-section-{{ sid }} .cb__item:hover .cb__sub { opacity: 1; transform: none; }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .cb2 { padding-left: var(--cl-side_padding_desktop); padding-right: var(--cl-side_padding_desktop); }
+    #shopify-section-{{ sid }} .cb2__head-title { margin-bottom: var(--clb-space_below_desktop); font-size: var(--clb-heading_font_size_desktop, var(--cb-h-size, 36px)); }
+    #shopify-section-{{ sid }} .cb2__head-sub { margin-bottom: var(--clb-space_below_desktop); font-size: var(--clb-subheading_font_size_desktop, var(--cb-s-size, 16px)); }
+    #shopify-section-{{ sid }} .cb2 .cb2__list { grid-template-columns: minmax(0, 1fr); }
+    #shopify-section-{{ sid }} .cb2[data-layout='grid_2'] .cb2__list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #shopify-section-{{ sid }} .cb2[data-layout='grid_3'] .cb2__list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    #shopify-section-{{ sid }} .cb2__item { aspect-ratio: var(--cl-aspect_ratio_desktop); }
+    #shopify-section-{{ sid }} .cb2 .cb2__heading { font-size: var(--cl-heading_size_desktop, var(--cb-t-size, 36px)); }
   }
-  #shopify-section-{{ sid }} a.cb__item:focus-visible .cb__img { transform: scale({{ s.image_hover_scale | default: 105 | divided_by: 100.0 }}); }
-  #shopify-section-{{ sid }} .cb__item:focus-visible .cb__overlay { opacity: clamp(0, calc(var(--cb-ov-o) + {{ ov_delta }}), 0.9); }
-  #shopify-section-{{ sid }} a.cb__item:focus-visible .cb__heading::after { transform: scaleX(1); }
-  #shopify-section-{{ sid }} .cb__item:focus-visible .cb__sub { opacity: 1; transform: none; }
-
-  #shopify-section-{{ sid }} .cb__empty {
-    margin: 0; padding: 32px 16px; text-align: center;
-    font-size: 14px; color: var(--color-text); opacity: 0.7;
-  }
-
   @media (prefers-reduced-motion: reduce) {
-    #shopify-section-{{ sid }} .cb__img,
-    #shopify-section-{{ sid }} .cb__overlay,
-    #shopify-section-{{ sid }} .cb__heading::after,
-    #shopify-section-{{ sid }} .cb__sub { transition: none !important; }
-    #shopify-section-{{ sid }} .cb__item:hover .cb__img,
-    #shopify-section-{{ sid }} .cb__item:focus-visible .cb__img { transform: scale({{ s.image_base_scale | default: 100 | divided_by: 100.0 }}) !important; }
+    #shopify-section-{{ sid }} :is(.cb2__img, .cb2__ph, .cb2__overlay, .cb2__heading::after, .cb2__sub) { transition: none !important; }
+    #shopify-section-{{ sid }} .cb2__heading::after { transition: none !important; }
+    #shopify-section-{{ sid }} .cb2__item:is(:hover, :focus-visible) :is(.cb2__img, .cb2__ph) { transform: scale(var(--cl-image_base_scale)) !important; }
   }
 {% comment %}{% endcomment %}</style>
 
-<div class="section cb-wrap color-{{ color_scheme }} gradient{{ reset_spacing }}">
-  <div class="cb" data-section-id="{{ sid }}">
-
-    {%- if show_head -%}
-      <div class="cb__head">
-        {%- if heading_found and hb.heading != blank -%}
-          <h2 class="cb__head-title cb__rt" {{ heading_block.shopify_attributes }}>{{ hb.heading }}</h2>
+<div class="section cb2 color-{{ color_scheme }} gradient{% if s.reset_spacing %} remove_spacing{% endif %}" data-width="{{ s.section_width | default: 'full_width' }}" data-cl-banner-label="{{ fb_accessibility_banner | escape }}" {% capture cl_json %}{"color_scheme":{{ section.settings.color_scheme.id | default: section.settings.color_scheme | append: '' | json }},"section_width":{{ section.settings.section_width | append: '' | json }},"reset_spacing":{% if section.settings.reset_spacing %}true{% else %}false{% endif %},"layout":{{ section.settings.layout | append: '' | json }},"gap":{{ section.settings.gap | default: 0 | json }},"aspect_ratio_desktop":{{ section.settings.aspect_ratio_desktop | append: '' | json }},"header_alignment":{{ section.settings.header_alignment | append: '' | json }},"text_position":{{ section.settings.text_position | append: '' | json }},"sub_visibility":{{ section.settings.sub_visibility | append: '' | json }},"corner_style":{{ section.settings.corner_style | append: '' | json }},"border_radius":{{ section.settings.border_radius | default: 0 | json }},"image_base_scale":{{ section.settings.image_base_scale | default: 0 | json }},"placeholder_url":{% if section.settings.placeholder_url != blank %}{"src":{{ section.settings.placeholder_url | image_url: width: 1600 | json }},"width":{{ section.settings.placeholder_url.width | default: 0 | json }},"height":{{ section.settings.placeholder_url.height | default: 0 | json }},"alt":{{ section.settings.placeholder_url.alt | append: '' | json }}}{% else %}null{% endif %},"enable_custom_styling":{% if section.settings.enable_custom_styling %}true{% else %}false{% endif %},"section_bg":{{ section.settings.section_bg | append: '' | json }},"heading_color":{{ section.settings.heading_color | append: '' | json }},"sub_color":{{ section.settings.sub_color | append: '' | json }},"underline_color":{{ section.settings.underline_color | append: '' | json }},"overlay_color":{{ section.settings.overlay_color | append: '' | json }},"image_bg":{{ section.settings.image_bg | append: '' | json }},"overlay_opacity":{{ section.settings.overlay_opacity | default: 0 | json }},"title_style":{{ section.settings.title_style | append: '' | json }},"heading_style":{{ section.settings.heading_style | append: '' | json }},"sub_style":{{ section.settings.sub_style | append: '' | json }},"heading_size_desktop":{{ section.settings.heading_size_desktop | default: 0 | json }},"heading_weight":{{ section.settings.heading_weight | default: 0 | json }},"sub_size":{{ section.settings.sub_size | default: 0 | json }},"heading_uppercase":{% if section.settings.heading_uppercase %}true{% else %}false{% endif %},"heading_letter_spacing":{{ section.settings.heading_letter_spacing | default: 0 | json }},"heading_shadow":{{ section.settings.heading_shadow | append: '' | json }},"enable_custom_fonts":{% if section.settings.enable_custom_fonts %}true{% else %}false{% endif %},"heading_font":{"family":{{ section.settings.heading_font.family | append: '' | json }},"fallback_families":{{ section.settings.heading_font.fallback_families | append: '' | json }}},"body_font":{"family":{{ section.settings.body_font.family | append: '' | json }},"fallback_families":{{ section.settings.body_font.fallback_families | append: '' | json }}},"overlay_opacity_hover":{{ section.settings.overlay_opacity_hover | default: 0 | json }},"image_hover_scale":{{ section.settings.image_hover_scale | default: 0 | json }},"hover_duration":{{ section.settings.hover_duration | default: 0 | json }},"underline_thickness":{{ section.settings.underline_thickness | default: 0 | json }},"underline_offset":{{ section.settings.underline_offset | default: 0 | json }},"underline_duration":{{ section.settings.underline_duration | default: 0 | json }},"underline_origin":{{ section.settings.underline_origin | append: '' | json }},"padding_top":{{ section.settings.padding_top | default: 0 | json }},"padding_bottom":{{ section.settings.padding_bottom | default: 0 | json }},"side_padding_desktop":{{ section.settings.side_padding_desktop | default: 0 | json }},"mobile_layout":{{ section.settings.mobile_layout | append: '' | json }},"aspect_ratio_mobile":{{ section.settings.aspect_ratio_mobile | append: '' | json }},"heading_size_mobile":{{ section.settings.heading_size_mobile | default: 0 | json }},"side_padding_mobile":{{ section.settings.side_padding_mobile | default: 0 | json }}}{% endcapture %}{% capture cl_vars %}--cl-gap: {{ section.settings.gap | default: 0 }}px;--cl-padding_top: {{ section.settings.padding_top | default: 0 }}px;--cl-padding_bottom: {{ section.settings.padding_bottom | default: 0 }}px;--cl-side_padding_desktop: {{ section.settings.side_padding_desktop | default: 0 }}px;--cl-side_padding_mobile: {{ section.settings.side_padding_mobile | default: 0 }}px;--cl-aspect_ratio_desktop: {{ section.settings.aspect_ratio_desktop }};--cl-aspect_ratio_mobile: {{ section.settings.aspect_ratio_mobile }};--cl-border_radius: {{ section.settings.border_radius | default: 0 }}px;--cl-heading_letter_spacing: {{ section.settings.heading_letter_spacing | default: 0 }}em;--cl-heading_shadow: {{ section.settings.heading_shadow }};{% if section.settings.enable_custom_styling %}--cl-section_bg: {% render 'scheme-color', color: section.settings.section_bg, fallback: 'var(--color-background)' %};{% else %}--cl-section_bg: var(--color-background);{% endif %}{% if section.settings.enable_custom_styling %}--cl-heading_color: {% render 'scheme-color', color: section.settings.heading_color, fallback: '#ffffff' %};{% else %}--cl-heading_color: #ffffff;{% endif %}{% if section.settings.enable_custom_styling %}--cl-sub_color: {% render 'scheme-color', color: section.settings.sub_color, fallback: 'rgba(255, 255, 255, 0.92)' %};{% else %}--cl-sub_color: rgba(255, 255, 255, 0.92);{% endif %}{% if section.settings.enable_custom_styling %}--cl-underline_color: {% render 'scheme-color', color: section.settings.underline_color, fallback: 'currentColor' %};{% else %}--cl-underline_color: currentColor;{% endif %}{% if section.settings.enable_custom_styling %}--cl-overlay_color: {% render 'scheme-color', color: section.settings.overlay_color, fallback: '#000000' %};{% else %}--cl-overlay_color: #000000;{% endif %}{% if section.settings.enable_custom_styling %}--cl-image_bg: {% render 'scheme-color', color: section.settings.image_bg, fallback: '#1f2937' %};{% else %}--cl-image_bg: #1f2937;{% endif %}{% if section.settings.enable_custom_styling %}--cl-heading_size_desktop: {{ section.settings.heading_size_desktop | default: 0 }}px;{% endif %}{% if section.settings.enable_custom_styling %}--cl-heading_size_mobile: {{ section.settings.heading_size_mobile | default: 0 }}px;{% endif %}{% if section.settings.enable_custom_styling %}--cl-heading_weight: {{ section.settings.heading_weight | default: 0 }};{% endif %}{% if section.settings.enable_custom_styling %}--cl-sub_size: {{ section.settings.sub_size | default: 0 }}px;{% endif %}--cl-overlay_opacity: {{ section.settings.overlay_opacity | default: 0 | divided_by: 100.0 }};--cl-overlay_opacity_hover: {{ section.settings.overlay_opacity_hover | default: 0 | divided_by: 100.0 }};--cl-image_base_scale: {{ section.settings.image_base_scale | default: 0 | divided_by: 100.0 }};--cl-image_hover_scale: {{ section.settings.image_hover_scale | default: 0 | divided_by: 100.0 }};--cl-hover_duration: {{ section.settings.hover_duration | default: 0 }}ms;--cl-underline_thickness: {{ section.settings.underline_thickness | default: 0 }}px;--cl-underline_offset: {{ section.settings.underline_offset | default: 0 }}px;--cl-underline_duration: {{ section.settings.underline_duration | default: 0 }}ms;{% if section.settings.enable_custom_fonts and section.settings.heading_font.family != blank %}--heading-font: {{ section.settings.heading_font.family }}, {{ section.settings.heading_font.fallback_families | default: 'sans-serif' }};{% endif %}{% if section.settings.enable_custom_fonts and section.settings.body_font.family != blank %}--body-font: {{ section.settings.body_font.family }}, {{ section.settings.body_font.fallback_families | default: 'sans-serif' }};{% endif %}{% endcapture %}data-cl-root="category-banners-2" data-cl-section="{{ section.id }}" data-cl-settings="{{ cl_json | escape }}" data-cl-defaults='{"color_scheme":"default-color-scheme","section_width":"full_width","reset_spacing":true,"layout":"grid_2","gap":0,"aspect_ratio_desktop":"21 / 9","header_alignment":"center","text_position":"center","sub_visibility":"hover","corner_style":"custom","border_radius":0,"image_base_scale":100,"enable_custom_styling":false,"overlay_opacity":25,"title_style":"lg","heading_style":"h2","sub_style":"body","heading_size_desktop":42,"heading_weight":700,"sub_size":14,"heading_uppercase":true,"heading_letter_spacing":0.1,"heading_shadow":"0 2px 8px rgba(0,0,0,0.25)","enable_custom_fonts":false,"heading_font":"assistant_n4","body_font":"assistant_n4","overlay_opacity_hover":45,"image_hover_scale":105,"hover_duration":700,"underline_thickness":2,"underline_offset":6,"underline_duration":350,"underline_origin":"left","padding_top":0,"padding_bottom":0,"side_padding_desktop":0,"mobile_layout":"stack","aspect_ratio_mobile":"16 / 9","heading_size_mobile":28,"side_padding_mobile":0}' data-cl-block-defaults='{"heading":{"heading":"Shop by category","size_style":"md","heading_size":"h2","custom_style":false,"heading_font_weight":"700","heading_font_size_desktop":32,"heading_font_size_mobile":26,"space_below_desktop":16,"space_below_mobile":8},"subheading":{"subheading":"<p>Pick a collection to start browsing.</p>","text_size":"body","custom_style":false,"subheading_font_weight":"400","subheading_font_size_desktop":16,"subheading_font_size_mobile":14,"space_below_desktop":32,"space_below_mobile":24},"banner":{"custom_style":false,"overlay_opacity":25}}' style="{{ cl_vars | strip }}" data-layout="{{ section.settings.layout }}" data-mobile-layout="{{ section.settings.mobile_layout }}" data-header-align="{{ section.settings.header_alignment }}" data-text-position="{{ section.settings.text_position }}" data-sub-visibility="{{ section.settings.sub_visibility }}" data-corner="{{ section.settings.corner_style }}" data-underline-origin="{{ section.settings.underline_origin }}" data-uppercase="{% if section.settings.heading_uppercase %}true{% else %}false{% endif %}"{% if section.settings.enable_custom_styling %} data-title-style="custom"{% else %} data-title-style="{{ section.settings.title_style }}"{% endif %}{% if section.settings.enable_custom_styling %} data-sub-style="custom"{% else %} data-sub-style="{{ section.settings.sub_style }}"{% endif %}{% if section.settings.enable_custom_fonts %}{% if section.settings.heading_font.family != blank or section.settings.body_font.family != blank %} data-own-font{% endif %}{% endif %}>
+  <div class="cb2__inner">
+    <div class="cb2__head"{% if head_count == 0 %} hidden{% endif %}>
+      {%- for block in section.blocks -%}
+        {%- if block.type == 'heading' -%}
+          <h2 class="cb2__head-title cb2__rt" {% capture clb_json %}{"heading":{{ block.settings.heading | append: '' | json }},"size_style":{{ block.settings.size_style | append: '' | json }},"heading_size":{{ block.settings.heading_size | append: '' | json }},"custom_style":{% if block.settings.custom_style %}true{% else %}false{% endif %},"heading_color":{{ block.settings.heading_color | append: '' | json }},"heading_font_weight":{{ block.settings.heading_font_weight | append: '' | json }},"heading_font_size_desktop":{{ block.settings.heading_font_size_desktop | default: 0 | json }},"heading_font_size_mobile":{{ block.settings.heading_font_size_mobile | default: 0 | json }},"space_below_desktop":{{ block.settings.space_below_desktop | default: 0 | json }},"space_below_mobile":{{ block.settings.space_below_mobile | default: 0 | json }}}{% endcapture %}{% capture clb_vars %}{% if block.settings.custom_style %}--clb-heading_color: {% render 'scheme-color', color: block.settings.heading_color, fallback: 'var(--color-heading)' %};{% else %}--clb-heading_color: var(--color-heading);{% endif %}{% if block.settings.custom_style %}--clb-heading_font_weight: {{ block.settings.heading_font_weight | default: 0 }};{% endif %}{% if block.settings.custom_style %}--clb-heading_font_size_desktop: {{ block.settings.heading_font_size_desktop | default: 0 }}px;{% endif %}{% if block.settings.custom_style %}--clb-heading_font_size_mobile: {{ block.settings.heading_font_size_mobile | default: 0 }}px;{% endif %}--clb-space_below_desktop: {{ block.settings.space_below_desktop | default: 0 }}px;--clb-space_below_mobile: {{ block.settings.space_below_mobile | default: 0 }}px;{% endcapture %}data-cl-block="{{ block.id }}" data-cl-type="heading" data-cl-settings="{{ clb_json | escape }}" style="{{ clb_vars | strip }}"{% if block.settings.custom_style %} data-size="custom"{% else %} data-size="{{ block.settings.size_style }}"{% endif %}{% if block.settings.custom_style %} data-own-weight=""{% endif %}{% if block.settings.heading == blank %} hidden{% endif %} {{ block.shopify_attributes }}>{{ block.settings.heading }}</h2>
+        {%- elsif block.type == 'subheading' -%}
+          <div class="cb2__head-sub cb2__rt" {% capture clb_json %}{"subheading":{{ block.settings.subheading | append: '' | json }},"text_size":{{ block.settings.text_size | append: '' | json }},"custom_style":{% if block.settings.custom_style %}true{% else %}false{% endif %},"subheading_color":{{ block.settings.subheading_color | append: '' | json }},"subheading_font_weight":{{ block.settings.subheading_font_weight | append: '' | json }},"subheading_font_size_desktop":{{ block.settings.subheading_font_size_desktop | default: 0 | json }},"subheading_font_size_mobile":{{ block.settings.subheading_font_size_mobile | default: 0 | json }},"space_below_desktop":{{ block.settings.space_below_desktop | default: 0 | json }},"space_below_mobile":{{ block.settings.space_below_mobile | default: 0 | json }}}{% endcapture %}{% capture clb_vars %}{% if block.settings.custom_style %}--clb-subheading_color: {% render 'scheme-color', color: block.settings.subheading_color, fallback: 'var(--color-text)' %};{% else %}--clb-subheading_color: var(--color-text);{% endif %}{% if block.settings.custom_style %}--clb-subheading_font_weight: {{ block.settings.subheading_font_weight | default: 0 }};{% endif %}{% if block.settings.custom_style %}--clb-subheading_font_size_desktop: {{ block.settings.subheading_font_size_desktop | default: 0 }}px;{% endif %}{% if block.settings.custom_style %}--clb-subheading_font_size_mobile: {{ block.settings.subheading_font_size_mobile | default: 0 }}px;{% endif %}--clb-space_below_desktop: {{ block.settings.space_below_desktop | default: 0 }}px;--clb-space_below_mobile: {{ block.settings.space_below_mobile | default: 0 }}px;{% endcapture %}data-cl-block="{{ block.id }}" data-cl-type="subheading" data-cl-settings="{{ clb_json | escape }}" style="{{ clb_vars | strip }}"{% if block.settings.custom_style %} data-size="custom"{% else %} data-size="{{ block.settings.text_size }}"{% endif %}{% if block.settings.custom_style %} data-own-weight=""{% endif %}{% if block.settings.subheading == blank %} hidden{% endif %} {{ block.shopify_attributes }}>{{ block.settings.subheading }}</div>
         {%- endif -%}
-        {%- if subheading_found and sb.subheading != blank -%}
-          <div class="cb__head-sub cb__rt" {{ subheading_block.shopify_attributes }}>{{ sb.subheading }}</div>
-        {%- endif -%}
-      </div>
-    {%- endif -%}
+      {%- endfor -%}
+    </div>
 
     {%- if banner_count > 0 -%}
-    <ul class="cb__list" role="list">
+    <ul class="cb2__list" role="list">
       {%- for block in section.blocks -%}
         {%- if block.type == 'banner' -%}
         {%- liquid
           assign bs = block.settings
+          assign coll = bs.collection
           assign banner_link = bs.link
-          if banner_link == blank and bs.collection != blank
-            assign banner_link = bs.collection.url
+          if banner_link == blank and coll != blank
+            assign banner_link = coll.url
           endif
+          assign own_image = true
           assign banner_image = bs.image
-          if banner_image == blank and bs.collection != blank
-            assign banner_image = bs.collection.featured_image
+          if banner_image == blank and coll != blank
+            assign banner_image = coll.featured_image
           endif
           assign banner_mobile = bs.image_mobile
           if banner_image == blank and banner_mobile != blank
             assign banner_image = banner_mobile
             assign banner_mobile = blank
           endif
-          if banner_image == blank and s.placeholder_url != blank
-            assign banner_image = s.placeholder_url
+          if banner_image == blank
+            assign own_image = false
+            if s.placeholder_url != blank
+              assign banner_image = s.placeholder_url
+            endif
           endif
           assign banner_heading = bs.heading
-          if banner_heading == blank and bs.collection != blank
-            assign banner_heading = bs.collection.title
+          if banner_heading == blank and coll != blank
+            assign banner_heading = coll.title
           endif
           assign tag = 'div'
           if banner_link != blank
             assign tag = 'a'
           endif
-          assign b_vars = ''
-          if bs.custom_style
-            if bs.overlay_color != blank
-              assign b_vars = b_vars | append: '--cb-ov: ' | append: bs.overlay_color | append: ';'
-            endif
-            assign b_ov = bs.overlay_opacity | default: 0 | divided_by: 100.0
-            assign b_vars = b_vars | append: '--cb-ov-o: ' | append: b_ov | append: ';'
-            if bs.heading_color != blank
-              assign b_vars = b_vars | append: '--cb-title: ' | append: bs.heading_color | append: ';'
-            endif
-            if bs.sub_color != blank
-              assign b_vars = b_vars | append: '--cb-sub: ' | append: bs.sub_color | append: ';'
-            endif
-          endif
         -%}
-        <li>
-          <{{ tag }} class="cb__item"
-             {%- if tag == 'a' %} href="{{ banner_link }}"{% endif %}
-             {%- if banner_heading == blank and tag == 'a' %} aria-label="{{ fb_accessibility_banner | escape }}"{% endif %}
-             {%- if b_vars != blank %} style="{{ b_vars }}"{% endif %}
-             {{ block.shopify_attributes }}>
-
-            <div class="cb__media">
+{%- if request.design_mode or banner_image != blank or banner_heading != blank -%}
+        <li {% capture clb_json %}{"collection":{{ block.settings.collection.handle | append: '' | json }},"heading":{{ block.settings.heading | append: '' | json }},"subheading":{{ block.settings.subheading | append: '' | json }},"link":{{ block.settings.link | append: '' | json }},"image":{% if block.settings.image != blank %}{"src":{{ block.settings.image | image_url: width: 1600 | json }},"width":{{ block.settings.image.width | default: 0 | json }},"height":{{ block.settings.image.height | default: 0 | json }},"alt":{{ block.settings.image.alt | append: '' | json }}}{% else %}null{% endif %},"image_mobile":{% if block.settings.image_mobile != blank %}{"src":{{ block.settings.image_mobile | image_url: width: 1600 | json }},"width":{{ block.settings.image_mobile.width | default: 0 | json }},"height":{{ block.settings.image_mobile.height | default: 0 | json }},"alt":{{ block.settings.image_mobile.alt | append: '' | json }}}{% else %}null{% endif %},"custom_style":{% if block.settings.custom_style %}true{% else %}false{% endif %},"heading_color":{{ block.settings.heading_color | append: '' | json }},"sub_color":{{ block.settings.sub_color | append: '' | json }},"overlay_color":{{ block.settings.overlay_color | append: '' | json }},"overlay_opacity":{{ block.settings.overlay_opacity | default: 0 | json }}}{% endcapture %}{% capture clb_vars %}{% if block.settings.custom_style %}--clb-heading_color: {% render 'scheme-color', color: block.settings.heading_color, fallback: 'var(--cl-heading_color)' %};{% endif %}{% if block.settings.custom_style %}--clb-sub_color: {% render 'scheme-color', color: block.settings.sub_color, fallback: 'var(--cl-sub_color)' %};{% endif %}{% if block.settings.custom_style %}--clb-overlay_color: {% render 'scheme-color', color: block.settings.overlay_color, fallback: 'var(--cl-overlay_color)' %};{% endif %}{% if block.settings.custom_style %}--clb-overlay_opacity: {{ block.settings.overlay_opacity | default: 0 | divided_by: 100.0 }};{% endif %}{% endcapture %}data-cl-block="{{ block.id }}" data-cl-type="banner" data-cl-settings="{{ clb_json | escape }}" style="{{ clb_vars | strip }}" data-cl-coll-title="{{ coll.title | escape }}" data-cl-coll-url="{{ coll.url }}" data-cl-own-image="{{ own_image }}" {{ block.shopify_attributes }}>
+          <{{ tag }} class="cb2__item"{% if tag == 'a' %} href="{{ banner_link }}"{% endif %}{% if banner_heading == blank and tag == 'a' %} aria-label="{{ fb_accessibility_banner | escape }}"{% endif %}>
+            <div class="cb2__media">
               {%- if banner_image != blank -%}
                 <picture>
                   {%- if banner_mobile != blank -%}
-                    <source media="(max-width: 749px)" srcset="{{ banner_mobile | image_url: width: 750 }} 750w, {{ banner_mobile | image_url: width: 1100 }} 1100w, {{ banner_mobile | image_url: width: 1500 }} 1500w" sizes="100vw">
+                    <source media="(max-width: 767px)" srcset="{{ banner_mobile | image_url: width: 750 }} 750w, {{ banner_mobile | image_url: width: 1100 }} 1100w, {{ banner_mobile | image_url: width: 1500 }} 1500w" sizes="100vw">
                   {%- endif -%}
-                  {{ banner_image | image_url: width: 2000 | image_tag: class: 'cb__img', loading: 'lazy', alt: banner_heading, sizes: img_sizes, widths: '600, 900, 1200, 1600, 2000' }}
+                  {{ banner_image | image_url: width: 2000 | image_tag: class: 'cb2__img', loading: 'lazy', alt: banner_heading, sizes: img_sizes, widths: '600, 900, 1200, 1600, 2000' }}
                 </picture>
+              {%- elsif request.design_mode -%}
+                {{ 'collection-1' | placeholder_svg_tag: 'cb2__ph' | replace: '<svg ', '<svg data-cl-ph aria-hidden="true" preserveAspectRatio="xMidYMid slice" ' }}
               {%- endif -%}
             </div>
-
-            <div class="cb__overlay" aria-hidden="true"></div>
-
-            {%- if banner_heading != blank or bs.subheading != blank -%}
-              <div class="cb__content cb__content--{{ s.text_position | default: 'center' }}">
-                {%- if banner_heading != blank -%}
-                  <h3 class="cb__heading">{{ banner_heading | escape }}</h3>
-                {%- endif -%}
-                {%- if bs.subheading != blank -%}
-                  <div class="cb__sub cb__rt">{{ bs.subheading }}</div>
-                {%- endif -%}
-              </div>
-            {%- endif -%}
+            <div class="cb2__overlay" aria-hidden="true"></div>
+            <div class="cb2__content">
+              <h3 class="cb2__heading"{% if custom %} data-own-weight{% endif %}{% if s.heading_letter_spacing != 0 %} data-own-size{% endif %}{% if banner_heading == blank %} hidden{% endif %}>{{ banner_heading | escape }}</h3>
+              <div class="cb2__sub cb2__rt"{% if bs.subheading == blank %} hidden{% endif %}>{{ bs.subheading }}</div>
+            </div>
           </{{ tag }}>
         </li>
         {%- endif -%}
+        {%- endif -%}
       {%- endfor -%}
     </ul>
-    {%- else -%}
-      {%- if request.design_mode -%}<p class="cb__empty">Add a Banner block to show your first banner.</p>{%- endif -%}
+    {%- elsif request.design_mode -%}
+      <p class="cb2__empty">Add a Banner block to show your first banner.</p>
     {%- endif -%}
   </div>
 </div>
-
 </template>
 
 <schema>
@@ -1548,7 +1264,13 @@
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "select",
@@ -1575,9 +1297,19 @@
         ]
       },
       {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove the theme's space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
         "type": "select",
         "id": "layout",
-        "label": "Banners per row on desktop",
+        "label": "Banners per row",
         "default": "grid_2",
         "options": [
           {
@@ -1595,22 +1327,6 @@
         ]
       },
       {
-        "type": "select",
-        "id": "mobile_layout",
-        "label": "Banners per row on phones",
-        "default": "stack",
-        "options": [
-          {
-            "value": "stack",
-            "label": "1 (stacked)"
-          },
-          {
-            "value": "grid_2",
-            "label": "2"
-          }
-        ]
-      },
-      {
         "type": "range",
         "id": "gap",
         "label": "Gap between banners",
@@ -1623,7 +1339,7 @@
       {
         "type": "select",
         "id": "aspect_ratio_desktop",
-        "label": "Banner shape on desktop",
+        "label": "Banner shape",
         "default": "21 / 9",
         "options": [
           {
@@ -1654,32 +1370,8 @@
       },
       {
         "type": "select",
-        "id": "aspect_ratio_mobile",
-        "label": "Banner shape on phones",
-        "default": "16 / 9",
-        "options": [
-          {
-            "value": "16 / 9",
-            "label": "Wide (16:9)"
-          },
-          {
-            "value": "1 / 1",
-            "label": "Square (1:1)"
-          },
-          {
-            "value": "4 / 5",
-            "label": "Portrait (4:5)"
-          },
-          {
-            "value": "3 / 4",
-            "label": "Tall (3:4)"
-          }
-        ]
-      },
-      {
-        "type": "select",
         "id": "header_alignment",
-        "label": "Section heading alignment",
+        "label": "Heading alignment",
         "info": "For the optional Heading and Subheading blocks.",
         "default": "center",
         "options": [
@@ -1694,13 +1386,9 @@
         ]
       },
       {
-        "type": "header",
-        "content": "Banner text"
-      },
-      {
         "type": "select",
         "id": "text_position",
-        "label": "Text position on the banner",
+        "label": "Text position",
         "default": "center",
         "options": [
           {
@@ -1728,7 +1416,7 @@
       {
         "type": "select",
         "id": "sub_visibility",
-        "label": "Show the line under the title",
+        "label": "Line under the title",
         "info": "Phones and tablets always show it, as they have no hover.",
         "default": "hover",
         "options": [
@@ -1743,10 +1431,146 @@
         ]
       },
       {
+        "type": "header",
+        "content": "Images"
+      },
+      {
+        "type": "select",
+        "id": "corner_style",
+        "label": "Corners",
+        "info": "Follow theme uses the picture corners in Theme settings. Custom uses the slider below.",
+        "default": "custom",
+        "options": [
+          {
+            "value": "theme",
+            "label": "Theme"
+          },
+          {
+            "value": "custom",
+            "label": "Custom"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "border_radius",
+        "visible_if": "{{ section.settings.corner_style == 'custom' }}",
+        "label": "Corner radius",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "image_base_scale",
+        "label": "Image zoom",
+        "min": 100,
+        "max": 130,
+        "step": 1,
+        "unit": "%",
+        "default": 100
+      },
+      {
+        "type": "image_picker",
+        "id": "placeholder_url",
+        "label": "Image for banners without one",
+        "info": "Used when a banner has no image and its collection has none either."
+      },
+      {
+        "type": "header",
+        "content": "Appearance"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_styling",
+        "label": "Enable custom styling",
+        "info": "Off: colours and title sizes follow the colour scheme and Theme settings.",
+        "default": false
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Section background",
+        "info": "Leave empty to use the colour scheme.",
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
+      },
+      {
+        "type": "color",
+        "id": "heading_color",
+        "label": "Title colour",
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
+      },
+      {
+        "type": "color",
+        "id": "sub_color",
+        "label": "Line colour",
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
+      },
+      {
+        "type": "color",
+        "id": "underline_color",
+        "label": "Underline colour",
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
+      },
+      {
+        "type": "color",
+        "id": "overlay_color",
+        "label": "Overlay colour",
+        "info": "Tints the photo so the title reads. Leave empty for black.",
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
+      },
+      {
+        "type": "color",
+        "id": "image_bg",
+        "label": "Banner background",
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
+      },
+      {
+        "type": "range",
+        "id": "overlay_opacity",
+        "label": "Overlay strength",
+        "min": 0,
+        "max": 80,
+        "step": 1,
+        "unit": "%",
+        "default": 25
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "select",
+        "id": "title_style",
+        "label": "Title size",
+        "default": "lg",
+        "options": [
+          {
+            "value": "xl",
+            "label": "Extra large"
+          },
+          {
+            "value": "lg",
+            "label": "Large"
+          },
+          {
+            "value": "md",
+            "label": "Medium"
+          },
+          {
+            "value": "sm",
+            "label": "Small"
+          }
+        ],
+        "visible_if": "{{ section.settings.enable_custom_styling == false }}"
+      },
+      {
         "type": "select",
         "id": "heading_style",
         "label": "Title text style",
-        "info": "Font, size and weight come from Theme settings > Typography. Custom sizes below replace the size and weight when turned on.",
+        "info": "Legacy: replaced by Title size.",
         "default": "h2",
         "options": [
           {
@@ -1765,12 +1589,13 @@
             "value": "h4",
             "label": "Heading 4"
           }
-        ]
+        ],
+        "hidden": true
       },
       {
         "type": "select",
         "id": "sub_style",
-        "label": "Line text style",
+        "label": "Line size",
         "info": "Font and size come from Theme settings > Typography.",
         "default": "body",
         "options": [
@@ -1786,7 +1611,40 @@
             "value": "body_small",
             "label": "Body small"
           }
-        ]
+        ],
+        "visible_if": "{{ section.settings.enable_custom_styling == false }}"
+      },
+      {
+        "type": "range",
+        "id": "heading_size_desktop",
+        "label": "Title size (desktop)",
+        "min": 18,
+        "max": 80,
+        "step": 1,
+        "unit": "px",
+        "default": 42,
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
+      },
+      {
+        "type": "range",
+        "id": "heading_weight",
+        "label": "Title weight",
+        "min": 300,
+        "max": 900,
+        "step": 100,
+        "default": 700,
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
+      },
+      {
+        "type": "range",
+        "id": "sub_size",
+        "label": "Line size",
+        "min": 11,
+        "max": 22,
+        "step": 1,
+        "unit": "px",
+        "default": 14,
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
       },
       {
         "type": "checkbox",
@@ -1826,115 +1684,28 @@
         ]
       },
       {
-        "type": "header",
-        "content": "Colours"
-      },
-      {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
-      },
-      {
-        "type": "color",
-        "id": "overlay_color",
-        "label": "Overlay colour",
-        "info": "Tints the photo so the title reads. Leave empty for black."
-      },
-      {
-        "type": "range",
-        "id": "overlay_opacity",
-        "label": "Overlay strength",
-        "min": 0,
-        "max": 80,
-        "step": 1,
-        "unit": "%",
-        "default": 25
-      },
-      {
         "type": "checkbox",
-        "id": "enable_custom_styling",
-        "label": "Use custom colours and type",
-        "info": "Off: colours follow the colour scheme and titles follow Theme settings > Typography, in white over the photo. On: the colour, size and weight controls below take over.",
+        "id": "enable_custom_fonts",
+        "label": "Enable custom fonts",
         "default": false
       },
       {
-        "type": "color",
-        "id": "heading_color",
-        "label": "Banner title colour",
-        "visible_if": "{{ section.settings.enable_custom_styling }}"
+        "type": "font_picker",
+        "id": "heading_font",
+        "label": "Heading font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
       },
       {
-        "type": "color",
-        "id": "sub_color",
-        "label": "Banner line colour",
-        "visible_if": "{{ section.settings.enable_custom_styling }}"
-      },
-      {
-        "type": "range",
-        "id": "heading_size_desktop",
-        "label": "Banner title size (desktop)",
-        "min": 18,
-        "max": 80,
-        "step": 1,
-        "unit": "px",
-        "default": 42,
-        "visible_if": "{{ section.settings.enable_custom_styling }}"
-      },
-      {
-        "type": "range",
-        "id": "heading_size_mobile",
-        "label": "Banner title size (phones)",
-        "min": 14,
-        "max": 56,
-        "step": 1,
-        "unit": "px",
-        "default": 28,
-        "visible_if": "{{ section.settings.enable_custom_styling }}"
-      },
-      {
-        "type": "range",
-        "id": "heading_weight",
-        "label": "Banner title weight",
-        "min": 300,
-        "max": 900,
-        "step": 100,
-        "default": 700,
-        "visible_if": "{{ section.settings.enable_custom_styling }}"
-      },
-      {
-        "type": "range",
-        "id": "sub_size",
-        "label": "Banner line size",
-        "min": 11,
-        "max": 22,
-        "step": 1,
-        "unit": "px",
-        "default": 14,
-        "visible_if": "{{ section.settings.enable_custom_styling }}"
-      },
-      {
-        "type": "color",
-        "id": "underline_color",
-        "label": "Underline colour",
-        "visible_if": "{{ section.settings.enable_custom_styling }}"
-      },
-      {
-        "type": "color",
-        "id": "image_bg",
-        "label": "Colour behind a banner with no image",
-        "visible_if": "{{ section.settings.enable_custom_styling }}"
-      },
-      {
-        "type": "color",
-        "id": "section_bg",
-        "label": "Section background",
-        "info": "Leave empty to use the colour scheme.",
-        "visible_if": "{{ section.settings.enable_custom_styling }}"
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Body font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
       },
       {
         "type": "header",
-        "content": "Hover effect"
+        "content": "Animation"
       },
       {
         "type": "range",
@@ -1979,7 +1750,7 @@
       {
         "type": "range",
         "id": "underline_offset",
-        "label": "Underline distance from title",
+        "label": "Underline distance",
         "min": 0,
         "max": 20,
         "step": 1,
@@ -2018,61 +1789,7 @@
       },
       {
         "type": "header",
-        "content": "Images and corners"
-      },
-      {
-        "type": "select",
-        "id": "corner_style",
-        "label": "Banner corners",
-        "info": "Follow theme uses the picture corners in Theme settings. Custom uses the slider below.",
-        "default": "custom",
-        "options": [
-          {
-            "value": "theme",
-            "label": "Follow theme"
-          },
-          {
-            "value": "custom",
-            "label": "Custom"
-          }
-        ]
-      },
-      {
-        "type": "range",
-        "id": "border_radius",
-        "visible_if": "{{ section.settings.corner_style == 'custom' }}",
-        "label": "Corner radius",
-        "min": 0,
-        "max": 40,
-        "step": 1,
-        "unit": "px",
-        "default": 0
-      },
-      {
-        "type": "range",
-        "id": "image_base_scale",
-        "label": "Image zoom",
-        "min": 100,
-        "max": 130,
-        "step": 1,
-        "unit": "%",
-        "default": 100
-      },
-      {
-        "type": "image_picker",
-        "id": "placeholder_url",
-        "label": "Image for banners without one",
-        "info": "Used when a banner has no image and its collection has none either."
-      },
-      {
-        "type": "header",
-        "content": "Spacing"
-      },
-      {
-        "type": "checkbox",
-        "id": "reset_spacing",
-        "label": "Remove the theme's space between sections",
-        "default": true
+        "content": "Desktop spacing"
       },
       {
         "type": "range",
@@ -2097,7 +1814,7 @@
       {
         "type": "range",
         "id": "side_padding_desktop",
-        "label": "Side padding (desktop)",
+        "label": "Side padding",
         "min": 0,
         "max": 80,
         "step": 2,
@@ -2105,9 +1822,64 @@
         "default": 0
       },
       {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "select",
+        "id": "mobile_layout",
+        "label": "Banners per row on phones",
+        "default": "stack",
+        "options": [
+          {
+            "value": "stack",
+            "label": "One"
+          },
+          {
+            "value": "grid_2",
+            "label": "Two"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "aspect_ratio_mobile",
+        "label": "Banner shape on phones",
+        "default": "16 / 9",
+        "options": [
+          {
+            "value": "16 / 9",
+            "label": "Wide (16:9)"
+          },
+          {
+            "value": "1 / 1",
+            "label": "Square (1:1)"
+          },
+          {
+            "value": "4 / 5",
+            "label": "Portrait (4:5)"
+          },
+          {
+            "value": "3 / 4",
+            "label": "Tall (3:4)"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "heading_size_mobile",
+        "label": "Title size on phones",
+        "min": 14,
+        "max": 56,
+        "step": 1,
+        "unit": "px",
+        "default": 28,
+        "visible_if": "{{ section.settings.enable_custom_styling }}"
+      },
+      {
         "type": "range",
         "id": "side_padding_mobile",
-        "label": "Side padding (phones)",
+        "label": "Side padding on phones",
         "min": 0,
         "max": 40,
         "step": 2,
@@ -2129,9 +1901,30 @@
           },
           {
             "type": "select",
+            "id": "size_style",
+            "label": "Heading size",
+            "default": "md",
+            "options": [
+              {
+                "value": "lg",
+                "label": "Large"
+              },
+              {
+                "value": "md",
+                "label": "Medium"
+              },
+              {
+                "value": "sm",
+                "label": "Small"
+              }
+            ],
+            "visible_if": "{{ block.settings.custom_style == false }}"
+          },
+          {
+            "type": "select",
             "id": "heading_size",
             "label": "Theme text style",
-            "info": "Follows Theme settings > Typography.",
+            "info": "Legacy: replaced by Heading size.",
             "default": "h2",
             "options": [
               {
@@ -2147,7 +1940,7 @@
                 "label": "Heading 3"
               }
             ],
-            "visible_if": "{{ block.settings.custom_style == false }}"
+            "hidden": true
           },
           {
             "type": "header",
@@ -2156,7 +1949,7 @@
           {
             "type": "checkbox",
             "id": "custom_style",
-            "label": "Use custom style",
+            "label": "Enable custom styling",
             "info": "Off: colour, size and weight follow the colour scheme and Theme settings > Typography. On: the controls below are used.",
             "default": false
           },
@@ -2257,7 +2050,7 @@
           {
             "type": "select",
             "id": "text_size",
-            "label": "Theme text style",
+            "label": "Text size",
             "info": "Follows Theme settings > Typography.",
             "default": "body",
             "options": [
@@ -2283,7 +2076,7 @@
           {
             "type": "checkbox",
             "id": "custom_style",
-            "label": "Use custom style",
+            "label": "Enable custom styling",
             "info": "Off: colour, size and weight follow the colour scheme and Theme settings > Typography. On: the controls below are used.",
             "default": false
           },
@@ -2379,6 +2172,12 @@
             "content": "Content"
           },
           {
+            "type": "collection",
+            "id": "collection",
+            "label": "Collection",
+            "info": "Its title, picture and link are used when the fields below are empty."
+          },
+          {
             "type": "text",
             "id": "heading",
             "label": "Title",
@@ -2388,12 +2187,6 @@
             "type": "richtext",
             "id": "subheading",
             "label": "Line under the title"
-          },
-          {
-            "type": "collection",
-            "id": "collection",
-            "label": "Collection",
-            "info": "Links the banner and fills in its image and title when those are empty."
           },
           {
             "type": "url",
@@ -2423,7 +2216,7 @@
           {
             "type": "checkbox",
             "id": "custom_style",
-            "label": "Use custom style for this banner",
+            "label": "Enable custom styling",
             "info": "Off: this banner follows the section's colours and overlay. On: the controls below are used.",
             "default": false
           },
@@ -2464,6 +2257,12 @@
         "name": "Category Banners 2",
         "category": "Collections",
         "blocks": [
+          {
+            "type": "heading"
+          },
+          {
+            "type": "subheading"
+          },
           {
             "type": "banner",
             "settings": {

@@ -1,10 +1,21 @@
 <template compat="shopify">
 {% render 'theme-type' %}
+{%- comment -%}
+  Materia Themes. Benefits Tabs: an optional top image, heading and
+  subheading, a grid of benefit cards that open to show a short text, and an
+  optional button. All of it is blocks. Colours follow the colour scheme
+  until Enable custom styling is on (the section's and each block's own);
+  fonts follow the theme until Use custom fonts is on; the button follows
+  Theme settings > Buttons. The cards are <details>, so they open without a
+  script; live-features-a.js animates them and paints builder edits live.
+{%- endcomment -%}
 {%- liquid
-  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+  assign st = section.settings
+  assign scheme = st.color_scheme.id | default: st.color_scheme | default: 'default-color-scheme'
+  assign own = st.enable_custom_style
+  assign icon_names = 'truck,shipping,shield,lock,heart,star,check,headphones,envelope,chat,tag,gift,globe,leaf,award,clock,card,wallet,lightning,recycle,sparkle,box,refresh,user,calendar,handshake,gem,organic,fire,crown' | split: ','
+  assign first_tab = true
 -%}
-{%- assign fb_accessibility_benefit = 'accessibility.benefit' | t -%}
-{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
 {%- if section.settings.reveal == false -%}<span data-ti-no-reveal hidden></span>{%- endif -%}
 {%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' and section.settings.reveal != false -%}
 <style>
@@ -21,442 +32,107 @@
   })();
 {% comment %}{% endcomment %}</script>
 {%- endif -%}
+{%- if st.reset_spacing -%}
 <style data-rs-bulletproof>
-  {%- if section.settings.reset_spacing -%}
-    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
-    #shopify-section-{{ section.id }},
-    #shopify-section-{{ section.id }} > .section,
-    #shopify-section-{{ section.id }} > section,
-    #shopify-section-{{ section.id }} > div,
-    #shopify-section-{{ section.id }} > div > .section {
-      margin-top: 0 !important;
-      margin-bottom: 0 !important;
-    }
-    #shopify-section-{{ section.id }} + .shopify-section,
-    #shopify-section-{{ section.id }} + section,
-    .shopify-section + #shopify-section-{{ section.id }} {
-      margin-top: 0 !important;
-    }
-  {%- endif -%}
+  #shopify-section-{{ section.id }}, #shopify-section-{{ section.id }} > section { margin-top: 0 !important; margin-bottom: 0 !important; }
+  #shopify-section-{{ section.id }} + .shopify-section, .shopify-section + #shopify-section-{{ section.id }} { margin-top: 0 !important; }
 {% comment %}{% endcomment %}</style>
-{%- comment -%}
-  Materia Themes — Benefits Tabs
-  Row of expand/collapse benefit cards using <details> with a smooth height
-  animation (grid-template-rows trick + cubic-bezier ease). Heading, subheading,
-  optional top-icon, tabs, and CTA button are all blocks for full reorderability.
-{%- endcomment -%}
-
-{%- liquid
-  assign st = section.settings
-  assign sid = section.id
-  assign cols_desktop = st.cols_desktop | default: 4
-  assign cols_mobile = st.cols_mobile | default: '1'
-  assign open_default = st.open_first_by_default
--%}
-
+{%- endif -%}
+{% render 'features-a-root', section: section, part: 'css' %}
+{% render 'features-a-root', section: section, part: 'fonts' %}
 <style>
-  /* Section isolation */
-  #shopify-section-{{ sid }} {
-    isolation: isolate;
-    position: relative;
-  }
-  :where(#shopify-section-{{ sid }}) {
-    font-family: var(--body-font, inherit);
-  }
-  :where(#shopify-section-{{ sid }}) :is(h1, h2, h3, h4, h5, h6) {
-    font-family: var(--heading-font, inherit);
-  }
-  :where(#shopify-section-{{ sid }}) :where(button, input, textarea, select, optgroup) {
-    font-family: inherit;
-  }
-  #shopify-section-{{ sid }} *,
-  #shopify-section-{{ sid }} *:before,
-  #shopify-section-{{ sid }} *:after {
-    box-sizing: border-box;
-  }
-
-  /* Margins + reset */
-  #shopify-section-{{ sid }} {
-    margin-top: {{ st.section_margin_top_mobile | default: 0 }}px;
-    margin-bottom: {{ st.section_margin_bottom_mobile | default: 0 }}px;
-  }
+  :is(#_, .btab) .btab__header { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--btab-hgap); margin-bottom: var(--btab-to-tabs); }
+  :is(#_, .btab) .btab__header:not(:has(> :not([hidden]))) { display: none; }
+  :is(#_, .btab) .btab__top-icon { width: var(--btab-top); height: var(--btab-top); object-fit: contain; }
+  :is(#_, .btab) .btab__top-icon.is-empty { display: none; }
+  :is(#_, .btab) .btab__heading { margin: 0; font-size: var(--btab-h-m); line-height: 1.15; color: var(--btab-h-color); }
+  :is(#_, .btab) .btab__heading[data-own-weight] { font-weight: var(--btab-h-w); }
+  :is(#_, .btab) .btab__sub { margin: 0; font-size: var(--btab-s-m); line-height: 1.55; max-width: 720px; color: var(--btab-s-color); }
+  :is(#_, .btab) .btab__list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(var(--btab-cols-m), minmax(0, 1fr)); gap: var(--btab-gap-m); align-items: start; }
+  :is(#_, .btab) .btab__item { background: var(--btab-bg); border: var(--btab-bw) solid var(--btab-border); border-radius: var(--btab-radius); overflow: hidden; transition: box-shadow .45s cubic-bezier(.22, 1, .36, 1); }
+  :is(#_, .btab) .btab__item[open] { box-shadow: 0 12px 28px -14px rgba(0, 0, 0, .14); }
+  :is(#_, .btab) .btab__item summary { list-style: none; cursor: pointer; padding: var(--btab-pad); display: flex; align-items: center; gap: 12px; min-height: 44px; -webkit-tap-highlight-color: transparent; }
+  :is(#_, .btab) .btab__item summary::-webkit-details-marker { display: none; }
+  :is(#_, .btab) .btab__item summary:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; border-radius: var(--btab-radius); }
+  :is(#_, .btab) .btab__icon { flex-shrink: 0; width: var(--btab-box); height: var(--btab-box); border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: var(--btab-icon-bg); color: var(--btab-icon); }
+  :is(#_, .btab) .btab__icon :is(svg, img) { width: var(--btab-icon-size); height: var(--btab-icon-size); object-fit: contain; display: block; }
+  :is(#_, .btab) .btab__title { margin: 0; flex: 1; font-size: var(--btab-title-size); line-height: 1.25; color: var(--btab-title); }
+  :is(#_, .btab) .btab__chev { flex-shrink: 0; width: 24px; height: 24px; display: inline-flex; color: var(--btab-chev); transition: transform .45s cubic-bezier(.34, 1.16, .64, 1); }
+  :is(#_, .btab) .btab__item[open]:not([data-closing]) .btab__chev { transform: rotate(45deg); }
+  :is(#_, .btab) .btab__chev svg { width: 100%; height: 100%; }
+  :is(#_, .btab) .btab__panel { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .45s cubic-bezier(.32, .72, 0, 1); }
+  :is(#_, .btab) .btab__item:is([data-closing], [data-opening]) .btab__panel { grid-template-rows: 0fr; }
+  :is(#_, .btab) .btab__panel > div { overflow: hidden; min-height: 0; }
+  :is(#_, .btab) .btab__desc { padding: 0 var(--btab-pad) var(--btab-pad); margin: 0; line-height: 1.55; font-size: var(--btab-desc-size); color: var(--btab-desc); }
+  :is(#_, .btab) .btab__cta-wrap { margin-top: var(--btab-to-cta); text-align: center; }
   @media (min-width: 768px) {
-    #shopify-section-{{ sid }} {
-      margin-top: {{ st.section_margin_top_desktop | default: 0 }}px;
-      margin-bottom: {{ st.section_margin_bottom_desktop | default: 0 }}px;
-    }
+    :is(#_, .btab) .btab__heading { font-size: var(--btab-h-d); }
+    :is(#_, .btab) .btab__sub { font-size: var(--btab-s-d); }
+    :is(#_, .btab) .btab__list { grid-template-columns: repeat(var(--btab-cols-d), minmax(0, 1fr)); gap: var(--btab-gap-d); }
   }
-  {%- if st.reset_spacing -%}
-    #shopify-section-{{ sid }} { margin-top: 0 !important; margin-bottom: 0 !important; }
-    #shopify-section-{{ sid }} + .shopify-section { margin-top: 0 !important; }
-  {%- endif -%}
-
-  /* Outer */
-  #shopify-section-{{ sid }} .btab {
-    background-color: {% render 'scheme-color', color: st.section_bg, fallback: 'var(--color-background)' %} !important;
-    padding-top: {{ st.padding_top_mobile | default: 56 }}px;
-    padding-bottom: {{ st.padding_bottom_mobile | default: 56 }}px;
-  }
-  @media (min-width: 768px) {
-    #shopify-section-{{ sid }} .btab {
-      padding-top: {{ st.padding_top_desktop | default: 88 }}px;
-      padding-bottom: {{ st.padding_bottom_desktop | default: 88 }}px;
-    }
-  }
-
-  /* Section width */
-  {%- case st.section_width -%}
-    {%- when 'container' -%}
-      #shopify-section-{{ sid }} .btab__inner { max-width: calc(var(--page-width, 1300px) + 3rem); margin-inline: auto; padding-inline: 1.5rem; }
-    {%- when 'fluid_container' -%}
-      #shopify-section-{{ sid }} .btab__inner { max-width: calc(var(--fluid-container-width, 1500px) + 3rem); margin-inline: auto; padding-inline: 1.5rem; }
-    {%- else -%}
-      #shopify-section-{{ sid }} .btab__inner { padding-inline: 1.5rem; }
-  {%- endcase -%}
-
-  /* Header */
-  #shopify-section-{{ sid }} .btab__header {
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: {{ st.gap_header_blocks | default: 14 }}px;
-    margin-bottom: {{ st.gap_header_to_tabs | default: 32 }}px;
-  }
-  #shopify-section-{{ sid }} .btab__top-icon {
-    object-fit: contain;
-  }
-  #shopify-section-{{ sid }} .btab__heading { margin: 0; line-height: 1.15; }
-  #shopify-section-{{ sid }} .btab__sub { margin: 0; line-height: 1.55; max-width: 720px; }
-
-  /* Tabs grid */
-  #shopify-section-{{ sid }} .btab__list {
-    display: grid;
-    grid-template-columns: repeat({{ cols_mobile }}, minmax(0, 1fr));
-    gap: {{ st.tab_gap | default: 16 }}px;
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-  @media (min-width: 768px) {
-    #shopify-section-{{ sid }} .btab__list {
-      grid-template-columns: repeat({{ cols_desktop }}, minmax(0, 1fr));
-      gap: {{ st.tab_gap_desktop | default: 20 }}px;
-    }
-  }
-
-  /* Tab card — JS-controlled <details> for guaranteed smooth open AND close
-     animations across browsers. The native `details` element toggles `open`
-     instantly which can skip the closing transition; our JS animates first,
-     then commits the state. */
-  #shopify-section-{{ sid }} .btab__item {
-    background-color: {% render 'scheme-color', color: st.tab_bg, fallback: 'var(--color-background)' %} !important;
-    border: {{ st.tab_border_width | default: 0 }}px solid {{ st.tab_border_color | default: 'rgba(0,0,0,0.08)' }};
-    border-radius: {{ st.tab_radius | default: 14 }}px;
-    overflow: hidden;
-    transition: box-shadow .55s cubic-bezier(0.22, 1, 0.36, 1), background-color .35s ease;
-    will-change: box-shadow;
-  }
-  #shopify-section-{{ sid }} .btab__item[open] {
-    box-shadow: 0 12px 28px -14px rgba(0,0,0,.14);
-  }
-  #shopify-section-{{ sid }} .btab__item summary {
-    list-style: none;
-    cursor: pointer;
-    padding: {{ st.tab_padding | default: 18 }}px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
-  }
-  #shopify-section-{{ sid }} .btab__item summary::-webkit-details-marker,
-  #shopify-section-{{ sid }} .btab__item summary::marker { display: none; content: ''; }
-
-  #shopify-section-{{ sid }} .btab__icon {
-    flex-shrink: 0;
-    width: {{ st.icon_box_size | default: 40 }}px;
-    height: {{ st.icon_box_size | default: 40 }}px;
-    border-radius: 999px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-  #shopify-section-{{ sid }} .btab__icon svg,
-  #shopify-section-{{ sid }} .btab__icon img {
-    width: {{ st.icon_size | default: 22 }}px;
-    height: {{ st.icon_size | default: 22 }}px;
-  }
-
-  #shopify-section-{{ sid }} .btab__title {
-    margin: 0;
-    flex: 1;
-    line-height: 1.25;
-    font-size: {{ st.tab_title_size | default: 16 }}px;
-    font-weight: 700;
-  }
-
-  #shopify-section-{{ sid }} .btab__chev {
-    flex-shrink: 0;
-    width: 24px; height: 24px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: {% render 'scheme-color', color: st.tab_chev_color, fallback: 'var(--color-primary)' %};
-    transition: transform .55s cubic-bezier(0.34, 1.16, 0.64, 1);
-    will-change: transform;
-  }
-  #shopify-section-{{ sid }} .btab__item[open] .btab__chev {
-    transform: rotate(45deg);
-  }
-  #shopify-section-{{ sid }} .btab__chev svg { width: 100%; height: 100%; }
-
-  /* Smooth expand/collapse — JS sets a real pixel max-height for guaranteed
-     smooth motion on open AND close (the grid-template-rows trick is fine on
-     open, but is unreliable on close in Safari/Chrome with <details>). */
-  #shopify-section-{{ sid }} .btab__panel {
-    overflow: hidden;
-    max-height: 0;
-    will-change: max-height;
-    transition: max-height .55s cubic-bezier(0.32, 0.72, 0, 1);
-  }
-  #shopify-section-{{ sid }} .btab__item.is-animating .btab__panel,
-  #shopify-section-{{ sid }} .btab__item[open] .btab__panel {
-    /* Set inline style by JS during transitions; default open shows content. */
-  }
-  #shopify-section-{{ sid }} .btab__panel > div {
-    overflow: hidden;
-    min-height: 0;
-    opacity: 0;
-    transform: translateY(-4px);
-    transition: opacity .35s cubic-bezier(0.32, 0.72, 0, 1), transform .35s cubic-bezier(0.32, 0.72, 0, 1);
-  }
-  #shopify-section-{{ sid }} .btab__item[open] .btab__panel > div {
-    opacity: 1;
-    transform: translateY(0);
-    transition-delay: .18s;
-  }
-  #shopify-section-{{ sid }} .btab__desc {
-    padding: 0 {{ st.tab_padding | default: 18 }}px {{ st.tab_padding | default: 18 }}px;
-    margin: 0;
-    line-height: 1.55;
-    font-size: {{ st.tab_desc_size | default: 14 }}px;
-    color: {% render 'scheme-color', color: st.tab_desc_color, fallback: 'var(--color-text)' %} !important;
-  }
-
-  /* CTA block button */
-  #shopify-section-{{ sid }} .btab__cta-wrap {
-    margin-top: {{ st.gap_tabs_to_cta | default: 32 }}px;
-    text-align: center;
-  }
-  #shopify-section-{{ sid }} .btab__cta {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    text-decoration: none;
-    border: 0;
-    cursor: pointer;
-    font-weight: 700;
-    letter-spacing: .5px;
-    transition: transform .15s ease, background-color .25s ease, color .25s ease;
-  }
-  #shopify-section-{{ sid }} .btab__cta:hover { transform: translateY(-1px); }
-
-  /* Reduced-motion */
   @media (prefers-reduced-motion: reduce) {
-    #shopify-section-{{ sid }} .btab__panel,
-    #shopify-section-{{ sid }} .btab__panel > div,
-    #shopify-section-{{ sid }} .btab__chev,
-    #shopify-section-{{ sid }} .btab__item {
-      transition: none;
-    }
+    :is(#_, .btab) :is(.btab__panel, .btab__chev, .btab__item) { transition: none !important; }
   }
 {% comment %}{% endcomment %}</style>
-
-<section class="btab-wrap color-{{ color_scheme }} gradient {{ section.settings.section_width }}">
-  <div class="btab">
-    <div class="btab__inner">
-      <div class="btab__header">
-        {%- for block in section.blocks -%}
-          {%- case block.type -%}
-            {%- when 'top_icon' -%}
-              {%- if block.settings.image -%}
-                <img class="btab__top-icon"
-                     style="width:{{ block.settings.size | default: 64 }}px;height:{{ block.settings.size | default: 64 }}px;"
-                     src="{{ block.settings.image | image_url: width: 200 }}"
-                     alt=""
-                     loading="lazy"
-                     {{ block.shopify_attributes }}>
-              {%- endif -%}
-            {%- when 'heading' -%}
-              {%- if block.settings.text != blank -%}
-                <{{ block.settings.tag | default: 'h2' }}
-                  id="block-{{ block.id }}"
-                  class="btab__heading"
-                  style="color: {{ block.settings.color | default: '#0F0F0F' }} !important; font-weight: {{ block.settings.weight | default: 700 }};"
-                  {{ block.shopify_attributes }}>
-                  {{ block.settings.text | escape }}
-                </{{ block.settings.tag | default: 'h2' }}>
-                <style>
-                  #block-{{ block.id }} { font-size: {{ block.settings.size_mobile | default: 32 }}px; }
-                  @media (min-width: 768px) { #block-{{ block.id }} { font-size: {{ block.settings.size_desktop | default: 44 }}px; } }
-{% comment %}{% endcomment %}                </style>
-              {%- endif -%}
-            {%- when 'subheading' -%}
-              {%- if block.settings.text != blank -%}
-                <p id="block-{{ block.id }}"
-                   class="btab__sub"
-                   style="color: {{ block.settings.color | default: '#555555' }} !important;"
-                   {{ block.shopify_attributes }}>
-                  {{ block.settings.text | escape }}
-                </p>
-                <style>
-                  #block-{{ block.id }} { font-size: {{ block.settings.size_mobile | default: 15 }}px; }
-                  @media (min-width: 768px) { #block-{{ block.id }} { font-size: {{ block.settings.size_desktop | default: 17 }}px; } }
-{% comment %}{% endcomment %}                </style>
-              {%- endif -%}
-          {%- endcase -%}
-        {%- endfor -%}
-      </div>
-
-      {%- assign tab_blocks = section.blocks | where: 'type', 'tab' -%}
-      {%- if tab_blocks.size > 0 -%}
-        <ul class="btab__list">
-          {%- for block in section.blocks -%}
-            {%- if block.type == 'tab' -%}
-              {%- assign bs = block.settings -%}
-              <li>
-                <details class="btab__item"{% if open_default and forloop.first %} open{% endif %} {{ block.shopify_attributes }}>
-                  <summary>
-                    {%- if bs.icon_source != 'none' -%}
-                      <span class="btab__icon" style="background:{{ bs.icon_box_bg | default: '#F0F0F0' }};color:{{ bs.icon_color | default: '#0F0F0F' }};">
-                        {%- case bs.icon_source -%}
-                          {%- when 'icon' -%}
-                            {%- render 'benefits-icon', icon: bs.icon, size: st.icon_size | default: 22 -%}
-                          {%- when 'image' -%}
-                            {%- if bs.image -%}<img src="{{ bs.image | image_url: width: 80 }}" alt="" loading="lazy">{%- endif -%}
-                          {%- when 'svg' -%}
-                            {%- if bs.svg_code != blank -%}{{ bs.svg_code }}{%- endif -%}
-                        {%- endcase -%}
-                      </span>
-                    {%- endif -%}
-                    <h3 class="btab__title" style="color: {{ bs.title_color | default: '#0F0F0F' }} !important;">
-                      {{ bs.title | default: fb_accessibility_benefit | escape }}
-                    </h3>
-                    <span class="btab__chev" aria-hidden="true">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="12" y1="5" x2="12" y2="19"/>
-                        <line x1="5" y1="12" x2="19" y2="12"/>
-                      </svg>
-                    </span>
-                  </summary>
-                  <div class="btab__panel">
-                    <div>
-                      {%- if bs.description != blank -%}
-                        <p class="btab__desc">{{ bs.description | escape }}</p>
-                      {%- endif -%}
-                    </div>
-                  </div>
-                </details>
-              </li>
-            {%- endif -%}
-          {%- endfor -%}
-        </ul>
-      {%- endif -%}
-
-      {%- comment -%}CTA block — rendered if user adds the cta block{%- endcomment -%}
+<section class="btab color-{{ scheme }} gradient"
+  {% render 'features-a-root', section: section, part: 'attrs', type: 'benefits-tabs', width: st.section_width, width_default: 'container' %}
+  style="{% render 'features-a-root', section: section, part: 'vars', bg: st.section_bg, pt_m: st.padding_top_mobile, pb_m: st.padding_bottom_mobile, pt_d: st.padding_top_desktop, pb_d: st.padding_bottom_desktop %}--btab-cols-d: {{ st.cols_desktop | default: 4 }};--btab-cols-m: {% if st.cols_mobile == '2' %}2{% else %}1{% endif %};--btab-gap-m: {{ st.tab_gap | default: 16 }}px;--btab-gap-d: {{ st.tab_gap_desktop | default: 20 }}px;--btab-pad: {{ st.tab_padding | default: 18 }}px;--btab-radius: {{ st.tab_radius | default: 0 }}px;--btab-bw: {{ st.tab_border_width | default: 0 }}px;--btab-title-size: {{ st.tab_title_size | default: 16 }}px;--btab-desc-size: {{ st.tab_desc_size | default: 14 }}px;--btab-box: {{ st.icon_box_size | default: 40 }}px;--btab-icon-size: {{ st.icon_size | default: 22 }}px;--btab-hgap: {{ st.gap_header_blocks | default: 14 }}px;--btab-to-tabs: {{ st.gap_header_to_tabs | default: 32 }}px;--btab-to-cta: {{ st.gap_tabs_to_cta | default: 0 }}px;--btab-bg: {% if own %}{% render 'scheme-color', color: st.tab_bg, fallback: 'color-mix(in srgb, var(--color-heading) 6%, var(--color-background))' %}{% else %}color-mix(in srgb, var(--color-heading) 6%, var(--color-background)){% endif %};--btab-border: {% if own %}{% render 'scheme-color', color: st.tab_border_color, fallback: 'var(--color-border)' %}{% else %}var(--color-border){% endif %};--btab-chev: {% if own %}{% render 'scheme-color', color: st.tab_chev_color, fallback: 'var(--color-primary)' %}{% else %}var(--color-primary){% endif %};--btab-desc: {% if own %}{% render 'scheme-color', color: st.tab_desc_color, fallback: 'var(--color-text)' %}{% else %}var(--color-text){% endif %};">
+  {%- if request.design_mode -%}{%- for n in icon_names -%}<template data-fa-icon="{{ n }}">{% render 'benefits-icon', icon: n, size: 24 %}</template>{%- endfor -%}{%- endif -%}
+  <div class="btab__inner fa-inner">
+    <div class="btab__header">
       {%- for block in section.blocks -%}
-        {%- if block.type == 'cta' and block.settings.label != blank -%}
-          {%- assign bs = block.settings -%}
-          <div class="btab__cta-wrap" {{ block.shopify_attributes }}>
-            <a class="btab__cta" data-sl-button data-button-role="primary"
-               href="{{ bs.link | default: '#' }}"
-               style="
-                 background-color: {{ bs.bg | default: '#0F0F0F' }} !important;
-                 color: {{ bs.text_color | default: '#FFFFFF' }} !important;
-                 padding: {{ bs.pad_y | default: 14 }}px {{ bs.pad_x | default: 32 }}px;
-                 border-radius: {{ bs.radius | default: 100 }}px;
-                 font-size: {{ bs.size | default: 14 }}px;
-               ">
-              {{ bs.label | escape }}
-            </a>
-            <style>
-              #shopify-section-{{ sid }} [data-cta-{{ block.id }}]:hover,
-              #shopify-section-{{ sid }} .btab__cta:hover {
-                background-color: {{ bs.bg_hover | default: '#444444' }} !important;
-                color: {{ bs.text_color_hover | default: '#FFFFFF' }} !important;
-              }
-{% comment %}{% endcomment %}            </style>
-          </div>
-        {%- endif -%}
+        {%- assign bs = block.settings -%}
+        {%- case block.type -%}
+          {%- when 'top_icon' -%}
+            <img class="btab__top-icon{% if bs.image == blank %} is-empty{% endif %}" data-fa-block="{{ block.id }}" data-fa-type="top_icon" data-fa-settings="{{ bs | json | escape }}" style="--btab-top: {{ bs.size | default: 64 }}px;" src="{% if bs.image != blank %}{{ bs.image | image_url: width: 320 }}{% else %}data:image/gif;base64,R0lGODlhAQABAAAAACw={% endif %}" alt="{{ bs.image.alt | escape }}" width="{{ bs.size | default: 64 }}" height="{{ bs.size | default: 64 }}" loading="lazy" decoding="async" {{ block.shopify_attributes }}>
+          {%- when 'heading' -%}
+            <h2 class="btab__heading fa-h" data-fa-block="{{ block.id }}" data-fa-type="heading" data-fa-settings="{{ bs | json | escape }}"{% if bs.enable_custom_style %} data-own-weight{% endif %} style="--btab-h-d: {{ bs.size_desktop | default: 44 }}px;--btab-h-m: {{ bs.size_mobile | default: 32 }}px;--btab-h-w: {{ bs.weight | default: 700 }};--btab-h-color: {% if bs.enable_custom_style %}{% render 'scheme-color', color: bs.color, fallback: 'var(--color-heading)' %}{% else %}var(--color-heading){% endif %};"{% if bs.text == blank %} hidden{% endif %} {{ block.shopify_attributes }}>{{ bs.text }}</h2>
+          {%- when 'subheading' -%}
+            <p class="btab__sub fa-t" data-fa-block="{{ block.id }}" data-fa-type="subheading" data-fa-settings="{{ bs | json | escape }}" style="--btab-s-d: {{ bs.size_desktop | default: 17 }}px;--btab-s-m: {{ bs.size_mobile | default: 15 }}px;--btab-s-color: {% if bs.enable_custom_style %}{% render 'scheme-color', color: bs.color, fallback: 'var(--color-text)' %}{% else %}var(--color-text){% endif %};"{% if bs.text == blank %} hidden{% endif %} {{ block.shopify_attributes }}>{{ bs.text | escape }}</p>
+        {%- endcase -%}
       {%- endfor -%}
     </div>
+    <ul class="btab__list" role="list">
+      {%- for block in section.blocks -%}
+        {%- if block.type == 'tab' -%}
+          {%- assign bs = block.settings -%}
+          {%- assign bown = bs.enable_custom_style -%}
+          <li data-fa-block="{{ block.id }}" data-fa-type="tab" data-fa-settings="{{ bs | json | escape }}" style="--btab-icon: {% if bown %}{% render 'scheme-color', color: bs.icon_color, fallback: 'var(--color-heading)' %}{% else %}var(--color-heading){% endif %};--btab-icon-bg: {% if bown %}{% render 'scheme-color', color: bs.icon_box_bg, fallback: 'color-mix(in srgb, var(--color-heading) 8%, transparent)' %}{% else %}color-mix(in srgb, var(--color-heading) 8%, transparent){% endif %};--btab-title: {% if bown %}{% render 'scheme-color', color: bs.title_color, fallback: 'var(--color-heading)' %}{% else %}var(--color-heading){% endif %};" {{ block.shopify_attributes }}>
+            <details class="btab__item"{% if st.open_first_by_default and first_tab %} open data-first{% elsif first_tab %} data-first{% endif %}>
+              <summary>
+                <span class="btab__icon" aria-hidden="true"{% if bs.icon_source == 'none' %} hidden{% endif %}>
+                  {%- case bs.icon_source -%}
+                    {%- when 'image' -%}
+                      {%- if bs.image != blank -%}<img src="{{ bs.image | image_url: width: 120 }}" alt="" width="120" height="120" loading="lazy" decoding="async">{%- endif -%}
+                    {%- when 'svg' -%}
+                      {%- if bs.svg_code != blank -%}{{ bs.svg_code }}{%- endif -%}
+                    {%- when 'none' -%}
+                    {%- else -%}
+                      {%- render 'benefits-icon', icon: bs.icon, size: 24 -%}
+                  {%- endcase -%}
+                </span>
+                <h3 class="btab__title fa-h">{{ bs.title | escape }}</h3>
+                <span class="btab__chev" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+              </summary>
+              <div class="btab__panel"><div><p class="btab__desc fa-t"{% if bs.description == blank %} hidden{% endif %}>{{ bs.description | escape }}</p></div></div>
+            </details>
+          </li>
+          {%- assign first_tab = false -%}
+        {%- endif -%}
+      {%- endfor -%}
+    </ul>
+    {%- for block in section.blocks -%}
+      {%- if block.type == 'cta' -%}
+        {%- assign bs = block.settings -%}
+        {%- assign shape = false -%}{%- if bs.use_theme_button == false -%}{%- assign shape = true -%}{%- endif -%}
+        <div class="btab__cta-wrap" data-fa-block="{{ block.id }}" data-fa-type="cta" data-fa-settings="{{ bs | json | escape }}"{% if bs.label == blank %} hidden{% endif %} {{ block.shopify_attributes }}>
+          {%- capture attrs -%} class="btab__cta" data-fa-nolink="button" data-theme-button="{% if bs.button_style == 'secondary' %}secondary{% else %}primary{% endif %}" data-sl-button{% if shape %} data-own-shape{% endif %} style="{% if bs.enable_custom_style %}{% render 'button-overrides', bg: bs.bg, text: bs.text_color, hover_bg: bs.bg_hover, hover_text: bs.text_color_hover %}{% endif %}{% if shape %}--mb-radius: {{ bs.radius }}px;--mb-padding-y: {{ bs.pad_y }}px;--mb-padding-x: {{ bs.pad_x }}px;--mb-font-size: {{ bs.size }}px;{% endif %}"{%- endcapture -%}
+          {%- if bs.link != blank -%}<a href="{{ bs.link | url }}"{{ attrs }}>{{ bs.label | escape }}</a>{%- else -%}<button type="button"{{ attrs }}>{{ bs.label | escape }}</button>{%- endif -%}
+        </div>
+      {%- endif -%}
+    {%- endfor -%}
   </div>
 </section>
-
-<script>
-(function() {
-  var root = document.querySelector('#shopify-section-{{ sid }} .btab');
-  if (!root) return;
-  var items = root.querySelectorAll('.btab__item');
-
-  function getInner(item) { return item.querySelector('.btab__panel > div'); }
-
-  function animateOpen(item) {
-    var panel = item.querySelector('.btab__panel');
-    var inner = getInner(item);
-    if (!panel || !inner) { item.setAttribute('open',''); return; }
-    item.setAttribute('open','');
-    panel.style.maxHeight = '0px';
-    // Force reflow
-    void panel.offsetHeight;
-    var target = inner.scrollHeight;
-    panel.style.maxHeight = target + 'px';
-    var done = function() {
-      panel.style.maxHeight = 'none';
-      panel.removeEventListener('transitionend', done);
-    };
-    panel.addEventListener('transitionend', done);
-  }
-
-  function animateClose(item) {
-    var panel = item.querySelector('.btab__panel');
-    var inner = getInner(item);
-    if (!panel || !inner) { item.removeAttribute('open'); return; }
-    var current = panel.scrollHeight;
-    panel.style.maxHeight = current + 'px';
-    void panel.offsetHeight;
-    panel.style.maxHeight = '0px';
-    var done = function() {
-      item.removeAttribute('open');
-      panel.style.maxHeight = '';
-      panel.removeEventListener('transitionend', done);
-    };
-    panel.addEventListener('transitionend', done);
-  }
-
-  items.forEach(function(item) {
-    var summary = item.querySelector('summary');
-    if (!summary) return;
-    // If preset open by default, set max-height to none so layout is correct
-    if (item.hasAttribute('open')) {
-      var panel = item.querySelector('.btab__panel');
-      if (panel) panel.style.maxHeight = 'none';
-    }
-    summary.addEventListener('click', function(e) {
-      e.preventDefault();
-      if (item.hasAttribute('open')) {
-        animateClose(item);
-      } else {
-        animateOpen(item);
-      }
-    });
-  });
-})();
-{% comment %}{% endcomment %}</script>
-
-
-
 </template>
 
 <schema>
@@ -1290,12 +966,18 @@
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "select",
         "id": "section_width",
-        "label": "Section width",
+        "label": "Width",
         "default": "container",
         "options": [
           {
@@ -1313,30 +995,24 @@
         ]
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
-      },
-      {
         "type": "checkbox",
         "id": "reset_spacing",
-        "label": "Remove default space between sections",
+        "label": "Remove space around section",
         "default": true
       },
       {
         "type": "header",
-        "content": "General"
+        "content": "Content"
       },
       {
         "type": "checkbox",
         "id": "open_first_by_default",
-        "label": "Open first tab by default",
+        "label": "Open the first tab",
         "default": false
       },
       {
         "type": "header",
-        "content": "Tabs"
+        "content": "Layout"
       },
       {
         "type": "range",
@@ -1346,6 +1022,240 @@
         "max": 6,
         "step": 1,
         "default": 4
+      },
+      {
+        "type": "range",
+        "id": "tab_gap_desktop",
+        "label": "Gap between tabs (desktop)",
+        "min": 4,
+        "max": 60,
+        "step": 2,
+        "unit": "px",
+        "default": 20
+      },
+      {
+        "type": "range",
+        "id": "gap_header_blocks",
+        "label": "Gap inside the heading",
+        "min": 4,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "range",
+        "id": "gap_header_to_tabs",
+        "label": "Gap above tabs",
+        "min": 12,
+        "max": 80,
+        "step": 4,
+        "unit": "px",
+        "default": 32
+      },
+      {
+        "type": "range",
+        "id": "gap_tabs_to_cta",
+        "label": "Gap above button",
+        "min": 0,
+        "max": 80,
+        "step": 4,
+        "unit": "px",
+        "default": 32
+      },
+      {
+        "type": "header",
+        "content": "Appearance"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Enable custom styling",
+        "default": false,
+        "info": "Off: colours follow the colour scheme."
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "tab_bg",
+        "label": "Tab background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "tab_border_color",
+        "label": "Tab border",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "tab_chev_color",
+        "label": "Plus sign",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "tab_desc_color",
+        "label": "Tab text",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "range",
+        "id": "tab_padding",
+        "label": "Tab padding",
+        "min": 8,
+        "max": 36,
+        "step": 2,
+        "unit": "px",
+        "default": 18
+      },
+      {
+        "type": "range",
+        "id": "tab_radius",
+        "label": "Tab corner radius",
+        "min": 0,
+        "max": 40,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "range",
+        "id": "tab_border_width",
+        "label": "Tab border width",
+        "min": 0,
+        "max": 4,
+        "step": 1,
+        "unit": "px",
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "icon_box_size",
+        "label": "Icon circle size",
+        "min": 24,
+        "max": 64,
+        "step": 2,
+        "unit": "px",
+        "default": 40
+      },
+      {
+        "type": "range",
+        "id": "icon_size",
+        "label": "Icon size",
+        "min": 12,
+        "max": 36,
+        "step": 1,
+        "unit": "px",
+        "default": 22
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Use custom fonts",
+        "default": false,
+        "info": "Off: fonts follow Theme settings > Typography."
+      },
+      {
+        "type": "font_picker",
+        "id": "heading_font",
+        "label": "Heading and title font",
+        "default": "helvetica_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Text font",
+        "default": "helvetica_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "range",
+        "id": "tab_title_size",
+        "label": "Tab title size",
+        "min": 12,
+        "max": 22,
+        "step": 1,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "tab_desc_size",
+        "label": "Tab text size",
+        "min": 11,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "header",
+        "content": "Animation"
+      },
+      {
+        "type": "checkbox",
+        "id": "reveal",
+        "label": "Reveal on scroll",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Desktop spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top_desktop",
+        "label": "Top padding",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 88
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_desktop",
+        "label": "Bottom padding",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 88
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin",
+        "min": -200,
+        "max": 200,
+        "step": 4,
+        "default": 0,
+        "visible_if": "{{ section.settings.reset_spacing == false }}"
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin",
+        "min": -200,
+        "max": 200,
+        "step": 4,
+        "default": 0,
+        "visible_if": "{{ section.settings.reset_spacing == false }}"
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
       },
       {
         "type": "select",
@@ -1375,207 +1285,8 @@
       },
       {
         "type": "range",
-        "id": "tab_gap_desktop",
-        "label": "Gap between tabs (desktop)",
-        "min": 4,
-        "max": 60,
-        "step": 2,
-        "unit": "px",
-        "default": 20
-      },
-      {
-        "type": "range",
-        "id": "tab_padding",
-        "label": "Tab inner padding",
-        "min": 8,
-        "max": 36,
-        "step": 2,
-        "unit": "px",
-        "default": 18
-      },
-      {
-        "type": "range",
-        "id": "tab_radius",
-        "label": "Tab corner radius",
-        "min": 0,
-        "max": 40,
-        "step": 1,
-        "unit": "px",
-        "default": 14
-      },
-      {
-        "type": "range",
-        "id": "tab_border_width",
-        "label": "Tab border width",
-        "min": 0,
-        "max": 4,
-        "step": 1,
-        "unit": "px",
-        "default": 0
-      },
-      {
-        "type": "color",
-        "id": "tab_border_color",
-        "label": "Tab border color"
-      },
-      {
-        "type": "range",
-        "id": "tab_title_size",
-        "label": "Title size",
-        "min": 12,
-        "max": 22,
-        "step": 1,
-        "unit": "px",
-        "default": 16
-      },
-      {
-        "type": "range",
-        "id": "tab_desc_size",
-        "label": "Description size",
-        "min": 11,
-        "max": 20,
-        "step": 1,
-        "unit": "px",
-        "default": 14
-      },
-      {
-        "type": "header",
-        "content": "Icon (per tab default fallback)"
-      },
-      {
-        "type": "range",
-        "id": "icon_box_size",
-        "label": "Icon box size",
-        "min": 24,
-        "max": 64,
-        "step": 2,
-        "unit": "px",
-        "default": 40
-      },
-      {
-        "type": "range",
-        "id": "icon_size",
-        "label": "Icon size",
-        "min": 12,
-        "max": 36,
-        "step": 1,
-        "unit": "px",
-        "default": 22
-      },
-      {
-        "type": "header",
-        "content": "Style & Colors"
-      },
-      {
-        "type": "color",
-        "id": "section_bg",
-        "label": "Section background"
-      },
-      {
-        "type": "color",
-        "id": "tab_bg",
-        "label": "Tab background"
-      },
-      {
-        "type": "color",
-        "id": "tab_chev_color",
-        "label": "Toggle (+/×) color"
-      },
-      {
-        "type": "color",
-        "id": "tab_desc_color",
-        "label": "Description color"
-      },
-      {
-        "type": "header",
-        "content": "Animation & Behavior"
-      },
-      {
-        "type": "checkbox",
-        "id": "reveal",
-        "label": "Reveal on scroll",
-        "default": true
-      },
-      {
-        "type": "header",
-        "content": "Layout & Spacing"
-      },
-      {
-        "type": "range",
-        "id": "gap_header_blocks",
-        "label": "Gap between header blocks",
-        "min": 4,
-        "max": 40,
-        "step": 2,
-        "unit": "px",
-        "default": 14
-      },
-      {
-        "type": "range",
-        "id": "gap_header_to_tabs",
-        "label": "Gap between header and tabs",
-        "min": 12,
-        "max": 80,
-        "step": 4,
-        "unit": "px",
-        "default": 32
-      },
-      {
-        "type": "range",
-        "id": "gap_tabs_to_cta",
-        "label": "Gap between tabs and CTA",
-        "min": 0,
-        "max": 80,
-        "step": 4,
-        "unit": "px",
-        "default": 32
-      },
-      {
-        "type": "range",
-        "id": "padding_top_desktop",
-        "label": "Section top padding (desktop)",
-        "min": 0,
-        "max": 200,
-        "step": 4,
-        "unit": "px",
-        "default": 88
-      },
-      {
-        "type": "range",
-        "id": "padding_bottom_desktop",
-        "label": "Section bottom padding (desktop)",
-        "min": 0,
-        "max": 200,
-        "step": 4,
-        "unit": "px",
-        "default": 88
-      },
-      {
-        "type": "range",
-        "id": "section_margin_top_desktop",
-        "label": "Top margin (desktop px)",
-        "min": -200,
-        "max": 200,
-        "step": 4,
-        "default": 0
-      },
-      {
-        "type": "range",
-        "id": "section_margin_bottom_desktop",
-        "label": "Bottom margin (desktop px)",
-        "min": -200,
-        "max": 200,
-        "step": 4,
-        "default": 0
-      },
-      {
-        "type": "header",
-        "content": "Mobile"
-      },
-      {
-        "type": "range",
         "id": "padding_top_mobile",
-        "label": "Section top padding (mobile)",
+        "label": "Top padding (mobile)",
         "min": 0,
         "max": 200,
         "step": 4,
@@ -1585,7 +1296,7 @@
       {
         "type": "range",
         "id": "padding_bottom_mobile",
-        "label": "Section bottom padding (mobile)",
+        "label": "Bottom padding (mobile)",
         "min": 0,
         "max": 200,
         "step": 4,
@@ -1595,20 +1306,22 @@
       {
         "type": "range",
         "id": "section_margin_top_mobile",
-        "label": "Top margin (mobile px)",
+        "label": "Top margin (mobile)",
         "min": -200,
         "max": 200,
         "step": 4,
-        "default": 0
+        "default": 0,
+        "visible_if": "{{ section.settings.reset_spacing == false }}"
       },
       {
         "type": "range",
         "id": "section_margin_bottom_mobile",
-        "label": "Bottom margin (mobile px)",
+        "label": "Bottom margin (mobile)",
         "min": -200,
         "max": 200,
         "step": 4,
-        "default": 0
+        "default": 0,
+        "visible_if": "{{ section.settings.reset_spacing == false }}"
       }
     ],
     "blocks": [
@@ -1620,12 +1333,12 @@
           {
             "type": "image_picker",
             "id": "image",
-            "label": "Top icon image"
+            "label": "Image"
           },
           {
             "type": "range",
             "id": "size",
-            "label": "Icon size",
+            "label": "Size",
             "min": 32,
             "max": 160,
             "step": 4,
@@ -1640,7 +1353,7 @@
         "limit": 1,
         "settings": [
           {
-            "type": "text",
+            "type": "inline_richtext",
             "id": "text",
             "label": "Heading",
             "default": "Real ingredients, nothing else"
@@ -1663,13 +1376,9 @@
                 "value": "h3",
                 "label": "H3"
               }
-            ]
-          },
-          {
-            "type": "color",
-            "id": "color",
-            "label": "Color",
-            "default": "#0F0F0F"
+            ],
+            "hidden": true,
+            "info": "Legacy: the heading is an h2."
           },
           {
             "type": "range",
@@ -1690,6 +1399,20 @@
             "step": 2,
             "unit": "px",
             "default": 32
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false,
+            "info": "Off: colour and weight follow the theme."
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Colour",
+            "default": "#0F0F0F",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           },
           {
             "type": "select",
@@ -1717,7 +1440,8 @@
                 "value": "800",
                 "label": "Extra-bold"
               }
-            ]
+            ],
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           }
         ]
       },
@@ -1730,13 +1454,7 @@
             "type": "textarea",
             "id": "text",
             "label": "Text",
-            "default": "Open any tab to see what we use — and what we leave out — for a cleaner, more honest product."
-          },
-          {
-            "type": "color",
-            "id": "color",
-            "label": "Color",
-            "default": "#555555"
+            "default": "Open any tab to see what we use and what we leave out."
           },
           {
             "type": "range",
@@ -1757,6 +1475,19 @@
             "step": 1,
             "unit": "px",
             "default": 15
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Colour",
+            "default": "#555555",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           }
         ]
       },
@@ -1766,13 +1497,21 @@
         "limit": 12,
         "settings": [
           {
-            "type": "header",
-            "content": "Visual"
+            "type": "text",
+            "id": "title",
+            "label": "Title",
+            "default": "Benefit"
+          },
+          {
+            "type": "textarea",
+            "id": "description",
+            "label": "Text shown when open",
+            "default": "A short description that appears when the merchant expands this benefit tab."
           },
           {
             "type": "select",
             "id": "icon_source",
-            "label": "Icon source",
+            "label": "Icon",
             "default": "icon",
             "options": [
               {
@@ -1796,7 +1535,7 @@
           {
             "type": "select",
             "id": "icon",
-            "label": "Icon",
+            "label": "Library icon",
             "default": "shield",
             "options": [
               {
@@ -1919,57 +1658,57 @@
                 "value": "crown",
                 "label": "Crown"
               }
-            ]
+            ],
+            "visible_if": "{{ block.settings.icon_source == 'icon' }}"
           },
           {
             "type": "image_picker",
             "id": "image",
-            "label": "Image (when source = Image)"
+            "label": "Image",
+            "visible_if": "{{ block.settings.icon_source == 'image' }}"
           },
           {
             "type": "html",
             "id": "svg_code",
-            "label": "Custom SVG (when source = Custom SVG)"
+            "label": "SVG code",
+            "visible_if": "{{ block.settings.icon_source == 'svg' }}"
+          },
+          {
+            "type": "header",
+            "content": "Style"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
           },
           {
             "type": "color",
             "id": "icon_color",
-            "label": "Icon color",
-            "default": "#0F0F0F"
+            "label": "Icon",
+            "default": "#0F0F0F",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           },
           {
             "type": "color",
             "id": "icon_box_bg",
-            "label": "Icon box background",
-            "default": "#F0F0F0"
-          },
-          {
-            "type": "header",
-            "content": "Content"
-          },
-          {
-            "type": "text",
-            "id": "title",
-            "label": "Title",
-            "default": "Benefit"
+            "label": "Icon circle",
+            "default": "#F0F0F0",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           },
           {
             "type": "color",
             "id": "title_color",
-            "label": "Title color",
-            "default": "#0F0F0F"
-          },
-          {
-            "type": "textarea",
-            "id": "description",
-            "label": "Description (shown when expanded)",
-            "default": "A short description that appears when the merchant expands this benefit tab."
+            "label": "Title",
+            "default": "#0F0F0F",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           }
         ]
       },
       {
         "type": "cta",
-        "name": "CTA button",
+        "name": "Button",
         "limit": 1,
         "settings": [
           {
@@ -1984,28 +1723,61 @@
             "label": "Button link"
           },
           {
+            "type": "select",
+            "id": "button_style",
+            "label": "Style",
+            "default": "primary",
+            "options": [
+              {
+                "value": "primary",
+                "label": "Primary"
+              },
+              {
+                "value": "secondary",
+                "label": "Secondary"
+              }
+            ]
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false,
+            "info": "Off: colours follow Theme settings > Buttons."
+          },
+          {
             "type": "color",
             "id": "bg",
             "label": "Background",
-            "default": "#0F0F0F"
+            "default": "#0F0F0F",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           },
           {
             "type": "color",
             "id": "bg_hover",
             "label": "Hover background",
-            "default": "#444444"
+            "default": "#444444",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           },
           {
             "type": "color",
             "id": "text_color",
-            "label": "Text color",
-            "default": "#FFFFFF"
+            "label": "Text",
+            "default": "#FFFFFF",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           },
           {
             "type": "color",
             "id": "text_color_hover",
-            "label": "Hover text color",
-            "default": "#FFFFFF"
+            "label": "Hover text",
+            "default": "#FFFFFF",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "checkbox",
+            "id": "use_theme_button",
+            "label": "Use theme button size and shape",
+            "default": true
           },
           {
             "type": "range",
@@ -2015,7 +1787,8 @@
             "max": 20,
             "step": 1,
             "unit": "px",
-            "default": 14
+            "default": 14,
+            "visible_if": "{{ block.settings.use_theme_button == false }}"
           },
           {
             "type": "range",
@@ -2025,7 +1798,8 @@
             "max": 60,
             "step": 1,
             "unit": "px",
-            "default": 32
+            "default": 32,
+            "visible_if": "{{ block.settings.use_theme_button == false }}"
           },
           {
             "type": "range",
@@ -2035,7 +1809,8 @@
             "max": 28,
             "step": 1,
             "unit": "px",
-            "default": 14
+            "default": 14,
+            "visible_if": "{{ block.settings.use_theme_button == false }}"
           },
           {
             "type": "range",
@@ -2045,7 +1820,8 @@
             "max": 100,
             "step": 1,
             "unit": "px",
-            "default": 100
+            "default": 100,
+            "visible_if": "{{ block.settings.use_theme_button == false }}"
           }
         ]
       }
@@ -2065,32 +1841,32 @@
             "type": "tab",
             "settings": {
               "icon": "leaf",
-              "title": "Organic ingredients",
-              "description": "Crafted from certified-organic ingredients — clean, simple, and grown without synthetic pesticides."
+              "title": "Ingredients",
+              "description": "Each ingredient is listed on the label."
             }
           },
           {
             "type": "tab",
             "settings": {
-              "icon": "organic",
-              "title": "All natural",
-              "description": "No artificial flavors, colors, or preservatives — just real ingredients you can pronounce."
+              "icon": "box",
+              "title": "Packaging",
+              "description": "How we pack each order before it ships."
             }
           },
           {
             "type": "tab",
             "settings": {
-              "icon": "sparkle",
-              "title": "Plant-based",
-              "description": "Made entirely from plants. Kind to your body and to the planet."
+              "icon": "truck",
+              "title": "Delivery",
+              "description": "Delivery options and times are shown at checkout."
             }
           },
           {
             "type": "tab",
             "settings": {
-              "icon": "shield",
-              "title": "Free from",
-              "description": "Free from gluten, dairy, soy, and refined sugar. Made with sensitivity in mind."
+              "icon": "refresh",
+              "title": "Returns",
+              "description": "How to send something back if it is not right."
             }
           },
           {

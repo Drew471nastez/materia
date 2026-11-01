@@ -3,443 +3,214 @@
 {%- liquid
   assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
 -%}
+{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
 <style data-rs-bulletproof>
   {%- if section.settings.reset_spacing -%}
-    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
-    #shopify-section-{{ section.id }},
-    #shopify-section-{{ section.id }} > .section,
-    #shopify-section-{{ section.id }} > section,
-    #shopify-section-{{ section.id }} > div,
-    #shopify-section-{{ section.id }} > div > .section {
-      margin-top: 0 !important;
-      margin-bottom: 0 !important;
-    }
-    #shopify-section-{{ section.id }} + .shopify-section,
-    #shopify-section-{{ section.id }} + section,
-    .shopify-section + #shopify-section-{{ section.id }} {
-      margin-top: 0 !important;
-    }
+    /* reset_spacing: the theme's own space between sections is removed; the margin sliders below still apply */
+    #shopify-section-{{ section.id }} { padding-top: 0 !important; padding-bottom: 0 !important; }
+    #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; padding-top: 0 !important; }
+    .shopify-section:has(+ #shopify-section-{{ section.id }}) { margin-bottom: 0 !important; padding-bottom: 0 !important; }
   {%- endif -%}
 {% comment %}{% endcomment %}</style>
 {%- comment -%}
-  Materia Themes — Progress Circles
-  Single row of large stat rings: percent inside the ring, label below.
-  Block-based: stat (icon-style cards). Optional heading + subheading + footnote.
+  Materia Themes. Progress Circles.
+
+  A row of large percentage rings with the number inside and a label below,
+  with optional heading, subheading and footnote blocks. Every value is a
+  CSS variable on the section root, so shopify/assets/live-features-d.js
+  applies builder edits in place. On the storefront the rings fill and the
+  numbers count up once, when the section first comes into view; in the
+  builder and under reduced motion they are drawn at their final values.
 {%- endcomment -%}
-
 {%- liquid
-  assign st  = section.settings
+  assign st = section.settings
   assign sid = section.id
-
+  assign custom = st.enable_custom_style
   case st.text_align
     when 'left'
       assign _ai = 'flex-start'
-      assign _ta = 'left'
     when 'right'
       assign _ai = 'flex-end'
-      assign _ta = 'right'
     else
       assign _ai = 'center'
-      assign _ta = 'center'
   endcase
-
-  assign stat_blocks = section.blocks | where: 'type', 'stat'
-  assign stat_count  = stat_blocks | size
-  if stat_count == 0
-    assign stat_count = 1
+  assign pending = false
+  if st.animate != false
+    assign pending = true
   endif
+  if request.design_mode
+    assign pending = false
+  endif
+  assign stat_blocks = section.blocks | where: 'type', 'stat'
 -%}
-
+{%- capture pgr_style -%}
+--pgr-pt-m: {{ st.padding_top_mobile | default: 0 }}px; --pgr-pb-m: {{ st.padding_bottom_mobile | default: 0 }}px; --pgr-px-m: {{ st.side_padding_mobile | default: 0 }}px;
+--pgr-pt-d: {{ st.padding_top_desktop | default: 0 }}px; --pgr-pb-d: {{ st.padding_bottom_desktop | default: 0 }}px; --pgr-px-d: {{ st.side_padding_desktop | default: 0 }}px;
+--pgr-ai: {{ _ai }}; --pgr-ta: {{ st.text_align | default: 'center' }};
+--pgr-head-gap: {{ st.heading_subheading_gap | default: 0 }}px; --pgr-grid-gap: {{ st.heading_to_grid_gap | default: 0 }}px;
+--pgr-cols-m: {{ st.per_row_mobile | default: 2 }}; --pgr-cols-d: {{ st.per_row_desktop | default: 4 }};
+--pgr-row-m: {{ st.row_gap_mobile | default: 0 }}px; --pgr-row-d: {{ st.row_gap_desktop | default: 0 }}px; --pgr-col-m: {{ st.col_gap_mobile | default: 0 }}px; --pgr-col-d: {{ st.col_gap_desktop | default: 0 }}px;
+--pgr-label-gap: {{ st.ring_to_label_gap | default: 0 }}px;
+--pgr-ring-m: {{ st.ring_size_mobile | default: 110 }}px; --pgr-ring-d: {{ st.ring_size_desktop | default: 137 }}px; --pgr-thick: {{ st.ring_thickness | default: 4 }};
+--pgr-pct-m: {{ st.percent_size_mobile | default: 29 }}px; --pgr-pct-d: {{ st.percent_size_desktop | default: 32 }}px;
+--pgr-label-m: {{ st.label_size_mobile | default: 14 }}px; --pgr-label-d: {{ st.label_size_desktop | default: 16 }}px; --pgr-label-max: {{ st.label_max_width | default: 240 }}px; --pgr-label-weight: {{ st.label_weight | default: 500 }};
+--fd-dur: 1400ms;
+{%- render 'media-msr-var', name: '--pgr-bg', color: st.section_bg, on: custom -%}
+{%- render 'media-msr-var', name: '--pgr-text', color: st.text_color, on: custom -%}
+{%- render 'media-msr-var', name: '--pgr-pct-color', color: st.percent_color, on: custom -%}
+{%- render 'media-msr-var', name: '--pgr-ring-color', color: st.ring_color, on: custom -%}
+{%- render 'media-msr-var', name: '--pgr-track', color: st.ring_track, on: custom -%}
+{%- render 'media-msr-var', name: '--pgr-label-color', color: st.label_color, on: custom -%}
+{%- if st.enable_custom_fonts -%}
+  {%- if st.heading_font.family != blank -%}--pgr-hfont: {{ st.heading_font.family }}, {{ st.heading_font.fallback_families | default: 'serif' }};{%- endif -%}
+  {%- if st.body_font.family != blank -%}--pgr-bfont: {{ st.body_font.family }}, {{ st.body_font.fallback_families | default: 'sans-serif' }};{%- endif -%}
+{%- endif -%}
+{%- endcapture -%}
 <style>
-  {%- if st.enable_custom_fonts and st.body_font -%}
-    #shopify-section-{{ sid }},
-    #shopify-section-{{ sid }} :is(p, div, span, a, li) {
-      font-family: {{ st.body_font.family }}, {{ st.body_font.fallback_families }};
-      font-weight: {{ st.body_font.weight }};
-    }
+  {%- if st.enable_custom_fonts -%}
+    {%- if st.heading_font.family != blank -%}{{ st.heading_font | font_face: font_display: 'swap' }}{%- endif -%}
+    {%- if st.body_font.family != blank -%}{{ st.body_font | font_face: font_display: 'swap' }}{%- endif -%}
   {%- endif -%}
-  {%- if st.enable_custom_fonts and st.heading_font -%}
-    #shopify-section-{{ sid }} :is(h1, h2, h3, h4, h5, h6) {
-      font-family: {{ st.heading_font.family }}, {{ st.heading_font.fallback_families }};
-      font-weight: {{ st.heading_font.weight }};
-    }
-  {%- endif -%}
-
-  #shopify-section-{{ sid }} {
-    margin-top: {{ st.section_margin_top_mobile | default: 0 }}px;
-    margin-bottom: {{ st.section_margin_bottom_mobile | default: 0 }}px;
+  #shopify-section-{{ sid }}#shopify-section-{{ sid }} {
+    --fd-mt-m: {{ st.section_margin_top_mobile | default: 0 }}px; --fd-mb-m: {{ st.section_margin_bottom_mobile | default: 0 }}px;
+    --fd-mt-d: {{ st.section_margin_top_desktop | default: 0 }}px; --fd-mb-d: {{ st.section_margin_bottom_desktop | default: 0 }}px;
+    margin-top: var(--fd-mt-m) !important; margin-bottom: var(--fd-mb-m) !important;
+    {% render 'media-msr-var', name: '--fd-wrap-bg', color: st.section_bg, on: custom %}
+    background: var(--fd-wrap-bg, none);
   }
-  @media (min-width: 768px) {
-    #shopify-section-{{ sid }} {
-      margin-top: {{ st.section_margin_top_desktop | default: 0 }}px;
-      margin-bottom: {{ st.section_margin_bottom_desktop | default: 0 }}px;
-    }
-  }
-  {%- if st.reset_spacing -%}
-    #shopify-section-{{ sid }} {
-      margin-top: 0 !important;
-      margin-bottom: 0 !important;
-      padding-top: 0 !important;
-      padding-bottom: 0 !important;
-    }
-  {%- endif -%}
-
-  {%- case st.section_width -%}
-    {%- when 'container' -%}
-      #shopify-section-{{ sid }} .pgr__inner { max-width: calc(var(--page-width, 1300px) + 3rem); margin-inline: auto; }
-    {%- when 'fluid_container' -%}
-      #shopify-section-{{ sid }} .pgr__inner { max-width: calc(var(--fluid-container-width, 1500px) + 3rem); margin-inline: auto; }
-    {%- when 'stretch_width' -%}
-      @media (min-width: 1200px) {
-        #shopify-section-{{ sid }} .pgr__inner { padding-inline: 3rem; }
-      }
-  {%- endcase -%}
-
-  {%- if st.section_bg != blank and st.section_bg.alpha != 0 -%}
-    #shopify-section-{{ sid }}, #shopify-section-{{ sid }} .pgr.gradient { background: {{ st.section_bg }}; }
-  {%- endif -%}
   #shopify-section-{{ sid }} .pgr {
-    padding: {{ st.padding_top_mobile | default: 60 }}px {{ st.side_padding_mobile | default: 20 }}px {{ st.padding_bottom_mobile | default: 60 }}px;
+    background: var(--pgr-bg, var(--color-background)); color: var(--pgr-text, var(--color-text));
+    font-family: var(--pgr-bfont, var(--body-font)); padding: var(--pgr-pt-m) var(--pgr-px-m) var(--pgr-pb-m); box-sizing: border-box;
   }
-  @media (min-width: 768px) {
-    #shopify-section-{{ sid }} .pgr {
-      padding: {{ st.padding_top_desktop | default: 92 }}px {{ st.side_padding_desktop | default: 32 }}px {{ st.padding_bottom_desktop | default: 92 }}px;
-    }
-  }
-  #shopify-section-{{ sid }} .pgr__inner {
-    width: 100%;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    gap: {{ st.heading_to_grid_gap | default: 36 }}px;
-    align-items: {{ _ai }};
-    text-align: {{ _ta }};
-    color: {% render 'scheme-color', color: st.text_color, fallback: 'var(--color-text)' %};
-  }
-  /* Tighter gap between consecutive heading/subheading blocks (overrides the larger inner gap) */
+  #shopify-section-{{ sid }} .pgr *, #shopify-section-{{ sid }} .pgr *::before, #shopify-section-{{ sid }} .pgr *::after { box-sizing: border-box; }
+  #shopify-section-{{ sid }} [hidden] { display: none !important; }
+  #shopify-section-{{ sid }} .pgr__inner { width: 100%; display: flex; flex-direction: column; gap: var(--pgr-grid-gap); align-items: var(--pgr-ai); text-align: var(--pgr-ta); }
+  #shopify-section-{{ sid }} .pgr__inner > * { margin: 0; }
   #shopify-section-{{ sid }} .pgr__heading + .pgr__subheading,
   #shopify-section-{{ sid }} .pgr__subheading + .pgr__subheading,
-  #shopify-section-{{ sid }} .pgr__heading   + .pgr__heading {
-    margin-top: calc({{ st.heading_subheading_gap | default: 14 }}px - {{ st.heading_to_grid_gap | default: 36 }}px);
-  }
-
-  /* Heading / subheading */
+  #shopify-section-{{ sid }} .pgr__heading + .pgr__heading { margin-top: calc(var(--pgr-head-gap) - var(--pgr-grid-gap)); }
   #shopify-section-{{ sid }} .pgr__heading {
-    font-weight: var(--heading-weight, 800);
-    line-height: var(--heading-line-height, 1.1);
-    letter-spacing: var(--heading-letter-spacing, -0.01em);
-    margin: 0;
-    max-width: 800px;
+    font-family: var(--pgr-hfont, var(--heading-font)); font-weight: var(--heading-weight, 700); max-width: 800px;
+    font-size: var(--b-size-m); line-height: var(--heading-line-height, 1.1); letter-spacing: var(--heading-letter-spacing, normal);
+    color: var(--b-color, var(--color-heading)); text-transform: var(--b-case, var(--heading-text-transform, none));
   }
-  #shopify-section-{{ sid }} .pgr__subheading {
-    line-height: 1.6;
-    margin: 0;
-    max-width: 640px;
-  }
-  #shopify-section-{{ sid }} .pgr__subheading p { margin: 0 0 0.5em; }
-  #shopify-section-{{ sid }} .pgr__subheading p:last-child { margin: 0; }
-
-  {%- for block in section.blocks -%}
-    {%- assign bs = block.settings -%}
-    {%- if block.type == 'heading' -%}
-      #shopify-section-{{ sid }} .pgr__heading[data-block-id="{{ block.id }}"] {
-        color: {% render 'scheme-color', color: bs.color, fallback: 'var(--color-heading)' %};
-        font-size: {{ bs.size_mobile | default: 30 }}px;
-        text-transform: {% if bs.uppercase %}uppercase{% else %}var(--heading-text-transform, none){% endif %};
-      }
-      @media (min-width: 768px) {
-        #shopify-section-{{ sid }} .pgr__heading[data-block-id="{{ block.id }}"] {
-          font-size: {{ bs.size_desktop | default: 42 }}px;
-        }
-      }
-    {%- endif -%}
-    {%- if block.type == 'subheading' -%}
-      #shopify-section-{{ sid }} .pgr__subheading[data-block-id="{{ block.id }}"] {
-        color: {% render 'scheme-color', color: bs.color, fallback: 'var(--color-text)' %};
-        font-size: {{ bs.size_mobile | default: 14 }}px;
-      }
-      @media (min-width: 768px) {
-        #shopify-section-{{ sid }} .pgr__subheading[data-block-id="{{ block.id }}"] {
-          font-size: {{ bs.size_desktop | default: 16 }}px;
-        }
-      }
-    {%- endif -%}
-    {%- if block.type == 'footnote' -%}
-      #shopify-section-{{ sid }} .pgr__footnote[data-block-id="{{ block.id }}"] {
-        color: {% render 'scheme-color', color: bs.color, fallback: 'var(--color-text)' %};
-        font-size: {{ bs.size | default: 12 }}px;
-        margin-top: {{ bs.margin_top | default: 16 }}px;
-      }
-    {%- endif -%}
-  {%- endfor -%}
-
-  /* Rings row */
+  #shopify-section-{{ sid }} .pgr__heading em { font-style: normal; color: var(--b-accent, var(--color-primary)); }
+  #shopify-section-{{ sid }} .pgr__subheading { font-size: var(--b-size-m); line-height: 1.6; max-width: 640px; color: var(--b-color, var(--pgr-text, var(--color-text))); }
+  #shopify-section-{{ sid }} .pgr__subheading p, #shopify-section-{{ sid }} .pgr__footnote p { margin: 0 0 0.5em; }
+  #shopify-section-{{ sid }} .pgr__subheading p:last-child, #shopify-section-{{ sid }} .pgr__footnote p:last-child { margin: 0; }
+  #shopify-section-{{ sid }} .pgr__footnote { font-size: var(--b-size); margin-top: var(--b-mt); color: var(--b-color, var(--pgr-text, var(--color-text))); }
   #shopify-section-{{ sid }} .pgr__row {
-    display: grid;
-    grid-template-columns: repeat({{ st.per_row_mobile | default: 2 }}, minmax(0, 1fr));
-    gap: {{ st.row_gap_mobile | default: 28 }}px {{ st.col_gap_mobile | default: 16 }}px;
-    width: 100%;
-    justify-items: center;
-    align-items: start;
+    display: grid; width: 100%; grid-template-columns: repeat(var(--pgr-cols-m), minmax(0, 1fr)); gap: var(--pgr-row-m) var(--pgr-col-m);
+    justify-items: center; align-items: start;
   }
-  @media (min-width: 768px) {
-    #shopify-section-{{ sid }} .pgr__row {
-      grid-template-columns: repeat({{ st.per_row_desktop | default: 4 }}, minmax(0, 1fr));
-      gap: {{ st.row_gap_desktop | default: 40 }}px {{ st.col_gap_desktop | default: 32 }}px;
-    }
-  }
-
-  /* Single ring item */
-  #shopify-section-{{ sid }} .pgr__item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: {{ st.ring_to_label_gap | default: 18 }}px;
-    text-align: center;
-    width: 100%;
-  }
-  #shopify-section-{{ sid }} .pgr__ring {
-    position: relative;
-    width: {{ st.ring_size_mobile | default: 110 }}px;
-    height: {{ st.ring_size_mobile | default: 110 }}px;
-  }
-  @media (min-width: 768px) {
-    #shopify-section-{{ sid }} .pgr__ring {
-      width: {{ st.ring_size_desktop | default: 137 }}px;
-      height: {{ st.ring_size_desktop | default: 137 }}px;
-    }
-  }
-  #shopify-section-{{ sid }} .pgr__ring svg {
-    width: 100%;
-    height: 100%;
-    transform: rotate(-90deg);
-    display: block;
-  }
-  #shopify-section-{{ sid }} .pgr__ring-bg   { stroke: {% render 'scheme-color', color: st.ring_track, fallback: 'var(--color-border)' %}; }
+  #shopify-section-{{ sid }} .pgr__item { display: flex; flex-direction: column; align-items: center; gap: var(--pgr-label-gap); text-align: center; width: 100%; min-width: 0; }
+  #shopify-section-{{ sid }} .pgr__ring { position: relative; width: var(--pgr-ring-m); height: var(--pgr-ring-m); max-width: 100%; }
+  #shopify-section-{{ sid }} .pgr__ring svg { width: 100%; height: 100%; transform: rotate(-90deg); display: block; overflow: visible; }
+  #shopify-section-{{ sid }} .pgr__ring-bg { stroke: var(--pgr-track, var(--color-border)); stroke-width: var(--pgr-thick); }
   #shopify-section-{{ sid }} .pgr__ring-fill {
-    stroke-linecap: round;
-    transition: stroke-dashoffset 1.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+    stroke: var(--b-ring, var(--pgr-ring-color, var(--color-primary))); stroke-width: var(--pgr-thick); stroke-linecap: round;
+    stroke-dasharray: 175.93; stroke-dashoffset: var(--fd-off, 0); transition: stroke-dashoffset var(--fd-dur) cubic-bezier(0.22, 0.61, 0.36, 1);
   }
   #shopify-section-{{ sid }} .pgr__percent {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--heading-font, inherit);
-    font-weight: var(--heading-weight, 800);
-    font-size: {{ st.percent_size_mobile | default: 29 }}px;
-    color: {% render 'scheme-color', color: st.percent_color, fallback: 'var(--color-heading)' %};
-    letter-spacing: -0.02em;
-    line-height: 1;
-  }
-  @media (min-width: 768px) {
-    #shopify-section-{{ sid }} .pgr__percent {
-      font-size: {{ st.percent_size_desktop | default: 32 }}px;
-    }
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-family: var(--pgr-hfont, var(--heading-font)); font-weight: var(--heading-weight, 700); font-size: var(--pgr-pct-m);
+    line-height: 1; letter-spacing: -0.02em; color: var(--pgr-pct-color, var(--color-heading)); font-variant-numeric: tabular-nums; transition: opacity 0.4s ease;
   }
   #shopify-section-{{ sid }} .pgr__label {
-    font-size: {{ st.label_size_mobile | default: 14 }}px;
-    line-height: 1.45;
-    font-weight: {{ st.label_weight | default: 500 }};
-    color: {% render 'scheme-color', color: st.label_color, fallback: 'var(--color-heading)' %};
-    margin: 0;
-    max-width: {{ st.label_max_width | default: 240 }}px;
+    margin: 0; font-size: var(--pgr-label-m); line-height: 1.45; font-weight: var(--pgr-label-weight); max-width: var(--pgr-label-max);
+    color: var(--pgr-label-color, var(--color-heading));
   }
-  #shopify-section-{{ sid }} .pgr__label p { margin: 0 0 0.5em; }
-  #shopify-section-{{ sid }} .pgr__label p:last-child { margin: 0; }
-  @media (min-width: 768px) {
-    #shopify-section-{{ sid }} .pgr__label {
-      font-size: {{ st.label_size_desktop | default: 16 }}px;
-    }
-  }
-
-  /* heading accent (em) color */
-  #shopify-section-{{ sid }} .pgr__heading em {
-    font-style: normal;
-  }
-  {%- for block in section.blocks -%}
-    {%- if block.type == 'heading' -%}
-      #shopify-section-{{ sid }} .pgr__heading[data-block-id="{{ block.id }}"] em {
-        color: {% render 'scheme-color', color: block.settings.accent_color, fallback: 'var(--color-primary)' %};
-      }
-    {%- endif -%}
-  {%- endfor -%}
-
-  /* gentle reveal — only arms when JS adds .pgr--armed (so editor preview + no-JS show content immediately) */
-  #pgr-{{ sid }}.pgr--armed .pgr__heading,
-  #pgr-{{ sid }}.pgr--armed .pgr__subheading,
-  #pgr-{{ sid }}.pgr--armed .pgr__footnote,
-  #pgr-{{ sid }}.pgr--armed .pgr__item {
-    opacity: 0;
-    transform: translateY(8px);
-    transition: opacity .55s ease, transform .55s cubic-bezier(0.22, 0.61, 0.36, 1);
-  }
-  #pgr-{{ sid }}[data-pgr-revealed="1"] .pgr__heading,
-  #pgr-{{ sid }}[data-pgr-revealed="1"] .pgr__subheading,
-  #pgr-{{ sid }}[data-pgr-revealed="1"] .pgr__footnote,
-  #pgr-{{ sid }}[data-pgr-revealed="1"] .pgr__item { opacity: 1; transform: none; }
-  #pgr-{{ sid }}[data-pgr-revealed="1"] .pgr__item:nth-child(1) { transition-delay: .05s; }
-  #pgr-{{ sid }}[data-pgr-revealed="1"] .pgr__item:nth-child(2) { transition-delay: .15s; }
-  #pgr-{{ sid }}[data-pgr-revealed="1"] .pgr__item:nth-child(3) { transition-delay: .25s; }
-  #pgr-{{ sid }}[data-pgr-revealed="1"] .pgr__item:nth-child(4) { transition-delay: .35s; }
-  #pgr-{{ sid }}[data-pgr-revealed="1"] .pgr__item:nth-child(5) { transition-delay: .45s; }
-  #pgr-{{ sid }}[data-pgr-revealed="1"] .pgr__item:nth-child(6) { transition-delay: .55s; }
+  #shopify-section-{{ sid }} .pgr[data-fd-reveal='pending'] .pgr__ring-fill { stroke-dashoffset: 175.93; }
+  #shopify-section-{{ sid }} .pgr[data-fd-reveal='pending'] .pgr__percent { opacity: 0; }
+  #shopify-section-{{ sid }} .pgr:not([data-fd-reveal]) .pgr__ring-fill { transition: none; }
   @media (prefers-reduced-motion: reduce) {
-    #shopify-section-{{ sid }} :is(.pgr__heading, .pgr__subheading, .pgr__footnote, .pgr__item) {
-      opacity: 1; transform: none; transition: none;
-    }
-    #shopify-section-{{ sid }} .pgr__ring-fill { transition: none; }
+    #shopify-section-{{ sid }} .pgr .pgr__ring-fill { stroke-dashoffset: var(--fd-off, 0); transition: none; }
+    #shopify-section-{{ sid }} .pgr .pgr__percent { opacity: 1; transition: none; }
+  }
+  @media (min-width: 1200px) {
+    #shopify-section-{{ sid }} .pgr.stretch_width .pgr__inner { padding-inline: 3rem; }
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }}#shopify-section-{{ sid }} { margin-top: var(--fd-mt-d) !important; margin-bottom: var(--fd-mb-d) !important; }
+    #shopify-section-{{ sid }} .pgr { padding: var(--pgr-pt-d) var(--pgr-px-d) var(--pgr-pb-d); }
+    #shopify-section-{{ sid }} .pgr__heading, #shopify-section-{{ sid }} .pgr__subheading { font-size: var(--b-size-d); }
+    #shopify-section-{{ sid }} .pgr__row { grid-template-columns: repeat(var(--pgr-cols-d), minmax(0, 1fr)); gap: var(--pgr-row-d) var(--pgr-col-d); }
+    #shopify-section-{{ sid }} .pgr__ring { width: var(--pgr-ring-d); height: var(--pgr-ring-d); }
+    #shopify-section-{{ sid }} .pgr__percent { font-size: var(--pgr-pct-d); }
+    #shopify-section-{{ sid }} .pgr__label { font-size: var(--pgr-label-d); }
   }
 {% comment %}{% endcomment %}</style>
+<noscript><style>#shopify-section-{{ sid }} .pgr[data-fd-reveal='pending'] .pgr__ring-fill { stroke-dashoffset: var(--fd-off, 0); } #shopify-section-{{ sid }} .pgr[data-fd-reveal='pending'] .pgr__percent { opacity: 1; }</style></noscript>
 
-<div id="pgr-{{ sid }}" class="pgr section sec__progress-circles color-{{ color_scheme }} gradient {{ st.section_width }}" data-section-id="{{ sid }}">
+<div id="pgr-{{ sid }}" class="pgr section sec__progress-circles color-{{ color_scheme }} gradient {{ st.section_width | default: 'container' }}" data-fd="pgr" data-fd-section="{{ sid }}" data-fd-settings="{{ st | json | escape }}"{% if st.enable_custom_fonts %} data-own-font{% endif %}{% if pending %} data-fd-reveal="pending"{% endif %} style="{{ pgr_style | strip_newlines }}">
   <div class="pgr__inner">
-
     {%- for block in section.blocks -%}
       {%- assign bs = block.settings -%}
-      {%- if block.type == 'heading' -%}
-        {%- assign htag = bs.tag | default: 'h2' -%}
-        <{{ htag }} class="pgr__heading" data-block-id="{{ block.id }}" {{ block.shopify_attributes }}>{%- if bs.text != blank -%}{{ bs.text }}{%- else -%}Heading text{%- endif -%}</{{ htag }}>
-      {%- elsif block.type == 'subheading' -%}
-        <div class="pgr__subheading" data-block-id="{{ block.id }}" {{ block.shopify_attributes }}>{%- if bs.text != blank -%}{{ bs.text }}{%- else -%}<p>{{ 'accessibility.add_supporting_copy' | t }}</p>{%- endif -%}</div>
-      {%- endif -%}
+      {%- case block.type -%}
+        {%- when 'heading' -%}
+          {%- assign htext = bs.text | remove: '<p>' | remove: '</p>' -%}
+          <h2 class="pgr__heading" data-fd-block="{{ block.id }}" data-fd-type="heading" data-fd-settings="{{ bs | json | escape }}" style="--b-size-m: {{ bs.size_mobile | default: 30 }}px; --b-size-d: {{ bs.size_desktop | default: 42 }}px;{% if bs.uppercase %} --b-case: uppercase; --heading-text-transform: uppercase;{% endif %}{% render 'media-msr-var', name: '--b-color', color: bs.color, on: bs.enable_custom_style %}{% render 'media-msr-var', name: '--b-accent', color: bs.accent_color, on: bs.enable_custom_style %}"{% if htext == blank %} hidden{% endif %} {{ block.shopify_attributes }}>{{ htext }}</h2>
+        {%- when 'subheading' -%}
+          <div class="pgr__subheading" data-fd-block="{{ block.id }}" data-fd-type="subheading" data-fd-settings="{{ bs | json | escape }}" style="--b-size-m: {{ bs.size_mobile | default: 14 }}px; --b-size-d: {{ bs.size_desktop | default: 16 }}px;{% render 'media-msr-var', name: '--b-color', color: bs.color, on: bs.enable_custom_style %}"{% if bs.text == blank %} hidden{% endif %} {{ block.shopify_attributes }}>{{ bs.text }}</div>
+      {%- endcase -%}
     {%- endfor -%}
 
     <div class="pgr__row">
-      {%- if stat_blocks.size > 0 -%}
-        {%- for stat in stat_blocks -%}
-          {%- assign sb = stat.settings -%}
-          {%- assign pct = sb.percent | default: 80 -%}
-          {%- if pct > 100 -%}{%- assign pct = 100 -%}{%- endif -%}
-          {%- if pct < 0 -%}{%- assign pct = 0 -%}{%- endif -%}
-          {%- assign circumference = 175.93 -%}
-          {%- assign offset = circumference | times: pct | divided_by: 100.0 -%}
-          {%- assign final_offset = circumference | minus: offset -%}
-          {%- comment -%}
-            Ring fill color — three-tier fallback:
-              1. If the block's own `color` is set to a real colour
-                 (not blank, not transparent) → use it (per-ring override).
-              2. Else fall back to the section-level `ring_color`.
-              3. Else fall back to the scheme primary colour.
-
-            The transparent check is required because Shopify's color
-            picker default for an unset value is `rgba(0,0,0,0)`. The
-            previous code used Liquid's `default` filter, which only
-            fires on blank/empty values — NOT on the string
-            `"rgba(0,0,0,0)"`. That made the section-level setting
-            non-functional whenever a block was added (the block's own
-            default colour kept winning).
-          {%- endcomment -%}
-          {%- capture ring_stroke -%}{% render 'scheme-color', color: st.ring_color, fallback: 'var(--color-primary)' %}{%- endcapture -%}
-          {%- if sb.color != blank and sb.color.alpha != 0 -%}
-            {%- assign ring_stroke = sb.color -%}
-          {%- endif -%}
-          <div class="pgr__item" {{ stat.shopify_attributes }}>
-            <div class="pgr__ring">
-              <svg viewBox="0 0 64 64" aria-hidden="true">
-                <circle class="pgr__ring-bg" cx="32" cy="32" r="28" fill="none" stroke-width="{{ st.ring_thickness | default: 4 }}"/>
-                <circle class="pgr__ring-fill" cx="32" cy="32" r="28" fill="none" stroke-width="{{ st.ring_thickness | default: 4 }}"
-                  style="stroke: {{ ring_stroke }};"
-                  stroke-dasharray="{{ circumference }}"
-                  stroke-dashoffset="{{ circumference }}"
-                  data-pgr-target-offset="{{ final_offset }}"/>
-              </svg>
-              <span class="pgr__percent">{{ pct }}%</span>
-            </div>
-            <p class="pgr__label">{%- if sb.label != blank -%}{{ sb.label | strip_html | strip | escape }}{%- else -%}Label{%- endif -%}</p>
+      {%- for stat in stat_blocks -%}
+        {%- liquid
+          assign sb = stat.settings
+          assign pct = sb.percent | default: 0 | round
+          if pct > 100
+            assign pct = 100
+          endif
+          if pct < 0
+            assign pct = 0
+          endif
+          assign off = 100 | minus: pct | times: 1.7593 | round: 2
+        -%}
+        <div class="pgr__item" data-fd-block="{{ stat.id }}" data-fd-type="stat" data-fd-settings="{{ sb | json | escape }}" style="--fd-off: {{ off }};{% render 'media-msr-var', name: '--b-ring', color: sb.color, on: sb.enable_custom_style %}" {{ stat.shopify_attributes }}>
+          <div class="pgr__ring">
+            <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+              <circle class="pgr__ring-bg" cx="32" cy="32" r="28" fill="none"/>
+              <circle class="pgr__ring-fill" cx="32" cy="32" r="28" fill="none"/>
+            </svg>
+            <span class="pgr__percent" data-fd-count data-to="{{ pct }}" data-suffix="%">{{ pct }}%</span>
           </div>
-        {%- endfor -%}
+          <p class="pgr__label"{% if sb.label == blank %} hidden{% endif %}>{{ sb.label | strip_html | strip | escape }}</p>
+        </div>
       {%- else -%}
-        <div class="pgr__item" style="opacity:.5"><p class="pgr__label">{{ 'accessibility.add_stat_blocks' | t }}</p></div>
-      {%- endif -%}
+        {%- if request.design_mode -%}<p class="pgr__label">{{ 'accessibility.add_stat_blocks' | t }}</p>{%- endif -%}
+      {%- endfor -%}
     </div>
 
     {%- for block in section.blocks -%}
       {%- if block.type == 'footnote' -%}
         {%- assign fbs = block.settings -%}
-        <p class="pgr__footnote" data-block-id="{{ block.id }}" {{ block.shopify_attributes }}>{%- if fbs.text != blank -%}{{ fbs.text }}{%- else -%}Footnote{%- endif -%}</p>
+        <div class="pgr__footnote" data-fd-block="{{ block.id }}" data-fd-type="footnote" data-fd-settings="{{ fbs | json | escape }}" style="--b-size: {{ fbs.size | default: 12 }}px; --b-mt: {{ fbs.margin_top | default: 0 }}px;{% render 'media-msr-var', name: '--b-color', color: fbs.color, on: fbs.enable_custom_style %}"{% if fbs.text == blank %} hidden{% endif %} {{ block.shopify_attributes }}>{{ fbs.text }}</div>
       {%- endif -%}
     {%- endfor -%}
-
   </div>
 </div>
-
-<script>
-  (function() {
-    var sid = '{{ sid }}';
-    if (!window.__pgrInit) window.__pgrInit = {};
-    if (!window.__pgrInit[sid]) {
-      window.__pgrInit[sid] = true;
-      document.addEventListener('storelib:section-load', function(e){
-        if (e && e.detail && String(e.detail.sectionId) === sid) init();
-      });
-    }
-    init();
-    function init() {
-    var sec = document.getElementById('pgr-' + sid);
-    if (!sec || sec.dataset.pgrInit === '1') return;
-    sec.dataset.pgrInit = '1';
-    function setRingTargets() {
-      sec.querySelectorAll('.pgr__ring-fill[data-pgr-target-offset]').forEach(function(r){
-        var t = r.getAttribute('data-pgr-target-offset');
-        if (t !== null) r.setAttribute('stroke-dashoffset', t);
-      });
-    }
-    // Always animate the ring fill smoothly: defer the target write past the first paint
-    // so the CSS transition runs from the initial empty state to the filled state.
-    function fillRingsSmoothly() {
-      if (sec.dataset.pgrRingsFilled === '1') return;
-      sec.dataset.pgrRingsFilled = '1';
-      // Two rAFs guarantee the browser has committed the initial frame before we
-      // change stroke-dashoffset, so the transition definitely runs.
-      requestAnimationFrame(function(){
-        requestAnimationFrame(function(){
-          setRingTargets();
-        });
-      });
-    }
-    function reveal() {
-      if (sec.dataset.pgrRevealed === '1') return;
-      sec.dataset.pgrRevealed = '1';
-      fillRingsSmoothly();
-    }
-    var inDesignMode = !!(window.Shopify && Shopify.designMode);
-    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce) {
-      // Reduced motion: snap to filled, no animation
-      setRingTargets();
-      return;
-    }
-    if (inDesignMode) {
-      // Editor: skip the gentle reveal but still animate the rings smoothly
-      fillRingsSmoothly();
-      return;
-    }
-    // Decide whether to arm the heading/item reveal: only if below the fold
-    var rect = sec.getBoundingClientRect();
-    var vh = window.innerHeight || document.documentElement.clientHeight;
-    var below = rect.top > vh * 0.85;
-    if (!below) {
-      // Already in view at boot — heading/items stay fully visible, but still fill rings smoothly
-      fillRingsSmoothly();
-      return;
-    }
-    sec.classList.add('pgr--armed');
-    if ('IntersectionObserver' in window) {
-      var io = new IntersectionObserver(function(es){
-        es.forEach(function(e){ if (e.isIntersecting) { reveal(); io.unobserve(e.target); } });
-      }, { threshold: 0.2, rootMargin: '0px 0px -8% 0px' });
-      io.observe(sec);
-    } else { reveal(); }
-    }
-  })();
-{% comment %}{% endcomment %}</script>
+{%- comment -%} Ring fill, count up and live edits: shopify/assets/live-features-d.js (loaded on every page). {%- endcomment -%}
 
 
 
 </template>
-
 <schema>
 {
   "type": "progress-circles",
@@ -1117,7 +888,13 @@
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "select",
@@ -1144,15 +921,9 @@
         ]
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
-      },
-      {
         "type": "checkbox",
         "id": "reset_spacing",
-        "label": "Remove default space between sections",
+        "label": "Remove theme spacing between sections",
         "default": true
       },
       {
@@ -1162,7 +933,7 @@
       {
         "type": "select",
         "id": "text_align",
-        "label": "Text alignment",
+        "label": "Alignment",
         "default": "center",
         "options": [
           {
@@ -1182,7 +953,7 @@
       {
         "type": "range",
         "id": "heading_subheading_gap",
-        "label": "Heading gap",
+        "label": "Heading to subheading gap",
         "min": 0,
         "max": 60,
         "step": 2,
@@ -1192,7 +963,7 @@
       {
         "type": "range",
         "id": "heading_to_grid_gap",
-        "label": "Heading to rings gap",
+        "label": "Text to rings gap",
         "min": 0,
         "max": 80,
         "step": 2,
@@ -1200,13 +971,9 @@
         "default": 36
       },
       {
-        "type": "header",
-        "content": "Ring grid"
-      },
-      {
         "type": "select",
         "id": "per_row_desktop",
-        "label": "Rings per row (desktop)",
+        "label": "Rings per row",
         "default": "4",
         "options": [
           {
@@ -1232,25 +999,9 @@
         ]
       },
       {
-        "type": "select",
-        "id": "per_row_mobile",
-        "label": "Rings per row (mobile)",
-        "default": "2",
-        "options": [
-          {
-            "value": "1",
-            "label": "1"
-          },
-          {
-            "value": "2",
-            "label": "2"
-          }
-        ]
-      },
-      {
         "type": "range",
         "id": "row_gap_desktop",
-        "label": "Row gap (desktop)",
+        "label": "Row gap",
         "min": 0,
         "max": 80,
         "step": 2,
@@ -1259,33 +1010,13 @@
       },
       {
         "type": "range",
-        "id": "row_gap_mobile",
-        "label": "Row gap (mobile)",
-        "min": 0,
-        "max": 60,
-        "step": 2,
-        "unit": "px",
-        "default": 28
-      },
-      {
-        "type": "range",
         "id": "col_gap_desktop",
-        "label": "Column gap (desktop)",
+        "label": "Column gap",
         "min": 0,
         "max": 80,
         "step": 2,
         "unit": "px",
         "default": 32
-      },
-      {
-        "type": "range",
-        "id": "col_gap_mobile",
-        "label": "Column gap (mobile)",
-        "min": 0,
-        "max": 60,
-        "step": 2,
-        "unit": "px",
-        "default": 16
       },
       {
         "type": "range",
@@ -1298,28 +1029,28 @@
         "default": 18
       },
       {
+        "type": "range",
+        "id": "label_max_width",
+        "label": "Label max width",
+        "min": 140,
+        "max": 360,
+        "step": 5,
+        "unit": "px",
+        "default": 240
+      },
+      {
         "type": "header",
-        "content": "Ring style"
+        "content": "Appearance"
       },
       {
         "type": "range",
         "id": "ring_size_desktop",
-        "label": "Ring size (desktop)",
+        "label": "Ring size",
         "min": 80,
         "max": 180,
         "step": 1,
         "unit": "px",
         "default": 137
-      },
-      {
-        "type": "range",
-        "id": "ring_size_mobile",
-        "label": "Ring size (mobile)",
-        "min": 60,
-        "max": 160,
-        "step": 1,
-        "unit": "px",
-        "default": 110
       },
       {
         "type": "range",
@@ -1332,23 +1063,9 @@
         "default": 4
       },
       {
-        "type": "color",
-        "id": "ring_color",
-        "label": "Ring color"
-      },
-      {
-        "type": "color",
-        "id": "ring_track",
-        "label": "Ring track color"
-      },
-      {
-        "type": "header",
-        "content": "Percent text + label"
-      },
-      {
         "type": "range",
         "id": "percent_size_desktop",
-        "label": "Percent size (desktop)",
+        "label": "Percent size",
         "min": 16,
         "max": 80,
         "step": 1,
@@ -1357,23 +1074,8 @@
       },
       {
         "type": "range",
-        "id": "percent_size_mobile",
-        "label": "Percent size (mobile)",
-        "min": 14,
-        "max": 60,
-        "step": 1,
-        "unit": "px",
-        "default": 29
-      },
-      {
-        "type": "color",
-        "id": "percent_color",
-        "label": "Percent color"
-      },
-      {
-        "type": "range",
         "id": "label_size_desktop",
-        "label": "Label size (desktop)",
+        "label": "Label size",
         "min": 12,
         "max": 24,
         "step": 1,
@@ -1381,29 +1083,50 @@
         "default": 16
       },
       {
-        "type": "range",
-        "id": "label_size_mobile",
-        "label": "Label size (mobile)",
-        "min": 11,
-        "max": 20,
-        "step": 1,
-        "unit": "px",
-        "default": 14
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Enable custom styling",
+        "default": false
       },
       {
-        "type": "range",
-        "id": "label_max_width",
-        "label": "Label max width",
-        "min": 140,
-        "max": 360,
-        "step": 5,
-        "unit": "px",
-        "default": 240
+        "type": "color",
+        "id": "section_bg",
+        "label": "Background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "text_color",
+        "label": "Text",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "percent_color",
+        "label": "Percent",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "ring_color",
+        "label": "Ring",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "ring_track",
+        "label": "Ring track",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
       },
       {
         "type": "color",
         "id": "label_color",
-        "label": "Label color"
+        "label": "Label",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "header",
+        "content": "Typography"
       },
       {
         "type": "select",
@@ -1430,10 +1153,6 @@
         ]
       },
       {
-        "type": "header",
-        "content": "Custom fonts (optional)"
-      },
-      {
         "type": "checkbox",
         "id": "enable_custom_fonts",
         "label": "Enable custom fonts",
@@ -1443,32 +1162,35 @@
         "type": "font_picker",
         "id": "heading_font",
         "label": "Heading font",
-        "default": "assistant_n4"
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
       },
       {
         "type": "font_picker",
         "id": "body_font",
         "label": "Body font",
-        "default": "assistant_n4"
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
       },
       {
         "type": "header",
-        "content": "Section colors + spacing"
+        "content": "Animation"
       },
       {
-        "type": "color",
-        "id": "section_bg",
-        "label": "Section background"
+        "type": "checkbox",
+        "id": "animate",
+        "label": "Fill rings when in view",
+        "default": true,
+        "info": "On the live store the rings fill and the numbers count up once. The editor and reduced motion show the final values."
       },
       {
-        "type": "color",
-        "id": "text_color",
-        "label": "Text color"
+        "type": "header",
+        "content": "Desktop spacing"
       },
       {
         "type": "range",
         "id": "padding_top_desktop",
-        "label": "Top padding (desktop)",
+        "label": "Top padding",
         "min": 0,
         "max": 200,
         "step": 4,
@@ -1478,7 +1200,7 @@
       {
         "type": "range",
         "id": "padding_bottom_desktop",
-        "label": "Bottom padding (desktop)",
+        "label": "Bottom padding",
         "min": 0,
         "max": 200,
         "step": 4,
@@ -1487,28 +1209,8 @@
       },
       {
         "type": "range",
-        "id": "padding_top_mobile",
-        "label": "Top padding (mobile)",
-        "min": 0,
-        "max": 160,
-        "step": 4,
-        "unit": "px",
-        "default": 60
-      },
-      {
-        "type": "range",
-        "id": "padding_bottom_mobile",
-        "label": "Bottom padding (mobile)",
-        "min": 0,
-        "max": 160,
-        "step": 4,
-        "unit": "px",
-        "default": 60
-      },
-      {
-        "type": "range",
         "id": "side_padding_desktop",
-        "label": "Horizontal padding (desktop)",
+        "label": "Side padding",
         "min": 0,
         "max": 80,
         "step": 2,
@@ -1517,18 +1219,8 @@
       },
       {
         "type": "range",
-        "id": "side_padding_mobile",
-        "label": "Horizontal padding (mobile)",
-        "min": 0,
-        "max": 40,
-        "step": 2,
-        "unit": "px",
-        "default": 20
-      },
-      {
-        "type": "range",
         "id": "section_margin_top_desktop",
-        "label": "Top margin (desktop)",
+        "label": "Top margin",
         "min": 0,
         "max": 200,
         "step": 4,
@@ -1538,7 +1230,7 @@
       {
         "type": "range",
         "id": "section_margin_bottom_desktop",
-        "label": "Bottom margin (desktop)",
+        "label": "Bottom margin",
         "min": 0,
         "max": 200,
         "step": 4,
@@ -1546,9 +1238,109 @@
         "default": 0
       },
       {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "select",
+        "id": "per_row_mobile",
+        "label": "Rings per row",
+        "default": "2",
+        "options": [
+          {
+            "value": "1",
+            "label": "1"
+          },
+          {
+            "value": "2",
+            "label": "2"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "row_gap_mobile",
+        "label": "Row gap",
+        "min": 0,
+        "max": 60,
+        "step": 2,
+        "unit": "px",
+        "default": 28
+      },
+      {
+        "type": "range",
+        "id": "col_gap_mobile",
+        "label": "Column gap",
+        "min": 0,
+        "max": 60,
+        "step": 2,
+        "unit": "px",
+        "default": 16
+      },
+      {
+        "type": "range",
+        "id": "ring_size_mobile",
+        "label": "Ring size",
+        "min": 60,
+        "max": 160,
+        "step": 1,
+        "unit": "px",
+        "default": 110
+      },
+      {
+        "type": "range",
+        "id": "percent_size_mobile",
+        "label": "Percent size",
+        "min": 14,
+        "max": 60,
+        "step": 1,
+        "unit": "px",
+        "default": 29
+      },
+      {
+        "type": "range",
+        "id": "label_size_mobile",
+        "label": "Label size",
+        "min": 11,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "range",
+        "id": "padding_top_mobile",
+        "label": "Top padding",
+        "min": 0,
+        "max": 160,
+        "step": 4,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_mobile",
+        "label": "Bottom padding",
+        "min": 0,
+        "max": 160,
+        "step": 4,
+        "unit": "px",
+        "default": 60
+      },
+      {
+        "type": "range",
+        "id": "side_padding_mobile",
+        "label": "Side padding",
+        "min": 0,
+        "max": 40,
+        "step": 2,
+        "unit": "px",
+        "default": 20
+      },
+      {
         "type": "range",
         "id": "section_margin_top_mobile",
-        "label": "Top margin (mobile)",
+        "label": "Top margin",
         "min": 0,
         "max": 200,
         "step": 4,
@@ -1558,7 +1350,7 @@
       {
         "type": "range",
         "id": "section_margin_bottom_mobile",
-        "label": "Bottom margin (mobile)",
+        "label": "Bottom margin",
         "min": 0,
         "max": 200,
         "step": 4,
@@ -1573,9 +1365,11 @@
         "limit": 2,
         "settings": [
           {
-            "type": "richtext",
+            "type": "inline_richtext",
             "id": "text",
-            "label": "Text"
+            "label": "Text",
+            "default": "Results you can <em>measure</em>",
+            "info": "Italic words use the accent colour."
           },
           {
             "type": "select",
@@ -1595,17 +1389,27 @@
                 "value": "h3",
                 "label": "H3"
               }
-            ]
+            ],
+            "hidden": true,
+            "info": "Legacy: the heading is always an h2."
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
           },
           {
             "type": "color",
             "id": "color",
-            "label": "Color"
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           },
           {
             "type": "color",
             "id": "accent_color",
-            "label": "Accent color"
+            "label": "Accent (italic words)",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           },
           {
             "type": "range",
@@ -1630,7 +1434,7 @@
           {
             "type": "checkbox",
             "id": "uppercase",
-            "label": "UPPERCASE",
+            "label": "Uppercase",
             "default": false
           }
         ]
@@ -1643,12 +1447,20 @@
           {
             "type": "richtext",
             "id": "text",
-            "label": "Text"
+            "label": "Text",
+            "default": "<p>Add a short line about what these numbers measure.</p>"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
           },
           {
             "type": "color",
             "id": "color",
-            "label": "Color"
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           },
           {
             "type": "range",
@@ -1690,12 +1502,19 @@
             "type": "text",
             "id": "label",
             "label": "Label",
-            "default": "Less Acne Skin"
+            "default": "Ring label"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
           },
           {
             "type": "color",
             "id": "color",
-            "label": "Ring color"
+            "label": "Ring color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           }
         ]
       },
@@ -1707,12 +1526,20 @@
           {
             "type": "richtext",
             "id": "text",
-            "label": "Text"
+            "label": "Text",
+            "default": "<p>Add where these numbers come from.</p>"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
           },
           {
             "type": "color",
             "id": "color",
-            "label": "Color"
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           },
           {
             "type": "range",
@@ -1743,31 +1570,43 @@
         "category": "Features",
         "blocks": [
           {
+            "type": "heading",
+            "settings": {
+              "text": "Results you can <em>measure</em>"
+            }
+          },
+          {
             "type": "stat",
             "settings": {
               "percent": 85,
-              "label": "Less Acne Skin"
+              "label": "First result"
             }
           },
           {
             "type": "stat",
             "settings": {
               "percent": 80,
-              "label": "Brighter Glow"
+              "label": "Second result"
             }
           },
           {
             "type": "stat",
             "settings": {
               "percent": 60,
-              "label": "Smoother Skin"
+              "label": "Third result"
             }
           },
           {
             "type": "stat",
             "settings": {
               "percent": 99,
-              "label": "More Beauty"
+              "label": "Fourth result"
+            }
+          },
+          {
+            "type": "footnote",
+            "settings": {
+              "text": "<p>Add where these numbers come from.</p>"
             }
           }
         ]
