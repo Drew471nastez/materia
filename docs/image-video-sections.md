@@ -13,6 +13,11 @@ approach.
   Appearance, Typography, Animation, Desktop spacing, Mobile. Dependent
   controls use `visible_if`. HTML tag selects and legacy ids are hidden, never
   removed; headings render h2 with h3 inside.
+- Exception requested by the creator: Before and After Slider no longer
+  exposes the duplicate section `headline` and `content` fields. Heading
+  and Subheading blocks are included by default and own their rich-text
+  editors. The read-only legacy rendering fallback remains for older saved
+  instances; existing blocks take precedence over those values.
 - Live editing: `shopify/assets/media-live-<group>.js`, loaded by the layout on
   every page. Each controller is scoped per section instance, batches paints per
   frame, only writes values that changed, keeps images, videos and running
