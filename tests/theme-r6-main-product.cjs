@@ -140,7 +140,7 @@ const OLD = 'c098384';
       S('enable_video_controls', false, M.video, {editorRedraw: galleryKeysVideo}),
       S('enable_on_desktop', false, M.barClass),
       S('enable_on_mobile', false, M.barClass),
-      S('sticky_show_image', false, M.barShown('.product-item__media'), {live: true, widths: [1366]}),
+      S('sticky_show_image', false, M.barShown('.product-item__inner'), {live: true, widths: [1366]}),
       S('sticky_show_title', false, M.barShown('.product-item__information'), {live: true, widths: [1366]}),
       S('sticky_show_reviews', true, M.barReviews, {product: REVIEWED}),
       S('sticky_show_variant_picker', false, M.barShown('.product-detail__variant-picker'), {live: true}),
