@@ -211,7 +211,7 @@
     const fields = c.q('[data-nl-fields]');
     if (fields) {
       put(fields, '.align', 'justify-content-' + align);
-      const set = id => on && isColor(s[id]) ? color(s[id], '') : null, ownField = own(s, 'use_theme_fields');
+      const ownField = own(s, 'use_theme_fields'), set = id => ownField && isColor(s[id]) ? color(s[id], '') : null;
       put(fields, '--input-bg', set('field_bg')); put(fields, '--field-text', set('field_text')); put(fields, '--field-placeholder', set('field_text'));
       put(fields, '--input-border-color', set('field_border')); put(fields, '--input-focus-color', set('field_focus'));
       put(fields, '--input-border-radius', ownField ? px(s.field_radius, 4) : null); put(fields, '--input-height', ownField ? px(s.field_height, 50) : null);
@@ -313,7 +313,132 @@
     margins(c, bool(s.reset_spacing), false);
   }
 
+  /* ---------- Contact Form Simple ---------- */
+  const FLEX = {left: 'flex-start', right: 'flex-end'};
+  /* a field block's control, as the Liquid draws it */
+  function fieldControl(b, id, word) {
+    const type = b.field_type || 'text', name = b.name || b.label || word;
+    const attr = type === 'email' ? 'contact[email]' : type === 'textarea' ? 'contact[body]' : 'contact[' + name + ']';
+    const tag = type === 'textarea' ? 'TEXTAREA' : type === 'select' ? 'SELECT' : 'INPUT';
+    const want = {tag, cls: tag === 'TEXTAREA' ? 'cfs__textarea' : tag === 'SELECT' ? 'cfs__select' : 'cfs__input', type: tag === 'INPUT' ? (type === 'email' || type === 'tel' ? type : 'text') : null, name: attr,
+      auto: type === 'email' ? 'email' : type === 'tel' ? 'tel' : null, ph: tag === 'SELECT' ? null : str(b.placeholder), req: bool(b.required),
+      opts: tag === 'SELECT' ? JSON.stringify([str(b.placeholder), String(b.options || '').split(',').map(o => o.trim()).filter(Boolean)]) : ''};
+    return want;
+  }
+  function applyField(c, x, word) {
+    const {put} = c, b = x.b, el = x.el, id = 'cfs-' + c.root.dataset.ctSection + '-' + x.id, w = fieldControl(b, id, word);
+    put(el, '@data-half', (bool(b.half_width) && b.field_type !== 'textarea') || null);
+    const label = el.querySelector('.cfs__label');
+    if (label) {
+      put(label, '~visually-hidden', blank(b.label));
+      const t = label.querySelector('[data-cfs-label]'); if (t) put(t, 'text', str(b.label) || str(b.placeholder) || b.name || word);
+      const r = label.querySelector('.cfs__label-required'); if (r) put(r, 'hidden', !w.req);
+    }
+    let ctl = el.querySelector('input, textarea, select');
+    if (!ctl) return;
+    if (c.record) return;
+    if (ctl.tagName !== w.tag) { const n = document.createElement(w.tag); n.id = ctl.id; ctl.replaceWith(n); ctl = n; c.st.last.delete(ctl); }
+    ctl.className = w.cls;
+    const set = (k, v) => { if (v == null || v === false) { if (ctl.hasAttribute(k)) ctl.removeAttribute(k); } else if (ctl.getAttribute(k) !== (v === true ? '' : v)) ctl.setAttribute(k, v === true ? '' : v); };
+    set('type', w.type); set('name', w.name); set('placeholder', w.ph); set('autocomplete', w.auto); set('required', w.req);
+    if (w.tag === 'SELECT' && ctl.dataset.cfsOpts !== w.opts) {
+      const [ph, list] = JSON.parse(w.opts), out = [];
+      if (ph) { const o = document.createElement('option'); o.value = ''; o.textContent = ph; out.push(o); }
+      for (const v of list) { const o = document.createElement('option'); o.value = v; o.textContent = v; out.push(o); }
+      ctl.replaceChildren(...out); ctl.dataset.cfsOpts = w.opts;
+    }
+  }
+  function applyInfo(c, x, shop) {
+    const {put} = c, b = x.b, el = x.el, icon = b.icon || 'mail';
+    let value = str(b.value), link = str(b.link);
+    if (!value.trim()) value = icon === 'mail' || icon === 'message' ? shop[0] : icon === 'phone' ? shop[1] : icon === 'pin' ? shop[2] : '';
+    if (!link.trim() && value) link = icon === 'mail' || icon === 'message' ? 'mailto:' + value : icon === 'phone' ? 'tel:' + value.replace(/[ ()-]/g, '') : '';
+    put(el, 'hidden', blank(b.label) && !value);
+    const ic = el.querySelector('[data-cfs-icon]'); if (ic) put(ic, 'icon', icon);
+    const l = el.querySelector('.cfs__info-label'); if (l) { put(l, 'text', str(b.label)); put(l, 'hidden', blank(b.label)); }
+    const v = el.querySelector('.cfs__info-value');
+    if (v) {
+      put(v, 'hidden', !value);
+      if (c.record) return;
+      let inner = v.firstElementChild;
+      const tag = link ? 'A' : 'SPAN';
+      if (!inner || inner.tagName !== tag) { const n = document.createElement(tag); v.replaceChildren(n); inner = n; }
+      if (link) { if (inner.getAttribute('href') !== link) inner.setAttribute('href', link); }
+      if (inner.textContent !== value) inner.textContent = value;
+    }
+  }
+  function cfs(c) {
+    const {root, s, put} = c, on = custom(s), secFont = bool(s.enable_custom_fonts), align = s.header_align || 'center';
+    const ownField = own(s, 'use_theme_fields'), shape = own(s, 'use_theme_button'), lw = s.label_weight || 'theme';
+    put(root, 'scheme', schemeOf(s)); width(c, s.section_width);
+    put(root, '@data-cfs-show', s.show_section_on || 'all'); put(root, '@data-cfs-side', s.side_column_position || 'right');
+    const v = (k, val) => put(root, k, val);
+    v('--cfs-pt-m', px(s.padding_top_mobile, 56)); v('--cfs-pb-m', px(s.padding_bottom_mobile, 56)); v('--cfs-pt-d', px(s.padding_top_desktop, 96)); v('--cfs-pb-d', px(s.padding_bottom_desktop, 96));
+    v('--cfs-w-m', px(s.section_max_width_mobile, 560)); v('--cfs-w-t', px(s.section_max_width_tablet, 900)); v('--cfs-w-d', px(s.section_max_width_desktop, 1100));
+    v('--cfs-align', align); v('--cfs-flex', FLEX[align] || 'center');
+    v('--cfs-hgap-m', px(s.heading_sub_gap_mobile, 8)); v('--cfs-hgap-d', px(s.heading_sub_gap_desktop, 14)); v('--cfs-gap-m', px(s.gap_subheading_content_mobile, 32)); v('--cfs-gap-d', px(s.gap_subheading_content, 56));
+    v('--cfs-cols', (s.form_col_ratio || '3fr') + ' ' + (s.side_col_ratio || '2fr')); v('--cfs-col-gap-m', px(s.col_gap_mobile, 32)); v('--cfs-col-gap-d', px(s.col_gap_desktop, 48));
+    v('--cfs-field-gap', px(s.field_gap, 16)); v('--cfs-label-size', px(s.label_size, 14)); v('--cfs-ta-h', px(s.textarea_min_height, 140)); v('--cfs-img-r', px(s.side_image_radius, 16));
+    v('--cfs-label-weight', lw !== 'theme' ? str(lw) : null);
+    const boxed = on && isColor(s.form_bg);
+    v('--cfs-form-pad', boxed ? px(s.form_padding, 32) : null); v('--cfs-form-r', boxed ? px(s.form_radius, 16) : null);
+    const cv = (k, id, f) => v(k, on ? color(s[id], f) : null);
+    cv('--cfs-bg', 'section_bg', 'var(--color-background)'); cv('--cfs-form-bg', 'form_bg', 'transparent'); cv('--cfs-label-c', 'label_color', 'var(--color-text)'); cv('--cfs-req-c', 'required_color', 'var(--color-primary)');
+    cv('--cfs-ib', 'info_icon_bg', 'color-mix(in srgb, var(--color-heading) 8%, transparent)'); cv('--cfs-ic', 'info_icon_color', 'var(--color-heading)');
+    cv('--cfs-il', 'info_label_color', 'color-mix(in srgb, var(--color-text) 72%, transparent)'); cv('--cfs-iv', 'info_value_color', 'var(--color-heading)'); cv('--cfs-id', 'info_border_color', 'var(--color-border)');
+    fontVar(c, root, '--ct-hf', secFont, s.heading_font); fontVar(c, root, '--ct-bf', secFont, s.body_font);
+    const word = root.dataset.cfsWord || 'field', shop = String(root.dataset.cfsShop || '||').split('|');
+    let header = false;
+    for (const x of c.blocks) {
+      const b = x.b, el = x.el, bf = bool(b.enable_custom_fonts);
+      if (x.type === 'heading' || x.type === 'subheading') {
+        const h = x.type === 'heading', z = bool(b.size_enable);
+        put(el, 'hidden', blank(b.text)); put(el, 'rich', b.text || ''); if (!blank(b.text)) header = true;
+        put(el, '@data-own-font', secFont || bf || null); put(el, '@data-own-size', z || null);
+        put(el, '--cfs-ff', bf && font(b.font) || null);
+        if (h) {
+          const fw = b.weight && b.weight !== 'theme' ? str(b.weight) : null;
+          put(el, '@data-own-weight', !!fw || null); put(el, '--cfs-h-fw', fw);
+          put(el, '--cfs-h-c', custom(b) ? color(b.color, 'var(--color-heading)') : null);
+          put(el, '--cfs-h-m', z ? px(b.size_mobile, 30) : null); put(el, '--cfs-h-d', z ? px(b.size_desktop, 44) : null);
+          put(el, '--cfs-h-lh', z ? str(num(b.line_height, 1.2)) : null); put(el, '--cfs-h-ls', z ? px(b.tracking) : null);
+        } else {
+          const w = bool(b.weight_enable);
+          put(el, '@data-own-weight', w || null); put(el, '--cfs-s-fw', w ? str(b.weight || 400) : null);
+          put(el, '--cfs-s-mw', px(b.max_width, 600));
+          put(el, '--cfs-s-c', custom(b) ? color(b.color, 'var(--color-text)') : null);
+          put(el, '--cfs-s-fs', z ? px(b.size, 16) : null); put(el, '--cfs-s-lh', z ? str(num(b.line_height, 1.5)) : null);
+        }
+      } else if (x.type === 'field') applyField(c, x, word);
+      else if (x.type === 'info') { put(el, '@data-own-font', secFont || null); applyInfo(c, x, shop); }
+      else if (x.type === 'side_image' && el.tagName === 'IMG') put(el, '@alt', str(b.alt));
+    }
+    const head = c.q('[data-ct-header]'); if (head) put(head, 'hidden', !header);
+    const form = c.q('[data-cfs-form]');
+    if (form) {
+      put(form, '@data-cfs-own-field', ownField || null); put(form, '@data-own-font', secFont || null); put(form, '@data-own-weight', lw !== 'theme' || null);
+      const fv = (k, val) => put(form, k, ownField ? val : null), set = id => ownField && isColor(s[id]) ? color(s[id], '') : null;
+      fv('--input-border-radius', px(s.input_radius, 10)); fv('--input-padding', px(s.input_padding_y, 14) + ' ' + px(s.input_padding_x, 16));
+      fv('--inputs-border-width', px(s.input_border_width, 1)); fv('--field-border-widths', px(s.input_border_width, 1)); fv('--cfs-in-size', px(s.input_size, 16));
+      put(form, '--input-bg', set('input_bg')); put(form, '--field-text', set('input_text_color'));
+      put(form, '--field-placeholder', set('placeholder_color')); put(form, '--field-placeholder-opacity', set('placeholder_color') ? '1' : null);
+      put(form, '--input-border-color', set('input_border_color')); put(form, '--input-focus-color', set('input_focus_color'));
+      const send = root.dataset.cfsSend || 'Send message';
+      for (const btn of form.querySelectorAll('.cfs__submit')) {
+        put(btn, '@data-cfs-full', bool(s.submit_full_width) || null); put(btn, '@data-own-shape', shape || null); put(btn, '@data-own-font', secFont || null);
+        buttonColours(c, btn, on, {bg: 'submit_bg', text: 'submit_color', hover_bg: 'submit_bg_hover', hover_text: 'submit_color'});
+        put(btn, '--mb-radius', shape ? px(s.submit_radius, 100) : null); put(btn, '--mb-font-size', shape ? px(s.submit_size, 16) : null);
+        put(btn, '--mb-padding-x', shape ? px(s.submit_pad_x, 32) : null); put(btn, '--mb-padding-y', shape ? px(s.submit_pad_y, 16) : null);
+        put(btn, '--mb-font', secFont && font(s.body_font) ? 'var(--ct-bf)' : null);
+        if (btn.hasAttribute('data-cfs-default-submit')) put(btn, 'text', str(s.submit_label) || send);
+        else { const x = c.blocks.find(y => y.el === btn); if (x) put(btn, 'text', str(x.b.label) || send); }
+      }
+    }
+    margins(c, bool(s.reset_spacing), false);
+  }
+
   const TYPES = {
+    'contact-form-simple': {derive: cfs},
     contactformsimple2: {derive: cp2},
     'google-map': {derive: googleMap},
     newsletter: {derive: newsletter},

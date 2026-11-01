@@ -18,7 +18,7 @@ const {launch, mount, schemaProblems, schemaOf} = require('./media-fixture.cjs')
 const IMG = {url: 'https://img.test/logo-a.png', src: 'https://img.test/logo-a.png', width: 300, height: 120, alt: 'Logo A'};
 const IMG2 = {url: 'https://img.test/logo-b.png', src: 'https://img.test/logo-b.png', width: 320, height: 100, alt: 'Logo B'};
 const FONT = {family: 'Courier New', fallback_families: 'monospace', weight: 300};
-const PROPS = ['color', 'backgroundColor', 'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'textTransform', 'textAlign', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'marginTop', 'marginBottom', 'width', 'height', 'maxWidth', 'columnGap', 'rowGap', 'borderTopWidth', 'borderTopColor', 'borderTopLeftRadius', 'opacity', 'filter', 'display', 'justifyContent', 'alignItems', 'gridTemplateColumns', 'order', 'aspectRatio', 'objectFit', 'animationName', 'animationDuration', 'animationDirection', 'maskImage', 'transitionDuration', 'flexDirection', 'top', 'left', 'visibility', 'transform', 'fill', 'stroke'];
+const PROPS = ['color', 'backgroundColor', 'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'textTransform', 'textAlign', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'marginTop', 'marginBottom', 'width', 'height', 'maxWidth', 'columnGap', 'rowGap', 'borderTopWidth', 'borderTopColor', 'borderTopLeftRadius', 'opacity', 'filter', 'display', 'justifyContent', 'alignItems', 'gridTemplateColumns', 'order', 'aspectRatio', 'objectFit', 'animationName', 'animationDuration', 'animationDirection', 'maskImage', 'transitionDuration', 'flexDirection', 'top', 'left', 'visibility', 'transform', 'fill', 'stroke', 'backgroundImage', 'borderBottomWidth', 'borderBottomColor'];
 
 let NO_RECT = '';
 async function fingerprint(page, uid) {
@@ -37,7 +37,7 @@ async function fingerprint(page, uid) {
       const own = [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent.trim()).join('');
       const cls = [...el.classList].filter(c => !/^(is-|swiper|revealed|scroll-trigger)/.test(c)).sort().join('.');
       const r = NO_RECT && el.closest(NO_RECT) ? {left: 0, top: 0} : el.getBoundingClientRect();
-      out.push(el.tagName + '.' + cls + '|' + attrs + '|' + own + '|' + Math.round(r.left - w.left) + ',' + Math.round(r.top - w.top) + '|' + PROPS.map(p => p === 'transform' && el.getAnimations().some(a => a.effect && a.effect.getTiming().iterations === Infinity) ? 'looping' : cs[p]).join(';') + '|' + ['::before', '::after'].map(p => { const s = getComputedStyle(el, p); return s.content + s.fontSize + s.color + s.backgroundColor + s.width + s.borderTopLeftRadius + s.opacity; }).join(''));
+      out.push(el.tagName + '.' + cls + '|' + attrs + '|' + own + '|' + Math.round(r.left - w.left) + ',' + Math.round(r.top - w.top) + '|' + PROPS.map(p => ['transform', 'filter', 'opacity'].includes(p) && el.getAnimations().some(a => a.effect && a.effect.getTiming().iterations === Infinity) ? 'looping' : cs[p]).join(';') + '|' + ['::before', '::after'].map(p => { const s = getComputedStyle(el, p); return s.content + s.fontSize + s.color + s.backgroundColor + s.width + s.borderTopLeftRadius + s.opacity; }).join(''));
     }
     return out;
   }, {uid, PROPS, NO_RECT});
@@ -114,8 +114,9 @@ async function run(spec) {
     }
     /* 2. first paint = hydrated */
     for (const width of [375, 1366]) {
-      const a = await mount(browser, name, {width, assets: [], globals, settings: baseSettings, blocks: baseBlocks, inlineScripts: false});
-      const b = await mount(browser, name, {width, assets: ['live-announcements.js'], globals, settings: baseSettings, blocks: baseBlocks});
+      const fpBlocks = spec.firstPaintBlocks || baseBlocks;
+      const a = await mount(browser, name, {width, assets: [], globals, settings: baseSettings, blocks: fpBlocks, inlineScripts: false});
+      const b = await mount(browser, name, {width, assets: ['live-announcements.js'], globals, settings: baseSettings, blocks: fpBlocks});
       await b.page.waitForTimeout(120);
       const fa = await fingerprint(a.page, 'test'), fb = await fingerprint(b.page, 'test');
       ok(JSON.stringify(fa) === JSON.stringify(fb), name + ' ' + width + ' first paint equals hydrated paint: ' + diffAt(fa, fb));

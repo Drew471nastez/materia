@@ -160,7 +160,11 @@ async function redraw(p, sectionId, markup) {
     sec.querySelectorAll('script').forEach(o => { const s = document.createElement('script'); s.textContent = o.textContent; o.replaceWith(s); });
     sec.dispatchEvent(new CustomEvent('storelib:section-load', {bubbles: true, detail: {sectionId: id}}));
   }, [sectionId, markup]);
-  await p.waitForTimeout(150);
+  await p.waitForTimeout(250);
+  /* pictures settle (some reveal once loaded), then two frames */
+  await p.evaluate(id => Promise.all([...document.querySelectorAll('#shopify-section-' + id + ' img')].map(i => i.complete ? null : new Promise(r => { i.addEventListener('load', r, {once: true}); i.addEventListener('error', r, {once: true}); setTimeout(r, 1500); }))), sectionId);
+  await p.waitForTimeout(120);
+  await p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 }
 
 module.exports = {Liquid, root, read, readHead, body, schemaOf, engine, renderPage, open, emit, redraw, savedGroup, savedMenu, RICH_MENU, L, img, blockList};
@@ -171,6 +175,8 @@ module.exports = {Liquid, root, read, readHead, body, schemaOf, engine, renderPa
 const VARS = ['--menu-hover-color', '--menu-link-color', '--menu-link-hover-color', '--mega-label-bg', '--mega-label-color', '--dd-shadow', '--hs-logo-width', '--hs-logo-width-mobile', '--hs-hover-fill', '--transparent-color', '--mmb-bg', '--mmb-color', '--mmb-btn-bg', '--mmb-btn-color', '--hot-cl', '--hot-bg-cl', '--new-cl', '--new-bg-cl', '--sale-cl', '--sale-bg-cl', '--popular-cl', '--popular-bg-cl', '--custom_1-cl', '--custom_1-bg-cl', '--custom_2-cl', '--custom_2-bg-cl', '--mega_custom_width', '--menu-font', '--tb-msg-color'];
 async function signature(p, sel, full = true) {
   return p.evaluate(([sel, full, VARS]) => {
+    /* transitions jump to their end, so a value is compared, not a frame of its fade */
+    for (const a of document.getAnimations()) { try { if (a instanceof CSSTransition || (a instanceof CSSAnimation && a.effect && a.effect.getComputedTiming().iterations !== Infinity)) a.finish(); } catch (_) { /* running */ } }
     const root = document.querySelector(sel);
     if (!root) return ['missing ' + sel];
     const skip = new Set(['SCRIPT', 'STYLE', 'LINK', 'path', 'use', 'symbol', 'TEMPLATE']);
@@ -228,3 +234,6 @@ module.exports.signature = signature;
 module.exports.diff = diff;
 module.exports.changed = changed;
 module.exports.enabling = enabling;
+/* which fields of a signature row differ, by name */
+const FIELDS = ['tag', 'x', 'y', 'w', 'h', 'color', 'backgroundColor', 'backgroundImage', 'fontFamily', 'fontSize', 'fontWeight', 'letterSpacing', 'textTransform', 'display', 'visibility', 'opacity', 'borderTopWidth', 'borderBottomWidth', 'borderTopColor', 'borderBottomColor', 'borderTopLeftRadius', 'boxShadow', 'justifyContent', 'textAlign', 'position', 'transform', 'marginTop', 'marginBottom', 'paddingTop', 'paddingBottom', 'paddingLeft', 'columnGap', 'gridTemplateColumns', 'width', 'maxWidth', 'height', 'top', 'zIndex', 'backdropFilter', 'transitionDuration', 'transitionTimingFunction', 'textDecorationLine', ...VARS, 'text', 'class'];
+module.exports.explain = d => d.slice(0, 4).map(([i, a, b]) => { const A = String(a).split('|'), B = String(b).split('|'); return '#' + i + ' ' + A[0] + ' ' + (A[A.length - 1] || '') + ': ' + A.map((x, k) => x !== B[k] ? (FIELDS[k] || k) + ' ' + x + ' -> ' + B[k] : '').filter(Boolean).join('; ').slice(0, 400); }).join('\n');

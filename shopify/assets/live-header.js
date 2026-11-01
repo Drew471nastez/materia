@@ -241,7 +241,7 @@
       switch (k) {
         case 'logo_width_desktop': prop(S, '--hs-logo-width', px(v, 120)); break;
         case 'logo_width_mobile': prop(S, '--hs-logo-width-mobile', px(v, 100)); break;
-        case 'logo_position': if (inner && ['left', 'center'].includes(v)) { swap(inner, ['logo-left', 'logo-center'], 'logo-' + v); for (const sub of all(H, '.navigation:not(.mobile) .level0 > .submenu')) cls(sub, 'left-0', v === 'left'); } break;
+        case 'logo_position': if (inner && ['left', 'center'].includes(v)) { swap(inner, ['logo-left', 'logo-center'], 'logo-' + v); for (const sub of all(H, '.navigation .level0 > .submenu.custom-scrollbar.submenu-horizontal')) cls(sub, 'left-0', v === 'left'); } break;
         case 'color_scheme': if (scheme(v)) swapPrefix(H, 'color-', scheme(v)); break;
         case 'separator_line': cls(H, 'border-bottom', v === 'all-page' || (v === 'homepage' && index) || (v === 'inner_page' && !index)); break;
         case 'header_height': prop(S, '--hs-logo-max-height', px(num(v, 64) - 16)); prop(S, '--hs-logo-box-height', px(v, 64)); break;
@@ -256,13 +256,13 @@
           break;
         }
         case 'menu_hover_color': st.hoverColor = color(v, ''); hoverColor(H, st); break;
-        case 'dropdowns_animation': if (ANIMS.includes(v)) for (const n of navs) swap(n, ANIMS, v); break;
+        case 'dropdowns_animation': if (ANIMS.includes(v)) { for (const n of navs) swap(n, ANIMS, v); for (const ul of all(H, '.navigation .horizontal-list')) swap(ul, ANIMS.map(x => 'animation-' + x), 'animation-' + v); } break;
         case 'dropdown_shadow': prop(H, '--dd-shadow', SHADOWS[v] || '0 5px 30px 0 rgba(0, 0, 0, 0.05)'); break;
         case 'uppercase_first':
-          for (const a of all(H, '.navigation .level0 > menu-item > a, .mobile-nav-actions__login, .header__action .header-action-text')) cls(a, 'uppercase', bool(v));
+          for (const a of all(H, '.navigation .level0 > menu-item > a, .navigation .level0.hidden-1025 > a.border-bottom-1025-0, .navigation .level0 > a.border-bottom-1025-0, .mobile-nav-actions__login, .header__action .header-action-text')) cls(a, 'uppercase', bool(v));
           break;
         case 'mega_column_dividers': attr(H, 'data-mega-dividers', bool(v)); break;
-        case 'mega_card_label': attr(H, 'data-mega-label', v || 'button'); break;
+        case 'mega_card_label': attr(H, 'data-mega-label', v || 'button'); for (const el of all(H, '[data-mega-card-label]')) { const c = (v || 'button') === 'button' ? 'btn inline-block bg-white heading-color py-15 px-30 text-center' : 'menu-card__label'; if (el.className !== c) el.className = c; } break;
         case 'mega_card_label_bg': prop(H, '--mega-label-bg', color(v, '')); break;
         case 'mega_card_label_color': prop(H, '--mega-label-color', color(v, '')); break;
         case 'show_search': show(action && action.querySelector('.header_search'), bool(v)); break;

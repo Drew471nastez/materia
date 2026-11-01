@@ -28,7 +28,9 @@ const fs = require('fs'), path = require('path'), {execSync} = require('child_pr
 const {launch, mount, render, schemaOf, schemaProblems, themeControls, THEME_VARS} = require('./media-fixture.cjs');
 const {engine} = require('./theme-featured-product-round5.cjs');
 const ROOT = path.join(__dirname, '..');
-const A = ['swiper-bundle.min.css', 'banner.css', 'slideshow.css', 'swiper-bundle.min.js', 'motion.min.js', 'global.js', 'slideshow-live.js', 'slideshow-pointer.js', 'live-blog-slideshow.js'];
+/* The sections as they were before round 5 (the commit before the round's work in progress), or HEAD. */
+const BEFORE = (() => { try { return execSync('git rev-parse --verify -q 2002b49^{commit}', {cwd: ROOT, encoding: 'utf8'}).trim() || 'HEAD'; } catch (_) { return 'HEAD'; } })();
+const A = ['swiper-bundle.min.css', 'banner.css', 'slideshow.css', 'pagination-styles.css', 'swiper-bundle.min.js', 'motion.min.js', 'global.js', 'slideshow-live.js', 'slideshow-pointer.js', 'live-blog-slideshow.js'];
 const IMG = {url: 'https://theme.test/pic.png', src: 'https://theme.test/pic.png', width: 1600, height: 900, aspect_ratio: 1.78, alt: 'Saved alt', presentation: {focal_point: '50% 50%'}};
 const FONT = {family: 'Verdana', fallback_families: 'sans-serif'}, MONO = {family: 'Courier New', fallback_families: 'monospace'};
 let checks = 0;
@@ -39,11 +41,13 @@ const only = process.argv.slice(2);
 
 const SLIDE1 = {subheading: 'Top text', heading: 'First slide', description: '<p>Some <strong>words</strong> here</p>', first_button_label: 'Shop', first_button_link: '/collections/all', second_button_label: 'More'};
 const BLOCKS = () => [{type: 'slider_item', settings: {...SLIDE1}}, {type: 'slider_item', settings: {heading: 'Second slide'}}];
-const BASE = {slide_effect: 'fade', autoplay: false};
+const BASE = {autoplay: false};
 
 /* Everything a visitor can see on the first slide and around it. */
 async function sig(page, uid = 'test') {
   return page.evaluate(uid => {
+    /* compare looks at rest: transitions finished, endless image loops at their start */
+    for (const a of document.getAnimations()) { if (a instanceof CSSTransition) a.finish(); else if (a.effect && a.effect.getComputedTiming().iterations === Infinity) a.currentTime = 0; }
     const W = document.getElementById('shopify-section-' + uid), R = W.querySelector('[data-slideshow-settings]'), S = W.querySelector('[data-first-slide]');
     const cs = (el, props, pseudo) => el ? Object.fromEntries(props.map(p => [p, p.startsWith('--') ? getComputedStyle(el, pseudo).getPropertyValue(p).trim() : getComputedStyle(el, pseudo)[p]])) : null;
     const T = ['fontFamily', 'fontWeight', 'fontSize', 'lineHeight', 'letterSpacing', 'textTransform', 'color', 'marginBottom', 'fontStyle', 'display'];
@@ -68,7 +72,7 @@ async function sig(page, uid = 'test') {
       badges: vis(S.querySelector('.banner__badges')) && {t: S.querySelector('.banner__badges').textContent.replace(/\s+/g, ' ').trim(), at: [...S.querySelector('.sec__content-inner').children].indexOf(S.querySelector('.banner__badges')), ...cs(S.querySelector('.banner__badges'), ['marginTop', 'marginBottom', 'columnGap', 'justifyContent']), badge: cs(S.querySelector('.banner__badge'), ['fontSize', 'color']), text: cs(S.querySelector('.banner__badge-text'), ['fontWeight']), svg: cs(S.querySelector('.banner__badge svg'), ['color', 'width']), stars: S.querySelector('.badge-stars__fg')?.style.width, starsBg: cs(S.querySelector('.badge-stars__bg'), ['color']), icons: [...S.querySelectorAll('.banner__badge svg path')].map(p => p.getAttribute('d').slice(0, 12)).join()},
       arrows: vis(R.querySelector('.swiper-actions')) && {...cs(R.querySelector('.swiper-actions'), ['opacity', 'visibility', 'display']), a: cs(R.querySelector('.swiper-button-next'), ['width', 'borderTopLeftRadius', 'backgroundColor', 'color', 'borderTopColor', '--ss-arrow-hover-bg', '--ss-arrow-hover-icon', 'opacity', 'display', 'visibility'])},
       pag: vis(R.querySelector('.swiper-pagination')) && {...cs(R.querySelector('.swiper-pagination'), ['justifyContent', 'display']), bullet: cs(R.querySelector('.swiper-pagination-bullet-active, .swiper-pagination-bullet'), ['width', 'height', 'borderTopLeftRadius', 'backgroundColor', 'borderTopWidth']), style: slider.dataset.paginationStyle},
-      swiper: sw && !sw.destroyed ? {effect: sw.params.effect, loop: !!sw.params.loop, autoplay: !!(sw.params.autoplay && sw.params.autoplay.enabled), delay: sw.params.autoplay?.delay} : null,
+      swiper: sw && !sw.destroyed ? {effect: sw.params.effect, loop: !!sw.params.loop, autoplay: !!(sw.params.autoplay && sw.params.autoplay.enabled), delay: sw.params.autoplay?.enabled ? sw.params.autoplay.delay : 0} : null, split: cs(S.querySelector('.banner__media-split'), ['columnGap', 'rowGap']),
       pointer: R.dataset.slideshowPointer,
     };
     return JSON.parse(JSON.stringify(out));
@@ -85,7 +89,7 @@ function values(x) {
     case 'checkbox': return [!cur];
     case 'color': return ['#ab12cd'];
     case 'color_scheme': return ['alt-scheme'];
-    case 'text': case 'textarea': return ['Edited words'];
+    case 'text': case 'textarea': return x.id === 'accent_heading_text' ? ['First'] : ['Edited words'];
     case 'richtext': return ['<p>Edited <em>text</em></p>'];
     case 'url': return ['/pages/edited'];
     case 'image_picker': return [IMG];
@@ -110,7 +114,7 @@ function prereq(vif, scope) {
 /* Extra context so a setting can show (beyond its visible_if). */
 const PRE_S = {
   section_margin_top_desktop: {reset_spacing: false}, section_margin_bottom_desktop: {reset_spacing: false}, section_margin_top_mobile: {reset_spacing: false}, section_margin_bottom_mobile: {reset_spacing: false},
-  autorotate_speed: {autoplay: true}, image_effect_intensity: {image_effect: 'blur_in'},
+  autorotate_speed: {autoplay: true}, image_effect_intensity: {image_effect: 'zoom_out'}, reset_spacing: {section_margin_top_mobile: 20, section_margin_top_desktop: 20},
   arrow_visibility: {}, btn_text_transform_override: {btn_custom_enable: true},
 };
 const PRE_B = {
@@ -118,7 +122,8 @@ const PRE_B = {
   enable_accent_heading: {accent_heading_text: 'First'},
   subheading_weight: {enable_custom_font_weights: true}, trust_badge_star_empty_color: {enable_trust_badges: true, badge_1_type: 'stars'}, badge_1_rating: {enable_trust_badges: true, badge_1_type: 'stars'},
   trust_badge_accent_color: {enable_trust_badges: true}, badge_1_icon: {enable_trust_badges: true, badge_1_type: 'icon'},
-  badge_2_text: {enable_trust_badges: true, badge_2_type: 'text', badge_2_text: 'Two'}, badge_3_text: {enable_trust_badges: true, badge_3_type: 'text', badge_3_text: 'Three'},
+  badge_2_text: {enable_trust_badges: true, badge_2_type: 'icon'}, badge_3_text: {enable_trust_badges: true, badge_3_type: 'icon'},
+  badge_2_type: {enable_trust_badges: true, badge_2_text: 'Two'}, badge_3_type: {enable_trust_badges: true, badge_3_text: 'Three'}, accent_heading_text: {enable_accent_heading: true},
   badge_2_rating: {enable_trust_badges: true, badge_2_type: 'stars'}, badge_3_rating: {enable_trust_badges: true, badge_3_type: 'stars'},
   badge_2_icon: {enable_trust_badges: true, badge_2_type: 'icon'}, badge_3_icon: {enable_trust_badges: true, badge_3_type: 'icon'},
   content_box_opacity: {show_content_background: true, content_background: '#00ff00'}, content_background: {show_content_background: true},
@@ -132,21 +137,26 @@ const PRE_B = {
 const STRUCTURAL = new Set(['image', 'image_mobile', 'local_video', 'video_url', 'split_images_enable', 'image_split_left', 'image_split_right', 'split_gap', 'split_mobile_use_primary', 'split_mobile_primary_image',
   'enable_trust_badges', 'trust_badge_position', 'badge_1_type', 'badge_2_type', 'badge_3_type', 'badge_1_icon', 'badge_2_icon', 'badge_3_icon', 'content_below_image', 'reveal', 'carousel_pagination', 'show_arrow', 'slide_height', 'subheading', 'second_button_label', 'enable_accent_heading', 'accent_heading_text']);
 /* Settings that look the same at one width (desktop or mobile only). */
-const SAME = {375: new Set(['subheading_font_size', 'heading_font_size', 'des_font_size', 'section_margin_top_desktop', 'section_margin_bottom_desktop', 'content_position', 'content_alignment', 'content_max_width', 'arrow_visibility', 'content_width', 'pagination_position', 'section_width', 'desktop_height']),
+const SAME = {375: new Set(['subheading_font_size', 'heading_font_size', 'des_font_size', 'section_margin_top_desktop', 'section_margin_bottom_desktop', 'content_position', 'content_alignment', 'content_max_width', 'arrow_visibility', 'show_arrow', 'arrow_shape', 'arrow_style', 'arrow_size', 'arrow_bg', 'arrow_icon_color', 'arrow_border_color', 'content_width', 'pagination_position', 'section_width', 'desktop_height']),
   1366: new Set(['subheading_font_size_mobile', 'heading_font_size_mobile', 'des_font_size_mobile', 'section_margin_top_mobile', 'section_margin_bottom_mobile', 'content_position_mobile', 'content_alignment_mobile', 'arrow_show_mobile', 'content_below_image', 'mobile_height', 'split_mobile_use_primary', 'split_mobile_primary_image'])};
 /* Values whose look is the same as the default by design (an option equal to the theme value here). */
 const SAME_VALUE = {
   subheading_font_weight: ['subheading_weight'], des_font_weight: ['subheading_weight'], heading_font_weight: [], btn_text_transform_override: [],
-  slide_effect: ['slide'], /* the fixture default effect '' is Slide */
   carousel_pagination: ['show_dots_on_mobile@375'], content_width: ['fluid_container'], section_width: ['fluid_container', 'container@1366'],
-  image_effect: ['zoom_in', 'zoom_out', 'parallax', 'fade_in', 'reveal_up'], /* hover, scroll and entrance effects: checked below */
+  image_effect: ['zoom_in', 'fade_in', 'reveal_up'], /* hover and entrance effects: checked in motion() */
+  arrow_shape: ['rounded@1366'], /* the fixture theme's own radius is 12px, like Rounded */
+  slide_height: ['adapt'], /* no picture here: adapt keeps the full screen ratio */
+  btn_second_bg: ['#ab12cd'], /* the theme's second button is an outline here (no fill); checked in themeFirst() with a solid one */
+  enable_custom_colors: [true], /* on with no colour chosen: still the scheme */
   badge_text_weight: [], subheading_weight: [], heading_weight: [], description_weight: [],
 };
 /* Not a visible change on its own in this fixture, checked elsewhere in this file. */
-const ELSEWHERE = new Set(['autoplay', 'autorotate_speed', 'slide_loop', 'first_button_hover_bg', 'first_button_hover_color', 'second_button_hover_bg', 'second_button_hover_color', 'btn_first_text_hover', 'btn_second_text_hover', 'btn_first_bg_hover', 'btn_second_bg_hover', 'arrow_hover_bg', 'arrow_hover_icon_color', 'image_effect_intensity', 'reset_spacing', 'local_video', 'padding_top', 'padding_bottom']);
+const ELSEWHERE = new Set(['reveal', 'first_button_hover_bg', 'first_button_hover_color', 'second_button_hover_bg', 'second_button_hover_color', 'btn_first_text_hover', 'btn_second_text_hover', 'btn_first_bg_hover', 'btn_second_bg_hover', 'arrow_hover_bg', 'arrow_hover_icon_color', 'local_video']);
 
 async function controls(browser) {
   const {schema} = schemaOf('slideshow'), allFails = [];
+  /* the fixture's redraw keeps earlier settings: every id is given each time */
+  const RESET = Object.fromEntries(schema.settings.filter(x => x.id).map(x => [x.id, x.default]));
   const items = [...schema.settings.filter(x => x.id && !x.hidden).map(x => ['s', x]), ...schema.blocks[0].settings.filter(x => x.id && !x.hidden).map(x => ['b', x])].filter(([, x]) => !only.length || only[0] === 'controls' || only.includes(x.id));
   for (const width of [375, 1366]) {
     const L = await mount(browser, 'slideshow', {width, assets: A, settings: BASE, blocks: BLOCKS()});
@@ -158,7 +168,7 @@ async function controls(browser) {
       for (const v of values(x)) {
         const tag = x.id + '=' + JSON.stringify(v).slice(0, 30) + '@' + width;
         const same = (SAME_VALUE[x.id] || []).some(s => s === v || s === v + '@' + width);
-        const set = o => scope === 's' ? {settings: {...BASE, ...o}, blocks: BLOCKS()} : {settings: BASE, blocks: [{type: 'slider_item', settings: {...SLIDE1, ...o}}, BLOCKS()[1]]};
+        const set = o => scope === 's' ? {settings: {...RESET, ...BASE, ...o}, blocks: BLOCKS()} : {settings: {...RESET, ...BASE}, blocks: [{type: 'slider_item', settings: {...SLIDE1, ...o}}, BLOCKS()[1]]};
         const preS = {...pre}; for (const k of Object.keys(preS)) if (k === x.id) delete preS[k];
         await L.redraw(set(preS)); await frames(L.page);
         const before = await sig(L.page);
@@ -221,10 +231,28 @@ async function themeFirst(browser) {
     eq([await t.css('[data-slideshow-settings]', 'backgroundColor'), await t.css(H, 'color')], ['rgb(250, 250, 250)', 'rgb(16, 16, 16)'], 'scheme live');
     await t.redraw({settings: {...BASE, color_scheme: 'alt-scheme'}}); await frames(t.page);
     eq([await t.css('[data-slideshow-settings]', 'backgroundColor'), await t.css(H, 'color')], ['rgb(250, 250, 250)', 'rgb(16, 16, 16)'], 'scheme redraw');
+    if (width === 1366) {
+      /* hover colours: section custom buttons, a slide's own buttons, custom arrows */
+      const hov = async (sel, prop) => { await t.page.mouse.move(1, 1); await t.page.waitForTimeout(40); const box = await t.page.locator('#shopify-section-test ' + sel).first().boundingBox(); await t.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await t.page.waitForTimeout(120); const v = await t.css(sel, prop); await t.page.mouse.move(1, 1); return v; };
+      await t.emit({btn_custom_enable: true, btn_first_bg_hover: '#010203', btn_first_text_hover: '#040506', btn_second_bg_hover: '#070809', btn_second_text_hover: '#0a0b0c', arrow_style: 'custom', arrow_hover_bg: '#0d0e0f', arrow_hover_icon_color: '#101112', arrow_visibility: 'always'}); await frames(t.page);
+      eq([await hov(B1, 'backgroundColor'), await hov(B1, 'color'), await hov(P + '[data-button-role="secondary"]', 'backgroundColor'), await hov(P + '[data-button-role="secondary"]', 'color'), await hov('.swiper-button-next', 'backgroundColor'), await hov('.swiper-button-next', 'color')],
+        ['rgb(1, 2, 3)', 'rgb(4, 5, 6)', 'rgb(7, 8, 9)', 'rgb(10, 11, 12)', 'rgb(13, 14, 15)', 'rgb(16, 17, 18)'], 'hover colours live');
+      await t.emit({enable_custom_colors: true, first_button_hover_bg: '#131415', first_button_hover_color: '#161718', second_button_hover_bg: '#191a1b', second_button_hover_color: '#1c1d1e'}, bid); await frames(t.page);
+      eq([await hov(B1, 'backgroundColor'), await hov(B1, 'color'), await hov(P + '[data-button-role="secondary"]', 'backgroundColor'), await hov(P + '[data-button-role="secondary"]', 'color')], ['rgb(19, 20, 21)', 'rgb(22, 23, 24)', 'rgb(25, 26, 27)', 'rgb(28, 29, 30)'], 'slide hover colours live');
+      await t.redraw({settings: {...BASE, btn_custom_enable: true, btn_first_bg_hover: '#010203', arrow_style: 'custom', arrow_hover_bg: '#0d0e0f', arrow_visibility: 'always'}, blocks: blocksWith({enable_custom_colors: true, second_button_hover_bg: '#191a1b'})}); await frames(t.page);
+      eq([await hov(B1, 'backgroundColor'), await hov(P + '[data-button-role="secondary"]', 'backgroundColor'), await hov('.swiper-button-next', 'backgroundColor')], ['rgb(1, 2, 3)', 'rgb(25, 26, 27)', 'rgb(13, 14, 15)'], 'hover colours after a redraw');
+      await t.redraw({settings: BASE, blocks: blocksWith({})}); await frames(t.page);
+    }
     ok(await t.noOverflow(), 'no sideways scroll ' + width);
     eq(t.errors, [], 'no errors');
     await t.page.close();
   }
+  /* a solid second button takes the section's second button colour */
+  const sb = await mount(browser, 'slideshow', {width: 1366, assets: A, theme: {btn_secondary_style: 'solid'}, settings: {...BASE, btn_custom_enable: true, btn_second_bg: '#ab12cd'}, blocks: BLOCKS()});
+  eq(await sb.css('[data-first-slide] [data-button-role="secondary"]', 'backgroundColor'), 'rgb(171, 18, 205)', 'second button colour');
+  await sb.emit({btn_second_bg: '#12ab34'}); await frames(sb.page);
+  eq(await sb.css('[data-first-slide] [data-button-role="secondary"]', 'backgroundColor'), 'rgb(18, 171, 52)', 'second button colour live');
+  await sb.page.close();
   /* both priorities off: still the theme */
   const t = await mount(browser, 'slideshow', {width: 1366, assets: A, settings: BASE, blocks: BLOCKS(), priority: 'off'});
   eq([await t.css('[data-first-slide] .sec__content-heading', 'fontFamily'), await t.css('[data-first-slide] .sec__content-des', 'fontFamily'), await t.css('[data-first-slide] [data-button-role="primary"]', 'backgroundColor')], ['Georgia', 'Arial', 'rgb(18, 52, 86)'], 'priority off');
@@ -288,10 +316,10 @@ async function motion(browser) {
   }
   for (const a of ent) for (const b of ent) if (a < b) ok(seen[a] !== seen[b], 'entrances ' + a + ' and ' + b + ' differ: ' + seen[a]);
   /* Autoplay per instance: in view it runs, off screen it waits, the other instance keeps its own; reduced motion: none. */
-  const two = await mount(browser, 'slideshow', {width: 1366, height: 700, editing: false, assets: A, instances: [{uid: 'a', settings: {...BASE, autoplay: true, autorotate_speed: 2}, blocks: BLOCKS()}, {uid: 'b', settings: {...BASE, autoplay: false, slide_effect: 'slide'}, blocks: BLOCKS()}]});
+  const two = await mount(browser, 'slideshow', {width: 1366, height: 700, editing: false, assets: A, instances: [{uid: 'a', settings: {...BASE, autoplay: true, autorotate_speed: 2}, blocks: BLOCKS()}, {uid: 'b', settings: {...BASE, autoplay: false, slide_effect: 'fade'}, blocks: BLOCKS()}]});
   await two.page.mouse.move(1, 699); await two.page.waitForTimeout(400);
   const run = uid => two.page.evaluate(uid => { const sw = document.querySelector('#shopify-section-' + uid + ' slide-section').globalSlide; return {running: !!sw.autoplay.running, effect: sw.params.effect}; }, uid);
-  eq([await run('a'), await run('b')], [{running: true, effect: 'fade'}, {running: false, effect: 'slide'}], 'two instances keep their own autoplay and effect');
+  eq([await run('a'), await run('b')], [{running: true, effect: 'slide'}, {running: false, effect: 'fade'}], 'two instances keep their own autoplay and effect');
   await two.page.evaluate(() => document.getElementById('shopify-section-b').scrollIntoView()); await two.page.waitForTimeout(400);
   eq((await run('a')).running, false, 'off screen: autoplay waits');
   await two.page.evaluate(() => scrollTo(0, 0)); await two.page.waitForTimeout(400);
@@ -323,9 +351,9 @@ async function motion(browser) {
 /* The saved slideshows against HEAD. */
 async function saved(browser) {
   let oldRaw, oldCss;
-  try { oldRaw = execSync('git show HEAD:sections/slideshow.storelib', {cwd: ROOT, encoding: 'utf8'}); oldCss = execSync('git show HEAD:shopify/assets/slideshow.css', {cwd: ROOT, encoding: 'utf8'}); } catch (_) { console.log('  (no HEAD, saved comparison skipped)'); return; }
+  try { oldRaw = execSync('git show ' + BEFORE + ':sections/slideshow.storelib', {cwd: ROOT, encoding: 'utf8'}); oldCss = execSync('git show ' + BEFORE + ':shopify/assets/slideshow.css', {cwd: ROOT, encoding: 'utf8'}); } catch (_) { console.log('  (no HEAD, saved comparison skipped)'); return; }
   const newRaw = fs.readFileSync(path.join(ROOT, 'sections/slideshow.storelib'), 'utf8'), controls = await themeControls();
-  const oldLive = execSync('git show HEAD:shopify/assets/slideshow-live.js', {cwd: ROOT, encoding: 'utf8'});
+  const oldLive = execSync('git show ' + BEFORE + ':shopify/assets/slideshow-live.js', {cwd: ROOT, encoding: 'utf8'});
   for (const [tpl, key] of [['home', 'slideshow-1793370382889'], ['contact', 'slideshow_Mzc3A8'], ['about', 'slideshow_CwBbLj']]) {
     const sec = JSON.parse(fs.readFileSync(path.join(ROOT, 'templates', tpl + '.json'), 'utf8')).sections[key];
     const fill = raw => { const s = JSON.parse(raw.split('<schema>')[1].split('</schema>')[0]).shopify, d = l => Object.fromEntries((l || []).filter(x => x.id && x.default !== undefined).map(x => [x.id, x.default]));
@@ -364,7 +392,7 @@ async function saved(browser) {
 (async () => {
   const s = schemaOf('slideshow').schema;
   eq(schemaProblems('slideshow'), [], 'schema problems');
-  let head = null; try { head = JSON.parse(execSync('git show HEAD:sections/slideshow.storelib', {cwd: ROOT, encoding: 'utf8'}).split('<schema>')[1].split('</schema>')[0]).shopify; } catch (_) {}
+  let head = null; try { head = JSON.parse(execSync('git show ' + BEFORE + ':sections/slideshow.storelib', {cwd: ROOT, encoding: 'utf8'}).split('<schema>')[1].split('</schema>')[0]).shopify; } catch (_) {}
   if (head) { const ids = l => l.filter(x => x.id).map(x => x.id); for (const id of ids(head.settings)) ok(ids(s.settings).includes(id), 'kept ' + id); for (const id of ids(head.blocks[0].settings)) ok(ids(s.blocks[0].settings).includes(id), 'kept block ' + id); }
   const heads = s.settings.filter(x => x.type === 'header').map(x => x.content);
   eq(heads, ['General', 'Layout', 'Media', 'Appearance', 'Typography', 'Animation', 'Desktop spacing', 'Mobile'], 'section groups in the shared order');

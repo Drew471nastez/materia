@@ -1,5 +1,13 @@
 <template compat="shopify">
+{%- comment -%} Runtime: shopify/assets/live-announcements.js (loaded by the layout on every page) runs the slides, the marquee, the countdowns and the close button per instance (paused off screen) and applies live edits. {%- endcomment -%}
 {% render 'theme-type' %}
+{%- liquid
+  assign st = section.settings
+  assign color_scheme = st.color_scheme.id | default: st.color_scheme | default: 'default-color-scheme'
+  assign __ti_scroll_animation = settings.scroll_animation | default: 'none'
+  assign fonts = st.enable_custom_fonts
+  assign custom = st.enable_custom_style
+-%}
 {%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
 {%- if section.settings.reveal == false -%}<span data-ti-no-reveal hidden></span>{%- endif -%}
 {%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' and section.settings.reveal != false -%}
@@ -17,363 +25,106 @@
   })();
 {% comment %}{% endcomment %}</script>
 {%- endif -%}
-<style data-rs-bulletproof>
-  {%- if section.settings.reset_spacing -%}
-    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
-    #shopify-section-{{ section.id }},
-    #shopify-section-{{ section.id }} > .section,
-    #shopify-section-{{ section.id }} > section,
-    #shopify-section-{{ section.id }} > div,
-    #shopify-section-{{ section.id }} > div > .section {
-      margin-top: 0 !important;
-      margin-bottom: 0 !important;
-    }
-    #shopify-section-{{ section.id }} + .shopify-section,
-    #shopify-section-{{ section.id }} + section,
-    .shopify-section + #shopify-section-{{ section.id }} {
-      margin-top: 0 !important;
-    }
-  {%- endif -%}
-{% comment %}{% endcomment %}</style>
+{%- render 'announce-frame', section: section -%}
+{%- if fonts -%}<style>{{ st.body_font | font_face: font_display: 'swap' }}{% comment %}{% endcomment %}</style>{%- endif -%}
+{%- for block in section.blocks -%}{%- if block.settings.enable_custom_fonts and block.settings.font.family != blank -%}<style>{{ block.settings.font | font_face: font_display: 'swap' }}{% comment %}{% endcomment %}</style>{%- endif -%}{%- endfor -%}
 {%- liquid
-  assign __ti_scroll_animation = settings.scroll_animation | default: 'none'
-  assign __ti_reveal = section.settings.reveal
+  assign sid = section.id
+  assign shown_count = 0
+  for block in section.blocks
+    if block.settings.text != blank
+      assign shown_count = shown_count | plus: 1
+    endif
+  endfor
+  assign multi = false
+  if shown_count > 1
+    assign multi = true
+  endif
+  assign page = request.page_type
 -%}
 <style>
-  /* Section isolation — prevent CSS/JS bleed between sections */
-  #shopify-section-{{ section.id }} {
-    isolation: isolate;
-    position: relative;
+  #shopify-section-{{ sid }} .ab2 { position: relative; z-index: 10; display: block; background: var(--ab2-bg); color: var(--ab2-text); font-family: var(--ab2-ff); font-weight: var(--ab2-fw); font-size: var(--ab2-fs); text-transform: var(--ab2-tt); text-align: center; border-bottom: var(--ab2-lw) solid var(--ab2-line); padding: var(--ab2-pt) 0 var(--ab2-pb); }
+  #shopify-section-{{ sid }} .ab2[data-home-only='true']:not([data-page='index']) { display: none; }
+  #shopify-section-{{ sid }} .ab2__inner { position: relative; width: 100%; margin-inline: auto; padding-inline: 16px; }
+  #shopify-section-{{ sid }} .ab2[data-width='container'] .ab2__inner { max-width: calc(var(--page-width, 1300px) + 3rem); }
+  #shopify-section-{{ sid }} .ab2[data-width='fluid_container'] .ab2__inner { max-width: calc(var(--fluid-container-width, 1500px) + 3rem); }
+  #shopify-section-{{ sid }} .ab2[data-close='true'] .ab2__inner { padding-inline: 44px; }
+  #shopify-section-{{ sid }} .ab2__msg { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 12px; color: var(--b-c, var(--ab2-text)); font-family: var(--b-f, inherit); font-weight: var(--b-w, inherit); line-height: 1.4; }
+  #shopify-section-{{ sid }} .ab2__text :is(p, strong, em, a, span) { font-family: inherit; color: inherit; margin: 0; }
+  #shopify-section-{{ sid }} .ab2__text a { text-decoration: underline; text-underline-offset: 3px; }
+  #shopify-section-{{ sid }} .ab2__timer { display: inline-flex; gap: 8px; align-items: baseline; font-variant-numeric: tabular-nums; color: var(--ab2-accent); white-space: nowrap; }
+  #shopify-section-{{ sid }} .ab2__unit { display: inline-flex; gap: 3px; align-items: baseline; }
+  #shopify-section-{{ sid }} .ab2__num { font-weight: var(--heading-weight, 700); min-width: 2ch; }
+  #shopify-section-{{ sid }} .ab2__lbl { font-size: .85em; opacity: .85; }
+  #shopify-section-{{ sid }} .ab2__timer[data-ended='true']:has([data-an-ended]:not([hidden])) .ab2__unit { display: none; }
+  #shopify-section-{{ sid }} .ab2__slides { display: flex; align-items: center; justify-content: center; gap: 4px; }
+  #shopify-section-{{ sid }} .ab2__viewport { display: grid; flex: 1 1 auto; min-width: 0; max-width: 55rem; overflow: hidden; }
+  #shopify-section-{{ sid }} .ab2__slide { grid-area: 1 / 1; display: flex; align-items: center; justify-content: center; min-width: 0; padding-inline: 8px; }
+  #shopify-section-{{ sid }} .ab2[data-multi='true'][data-mode='slide'] .ab2__slide { opacity: 0; visibility: hidden; transform: translateY(100%); transition: transform .45s ease, opacity .45s ease, visibility 0s .45s; }
+  #shopify-section-{{ sid }} .ab2[data-multi='true'][data-mode='slide'] .ab2__slide[data-active] { opacity: 1; visibility: visible; transform: none; transition: transform .45s ease, opacity .45s ease; }
+  #shopify-section-{{ sid }} .ab2__arrow { display: none; flex: 0 0 44px; width: 44px; height: 44px; align-items: center; justify-content: center; padding: 0; margin: 0; border: 0; background: transparent; color: inherit; opacity: .6; cursor: pointer; box-shadow: none; }
+  #shopify-section-{{ sid }} .ab2__arrow:hover { opacity: 1; }
+  #shopify-section-{{ sid }} .ab2[data-multi='true'][data-mode='slide'] .ab2__arrow { display: inline-flex; }
+  #shopify-section-{{ sid }} .ab2__marquee { display: none; overflow: hidden; gap: var(--ab2-gap); }
+  #shopify-section-{{ sid }} .ab2[data-multi='true'][data-mode='marquee'] .ab2__slides { display: none; }
+  #shopify-section-{{ sid }} .ab2[data-multi='true'][data-mode='marquee'] .ab2__marquee { display: flex; }
+  #shopify-section-{{ sid }} .ab2[data-multi='true'][data-mode='marquee'] .ab2__inner { padding-inline: 0; }
+  #shopify-section-{{ sid }} .ab2__group { display: flex; flex-shrink: 0; align-items: center; gap: var(--ab2-gap); width: max-content; white-space: nowrap; animation: ab2Marquee var(--ab2-speed) linear infinite; }
+  #shopify-section-{{ sid }} .ab2__marquee:hover .ab2__group, #shopify-section-{{ sid }} .ab2[data-paused] .ab2__group { animation-play-state: paused; }
+  #shopify-section-{{ sid }} .ab2__item { display: inline-flex; align-items: center; gap: var(--ab2-gap); }
+  #shopify-section-{{ sid }} .ab2__item .ab2__msg { flex-wrap: nowrap; }
+  #shopify-section-{{ sid }} .ab2__icon { display: inline-flex; color: var(--ab2-accent); font-size: .8em; }
+  #shopify-section-{{ sid }} .ab2[data-icon='none'] .ab2__icon { display: none; }
+  @keyframes ab2Marquee { from { transform: translateX(0); } to { transform: translateX(calc(-100% - var(--ab2-gap))); } }
+  #shopify-section-{{ sid }} .ab2__close { position: absolute; inset-inline-end: 0; top: 50%; transform: translateY(-50%); display: none; width: 44px; height: 44px; align-items: center; justify-content: center; padding: 0; margin: 0; border: 0; background: transparent; color: inherit; cursor: pointer; z-index: 2; box-shadow: none; }
+  #shopify-section-{{ sid }} .ab2__close svg { opacity: .6; } #shopify-section-{{ sid }} .ab2__close:hover svg { opacity: 1; }
+  #shopify-section-{{ sid }} .ab2[data-close='true'] .ab2__close { display: inline-flex; }
+  @media (max-width: 767px) { #shopify-section-{{ sid }} .ab2[data-show-mobile='false'] { display: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ sid }} .ab2__group { animation: none; }
+    #shopify-section-{{ sid }} .ab2__group[aria-hidden='true'] { display: none; }
+    #shopify-section-{{ sid }} .ab2__marquee { overflow-x: auto; }
+    #shopify-section-{{ sid }} .ab2 .ab2__slide { transition: none !important; }
   }
-  /* Aggressive theme typography */
-  :where(#shopify-section-{{ section.id }}) {
-    font-family: var(--body-font, inherit);
-  }
-  :where(#shopify-section-{{ section.id }}) :where(button, input, textarea, select, optgroup) {
-    font-family: inherit;
-  }
-  /* Theme font-weight inheritance — sections inherit theme weights by default.
-     Specific font-weight rules in section CSS still override these. */
-  #shopify-section-{{ section.id }} {
-    font-weight: var(--body-weight, inherit);
-  }
-  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
-    font-weight: var(--heading-weight, inherit);
-  }
-  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
-    font-family: var(--heading-font, inherit);
-  }
-  /* Section margin sliders (mobile-first) */
-  #shopify-section-{{ section.id }} {
-    margin-top: {{ section.settings.section_margin_top_mobile | default: 0 }}px;
-    margin-bottom: {{ section.settings.section_margin_bottom_mobile | default: 0 }}px;
-  }
-  @media (min-width: 768px) {
-    #shopify-section-{{ section.id }} {
-      margin-top: {{ section.settings.section_margin_top_desktop | default: 0 }}px;
-      margin-bottom: {{ section.settings.section_margin_bottom_desktop | default: 0 }}px;
-    }
-  }
-  /* Section wrapper spans its parent's full width without breaking out of
-     the editor preview. The section + first child span 100% so backgrounds
-     reach edge-to-edge but the editor inspector outline stays inside the
-     iframe viewport. */
-  #shopify-section-{{ section.id }} {
-    max-width: none !important;
-    width: 100% !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-    position: relative !important;
-    box-sizing: border-box !important;
-  }
-  #shopify-section-{{ section.id }} > :where(div, section, header, footer, aside, main, article):first-child {
-    max-width: none !important;
-    width: 100% !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    box-sizing: border-box !important;
-  }
-
-  /* Section width — universal selector that works regardless of inner
-     markup. Targets both:
-       1) Theme container classes (.container/.fluid_container/etc.) — for
-          sections that have an inner wrapper with that class
-       2) The section's first-child div — for sections that don't have a
-          named inner wrapper. The padding-inline sets the max content
-          area while the wrapper itself stays 100% wide so any background
-          stays edge-to-edge. */
-  {%- case section.settings.section_width -%}
-    {%- when 'container' -%}
-      #shopify-section-{{ section.id }} .container,
-      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
-        max-width: calc(var(--page-width, 1300px) + 3rem) !important;
-        margin-inline: auto !important;
-        box-sizing: border-box !important;
-      }
-    {%- when 'fluid_container' -%}
-      #shopify-section-{{ section.id }} .fluid_container,
-      #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
-        max-width: calc(var(--fluid-container-width, 1500px) + 3rem) !important;
-        margin-inline: auto !important;
-        box-sizing: border-box !important;
-      }
-    {%- when 'stretch_width' -%}
-      /* Stretched: no max-width; tighter side padding handled below */
-      @media (min-width: 1200px) {
-        #shopify-section-{{ section.id }} .stretch_width,
-        #shopify-section-{{ section.id }}:not(.no-section-width-wrap) > :is(div, section, header, footer, aside, main, article):first-child {
-          padding-inline: 3rem;
-        }
-      }
-    {%- when 'full_width' -%}
-      /* full bleed — no constraints */
-  {%- endcase -%}
-  /* Reset spacing */
-  {%- if section.settings.reset_spacing -%}
-    #shopify-section-{{ section.id }} { margin-bottom: 0 !important; margin-top: 0 !important; }
-    #shopify-section-{{ section.id }} + .shopify-section { margin-top: 0 !important; }
-  {%- endif -%}
 {% comment %}{% endcomment %}</style>
-<!-- ti-theme:start -->
-{%- comment -%}
-  Materia Themes. Developed By Materia Themes.
-{%- endcomment -%}
-{{ 'countdown.css' | asset_url | stylesheet_tag }}
-{%- if section.settings.announcement_actions == 'marquee' -%}
-  {{ 'marquee.css' | asset_url | stylesheet_tag }}
-{% endif %}
-{%- liquid
-  assign section_st = section.settings
-  assign section_width = section_st.section_width
-  assign color_scheme = section_st.color_scheme.id | default: section_st.color_scheme
-  assign homepage_only = section_st.homepage_only
-  assign show_close = section_st.show_close
-  assign announcement_actions = section_st.announcement_actions
-  assign is_shown = false
-  if homepage_only
-    if request.page_type == 'index'
-      assign is_shown = true
-    endif
-  else
-    assign is_shown = true
-  endif
--%}
-{% liquid
-  assign enable_rtl = settings.rtl
-  assign iso_code = request.locale.iso_code
-  assign lis_language_rtl = settings.language_rtl
-  if lis_language_rtl != blank
-    if iso_code != blank and lis_language_rtl contains iso_code
-      assign enable_rtl = true
-    endif
-  endif
-%}
-{%- capture style -%}
-    --section-pt: {{ section_st.padding_top }}; --section-pb: {{ section_st.padding_bottom }}; --font-size: {{ section_st.font_size }};--countdown-text-size: {{ section_st.font_size }}px;--swiper-navigation-color: var(--color-text); 
-  {%- endcapture -%}
-{%- if section.blocks.size > 0 and is_shown -%}
-  {%- style -%}
-    announcement-bar .announcement-slide {
-      width: 80%;
-      max-width: 55rem;
-    }
-    .announcement-bar-close svg {
-      opacity: 0.6;
-    }
-    .announcement-bar-close:hover svg {
-      opacity: 1;
-    }
-    announcement-bar .swiper-wrapper {
-      align-items: center;
-    }
-    announcement-bar :where(.swiper-arrow:hover) {
-      background-color: transparent;
-    }
-    announcement-bar countdown-timer{
-      {% if section_st.font_weight == 'subheading_weight' %}--countdown-text-weight: var(--subheading-weight, 600);--heading-weight: var(--subheading-weight, 600);{% elsif section_st.font_weight == 'heading_weight' %}--countdown-text-weight: var(--heading-weight, 600);--heading-weight: var(--heading-weight, 600);{% else %}--countdown-text-weight: var(--body-weight, 600);--heading-weight: var(--body-weight, 600){% endif %}
-    }
-    announcement-bar .swiper-slide {
-      display: flex;
-    }
-  {%- endstyle -%}
-  <announcement-bar
-    class="section section{% if section_st.padding_top < 30 %} pt-min{% endif %}{% if section_st.padding_bottom < 30 %} pb-min{% endif %} remove_spacing color-{{ color_scheme }} gradient text-center relative{% if section_st.uppercase %} uppercase{% endif %} fs-custom {{ section_st.font_weight }}{% if section_st.show_mobile == blank %} hidden block-xl{% else %} block{% endif %}{% if section_st.show_separator_line %} border-bottom{% endif %}"
-    aria-label="{{ 'sections.header.announcement' | t }}"
-    style="{{ style | strip | strip_newlines }}"
-  >
-    <div class="{{ section_width }}">
-      {% if section.blocks.size > 1 %}
-        {%- if announcement_actions == 'slide' -%}
-          {% # theme-check-disable UnclosedHTMLElement %}
-          <div class="announcement-slide relative mx-auto btn-control-small no-js-hidden">
-            <slide-section
-              class="swiper lazy-loading-swiper-before"
-              data-section-id="{{ section.id }}"
-              data-autoplay="true"
-              data-autoplaySpeed="{{ section_st.change_every }}"
-              data-loop="true"
-              data-mobile="1"
-              data-tablet="1"
-              data-desktop="1"
-              data-direction="vertical"
-              data-spacing="0"
-            >
-              <div class="swiper-wrapper">
-                {% # theme-check-disable UnclosedHTMLElement %}
-        {%- else -%}
-          <div
-            class="marquee flex overflow-hidden w-full justify-content-center"
-            style="--speed: {{ section_st.speed }}s;--col-gap: {{ section_st.space_between }}px;"
-          >
-        {% endif %}
-        {%- if announcement_actions == 'marquee' -%}
-          {%- for i in (0..5) -%}
-            <div class="flex animation-marquee">
-              {%- for block in section.blocks -%}
-                {%- liquid
-                  assign block_st = block.settings
-                -%}
-                {%- if block_st.text != blank -%}
-                  <div
-                    class="announcement__bar-message mx-auto flex-nowrap flex{% if section_st.icon_between_item != 'none' %} gap{% endif %} content-center whitespace-nowrap"
-                  >
-                    <span class="grow">{{ block_st.text }}</span>
-                    {% if block_st.countdown_deadline != blank %}
-                      <div
-                        class="countdown-announcementBar ms-5 gap-5 flex align-center"
-                        data-block-id="{{ block.id }}"
-                      >
-                        <countdown-timer
-                          class="hidden flex flex-nowrap justify-center"
-                          data-endtime="{{ block_st.countdown_deadline }}"
-                          data-format="dd:hh:mm:ss"
-                          data-days="{{ 'products.product.countdown.days' | t }}"
-                          data-hours="{{ 'products.product.countdown.hours' | t }}"
-                          data-mins="{{ 'products.product.countdown.mins' | t }}"
-                          data-secs="{{ 'products.product.countdown.secs' | t }}"
-                        >
-                        </countdown-timer>
-                      </div>
-                    {% endif %}
-                    {% if section_st.icon_between_item == 'hight_light' %}
-                      {% render 'icon-highlight' %}
-                    {% elsif section_st.icon_between_item == 'dot' %}
-                      {% render 'icon-dot' %}
-                    {% elsif section_st.icon_between_item == 'star' %}
-                      {% render 'icon-star' %}
-                    {% else %}
-                      <span class="spacing"></span>
-                    {% endif %}
-                  </div>
-                {% endif %}
-              {%- endfor -%}
-            </div>
-          {%- endfor -%}
-        {%- else -%}
-          {%- for block in section.blocks -%}
-            {%- liquid
-              assign block_st = block.settings
-            -%}
-            {%- if block_st.text != blank -%}
-              <div class="swiper-slide align-center justify-center">
-                <div class="announcement__bar-message mx-auto flex-wrap px-20 flex justify-content-center">
-                  <span class="grow">{{ block_st.text }}</span>
-                  {% if block_st.countdown_deadline != blank %}
-                    <div
-                      class="countdown-announcementBar ms-5 gap-5 flex align-center"
-                      data-block-id="{{ block.id }}"
-                    >
-                      <countdown-timer
-                        class="hidden flex flex-wrap justify-center"
-                        data-endtime="{{ block_st.countdown_deadline }}"
-                        data-format="dd:hh:mm:ss"
-                        data-days="{{ 'products.product.countdown.days' | t }}"
-                        data-hours="{{ 'products.product.countdown.hours' | t }}"
-                        data-mins="{{ 'products.product.countdown.mins' | t }}"
-                        data-secs="{{ 'products.product.countdown.secs' | t }}"
-                      >
-                      </countdown-timer>
-                    </div>
-                  {% endif %}
-                </div>
-              </div>
-            {% endif %}
-          {%- endfor -%}
-        {% endif %}
-      {%- else -%}
+{%- capture ab2_vars -%}
+--ab2-fs: {{ st.font_size }}px;--ab2-pt: {{ st.padding_top }}px;--ab2-pb: {{ st.padding_bottom }}px;--ab2-speed: {{ st.speed }}s;--ab2-gap: {{ st.space_between }}px;
+--ab2-fw: {% case st.font_weight %}{% when 'heading_weight' %}var(--heading-weight, 600){% when 'subheading_weight' %}var(--subheading-weight, 600){% else %}{% if fonts %}{% render 'announce-font', font: st.body_font, on: true, fallback: 'var(--body-weight, 400)', weight: true %}{% else %}var(--body-weight, 400){% endif %}{% endcase %};--ab2-tt: {% if st.uppercase %}uppercase{% else %}none{% endif %};
+--ab2-ff: {% render 'announce-font', font: st.body_font, on: fonts, fallback: 'var(--body-font)' %};
+--ab2-text: {% if custom %}{% render 'scheme-color', color: st.text_color, fallback: 'var(--color-text)' %}{% else %}var(--color-text){% endif %};--ab2-bg: {% if custom %}{% render 'scheme-color', color: st.background_color, fallback: 'var(--color-background)' %}{% else %}var(--color-background){% endif %};
+--ab2-accent: {% if custom %}{% render 'scheme-color', color: st.accent_color, fallback: 'var(--color-heading)' %}{% else %}var(--color-heading){% endif %};--ab2-line: {% if custom %}{% render 'scheme-color', color: st.line_color, fallback: 'var(--color-border)' %}{% else %}var(--color-border){% endif %};--ab2-lw: {% if st.show_separator_line %}1px{% else %}0px{% endif %};
+{%- endcapture -%}
+<div id="announcement-bar-pro-2-{{ sid }}" class="ab2 announcement-bar-pro-2 color-{{ color_scheme }} gradient" role="region" aria-label="Announcements" data-an-root="announcement-bar" data-an-section="{{ sid }}" data-an-settings="{{ section.settings | json | escape }}" data-an-defaults="&#123;&quot;color_scheme&quot;:&quot;default-color-scheme&quot;,&quot;section_width&quot;:&quot;full_width&quot;,&quot;reset_spacing&quot;:true,&quot;homepage_only&quot;:true,&quot;show_mobile&quot;:true,&quot;label_days&quot;:&quot;Days&quot;,&quot;label_hours&quot;:&quot;Hours&quot;,&quot;label_minutes&quot;:&quot;Mins&quot;,&quot;label_seconds&quot;:&quot;Secs&quot;,&quot;announcement_actions&quot;:&quot;slide&quot;,&quot;icon_between_item&quot;:&quot;none&quot;,&quot;space_between&quot;:50,&quot;show_separator_line&quot;:true,&quot;enable_custom_style&quot;:false,&quot;show_close&quot;:true,&quot;enable_custom_fonts&quot;:false,&quot;body_font&quot;:&quot;assistant_n4&quot;,&quot;font_size&quot;:12,&quot;font_weight&quot;:&quot;subheading_weight&quot;,&quot;uppercase&quot;:false,&quot;reveal&quot;:true,&quot;change_every&quot;:3,&quot;speed&quot;:15,&quot;padding_top&quot;:12,&quot;padding_bottom&quot;:12,&quot;section_margin_top_desktop&quot;:0,&quot;section_margin_bottom_desktop&quot;:0,&quot;section_margin_top_mobile&quot;:0,&quot;section_margin_bottom_mobile&quot;:0&#125;" data-an-block-defaults="&#123;&quot;announcement&quot;:&#123;&quot;text&quot;:&quot;Welcome to our store&quot;,&quot;enable_custom_style&quot;:false,&quot;enable_custom_fonts&quot;:false,&quot;font&quot;:&quot;assistant_n4&quot;&#125;&#125;" data-width="{{ st.section_width | default: 'full_width' }}" data-reset="{% if st.reset_spacing %}true{% else %}false{% endif %}" data-mode="{% if st.announcement_actions == 'marquee' %}marquee{% else %}slide{% endif %}" data-multi="{{ multi }}" data-page="{{ page }}" data-home-only="{% if st.homepage_only %}true{% else %}false{% endif %}" data-show-mobile="{% if st.show_mobile == false %}false{% else %}true{% endif %}" data-close="{% if st.show_close %}true{% else %}false{% endif %}" data-icon="{{ st.icon_between_item | default: 'none' }}" data-sticky-announcement="false"{% if fonts %} data-own-font data-own-weight{% endif %} style="{{ ab2_vars | strip_newlines }}">
+  <div class="ab2__inner">
+    <div class="ab2__slides" data-an-slides>
+      <button type="button" class="ab2__arrow" data-an-prev aria-label="Previous announcement"><svg width="8" height="14" viewBox="0 0 8 14" aria-hidden="true" focusable="false"><path d="M7 1 1 7l6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="ab2__viewport" aria-live="off">
+        {%- assign shown = 0 -%}
         {%- for block in section.blocks -%}
-          {%- liquid
-            assign block_st = block.settings
-          -%}
-          {%- if block_st.text != blank -%}
-            <div class="announcement__bar-message mx-auto flex-wrap flex justify-content-center">
-              <span class="grow">{{ block_st.text }}</span>
-              {% if block_st.countdown_deadline != blank %}
-                <div
-                  class="countdown-announcementBar ms-5 gap-5 flex align-center"
-                  data-block-id="{{ block.id }}"
-                >
-                  <countdown-timer
-                    class="hidden flex flex-wrap justify-center"
-                    data-endtime="{{ block_st.countdown_deadline }}"
-                    data-format="dd:hh:mm:ss"
-                    data-days="{{ 'products.product.countdown.days' | t }}"
-                    data-hours="{{ 'products.product.countdown.hours' | t }}"
-                    data-mins="{{ 'products.product.countdown.mins' | t }}"
-                    data-secs="{{ 'products.product.countdown.secs' | t }}"
-                  >
-                  </countdown-timer>
-                </div>
-              {% endif %}
-            </div>
-          {% endif %}
+          {%- assign bs = block.settings -%}
+          {%- assign bfont = false -%}{%- if bs.enable_custom_fonts and bs.font.family != blank -%}{%- assign bfont = true -%}{%- endif -%}
+          {%- assign active = false -%}{%- if bs.text != blank and shown == 0 -%}{%- assign active = true -%}{%- assign shown = 1 -%}{%- endif -%}
+          <div class="ab2__slide" {% render 'announce-block', block: block %}{% if active %} data-active{% elsif multi %} aria-hidden="true"{% endif %}{% if bs.text == blank %} hidden{% endif %}>
+            <span class="ab2__msg"{% if bfont %} data-own-font data-own-weight{% endif %} style="{% if bs.enable_custom_style %}--b-c: {% render 'scheme-color', color: bs.color, fallback: 'var(--ab2-text)' %};{% endif %}{% if bfont %}--b-f: {% render 'announce-font', font: bs.font, on: true, fallback: 'inherit' %};--b-w: {{ bs.font.weight | default: 400 }};{% endif %}">{% render 'announce-ab2-message', block: block, section: section %}</span>
+          </div>
         {%- endfor -%}
-      {% endif %}
-      {% if section.blocks.size > 1 %}
-        </div>
-        {%- if announcement_actions == 'slide' -%}
-          <div
-            class="swiper-arrow original-style swiper-button-prev visible absolute left-10"
-            style="--swiper-navigation-sides-offset: -1rem;--swiper-width: 3rem;--swiper-size: 10px"
-          >
-            <svg width="6" height="11" fill="none">
-              <use href="#icon-back" />
-            </svg>
-          </div>
-          <div
-            class="swiper-arrow original-style swiper-button-next visible absolute right-10"
-            style="--swiper-navigation-sides-offset: -1rem;--swiper-width: 3rem;--swiper-size: 10px"
-          >
-            <svg width="6" height="11" fill="none">
-              <use href="#icon-next" />
-            </svg>
-          </div>
-          </slide-section>
-          </div>
-        {% endif %}
-      {% endif %}
-    </div>
-    {%- if show_close -%}
-      <div
-        class="announcement-bar-close color-{{ color_scheme }} gradient absolute{% if enable_rtl %} left-0{% else %} right-0{% endif %} top-0 w-30 h-full transition inline-flex content-center hover-svg-zoom pointer lh-normal"
-        tabindex="0"
-      >
-        <svg width="10" height="11" viewBox="0 0 10 11" fill="none" class="transition">
-          <use href="#icon-close" />
-        </svg>
       </div>
-    {% endif %}
-  </announcement-bar>
-  <script>
-    if (sessionStorage.getItem('announcement_bar') == 'false') {
-      document.getElementById('shopify-section-{{ section.id }}').classList.add('hidden');
-    }
-{% comment %}{% endcomment %}  </script>
-{% endif %}
-
-
+      <button type="button" class="ab2__arrow" data-an-next aria-label="Next announcement"><svg width="8" height="14" viewBox="0 0 8 14" aria-hidden="true" focusable="false"><path d="m1 1 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+    <div class="ab2__marquee" data-an-track>
+      {%- for i in (1..4) -%}
+        <div class="ab2__group"{% if forloop.first %} data-an-group{% else %} aria-hidden="true" data-an-copies{% endif %}>
+          {%- for block in section.blocks -%}
+            {%- assign bs = block.settings -%}
+            {%- assign bfont = false -%}{%- if bs.enable_custom_fonts and bs.font.family != blank -%}{%- assign bfont = true -%}{%- endif -%}
+            <span class="ab2__item" data-an-copy="{{ block.id }}"{% if bs.text == blank %} hidden{% endif %}><span class="ab2__msg"{% if bfont %} data-own-font data-own-weight{% endif %} style="{% if bs.enable_custom_style %}--b-c: {% render 'scheme-color', color: bs.color, fallback: 'var(--ab2-text)' %};{% endif %}{% if bfont %}--b-f: {% render 'announce-font', font: bs.font, on: true, fallback: 'inherit' %};--b-w: {{ bs.font.weight | default: 400 }};{% endif %}">{% render 'announce-ab2-message', block: block, section: section %}</span><span class="ab2__icon" aria-hidden="true">{% if st.icon_between_item == 'star' %}{% render 'announce-icon', icon: 'fa-star' %}{% else %}{% render 'announce-icon', icon: 'fa-circle' %}{% endif %}</span></span>
+          {%- endfor -%}
+        </div>
+      {%- endfor -%}
+    </div>
+  </div>
+  <button type="button" class="ab2__close announcement-bar-close" data-an-close aria-label="Close announcement"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="m1 1 10 10M11 1 1 11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+</div>
 
 </template>
 
@@ -713,7 +464,13 @@
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "select",
@@ -721,29 +478,23 @@
         "options": [
           {
             "value": "container",
-            "label": "t:sections.all.section_width.container.label"
+            "label": "Default"
           },
           {
             "value": "fluid_container",
-            "label": "t:sections.all.section_width.fluid_container.label"
+            "label": "Fluid container"
           },
           {
             "value": "stretch_width",
-            "label": "t:sections.all.section_width.stretch_width.label"
+            "label": "Stretched"
           },
           {
             "value": "full_width",
-            "label": "t:sections.all.section_width.full_width.label"
+            "label": "Full width"
           }
         ],
         "default": "full_width",
-        "label": "t:sections.all.section_width.label"
-      },
-      {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "t:sections.all.color_scheme.label",
-        "default": "default-color-scheme"
+        "label": "Section width"
       },
       {
         "type": "checkbox",
@@ -752,26 +503,148 @@
         "default": true
       },
       {
-        "type": "header",
-        "content": "General"
-      },
-      {
         "type": "checkbox",
         "id": "homepage_only",
         "default": true,
-        "label": "t:sections.announcement-bar.settings.homepage_only.label"
+        "label": "Home page only"
       },
       {
         "type": "checkbox",
         "id": "show_mobile",
         "default": true,
-        "label": "t:sections.announcement-bar.settings.show_mobile.label"
+        "label": "Show on mobile"
+      },
+      {
+        "type": "header",
+        "content": "Content"
+      },
+      {
+        "type": "paragraph",
+        "content": "Each Announcement block is one message, with an optional countdown."
+      },
+      {
+        "type": "text",
+        "id": "label_days",
+        "label": "Countdown days label",
+        "default": "Days"
+      },
+      {
+        "type": "text",
+        "id": "label_hours",
+        "label": "Countdown hours label",
+        "default": "Hours"
+      },
+      {
+        "type": "text",
+        "id": "label_minutes",
+        "label": "Countdown minutes label",
+        "default": "Mins"
+      },
+      {
+        "type": "text",
+        "id": "label_seconds",
+        "label": "Countdown seconds label",
+        "default": "Secs"
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "announcement_actions",
+        "options": [
+          {
+            "value": "slide",
+            "label": "Slide"
+          },
+          {
+            "value": "marquee",
+            "label": "Marquee"
+          }
+        ],
+        "default": "slide",
+        "label": "With several messages",
+        "info": "One message stays still."
+      },
+      {
+        "type": "select",
+        "id": "icon_between_item",
+        "options": [
+          {
+            "value": "none",
+            "label": "None"
+          },
+          {
+            "value": "dot",
+            "label": "Dot"
+          },
+          {
+            "value": "star",
+            "label": "Star"
+          }
+        ],
+        "default": "none",
+        "label": "Icon between messages",
+        "visible_if": "{{ section.settings.announcement_actions == 'marquee' }}"
+      },
+      {
+        "type": "range",
+        "id": "space_between",
+        "min": 10,
+        "max": 100,
+        "step": 1,
+        "label": "Space between messages",
+        "unit": "px",
+        "default": 50,
+        "visible_if": "{{ section.settings.announcement_actions == 'marquee' }}"
+      },
+      {
+        "type": "header",
+        "content": "Appearance"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_separator_line",
+        "default": true,
+        "label": "Bottom line"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Enable custom styling",
+        "default": false,
+        "info": "Off: colours follow the colour scheme."
+      },
+      {
+        "type": "color",
+        "id": "text_color",
+        "label": "Text",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "background_color",
+        "label": "Background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "accent_color",
+        "label": "Countdown and icons",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "line_color",
+        "label": "Bottom line",
+        "visible_if": "{{ section.settings.enable_custom_style and section.settings.show_separator_line }}"
       },
       {
         "type": "checkbox",
         "id": "show_close",
         "default": true,
-        "label": "t:sections.announcement-bar.settings.show_close.label"
+        "label": "Close button"
       },
       {
         "type": "header",
@@ -779,8 +652,17 @@
       },
       {
         "type": "checkbox",
-        "id": "uppercase",
-        "label": "t:sections.all.content_setting.uppercase.label"
+        "id": "enable_custom_fonts",
+        "label": "Enable custom fonts",
+        "default": false,
+        "info": "Off: the bar follows Theme settings > Typography."
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
       },
       {
         "type": "range",
@@ -788,7 +670,7 @@
         "min": 12,
         "max": 20,
         "step": 1,
-        "label": "t:sections.all.content_setting.font_size.label",
+        "label": "Text size",
         "unit": "px",
         "default": 12
       },
@@ -798,33 +680,29 @@
         "options": [
           {
             "value": "body_weight",
-            "label": "t:sections.all.content_setting.font_weight.body_weight.label"
-          },
-          {
-            "value": "heading_weight",
-            "label": "t:sections.all.content_setting.font_weight.heading_weight.label"
+            "label": "Body"
           },
           {
             "value": "subheading_weight",
-            "label": "t:sections.all.content_setting.font_weight.subheading_weight.label"
+            "label": "Subheading"
+          },
+          {
+            "value": "heading_weight",
+            "label": "Heading"
           }
         ],
         "default": "subheading_weight",
-        "label": "t:sections.all.content_setting.font_weight.label"
-      },
-      {
-        "type": "header",
-        "content": "Style & Colors"
+        "label": "Text weight"
       },
       {
         "type": "checkbox",
-        "id": "show_separator_line",
-        "default": true,
-        "label": "t:sections.announcement-bar.settings.show_separator_line.label"
+        "id": "uppercase",
+        "label": "Uppercase",
+        "default": false
       },
       {
         "type": "header",
-        "content": "Behavior & Animation"
+        "content": "Animation"
       },
       {
         "type": "checkbox",
@@ -833,95 +711,37 @@
         "default": true
       },
       {
-        "type": "select",
-        "id": "announcement_actions",
-        "options": [
-          {
-            "value": "slide",
-            "label": "t:sections.announcement-bar.settings.announcement_actions.slide.label"
-          },
-          {
-            "value": "marquee",
-            "label": "t:sections.announcement-bar.settings.announcement_actions.marquee.label"
-          }
-        ],
-        "default": "slide",
-        "label": "t:sections.announcement-bar.settings.announcement_actions.label"
-      },
-      {
-        "type": "header",
-        "content": "Marquee",
-        "info": "t:sections.announcement-bar.settings.marquee.info",
-        "visible_if": "{{ section.settings.announcement_actions == 'marquee' }}"
-      },
-      {
-        "type": "range",
-        "id": "speed",
-        "label": "t:sections.scrolling_text.settings.speed.label",
-        "default": 15,
-        "min": 3,
-        "max": 30,
-        "step": 1,
-        "unit": "s",
-        "visible_if": "{{ section.settings.announcement_actions == 'marquee' }}"
-      },
-      {
-        "type": "range",
-        "id": "space_between",
-        "min": 10,
-        "max": 100,
-        "step": 1,
-        "label": "t:sections.announcement-bar.settings.marquee.space_between.label",
-        "unit": "px",
-        "default": 50,
-        "visible_if": "{{ section.settings.announcement_actions == 'marquee' }}"
-      },
-      {
-        "type": "select",
-        "id": "icon_between_item",
-        "options": [
-          {
-            "value": "none",
-            "label": "t:sections.announcement-bar.settings.marquee.icon_between.none"
-          },
-          {
-            "value": "dot",
-            "label": "t:sections.announcement-bar.settings.marquee.icon_between.dot"
-          },
-          {
-            "value": "star",
-            "label": "t:sections.announcement-bar.settings.marquee.icon_between.star"
-          }
-        ],
-        "default": "none",
-        "label": "t:sections.announcement-bar.settings.marquee.icon_between.label",
-        "visible_if": "{{ section.settings.announcement_actions == 'marquee' }}"
-      },
-      {
-        "type": "header",
-        "content": "Slide",
-        "info": "t:sections.announcement-bar.settings.slide.info",
-        "visible_if": "{{ section.settings.announcement_actions == 'slide' }}"
-      },
-      {
         "type": "range",
         "id": "change_every",
         "min": 3,
         "max": 6,
         "step": 1,
-        "label": "t:sections.announcement-bar.settings.slide.change_every.label",
+        "label": "Change every",
         "unit": "s",
         "default": 3,
-        "visible_if": "{{ section.settings.announcement_actions == 'slide' }}"
+        "visible_if": "{{ section.settings.announcement_actions == 'slide' }}",
+        "info": "Pauses on hover and for visitors who reduce motion."
+      },
+      {
+        "type": "range",
+        "id": "speed",
+        "label": "Marquee loop duration",
+        "default": 15,
+        "min": 3,
+        "max": 30,
+        "step": 1,
+        "unit": "s",
+        "visible_if": "{{ section.settings.announcement_actions == 'marquee' }}",
+        "info": "Lower is faster. Stops for visitors who reduce motion."
       },
       {
         "type": "header",
-        "content": "Layout & Spacing"
+        "content": "Desktop spacing"
       },
       {
         "type": "range",
         "id": "padding_top",
-        "label": "t:sections.all.section_padding.top.label",
+        "label": "Top padding",
         "default": 12,
         "min": 0,
         "max": 20,
@@ -931,7 +751,7 @@
       {
         "type": "range",
         "id": "padding_bottom",
-        "label": "t:sections.all.section_padding.bottom.label",
+        "label": "Bottom padding",
         "default": 12,
         "min": 0,
         "max": 20,
@@ -941,7 +761,7 @@
       {
         "type": "range",
         "id": "section_margin_top_desktop",
-        "label": "Top margin (desktop px)",
+        "label": "Top margin (desktop)",
         "min": 0,
         "max": 300,
         "step": 4,
@@ -950,16 +770,20 @@
       {
         "type": "range",
         "id": "section_margin_bottom_desktop",
-        "label": "Bottom margin (desktop px)",
+        "label": "Bottom margin (desktop)",
         "min": 0,
         "max": 300,
         "step": 4,
         "default": 0
       },
       {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
         "type": "range",
         "id": "section_margin_top_mobile",
-        "label": "Top margin (mobile px)",
+        "label": "Top margin (mobile)",
         "min": 0,
         "max": 300,
         "step": 4,
@@ -968,7 +792,7 @@
       {
         "type": "range",
         "id": "section_margin_bottom_mobile",
-        "label": "Bottom margin (mobile px)",
+        "label": "Bottom margin (mobile)",
         "min": 0,
         "max": 300,
         "step": 4,
@@ -979,7 +803,7 @@
     "blocks": [
       {
         "type": "announcement",
-        "name": "t:sections.announcement-bar.blocks.announcement.name",
+        "name": "Announcement",
         "settings": [
           {
             "type": "header",
@@ -989,17 +813,52 @@
             "type": "inline_richtext",
             "id": "text",
             "default": "Welcome to our store",
-            "label": "t:sections.announcement-bar.blocks.announcement.settings.text.label"
-          },
-          {
-            "type": "header",
-            "content": "Behavior & Animation"
+            "label": "Text"
           },
           {
             "type": "text",
             "id": "countdown_deadline",
-            "label": "t:sections.announcement-bar.blocks.announcement.settings.countdown_deadline.label",
-            "info": "t:sections.announcement-bar.blocks.announcement.settings.countdown_deadline.info"
+            "label": "Countdown end",
+            "info": "Month, day, year and time, for example 12-31-2027 18:00. Leave empty for no countdown."
+          },
+          {
+            "type": "text",
+            "id": "ended_text",
+            "label": "Text when the countdown ends",
+            "info": "Leave empty to show zeros."
+          },
+          {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Text",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom font",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
           }
         ]
       }
@@ -1007,15 +866,24 @@
     "presets": [
       {
         "name": "Announcement Bar Pro 2",
+        "category": "Announcements",
+        "settings": {
+          "homepage_only": false
+        },
         "blocks": [
           {
             "type": "announcement",
             "settings": {
-              "text": "Welcome to our store"
+              "text": "Write your first announcement"
+            }
+          },
+          {
+            "type": "announcement",
+            "settings": {
+              "text": "Add a second message"
             }
           }
-        ],
-        "category": "Announcements"
+        ]
       }
     ]
   }

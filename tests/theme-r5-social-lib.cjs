@@ -237,12 +237,12 @@ async function run(spec) {
 }
 
 
-/* A saved instance (templates/*.json) drawn by the section as it was (git REV) and as it is now,
+/* A saved instance (templates/*.json) drawn by the section as it was before round 5 (git 2002b49) and as it is now,
    with the toggles the lead sets on the new one: the screenshots must be identical. */
 const fs = require('fs'), path = require('path'), {execSync} = require('child_process');
 const {engine} = require('./theme-featured-product-round5.cjs');
 const {themeControls, THEME_VARS} = require('./media-fixture.cjs');
-async function savedLook(browser, {name, template, key, rev = 'HEAD', toggles = {}, blockToggles = {}, assets = [], widths = [375, 1366], globals = {}}) {
+async function savedLook(browser, {name, template, key, rev = '2002b49', toggles = {}, blockToggles = {}, assets = [], widths = [375, 1366], globals = {}}) {
   const root = path.join(__dirname, '..');
   const oldRaw = execSync('git show ' + rev + ':sections/' + name + '.storelib', {cwd: root, encoding: 'utf8', maxBuffer: 1 << 26});
   const newRaw = fs.readFileSync(path.join(root, 'sections', name + '.storelib'), 'utf8');

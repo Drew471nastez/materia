@@ -73,16 +73,18 @@
   /* a picture slot: {t:'img', src, alt, w, h} or {t:'ph'} (the placeholder template of the root) */
   function media(el, v, prev, st) {
     const d = parse(v), p = parse(prev);
-    const cur = el.querySelector(':scope > img[data-sd-img], :scope > svg[data-sd-ph]');
+    const cur = el.querySelector(':scope > img[data-sd-img], :scope > [data-sd-ph]');
     if (cur && p.t === d.t && p.src === d.src) { if (d.t === 'img' && cur.tagName === 'IMG' && cur.alt !== (d.alt || '')) cur.alt = d.alt || ''; return; }
     let n;
     if (d.t === 'img') {
       n = document.createElement('img'); n.setAttribute('data-sd-img', ''); n.alt = d.alt || '';
       if (d.w && d.h) { n.width = d.w; n.height = d.h; }
-      n.loading = 'lazy'; n.decoding = 'async'; n.src = d.src;
+      n.loading = 'lazy'; n.decoding = 'async';
+      if (d.widths) { const q = d.src.includes('?') ? '&' : '?'; n.srcset = d.widths.map(w => d.src + q + 'width=' + w + ' ' + w + 'w').join(', '); }
+      n.src = d.src;
       if (d.cls) n.className = d.cls;
     } else {
-      const t = st.root.querySelector('template[data-sd-ph]');
+      const t = (st.root.closest('.shopify-section') || st.root).querySelector('template[data-sd-ph]');
       n = t ? t.content.firstElementChild.cloneNode(true) : document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       n.setAttribute('data-sd-ph', '');
     }
@@ -103,6 +105,8 @@
     else if (key === 'media') media(el, v, prev, st);
     else if (key === 'href') return link(el, v, st);
     else if (key === 'hrefb') return link(el, v, st, 'BUTTON');
+    else if (key === 'hrefd') return link(el, v, st, 'DIV');
+    else if (key === 'hrefa') { if (v) { el.setAttribute('href', v); } else el.removeAttribute('href'); return el; }
     else if (key.startsWith('fn:')) { const f = st.type.fns && st.type.fns[key.slice(3)]; if (f) return f(el, v, prev, st) || el; }
     return el;
   }
@@ -224,11 +228,252 @@
     wrapper(c, {top: t, bottom: b, bg: o ? color(s.section_bg, '') : ''});
   }
 
+
+  /* ---------- Social Icons Pro ---------- */
+  function sipText(c, x, s) {
+    const {put} = c, b = x.b, h = x.type === 'headline', k = h ? 'h' : 'p';
+    put(x.el, 'inline', b.text || '');
+    put(x.el, '--sip-' + k + '-d', px(b.size)); put(x.el, '--sip-' + k + '-m', px(b.mobile_size));
+    put(x.el, '--sip-' + k + '-color', custom(b) ? color(b.color, h ? 'var(--color-heading)' : 'var(--color-text)') : (h ? 'var(--color-heading)' : 'var(--color-text)'));
+    const lh = b.line_height && b.line_height !== 'inherit' ? String(b.line_height) : null;
+    put(x.el, '--sip-' + k + '-lh', lh); own(c, x.el, 'size', !!lh);
+    const f = (bool(b.enable_custom_fonts) || bool(s.enable_custom_font)) && font(b.font) || '';
+    const w = f && fontWeight(b.font) || '';
+    put(x.el, '--sip-' + k + '-font', f || null); put(x.el, '--sip-' + k + '-weight', w || null);
+    own(c, x.el, 'font', !!f); own(c, x.el, 'weight', !!w);
+  }
+  function sipIcon(c, x, so) {
+    const {put} = c, b = x.b, platform = b.platform || 'instagram';
+    const href = url(b.link) || (so.links || {})[platform] || '', label = (so.labels || {})[platform] || platform;
+    const el = put(x.el, 'href', href);
+    put(el, '@target', href ? '_blank' : null); put(el, '@rel', href ? 'noopener noreferrer' : null); put(el, '@aria-label', href ? label : null);
+    put(el, '@data-sip-unlinked', !href);
+    const ic = el.querySelector('.loud-icon'); if (!ic) return;
+    put(ic, '.platform', 'loud-icon--' + platform); put(ic, '@aria-label', label);
+    put(ic, '--loud-icon-color', custom(b) ? color(b.color, 'var(--color-heading)') : 'var(--color-heading)');
+  }
+  function socialIcons(c) {
+    const {root, s, put} = c, o = custom(s), el = c.q('.loud-wrap');
+    put(root, '.width', s.section_width || 'container');
+    if (el) {
+      put(el, '@data-sip-show', s.show_on_device || 'all');
+      put(el, '--sip-bg', pick(o, s.section_background_color, 'var(--color-background)'));
+      put(el, '--sip-py', px(s.section_padding_top_bottom)); put(el, '--sip-px', px(s.section_padding_left_right)); put(el, '--sip-py-m', px(s.mobile_section_padding_top_bottom)); put(el, '--sip-px-m', px(s.mobile_section_padding_left_right));
+      put(el, '--sip-box-bg', pick(o, s.container_background_color, 'transparent')); put(el, '--sip-border', pick(o, s.container_border_color, 'var(--color-border)'));
+      put(el, '--sip-bw', px(s.container_border_size)); put(el, '--sip-radius', px(s.container_radius)); put(el, '--sip-shadow', bool(s.container_shadow) ? '0 0 5px 0 rgba(0,0,0,0.20)' : 'none'); put(el, '--sip-maxw', px(s.container_max_width));
+      put(el, '--sip-box-py', px(s.container_padding_top_bottom)); put(el, '--sip-box-px', px(s.container_padding_left_right)); put(el, '--sip-box-py-m', px(s.mobile_container_padding_top_bottom)); put(el, '--sip-box-px-m', px(s.mobile_container_padding_left_right));
+      put(el, '--sip-hs', px(s.headline_spacing)); put(el, '--sip-gap', px(s.element_spacing)); put(el, '--sip-align', s.text_alignment || 'center'); put(el, '--sip-align-m', s.mobile_text_alignment || 'center');
+      put(el, '--sip-icon-h', px(s.icon_height)); put(el, '--sip-icon-h-m', px(s.mobile_icon_height)); put(el, '--sip-icon-gap', px(s.icon_gap)); put(el, '--sip-icon-gap-m', px(s.mobile_icon_gap));
+    }
+    const so = parse(root.dataset.sdSocials);
+    for (const x of c.blocks) {
+      if (x.type === 'headline' || x.type === 'subheading') sipText(c, x, s);
+      else if (x.type === 'icon') sipIcon(c, x, so);
+    }
+    for (const a of c.all('[data-sip-legacy]')) { const ic = a.querySelector('.loud-icon'); if (ic) put(ic, '--loud-icon-color', pick(o, s[a.dataset.sipLegacy + '_color'], 'var(--color-heading)')); }
+    const [t, b] = margins(s, c.st.mq.matches);
+    wrapper(c, {top: t, bottom: b});
+  }
+
+
+  /* ---------- Instagram Promo ---------- */
+  const IG_SHADOW = {low: '0 2px 5px rgba(0,0,0,0.1)', medium: '0 4px 10px rgba(0,0,0,0.2)', high: '0 6px 15px rgba(0,0,0,0.3)'};
+  const IG_SHOW = {no_devices: 'show-none hide-all', mobile_only: 'show-mobile', desktop_only: 'show-desktop'};
+  function igButton(c, s, b, igLink, bodyFont) {
+    const {put} = c, block = !!b, src = b || s;
+    const label = block ? b.label : (s.button_text || 'Follow');
+    const link = url(block ? b.link : s.button_link_url) || igLink;
+    const mine = block ? custom(b) : custom(s);
+    const shape = (block ? b.use_theme_button : s.use_theme_button) === false || (block ? b.use_theme_button : s.use_theme_button) === 'false';
+    let el = c.q('[data-ig-button]'); if (!el) return;
+    el = put(el, 'hrefb', link);
+    put(el, '@target', link ? '_blank' : null); put(el, '@rel', link ? 'noopener' : null);
+    put(el, 'text', label || '');
+    const bg = block ? src.bg_color : s.button_bg_color, tx = block ? src.text_color : s.button_text_color, hb = block ? src.bg_color_hover : s.button_hover_bg_color, ht = block ? src.text_color_hover : s.button_text_hover_color;
+    put(el, '--mb-bg', mine ? color(bg, 'var(--btn-primary-bg-color)') : null); put(el, '--mb-border', mine ? color(bg, 'var(--btn-primary-bg-color)') : null);
+    put(el, '--mb-text', mine ? color(tx, 'var(--btn-primary-color)') : null);
+    put(el, '--mb-hover-bg', mine ? color(hb, 'var(--btn-primary-hover-bg-color)') : null); put(el, '--mb-hover-border', mine ? color(hb, 'var(--btn-primary-hover-bg-color)') : null);
+    put(el, '--mb-hover-text', mine ? color(ht, 'var(--btn-primary-hover-color)') : null);
+    put(el, '--ig-btn-fs-d', shape ? px(block ? b.size_desktop : s.button_size_desktop) : null); put(el, '--ig-btn-fs-m', shape ? px(block ? b.size_mobile : s.button_size_mobile) : null);
+    put(el, '--mb-weight', shape ? String((block ? b.font_weight : s.button_font_weight) || 700) : null);
+    own(c, el, 'shape', shape); own(c, el, 'weight', shape);
+    put(el, '--mb-font', bodyFont || null); own(c, el, 'font', !!bodyFont);
+  }
+  function instagram(c) {
+    const {root, s, put} = c, o = custom(s), el = c.q('[data-sd-ig]');
+    const igRaw = parse(root.dataset.sdSocials), igLink = typeof igRaw === 'string' ? igRaw : '';
+    const fonts = bool(s.enable_custom_fonts), hf = fonts && font(s.heading_font) || '', bf = fonts && font(s.body_font) || '';
+    put(root, '.width', s.section_width || 'container');
+    if (el) {
+      put(el, '.show', IG_SHOW[s.show_section_on] || 'show-all');
+      put(el, '@data-ig-hover', s.image_hover_animation || 'none');
+      put(el, '--ig-ml', px(s.margin_left)); put(el, '--ig-mr', px(s.margin_right));
+      put(el, '--ig-bg', pick(o, s.background_color, 'var(--color-background)'));
+      put(el, '--ig-pt-d', px(s.padding_top_desktop)); put(el, '--ig-pb-d', px(s.padding_bottom_desktop)); put(el, '--ig-px-d', bool(s.full_width_desktop) ? '0px' : px(s.padding_lr_desktop));
+      put(el, '--ig-pt-m', px(s.padding_top_mobile)); put(el, '--ig-pb-m', px(s.padding_bottom_mobile)); put(el, '--ig-px-m', bool(s.full_width_mobile) ? '0px' : px(s.padding_lr_mobile));
+      put(el, '--ig-gap-d', px(s.horizontal_gap_desktop)); put(el, '--ig-gap-m', px(s.vertical_gap_mobile));
+      put(el, '--ig-iw-d', px(s.image_width_desktop)); put(el, '--ig-ih-d', px(s.image_height_desktop)); put(el, '--ig-iw-m', px(s.image_width_mobile)); put(el, '--ig-ih-m', px(s.image_height_mobile));
+      put(el, '--ig-radius', bool(s.circular_images) ? '50%' : px(s.image_border_radius));
+      put(el, '--ig-shadow', IG_SHADOW[s.image_shadow] || 'none');
+      put(el, '--ig-hf', hf || null); put(el, '--ig-bf', bf || null);
+    }
+    let btn = null;
+    for (const x of c.blocks) {
+      const b = x.b, bc = custom(b) ? b.color : '';
+      if (x.type === 'heading') {
+        put(x.el, 'inline', b.text || '');
+        put(x.el, '--ig-h-d', px(b.size_desktop)); put(x.el, '--ig-h-m', px(b.size_mobile)); put(x.el, '--ig-h-c', color(bc, 'var(--color-heading)'));
+        let w = b.font_weight || 'theme'; if (w === 'theme' && hf && fontWeight(s.heading_font)) w = fontWeight(s.heading_font);
+        put(x.el, '--ig-h-w', w !== 'theme' ? String(w) : null); own(c, x.el, 'weight', w !== 'theme'); own(c, x.el, 'font', !!hf);
+      } else if (x.type === 'subheading') {
+        put(x.el, 'fn:lines', b.text || '');
+        put(x.el, '--ig-p-d', px(b.size_desktop)); put(x.el, '--ig-p-m', px(b.size_mobile)); put(x.el, '--ig-p-c', color(bc, 'var(--color-text)'));
+        own(c, x.el, 'font', !!bf);
+      } else if (x.type === 'image') {
+        const link = url(b.link_url) || igLink;
+        const tile = put(x.el.querySelector('[data-ig-tile]'), 'hrefd', link);
+        if (!tile) continue;
+        put(tile, '@target', link ? '_blank' : null); put(tile, '@rel', link ? 'noopener' : null); put(tile, '@aria-label', link ? b.alt_text || '' : null);
+        const legacy = bool(b.enable_image_url) && b.image_url ? String(b.image_url) : '';
+        const src = legacy || imgSrc(b.image);
+        put(tile, 'media', JSON.stringify(src ? {t: 'img', src, alt: b.alt_text || '', w: !legacy && b.image && b.image.width || 0, h: !legacy && b.image && b.image.height || 0} : {t: 'ph'}));
+      } else if (x.type === 'button') btn = b;
+    }
+    if (btn || bool(s.show_instagram_button)) igButton(c, s, btn, igLink, bf);
+    const [t, b] = margins(s, c.st.mq.matches);
+    wrapper(c, {top: t, bottom: b});
+  }
+  const igFns = {
+    lines(el, v) { el.replaceChildren(); String(v).split(/\r?\n/).forEach((line, i) => { if (i) el.append(document.createElement('br')); el.append(line); }); },
+  };
+
+
+  /* ---------- Social Shop Grid ---------- */
+  const SSG_RATIO = {portrait: '3/4', landscape: '4/3', tall: '9/16', wide: '16/9'};
+  const productUrl = p => p && typeof p === 'object' ? p.url || (p.handle ? '/products/' + p.handle : '') : typeof p === 'string' && p ? '/products/' + p : '';
+  function ssgTile(c, x, s, hf, bf) {
+    const {put} = c, b = x.b;
+    let tile = x.el.querySelector('[data-ssg-tile]'); if (!tile) return;
+    const href = productUrl(b.product) || url(b.link);
+    tile = put(tile, 'hrefd', href);
+    put(tile, '@aria-label', href ? String(b.headline || b.username || 'Tile') : null);
+    if (!b.video) {
+      const src = imgSrc(b.image);
+      put(tile, 'media', JSON.stringify(src ? {t: 'img', src, alt: b.headline || (b.image && b.image.alt) || '', w: b.image && b.image.width || 0, h: b.image && b.image.height || 0, widths: [300, 600, 900]} : {t: 'ph'}));
+      const img = tile.querySelector(':scope > img[data-sd-img]');
+      if (img) put(img, '@sizes', '(min-width: 768px) calc(100vw / ' + num(s.columns, 4) + '), calc(100vw / ' + num(s.columns_mobile, 2) + ')');
+    }
+    const showHandle = bool(s.show_handle) && !blank(b.username);
+    const pill = tile.querySelector('[data-ssg-handle]');
+    if (pill) {
+      put(pill, 'hidden', !showHandle);
+      put(pill.querySelector('[data-ssg-username]'), 'text', b.username || '');
+      const av = pill.querySelector('[data-ssg-avatar]');
+      if (av) put(av, 'fn:avatar', JSON.stringify({src: imgSrc(b.avatar), letter: String(b.username || '@').trim().replace(/@/g, '').slice(0, 1).toUpperCase()}));
+    }
+    put(tile.querySelector('[data-ssg-badge-slot]'), 'fn:badge', b.platform || 'none');
+    const chip = tile.querySelector('[data-ssg-product]'), showChip = bool(s.show_product) && !!b.product;
+    if (chip) { put(chip, 'hidden', !showChip); own(c, chip, 'font', !!bf); }
+    const head = tile.querySelector('[data-ssg-headline]');
+    if (head) { put(head, 'text', b.headline || ''); put(head, 'hidden', blank(b.headline)); own(c, head, 'font', !!hf); }
+    put(tile.querySelector('[data-ssg-content]'), 'hidden', blank(b.headline) && !showChip);
+  }
+  function shopGrid(c) {
+    const {root, s, put} = c, o = custom(s), fonts = bool(s.enable_custom_fonts);
+    const hf = fonts && font(s.heading_font) || '', bf = fonts && font(s.body_font) || '', hw = hf && fontWeight(s.heading_font) || '';
+    put(c.q('[data-sd-width]'), '.width', s.section_width || 'container');
+    put(root, '~pt-min', num(s.padding_top) < 30); put(root, '~pb-min', num(s.padding_bottom) < 30); put(root, '~remove_spacing', bool(s.reset_spacing)); put(root, '~overflow-hidden', bool(s.reveal));
+    put(root, '--section-pt', String(num(s.padding_top))); put(root, '--section-pb', String(num(s.padding_bottom)));
+    put(root, '--ssg-cols', String(num(s.columns, 4))); put(root, '--ssg-cols-mb', String(num(s.columns_mobile, 2))); put(root, '--ssg-gap', px(s.column_gap, 8));
+    put(root, '--ssg-radius', px(s.tile_radius)); put(root, '--ssg-overlay', String(num(s.overlay_strength)));
+    put(root, '--ssg-accent', pick(o, s.accent_color, 'var(--color-primary)')); put(root, '--ssg-heading-c', pick(o, s.custom_heading_color, 'var(--color-heading)')); put(root, '--ssg-text-c', pick(o, s.custom_text_color, '#fff'));
+    put(root, '--ssg-ratio', SSG_RATIO[s.image_ratio] || '1/1');
+    const bg = o ? color(s.custom_section_bg, '') : '';
+    put(root, '--ssg-bg', bg || null); put(root, '@data-ssg-bg', !!bg);
+    put(root, '--ssg-hf', hf || null); put(root, '--ssg-hw', hw || null); put(root, '--ssg-bf', bf || null);
+    put(root, '@data-ssg-mode', s.display_mode || 'grid'); put(root, '@data-ssg-hover', s.hover_style || 'fade');
+    const head = c.q('[data-ssg-header]');
+    if (head) put(head, '.align', 'text-' + (s.header_alignment || 'center'));
+    let any = false;
+    for (const el of c.all('[data-ssg-legacy]')) {
+      any = true;
+      const k = el.dataset.ssgLegacy;
+      if (k === 'heading') { own(c, el, 'font', !!hf); own(c, el, 'weight', !!hw); put(el, '@data-ssg-hw', !!hw); }
+      else own(c, el, 'font', !!bf);
+    }
+    for (const x of c.blocks) {
+      const b = x.b;
+      if (x.type === 'tile') { ssgTile(c, x, s, hf, bf); continue; }
+      const col = custom(b) ? color(b.color, '') : '';
+      put(x.el, '--ssg-c', col || null); put(x.el, '@data-ssg-c', !!col);
+      if (x.type === 'eyebrow') { put(x.el, 'text', b.text || ''); put(x.el, 'hidden', blank(b.text)); own(c, x.el, 'font', !!bf); any = any || !blank(b.text); }
+      else if (x.type === 'heading') { put(x.el, 'inline', b.text || ''); put(x.el, 'hidden', blank(b.text)); own(c, x.el, 'font', !!hf); own(c, x.el, 'weight', !!hw); put(x.el, '@data-ssg-hw', !!hw); any = true; }
+      else if (x.type === 'subheading') { put(x.el, 'rich', b.text || ''); put(x.el, 'hidden', blank(b.text)); own(c, x.el, 'font', !!bf); any = true; }
+      else if (x.type === 'button') {
+        const link = url(b.link), el = put(x.el, 'hrefa', link);
+        put(el, '@target', link ? '_blank' : null); put(el, '@rel', link ? 'noopener' : null);
+        put(el.querySelector('strong'), 'text', b.label || ''); put(el, 'hidden', blank(b.label)); own(c, el, 'font', !!bf); any = true;
+      }
+    }
+    if (head) put(head, 'hidden', !any);
+    /* carousel: the theme's slider reads its data-* once, so a change builds it again */
+    const sl = c.q('slide-section');
+    if (sl) {
+      const cols = num(s.columns, 4);
+      put(sl, '@data-spacing', String(num(s.column_gap, 8))); put(sl, '@data-mobile', String(num(s.columns_mobile, 2))); put(sl, '@data-desktop', String(cols)); put(sl, '@data-tablet', String(cols > 3 ? 3 : cols));
+      put(sl, '@data-pagination-style', s.pagination_style || 'pill');
+      put(sl, '~reveal_on_scroll', bool(s.reveal));
+      put(sl.querySelector('[data-ssg-arrows]'), 'hidden', !bool(s.show_arrow));
+      const pg = sl.querySelector('[data-ssg-pagination]');
+      if (pg) { put(pg, 'hidden', s.carousel_pagination !== 'show_dots'); put(pg, '.pos', 'justify-content-' + (s.pagination_position || 'center')); }
+    }
+    const [t, b] = margins(s, c.st.mq.matches);
+    wrapper(c, {top: t, bottom: b});
+  }
+  const ssgFns = {
+    avatar(el, v, prev, st) {
+      const d = parse(v);
+      if (d.src) { if (el.tagName === 'IMG') { if (el.getAttribute('src') !== d.src) el.src = d.src; return el; } const n = document.createElement('img'); n.src = d.src; n.alt = ''; n.width = 18; n.height = 18; n.loading = 'lazy'; n.setAttribute('data-ssg-avatar', ''); el.replaceWith(n); st.last.set(n, st.last.get(el)); return n; }
+      if (el.tagName === 'IMG') { const n = document.createElement('span'); n.className = 'ssg-avatar'; n.setAttribute('aria-hidden', 'true'); n.setAttribute('data-ssg-avatar', ''); el.replaceWith(n); st.last.set(n, st.last.get(el)); el = n; }
+      el.textContent = d.letter || '';
+      return el;
+    },
+    badge(el, v, prev, st) {
+      const t = st.root.parentElement && st.root.parentElement.querySelector('template[data-ssg-badges]');
+      const src = t && t.content.querySelector('[data-ssg-badge="' + CSS.escape(v) + '"]');
+      el.replaceChildren(...(src ? [src.cloneNode(true)] : []));
+      el.dataset.ssgBadgeSlot = v;
+    },
+  };
+  /* tile videos play while on screen, never under reduced motion */
+  function ssgInit(root, st) {
+    const vids = () => [...root.querySelectorAll('video[data-ssg-video]')];
+    const sync = () => { for (const v of vids()) { const go = !reduced.matches && v.__sdOn && !document.hidden; if (go && v.paused) { const p = v.play(); if (p && p.catch) p.catch(() => {}); } else if (!go && !v.paused) v.pause(); } };
+    if ('IntersectionObserver' in window) {
+      const io = new IntersectionObserver(es => { for (const e of es) e.target.__sdOn = e.isIntersecting; sync(); }, {threshold: 0.15});
+      for (const v of vids()) io.observe(v);
+      st.off.push(() => io.disconnect());
+    }
+    reduced.addEventListener('change', sync); document.addEventListener('visibilitychange', sync);
+    st.off.push(() => { reduced.removeEventListener('change', sync); document.removeEventListener('visibilitychange', sync); for (const v of vids()) v.pause(); });
+    st.videos = sync;
+    /* a slider built by the theme is built again when one of its data-* values changes */
+    const sl = root.querySelector('slide-section');
+    if (sl && 'MutationObserver' in window) {
+      const mo = new MutationObserver(() => { if (typeof sl.initSlide === 'function' && sl.globalSlide) { try { sl.globalSlide.destroy(true, true); } catch (_) {} sl.globalSlide = null; sl.initSlide(); } });
+      mo.observe(sl, {attributes: true, attributeFilter: ['data-spacing', 'data-mobile', 'data-desktop', 'data-tablet', 'data-pagination-style']});
+      st.off.push(() => mo.disconnect());
+    }
+  }
+
   /* ---------- section types ---------- */
   const TYPES = {
     divider: {derive: divider, fns: dividerFns, bp: 768},
     divider3: {derive: divider3, fns: d3Fns, bp: 768},
     'waves-divider': {derive: waves, bp: 768},
+    'social-icons-pro2': {derive: socialIcons, bp: 768},
+    'instagram-promo': {derive: instagram, fns: igFns, bp: 768},
+    'social-shop-grid': {derive: shopGrid, fns: ssgFns, init: ssgInit, bp: 768},
   };
 
   function derive(root, st, record) {

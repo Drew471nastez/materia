@@ -48,7 +48,7 @@ if (!L.Liquid) { console.log(`${checks} header round 5 checks passed (render ski
 const coll = t => ({title: t, url: '/collections/' + t.toLowerCase(), handle: t.toLowerCase(), featured_image: L.img(t, 600, 800), image: L.img(t, 600, 800), products_count: 4, all_products_count: 4, products: [PANTS, OTHER]});
 const MENU = {handle: 'main-menu', title: 'Main menu', links: [
   L.L('Home', '/'),
-  L.L('Shop', '/collections/all', [L.L('Shop Layouts', '/collections/all', [L.L('Grid [new]', '/l/grid'), L.L('List [hot]', '/l/list')]), L.L('Shop Pages', '/collections/all', [L.L('Filters', '/l/filters')])]),
+  L.L('Shop', '/collections/all', [L.L('Shop Layouts', '/collections/all', [L.L('Grid [new]', '/l/grid'), L.L('List [hot]', '/l/list')]), L.L('Shop Pages', '/collections/all', [L.L('Filters', '/l/filters'), L.L('Gifts [custom_1]', '/l/gifts'), L.L('Trends [custom_2]', '/l/trends'), L.L('Loved [popular]', '/l/loved')])]),
   L.L('Products', '/collections/all', [L.L('New', '/c/new')]),
   L.L('Collections', '/collections', [L.L('Coats', '/c/coats')]),
   L.L('Brands', '/pages/brands', [L.L('One', '/b/one')]),
@@ -59,7 +59,7 @@ const MENU = {handle: 'main-menu', title: 'Main menu', links: [
 const group = L.savedGroup().sections.header;
 const saved = id => ({...group.blocks[id].settings});
 const BLOCKS = [
-  {id: 'pill', type: 'pill_glass', settings: {...saved('pill_glass_organize'), header_pill_enable: true, glass_enabled: true, glass_text_enable: true, header_pill_blur: true, header_pill_mobile: true, glass_border: true}},
+  {id: 'pill', type: 'pill_glass', settings: {...saved('pill_glass_organize'), header_pill_enable: true, glass_enabled: true, glass_text_enable: true, header_pill_blur: true, header_pill_mobile: true, glass_border: true, header_pill_border_width: 2}},
   {id: 'badges', type: 'menu_badges', settings: saved('menu_badges_qmWfdR')},
   {id: 'mbanner', type: 'menu_mobile_banner', settings: {...saved('block-mvnnx2f7-1-jta9o'), text: 'Shop', body: 'Coats and knitwear.', button_link: '/collections/winter', image: L.img('promo', 800, 500)}},
   {id: 'promo', type: 'menu_promotion', settings: {...saved('block-mvnnz3jy-2-oyn6k'), text: 'Shop', promotion_image_1: L.img('one'), promotion_image_2: L.img('two'), promotion_label_2: 'Bags', promotion_link_2: '/collections/bags', item_label: 'new'}},
@@ -71,6 +71,8 @@ const BLOCKS = [
 ];
 const ctxValues = {collection: coll('Changed'), collections: [coll('Changed'), coll('Other')], product: {...OTHER, title: 'Changed product'}};
 const clone = v => JSON.parse(JSON.stringify(v));
+/* the floating pill and glass place and paint the bar themselves; they are redraw only, so the rest is measured without them */
+const NOPILL = clone(BLOCKS); NOPILL[0].settings.header_pill_enable = false; NOPILL[0].settings.glass_enabled = false;
 
 (async () => {
   const {chromium} = require('playwright');
@@ -97,7 +99,6 @@ const clone = v => JSON.parse(JSON.stringify(v));
       const base = sectionBase(r);
       const sigs = new Map();
       /* the floating pill places the bar itself (margins, width), so the section's own settings are swept without it */
-      const NOPILL = clone(BLOCKS); NOPILL[0].settings.header_pill_enable = false; NOPILL[0].settings.glass_enabled = false;
       /* a hover setting is measured with the pointer over the bar */
       const point = async id => p.mouse.move(/hover/.test(id) ? 300 : 5, /hover/.test(id) ? 40 : 880);
       const baseSig = async (en, id) => { const key = JSON.stringify(en) + /hover/.test(id); if (!sigs.has(key)) { await draw(p, r, {...base, ...en}, NOPILL); await point(id); sigs.set(key, await L.signature(p, SEL)); } return sigs.get(key); };
@@ -118,7 +119,8 @@ const clone = v => JSON.parse(JSON.stringify(v));
       await ctx.close();
       return missed;
     };
-    {
+    const part = name => !process.env.PART || process.env.PART.split(',').includes(name);
+    if (part('sweep')) {
       const late = await sweepSection(1366);
       const missed = late.length ? await sweepSection(375, late) : [];
       assert.deepEqual(missed, [], 'section settings with no effect after a redraw: ' + missed.join(', '));
@@ -148,7 +150,7 @@ const clone = v => JSON.parse(JSON.stringify(v));
       await ctx.close();
       return bmissed;
     };
-    {
+    if (part('sweep')) {
       const late = await sweepBlocks(1366);
       const bmissed = late.length ? await sweepBlocks(375, late) : [];
       assert.deepEqual(bmissed, [], 'block settings with no effect after a redraw: ' + bmissed.join(', '));
@@ -160,10 +162,12 @@ const clone = v => JSON.parse(JSON.stringify(v));
       menu_hover_style: 'color', menu_hover_color: '#2f6fdb', dropdowns_animation: 'fade-in', dropdowns_speed: 250, dropdowns_smoothness: 10, dropdown_width: 300, dropdown_padding: 30,
       dropdown_link_spacing: 12, dropdown_radius: 14, dropdown_shadow: 'strong', mega_column_gap: 50, mega_column_dividers: true, mega_card_radius: 18, mega_card_label: 'pill',
       mega_card_label_bg: '#ffe066', mega_card_label_color: '#222222', uppercase_first: true, sticky_header_type: 'on-scroll-up', sticky_header_mobile: false,
-      menu_mobile_color: '#111111', menu_mobile_background: '#ffe066', menu_mobile_dividers: false, menu_mobile_chevrons: true, reset_spacing: false,
-      section_margin_top_desktop: 20, section_margin_bottom_desktop: 30, section_margin_top_mobile: 10, section_margin_bottom_mobile: 12,
+      menu_mobile_color: '#111111', menu_mobile_background: '#ffe066', menu_mobile_dividers: false, menu_mobile_chevrons: true,
       enable_custom_fonts: true, disable_white_fill_on_hover: true,
     };
+    /* values seen only on hover, while scrolling or with another value set: checked for equality, not for a visible change at rest */
+    const QUIET = ['menu_hover_style', 'sticky_header_type', 'sticky_header_mobile', 'disable_white_fill_on_hover', 'badges.badge_hover'];
+    const MARGINS = {section_margin_top_desktop: 20, section_margin_bottom_desktop: 30, section_margin_top_mobile: 10, section_margin_bottom_mobile: 12};
     const LIVE_ON = {enable_custom_fonts: true};
     const LIVE_DEP = {menu_custom_font: {family: 'Georgia', fallback_families: 'serif'}, menu_font_size: 19, menu_font_weight: '700'};
     const TRANS = {transparent_text_icon_color: '#ff00aa', transparent_hover_fill_color: '#00ffaa'};
@@ -175,21 +179,24 @@ const clone = v => JSON.parse(JSON.stringify(v));
     };
     const optionOk = (bt, id, v) => { const s = hs.blocks.find(b => b.type === bt).settings.find(x => x.id === id); return !s.options || s.options.some(o => o.value === v); };
     for (const [bid, set] of Object.entries(BLIVE)) for (const [k, v] of Object.entries(set)) assert(optionOk(BLOCKS.find(b => b.id === bid).type, k, v), `test value ${bid}.${k}=${v} is an option`);
-    for (const width of [1366, 375]) {
-      const {p, ctx, r, errors} = await page(width);
+    for (const width of part('live') ? [1366, 375] : []) {
+      const {p, ctx, r, errors} = await page(width, {headerBlocks: NOPILL});
+      const settle = () => width < 1025 ? p.waitForTimeout(500) : null;
       const base = sectionBase(r);
       const one = async (label, settings0, change, blockChange) => {
-        await draw(p, r, settings0);
+        await draw(p, r, settings0, NOPILL);
         const before = await L.signature(p, SEL, false);
         const bid = blockChange && blockChange[0];
         await L.emit(p, bid ? {section: 'header', block: bid, settings: blockChange[1], live: true} : {section: 'header', settings: change, live: true});
+        await settle();
         const live = await L.signature(p, SEL, false);
-        let blocks = BLOCKS;
-        if (bid) { blocks = clone(BLOCKS); Object.assign(blocks.find(b => b.id === bid).settings, blockChange[1]); }
+        let blocks = NOPILL;
+        if (bid) { blocks = clone(NOPILL); Object.assign(blocks.find(b => b.id === bid).settings, blockChange[1]); }
         await draw(p, r, bid ? settings0 : {...settings0, ...change}, restore(blocks));
+        await settle();
         const after = await L.signature(p, SEL, false);
         const d = L.diff(live, after);
-        ok(d.length === 0, `${width} live ${label} equals the redraw\n` + d.slice(0, 3).map(x => JSON.stringify(x).slice(0, 900)).join('\n'));
+        ok(d.length === 0, `${width} live ${label} equals the redraw\n` + L.explain(d));
         return L.diff(before, live).length;
       };
       const flat = [];
@@ -197,6 +204,9 @@ const clone = v => JSON.parse(JSON.stringify(v));
         const changedCount = await one(k, base, {[k]: v});
         if (!changedCount) flat.push(k);
       }
+      for (const [k, v] of Object.entries(MARGINS)) { const n = await one(k + ' (reset off)', {...base, reset_spacing: false}, {[k]: v}); if (!n && (width > 1024) === !/mobile/.test(k)) flat.push(k); }
+      { const n = await one('reset_spacing off (margins set)', {...base, ...MARGINS}, {reset_spacing: false}); if (!n) flat.push('reset_spacing'); }
+      await one('reset_spacing on (margins set)', {...base, ...MARGINS, reset_spacing: false}, {reset_spacing: true});
       for (const [k, v] of Object.entries(LIVE_DEP)) { const n = await one(k + ' (font on)', {...base, ...LIVE_ON}, {[k]: v}); if (!n) flat.push(k); }
       await one('font off', {...base, ...LIVE_ON, ...LIVE_DEP}, {enable_custom_fonts: false});
       for (const [k, v] of Object.entries(TRANS)) { const n = await one(k + ' (transparent)', {...base, transparent_header: true, transparent_on_mobile: true}, {[k]: v}); if (!n) flat.push(k); }
@@ -204,7 +214,7 @@ const clone = v => JSON.parse(JSON.stringify(v));
       /* a whole drag in one emit: many values at once, one frame */
       await one('several at once', base, {logo_width_desktop: 100, menu_hover_color: '#123456', dropdown_shadow: 'none', uppercase_first: true, menu_mobile_background: '#e9ecef'});
       if (width === 1366) {
-        const desk = flat.filter(k => !/mobile|mbanner|chevrons|dividers/.test(k) || k === 'mega_column_dividers');
+        const desk = flat.filter(k => !QUIET.includes(k) && (!/mobile|mbanner|chevrons|dividers/.test(k) || k === 'mega_column_dividers'));
         assert.deepEqual(desk, [], `${width}: live values that changed nothing: ${desk.join(', ')}`);
       } else {
         const mob = flat.filter(k => /logo_width_mobile|menu_mobile|mbanner/.test(k));
@@ -228,7 +238,7 @@ const clone = v => JSON.parse(JSON.stringify(v));
     }
 
     /* ---------- 4. Menu font under the theme priority ---------- */
-    for (const width of [1366, 375]) {
+    for (const width of part('font') ? [1366, 375] : []) {
       const {p, ctx, r} = await page(width);
       const base = sectionBase(r);
       const read = () => p.evaluate(() => {
@@ -257,7 +267,7 @@ const clone = v => JSON.parse(JSON.stringify(v));
     }
 
     /* ---------- 5. logo, phone targets, keyboard, redraw ---------- */
-    {
+    if (part('a11y')) {
       const {p, ctx, r} = await page(375);
       const base = sectionBase(r);
       await draw(p, r, base);
@@ -281,7 +291,7 @@ const clone = v => JSON.parse(JSON.stringify(v));
       ok(await p.locator('#shopify-section-header button.nav-toggle').getAttribute('aria-expanded') === 'true', 'after a redraw one tap opens the drawer (no double binding)');
       await ctx.close();
     }
-    {
+    if (part('a11y')) {
       const {p, ctx} = await page(1366);
       await p.keyboard.press('Tab');
       for (let i = 0; i < 12; i++) { if (await p.evaluate(() => document.activeElement.closest('.level0.menu-parent') && document.activeElement.matches('.navigation:not(.mobile) .level0 > menu-item > a'))) break; await p.keyboard.press('Tab'); }

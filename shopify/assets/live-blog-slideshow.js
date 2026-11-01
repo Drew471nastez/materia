@@ -69,7 +69,7 @@
     const slider = root.querySelector('slide-section');
     if (!slider || typeof slider.initSlideshow !== 'function') return;
     const s = st.s, single = root.querySelectorAll('slide-section > .swiper-wrapper > .swiper-slide').length < 2;
-    slider.dataset.effect = s.slide_effect || 'fade';
+    slider.dataset.effect = s.slide_effect || 'slide';
     slider.dataset.loop = String(!single && s.slide_loop !== false && s.slide_loop !== 'false');
     slider.dataset.autoplay = String(!single && bool(s.autoplay));
     slider.dataset.autoplaySpeed = String(num(s.autorotate_speed, 5));
@@ -92,17 +92,24 @@
     if (s.slide_effect && !root.classList.contains(s.slide_effect)) root.classList.add(s.slide_effect);
     /* Image effect and its intensity. */
     if (s.image_effect != null && root.dataset.slideshowPointer !== String(s.image_effect)) root.dataset.slideshowPointer = s.image_effect;
+    /* a new effect: slideshow-pointer.js measures the scroll position once now (parallax), not on the next scroll */
+    if (st.pointer !== undefined && st.pointer !== s.image_effect) dispatchEvent(new Event('scroll'));
+    st.pointer = s.image_effect;
     for (const [p, v] of Object.entries(fxVars(s.image_effect_intensity))) setVar(root, p, v);
     /* Width, spacing, height. */
     const inner = root.firstElementChild;
-    if (inner) swapClass(inner, '', s.section_width, ['container', 'fluid_container', 'stretch_width', 'full_width'].filter(w => w !== s.section_width)), s.section_width && inner.classList.add(s.section_width);
+    if (inner && s.section_width) { swapClass(inner, '', s.section_width, ['container', 'fluid_container', 'stretch_width', 'full_width'].filter(w => w !== s.section_width)); inner.classList.add(s.section_width); }
+    if (s.section_width && root.dataset.ssWidth !== s.section_width) root.dataset.ssWidth = s.section_width;
+    /* Mobile text sizes: the section's phone rules read these (0 = the desktop size). */
+    for (const [sel, v, sz, mob] of [['.sec__content-subheading', '--font-size-mobile-sub', 'subheading_font_size', 'subheading_font_size_mobile'], ['.sec__content-heading', '--font-size-mobile-heading', 'heading_font_size', 'heading_font_size_mobile'], ['.sec__content-des', '--font-size-mobile-des', 'des_font_size', 'des_font_size_mobile']])
+      for (const el of root.querySelectorAll(sel)) { setVar(el, '--font-size', String(num(s[sz]))); setVar(el, v, String(num(s[mob]) > 0 ? num(s[mob]) : num(s[sz]))); }
     setVar(root, '--section-pt', String(num(s.padding_top)));
     setVar(root, '--section-pb', String(num(s.padding_bottom)));
     root.classList.toggle('pt-min', num(s.padding_top) < 30);
     root.classList.toggle('pb-min', num(s.padding_bottom) < 30);
     root.classList.toggle('remove_spacing', bool(s.reset_spacing));
     const wrap = document.getElementById('shopify-section-' + id);
-    if (wrap && st.touched.has('margins')) {
+    if (wrap) {
       const desktop = matchMedia('(min-width: 768px)').matches, reset = bool(s.reset_spacing);
       setImp(wrap, 'margin-top', reset ? '0px' : num(desktop ? s.section_margin_top_desktop : s.section_margin_top_mobile) + 'px');
       setImp(wrap, 'margin-bottom', reset ? '0px' : num(desktop ? s.section_margin_bottom_desktop : s.section_margin_bottom_mobile) + 'px');
@@ -137,7 +144,6 @@
     for (const slide of root.querySelectorAll('[data-slide-id]')) {
       const b = {...st.blockDefaults, ...parse(slide.dataset.slideSettings), ...(st.blocks.get(slide.dataset.slideId) || {})};
       const fonts = bool(b.enable_custom_fonts), weights = bool(b.enable_custom_font_weights);
-      for (const el of slide.querySelectorAll('[data-ss-text]')) { attr(el, 'data-own-font', fonts); attr(el, 'data-own-weight', weights); }
       const sub = slide.querySelector('[data-ss-text="subheading"]');
       if (sub && st.touchedBlocks.has(slide.dataset.slideId)) text(sub, b.subheading);
       const h = slide.querySelector('[data-ss-text="heading"]');
@@ -152,6 +158,11 @@
       }
       const des = slide.querySelector('[data-ss-text="description"]');
       if (des && st.touchedBlocks.has(slide.dataset.slideId)) rich(des, b.description, st.cache);
+      for (const el of slide.querySelectorAll('[data-ss-text]')) {
+        attr(el, 'data-own-font', fonts); attr(el, 'data-own-weight', weights);
+        /* the slide's weight reaches the paragraphs inside, as the section's own rule does on first paint */
+        for (const child of el.querySelectorAll('p, li, strong:not(.hero-accent), em, a')) { if (weights) setImp(child, 'font-weight', 'inherit'); else if (child.style.getPropertyValue('font-weight')) child.style.removeProperty('font-weight'); }
+      }
       const content = slide.querySelector('.sec__content-inner');
       if (content && b.slider_effect && !content.classList.contains(b.slider_effect)) swapClass(content, '', b.slider_effect, ENTRANCES);
       const box = slide.querySelector('.sec__content');
@@ -185,7 +196,9 @@
           const type = b['badge_' + n + '_type'];
           if (type === 'none' || (type === 'text' && !String(b['badge_' + n + '_text'] || '').trim())) continue;
           const item = items[k++]; if (!item) break;
-          const t = item.querySelector('.banner__badge-text'); if (t) text(t, b['badge_' + n + '_text']);
+          let t = item.querySelector('.banner__badge-text');
+          if (!t && String(b['badge_' + n + '_text'] || '').trim()) { t = document.createElement('span'); t.className = 'banner__badge-text'; item.append(t); }
+          if (t) { text(t, b['badge_' + n + '_text']); show(t, !!String(b['badge_' + n + '_text'] || '').trim()); }
           const fg = item.querySelector('.badge-stars__fg'); if (fg) fg.style.width = num(b['badge_' + n + '_rating'], 5) * 20 + '%';
           const stars = item.querySelector('.badge-stars'); if (stars) stars.setAttribute('aria-label', num(b['badge_' + n + '_rating'], 5) + ' out of 5 stars');
         }
@@ -262,7 +275,7 @@
     const h2 = root.querySelector('.section__header-heading');
     attr(h2, 'data-own-weight', weight); attr(h2, 'data-own-size', size);
     /* Words. */
-    if (h2 && st.touched.has('heading')) rich(h2, String(s.heading || '').replace(/<\/?p>/g, ''), st.cache);
+    if (h2 && st.touched.has('heading')) rich(h2, s.heading, st.cache);
     const des = root.querySelector('.section__header-des');
     if (des && st.touched.has('description')) rich(des, s.description, st.cache);
     /* Alignment, author and date, image ratio. */
@@ -326,7 +339,7 @@
   const refresh = () => { for (const [root, st] of BP) bpAutoplay(root, st); };
   reduced.addEventListener?.('change', refresh);
   document.addEventListener('visibilitychange', refresh);
-  addEventListener('resize', () => { for (const st of SS.values()) if (st.touched.has('margins')) st.schedule(); }, {passive: true});
+  matchMedia('(min-width: 768px)').addEventListener?.('change', () => { for (const st of SS.values()) st.schedule(); });
   ['DOMContentLoaded', 'storelib:section-load', 'shopify:section:load'].forEach(t => document.addEventListener(t, scan));
   new MutationObserver(records => {
     if (records.some(r => [...r.addedNodes, ...r.removedNodes].some(n => n.nodeType === 1 && (n.matches('[data-slideshow-settings], [data-bp-root]') || n.querySelector('[data-slideshow-settings], [data-bp-root]'))))) scan();

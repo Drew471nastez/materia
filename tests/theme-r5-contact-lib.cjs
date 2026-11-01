@@ -57,7 +57,7 @@ function snapshot(page, uid) {
       const cs = getComputedStyle(el), r = [el.tagName];
       for (const p of P) r.push(cs[p]);
       for (const v of V) r.push(cs.getPropertyValue(v).trim());
-      for (const a of el.attributes) if (A.test(a.name)) r.push(a.name + '=' + (a.name === 'class' ? a.value.split(/\s+/).filter(c => c && !/^(is-|scroll-trigger|animate|ct-)/.test(c)).sort().join(' ') : a.value));
+      r.push(...[...el.attributes].filter(a => A.test(a.name)).map(a => a.name + '=' + (a.name === 'class' ? a.value.split(/\s+/).filter(c => c && !/^(is-|scroll-trigger|animate)/.test(c)).sort().join(' ') : a.value)).sort());
       if (el.tagName === 'svg') r.push(el.innerHTML.replace(/\s+/g, ' '));
       if (el.matches('input, textarea')) { r.push(getComputedStyle(el, '::placeholder').color); r.push(el.value); }
       r.push([...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').replace(/\s+/g, ' ').trim());
@@ -154,7 +154,7 @@ async function suite(name, cfg = {}) {
         if (/^t:/.test(x.label || '')) ok(false, where + ' ' + x.id + ': label is a translation key');
       }
       const headers = list.filter(x => x.type === 'header').map(x => x.content);
-      const order = ['General', 'Content', 'Messages', 'Layout', 'Icon', 'Icons', 'Media', 'Background image', 'Content box', 'Appearance', 'Button', 'Email field', 'Fields', 'Form', 'Submit button', 'Info rows', 'Side image', 'Typography', 'Animation', 'Desktop spacing', 'Mobile'];
+      const order = ['General', 'Content', 'Messages', 'Layout', 'Icon', 'Icons', 'Media', 'Background image', 'Content box', 'Appearance', 'Form', 'Button', 'Email field', 'Fields', 'Submit button', 'Info rows', 'Side image', 'Typography', 'Animation', 'Desktop spacing', 'Mobile'];
       if (where === 'section') { const idx = headers.map(h => order.indexOf(h)); ok(idx.every(i => i >= 0) && idx.every((v, i) => !i || v > idx[i - 1]), name + ' section groups in the shared order: ' + headers.join(', ')); }
     }
     ok(!/\u2014/.test(JSON.stringify(preset)) && !/\u2014/.test(s.name || ''), name + ' preset without em dashes');
@@ -186,7 +186,7 @@ async function suite(name, cfg = {}) {
     { const t = await mount(browser, name, opts({width: 1366, priority: 'off'})); await quiet(t); eq(await audit(t.page, 'test'), [], name + ' priority off: audit'); if (cfg.theme) await cfg.theme(t, {ok, eq, css: (sel, p, pseudo) => css(t.page, 'test', sel, p, pseudo), width: 1366, editing: true, tag: name + ' priority off'}); await t.page.close(); }
 
     /* every control: live, redraw, live equals redraw, options pairwise distinct */
-    const structural = new Set(cfg.structural || []), skip = new Set([...(cfg.skip || []), 'reveal']);
+    const structural = new Set(cfg.structural || []), skip = new Set([...(cfg.skip || []), 'reveal', ...(cfg.messages ? cfg.messages.slice(0, 2) : [])]);
     /* Reveal on scroll: with the theme's reveal on, the section's parts take it; off, none do */
     if (s.settings.some(x => x.id === 'reveal')) {
       const t = await mount(browser, name, opts({width: 1366, editing: false, theme: {scroll_animation: 'fade_up', animation_duration: 700}}));
@@ -205,7 +205,8 @@ async function suite(name, cfg = {}) {
     for (const [width, editing] of widths) {
       const t = await mount(browser, name, opts({width, editing, blocks: blocksOf()}));
       await quiet(t);
-      const base = {settings: clone(t.rendered[0].section.settings), blocks: t.rendered[0].section.blocks.map(b => ({type: b.type, settings: clone(b.settings)}))};
+      /* every id spelled out, so a redraw (which keeps the settings it is not given) starts clean */
+      const base = {settings: {...Object.fromEntries(s.settings.filter(x => x.id).map(x => [x.id, null])), ...clone(t.rendered[0].section.settings)}, blocks: t.rendered[0].section.blocks.map(b => ({type: b.type, settings: clone(b.settings)}))};
       for (const it of items) {
         const {x, block} = it, key = (block ? block.type + '.' : '') + x.id;
         let bi = block ? base.blocks.findIndex(b => b.type === block.type) : -1;
@@ -215,7 +216,7 @@ async function suite(name, cfg = {}) {
         if (block) Object.assign(ctx.sec, prereq(x).section);
         const mk = v => {
           const settings = {...base.settings, ...(cfg.ctx && cfg.ctx[key] || {}), ...ctx.sec}, blocks = base.blocks.concat(extra).map(b => ({type: b.type, settings: {...b.settings}}));
-          if (block) Object.assign(blocks[bi].settings, ctx.blk, v === undefined ? {} : {[x.id]: v}); else if (v !== undefined) settings[x.id] = v;
+          if (block) Object.assign(blocks[bi].settings, (cfg.bctx || {})[key] || {}, ctx.blk, v === undefined ? {} : {[x.id]: v}); else if (v !== undefined) settings[x.id] = v;
           return {settings, blocks};
         };
         /* start from the context, drawn by the server */
@@ -344,6 +345,17 @@ async function suite(name, cfg = {}) {
       await t.page.close();
     }
 
+    /* the form's own messages: the success message after a post, the error message with the store's field errors */
+    if (cfg.messages) {
+      const [succ, err, okSel, errSel] = cfg.messages;
+      const errors = Object.assign(['email'], {messages: {email: 'Email is invalid'}});
+      for (const [form, id, sel, text] of [[{'posted_successfully?': true, posted_successfully: true}, succ, okSel, 'Thanks, we got it.'], [{errors}, err, errSel, 'Fix these fields:']]) {
+        const t = await mount(browser, name, opts({width: 375, editing: false, settings: {[id]: text}, globals: {...((cfg.mountOpts || {}).globals || {}), form}}));
+        const got = await t.page.evaluate(sel => { const e = document.querySelector('#shopify-section-test ' + sel); return e ? {text: e.textContent.replace(/\s+/g, ' ').trim(), role: e.getAttribute('role')} : null; }, sel);
+        ok(got && got.text.startsWith(text) && /status|alert/.test(got.role || ''), name + ': ' + id + ' shows the setting\'s words: ' + JSON.stringify(got));
+        await t.page.close();
+      }
+    }
     if (cfg.extra) await cfg.extra(browser, {ok, eq, snapshot, audit, css, frames, quiet, opts, blocksOf, diff, same});
   } finally {
     await browser.close();
@@ -396,8 +408,11 @@ async function savedLook(browser, {name, template, key, toggles = {}, blockToggl
     const a = await look(browser, await renderRaw(oldRaw, fillSchema(oldRaw, sec)), width, {assets});
     const b = await look(browser, await renderRaw(newRaw, fillSchema(newRaw, sec, toggles, blockToggles)), width, {assets, js: true});
     const fix = x => tolerate ? x.map(tolerate) : x;
-    eq(b.height, a.height, name + ' saved ' + key + ' @' + width + ': same height');
-    eq(fix(b.els), fix(a.els), name + ' saved ' + key + ' @' + width + ': same text, colours, fonts, sizes and layout');
+    /* boxes may round a pixel differently; everything else is the same */
+    const close = (p, q) => p === q || (p.split('|').length === q.split('|').length && p.split('|').every((v, i) => { const w = q.split('|')[i]; return v === w || (/^-?\d+$/.test(v) && /^-?\d+$/.test(w) && Math.abs(v - w) <= 1); }));
+    const A = fix(a.els), B = fix(b.els);
+    ok(A.length === B.length && A.every((v, i) => close(v, B[i])), name + ' saved ' + key + ' @' + width + ': same text, colours, fonts, sizes and layout\n' + B.filter((v, i) => !close(v, A[i] || '')).map((v, i) => 'new ' + v + '\nold ' + A[B.indexOf(v)]).join('\n'));
+    ok(Math.abs(b.height - a.height) <= 1, name + ' saved ' + key + ' @' + width + ': same height ' + b.height + ' vs ' + a.height);
     n++;
   }
   return n;

@@ -91,6 +91,8 @@
     else if (key === 'image') image(el, v);
     else if (key === 'href') return link(el, v, st);
     else if (key === 'copies') copies(el, v, st);
+    else if (key === 'icon') el.innerHTML = ICONS[v] || '';
+    else if (key === 'barLink') barLink(el, v, st);
     else if (key === 'noReveal') { const m = el.querySelector(':scope > [data-ti-no-reveal]'); if (v === 'true' && !m) { const n = document.createElement('span'); n.setAttribute('data-ti-no-reveal', ''); n.hidden = true; el.prepend(n); } else if (v !== 'true' && m) m.remove(); }
     return el;
   }
@@ -201,6 +203,255 @@
     },
     after(root) { const t = root.querySelector('[data-an-track]'); if (t) syncClock(t); },
     visibility: pauseWhenAway,
+  };
+
+  /* ---------- close button (Basic, Pro 2) ---------- */
+  /* Storefront: hides the bar and remembers it (days > 0 in localStorage until then, 0 for this tab).
+     Builder: hides it only until the next edit, so the section can still be edited. */
+  function closer(root, st, keys) {
+    const store = (kind) => { try { return kind === 'local' ? localStorage : sessionStorage; } catch (_) { return null; } };
+    if (!design()) {
+      try {
+        const until = +(store('local')?.getItem(keys.local) || 0);
+        if ((until && Date.now() < until) || store('session')?.getItem(keys.session) === '1' || (keys.legacy && keys.legacy())) root.hidden = true;
+      } catch (_) {}
+    }
+    root.addEventListener('click', e => {
+      const b = e.target.closest('[data-an-close]'); if (!b || !root.contains(b)) return;
+      e.preventDefault();
+      if (design()) { root.setAttribute('data-an-dismissed', ''); return; }
+      root.hidden = true;
+      const days = num(keys.days ? keys.days() : 0);
+      try { if (days > 0) store('local')?.setItem(keys.local, String(Date.now() + days * 864e5)); else store('session')?.setItem(keys.session, '1'); } catch (_) {}
+    }, {signal: st.abort.signal});
+  }
+
+  /* ---------- Announcement Bar Basic ---------- */
+  function themeButton(c, el, b, o) {
+    const {put} = c, own = bool(b.enable_custom_style), shape = off(b.use_theme_button), outline = b.style === 'outline';
+    const cv = v => own ? color(v, '') || null : null;
+    put(el, '@data-theme-button', outline ? 'secondary' : 'primary');
+    const bgv = outline ? 'transparent' : cv(b.bg_color), tx = cv(b.text_color), hb = cv(b.bg_hover);
+    put(el, '--mb-bg', bgv); put(el, '--mb-text', tx); put(el, '--mb-border', outline ? tx : bgv);
+    put(el, '--mb-hover-bg', hb); put(el, '--mb-hover-text', cv(b.color_hover)); put(el, '--mb-hover-border', hb);
+    put(el, '--mb-radius', shape ? px(b.radius) : null); put(el, '--mb-padding-y', shape ? px(b.padding_y) : null); put(el, '--mb-padding-x', shape ? px(b.padding_x) : null); put(el, '--mb-font-size', shape ? px(b.font_size) : null);
+    put(el, '@data-own-shape', shape || null);
+    put(el, '--mb-weight', o.weight || null); put(el, '@data-own-weight', !!o.weight || null);
+    const f = bool(b.enable_custom_fonts) ? fontCss(b.font, '') : '';
+    put(el, '--mb-font', f || null); put(el, '@data-own-font', !!f || null);
+  }
+  TYPES['announcement-bar-basic'] = {
+    bp: 768,
+    derive(c) {
+      const {root, s, put} = c, own = bool(s.enable_custom_style), fonts = bool(s.enable_custom_fonts), legacyFont = !fonts && bool(s.enable_custom_font), cw = bool(s.enable_custom_font_weight);
+      scheme(c); frame(c, 'full_width');
+      const align = s.content_alignment || 'center';
+      const v = {
+        '--ab-bg': bg(own, s.background_type, s.background_color, s.gradient_start_color, s.gradient_end_color, s.gradient_angle),
+        '--ab-text': pick(own, s.text_color, 'var(--color-text)'),
+        '--ab-border': pick(own, s.border_color, 'var(--color-border)'), '--ab-bw': bool(s.show_border_bottom) ? px(num(s.border_width, 1) || 1) : '0px',
+        '--ab-justify': {left: 'flex-start', right: 'flex-end'}[align] || 'center', '--ab-ta': {left: 'start', right: 'end'}[align] || 'center',
+        '--ab-gap': px(s.content_gap), '--ab-px': px(s.bar_padding_x), '--ab-px-m': bool(s.show_close_button_mobile) ? '36px' : '14px',
+        '--ab-ls': px(s.letter_spacing), '--ab-tt': s.text_transform || 'none',
+        '--ab-ff': fonts ? fontCss(s.body_font, 'inherit') : legacyFont ? '"' + (s.custom_font || '') + '"' : 'inherit',
+        '--ab-fw': cw ? String(s.message_font_weight || 400) : fonts ? fontWeight(s.body_font, 'var(--body-weight, inherit)') : 'var(--body-weight, inherit)',
+        '--ab-fs-d': px(s.font_size), '--ab-fs-m': px(s.mobile_font_size), '--ab-h-d': px(s.bar_height), '--ab-h-m': px(s.mobile_bar_height),
+      };
+      for (const k in v) put(root, k, v[k]);
+      put(root, '@data-show', s.display_section_on || 'display_all');
+      put(root, '@data-close-d', bool(s.show_close_button) ? 'true' : 'false'); put(root, '@data-close-m', bool(s.show_close_button_mobile) ? 'true' : 'false');
+      put(root, '@data-close-days', String(num(s.close_persistence_days)));
+      put(root, '@data-own-font', fonts || bool(s.enable_custom_font) || null); put(root, '@data-own-weight', fonts || bool(s.enable_custom_font) || cw || null);
+      put(c.q('[data-an-close]'), '@aria-label', s.close_label || 'Close announcement');
+      let legacy = c.q('[data-an-legacy="message"]');
+      if (legacy && !c.blocks.length) {
+        const href = url(s.link);
+        legacy = put(legacy, 'href', href);
+        put(legacy, '@target', href && bool(s.open_in_new_tab) ? '_blank' : null); put(legacy, '@rel', href && bool(s.open_in_new_tab) ? 'noopener' : null);
+        put(legacy.querySelector('.ab-msg__d'), 'text', s.message || ''); put(legacy.querySelector('.ab-msg__m'), 'text', plain(s.message_mobile) ? s.message_mobile : s.message || '');
+      }
+    },
+    block(c, el, b, type) {
+      const {put, s, root} = c, tab = bool(b.open_in_new_tab);
+      if (type === 'message') {
+        const href = url(b.link);
+        el = put(el, 'href', href);
+        put(el, '@target', href && tab ? '_blank' : null); put(el, '@rel', href && tab ? 'noopener' : null);
+        put(el, '@data-vis', b.visibility || 'all');
+        put(el, 'hidden', !plain(b.text) && !plain(b.text_mobile));
+        put(el, '--b-c', bool(b.enable_custom_style) ? color(b.color, 'var(--ab-text)') : null);
+        const f = bool(b.enable_custom_fonts) ? fontCss(b.font, '') : '';
+        put(el, '--b-f', f || null); put(el, '--b-w', f ? fontWeight(b.font, '400') : null);
+        put(el, '@data-own-font', !!f || null); put(el, '@data-own-weight', !!f || null);
+        put(el.querySelector('.ab-msg__d'), 'text', b.text || ''); put(el.querySelector('.ab-msg__m'), 'text', plain(b.text_mobile) ? b.text_mobile : b.text || '');
+      } else if (type === 'button') {
+        el = put(el, 'href', url(b.link) || root.dataset.anFallbackHref || '/collections/all');
+        put(el, '@target', tab ? '_blank' : null); put(el, '@rel', tab ? 'noopener' : null);
+        put(el, '@data-vis', b.visibility || 'all');
+        put(el, 'text', b.label || ''); put(el, 'hidden', !plain(b.label));
+        themeButton(c, el, b, {weight: bool(s.enable_custom_font_weight) ? String(s.button_font_weight || 600) : ''});
+      }
+    },
+    init(root, st) {
+      const id = root.dataset.anSection;
+      closer(root, st, {local: 'announcementBarClosedUntil:' + id, session: 'announcementBarClosed:' + id, days: () => st.s.close_persistence_days});
+    },
+  };
+
+  /* ---------- Announcement Bar Pro 1 (annoucment-bar-scrolling) ---------- */
+  /* The separator shapes of snippets/announce-icon (an unknown name draws the sun, as the Liquid does). */
+  const ICONS = {"fa-star":"<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" aria-hidden=\"true\" focusable=\"false\"><path fill=\"currentColor\" d=\"M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z\"/></svg>","fa-heart":"<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" aria-hidden=\"true\" focusable=\"false\"><path fill=\"currentColor\" d=\"M12 21s-7.6-4.7-10-9.4C.6 8.4 2.6 4 6.6 4c2.2 0 3.6 1.1 5.4 3.2C13.8 5.1 15.2 4 17.4 4c4 0 6 4.4 4.6 7.6C19.6 16.3 12 21 12 21z\"/></svg>","fa-circle":"<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" aria-hidden=\"true\" focusable=\"false\"><circle fill=\"currentColor\" cx=\"12\" cy=\"12\" r=\"6\"/></svg>","fa-square":"<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" aria-hidden=\"true\" focusable=\"false\"><rect fill=\"currentColor\" x=\"6\" y=\"6\" width=\"12\" height=\"12\"/></svg>","fa-diamond":"<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" aria-hidden=\"true\" focusable=\"false\"><path fill=\"currentColor\" d=\"M12 3l9 9-9 9-9-9z\"/></svg>","fa-bolt":"<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" aria-hidden=\"true\" focusable=\"false\"><path fill=\"currentColor\" d=\"M13 2L4 14h7l-1 8 9-12h-7z\"/></svg>","fa-moon":"<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" aria-hidden=\"true\" focusable=\"false\"><path fill=\"currentColor\" d=\"M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z\"/></svg>","fa-check":"<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" aria-hidden=\"true\" focusable=\"false\"><path fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4 12.5l5 5L20 6.5\"/></svg>","fa-plus":"<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" aria-hidden=\"true\" focusable=\"false\"><path fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.6\" stroke-linecap=\"round\" d=\"M12 5v14M5 12h14\"/></svg>","fa-arrow-right":"<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" aria-hidden=\"true\" focusable=\"false\"><path fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4 12h15M13 6l6 6-6 6\"/></svg>","fa-leaf":"<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" aria-hidden=\"true\" focusable=\"false\"><path fill=\"currentColor\" d=\"M20 4C9 4 4 9 4 16c0 1.4.3 2.7.8 4 1.7-5 5.2-8.2 10.2-9.5-4 2-6.8 5-8 9 .9.3 1.9.5 3 .5 7 0 10-6 10-16z\"/></svg>","fa-fire":"<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" aria-hidden=\"true\" focusable=\"false\"><path fill=\"currentColor\" d=\"M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-6 0 2 1 3 2 3 0-4 0-6 1-9z\"/></svg>","fa-gift":"<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" aria-hidden=\"true\" focusable=\"false\"><path fill=\"currentColor\" d=\"M3 8h18v5H3zM5 14h6v8H5zM13 14h6v8h-6zM11 8h2v5h-2zM12 8c-2-5-7-5-7-2s5 2 7 2zm0 0c2-5 7-5 7-2s-5 2-7 2z\"/></svg>","fa-truck":"<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" aria-hidden=\"true\" focusable=\"false\"><path fill=\"currentColor\" d=\"M1 5h13v11H1zM15 9h4l4 4v3h-8zM6 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zm12 0a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z\"/></svg>","fa-snowflake":"<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" aria-hidden=\"true\" focusable=\"false\"><path fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" d=\"M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7\"/></svg>","fa-sun":"<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" aria-hidden=\"true\" focusable=\"false\"><circle fill=\"currentColor\" cx=\"12\" cy=\"12\" r=\"4.5\"/><path fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" d=\"M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1\"/></svg>","none":""};
+  function barLink(root, href, st) {
+    const track = root.querySelector('[data-an-track]'); if (!track) return;
+    const a = root.querySelector(':scope > [data-an-bar-link]');
+    if (href && !a) { const n = document.createElement('a'); n.className = 'announcement-bar-link'; n.target = '_blank'; n.rel = 'noopener noreferrer'; n.setAttribute('data-an-bar-link', ''); n.href = href; track.replaceWith(n); n.append(track); }
+    else if (href && a) a.setAttribute('href', href);
+    else if (!href && a) a.replaceWith(track);
+  }
+  TYPES['annoucment-bar-scrolling'] = {
+    bp: 769,
+    derive(c) {
+      const {root, s, put} = c, own = bool(s.enable_custom_style), fonts = bool(s.enable_custom_font);
+      scheme(c); frame(c, 'full_width');
+      const v = {
+        '--ab1-h': px(s.bar_height), '--ab1-fs': px(s.font_size), '--ab1-gap': px(s.message_spacing), '--ab1-rep': px(s.repetition_spacing),
+        '--ab1-dur': (num(s.scroll_speed, 1300) * 3 / 10) + 's',
+        '--ab1-text': pick(own, s.message_text_color, 'var(--color-text)'),
+        '--ab1-bg': bg(own, s.background_type, s.background_color, s.gradient_start_color, s.gradient_end_color, s.gradient_angle),
+        '--ab1-sep': pick(own, s.separator_icon_color, 'var(--color-primary)'),
+        '--ab1-ff': fonts ? fontCss(s.announcement_font, 'inherit') : 'inherit', '--ab1-fw': String(s.message_font_weight || 600), '--ab1-tt': off(s.uppercase) ? 'none' : 'uppercase',
+      };
+      for (const k in v) put(root, k, v[k]);
+      put(root, '@data-autoplay', bool(s.autoplay) ? 'true' : 'false'); put(root, '@data-pause-hover', bool(s.pause_on_hover) ? 'true' : 'false');
+      put(root, '@data-bg-anim', s.background_animation || 'none'); put(root, '@data-hover', s.hover_effect || 'none');
+      put(root, '@data-own-font', fonts || null); put(root, '@data-own-weight', fonts || null);
+      const icon = Object.prototype.hasOwnProperty.call(ICONS, s.separator_icon) ? s.separator_icon : 'fa-sun';
+      for (const sep of c.qa('.separator-icon')) { put(sep, 'hidden', icon === 'none'); put(sep, 'icon', icon); }
+      const linked = bool(s.enable_link_redirect) && url(s.redirect_url) ? url(s.redirect_url) : '';
+      put(root, 'barLink', linked);
+      if (!c.blocks.some(x => x.type === 'message')) for (let i = 1; i <= 4; i++) {
+        const k = 'message_' + i;
+        for (const el of c.qa('[data-an-legacy="' + k + '"], [data-an-legacy-copy="' + k + '"]')) { put(el, 'rich', s[k] || ''); put(el, 'hidden', !plain(s[k])); }
+      }
+    },
+    block(c, el, b, type, x) {
+      if (type !== 'message') return;
+      const {put, root} = c, own = bool(b.enable_custom_style), f = bool(b.enable_custom_fonts) ? fontCss(b.font, '') : '';
+      for (const t of [el, ...copiesOf(root, x.id)]) {
+        put(t, 'rich', b.text || ''); put(t, 'hidden', !plain(b.text));
+        put(t, '--b-c', own ? color(b.color, 'var(--ab1-text)') : null);
+        put(t, '--b-f', f || null); put(t, '--b-w', f ? fontWeight(b.font, '400') : null);
+        put(t, '@data-own-font', !!f || null); put(t, '@data-own-weight', !!f || null);
+      }
+    },
+    visibility: pauseWhenAway,
+  };
+
+  /* ---------- Announcement Bar Pro 2 (announcement-bar) ---------- */
+  /* A countdown end: month-day-year with an optional time (local), or anything Date.parse reads. */
+  function deadline(v) {
+    v = String(v || '').trim(); if (!v) return NaN;
+    const m = v.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})(?:[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (m) {
+      const [mo, d, y, h, mi, sec] = [m[1], m[2], m[3], m[4] || 0, m[5] || 0, m[6] || 0].map(Number);
+      const t = new Date(y, mo - 1, d, h, mi, sec);
+      return mo >= 1 && mo <= 12 && t.getMonth() === mo - 1 && t.getDate() === d && h < 24 && mi < 60 && sec < 60 ? t.getTime() : NaN;
+    }
+    const t = Date.parse(v); return Number.isFinite(t) ? t : NaN;
+  }
+  /* Every countdown of a bar, one tick a second at most, only while the bar is on screen and the tab is shown. */
+  function tick(root, st) {
+    clearTimeout(st.tickTimer); st.tickTimer = 0;
+    if (!root.isConnected) return;
+    const now = Date.now(); let running = false;
+    for (const t of root.querySelectorAll('[data-an-timer]')) {
+      if (!String(t.dataset.end || '').trim()) continue;
+      const end = deadline(t.dataset.end);
+      if (!Number.isFinite(end)) { if (!t.hidden) t.hidden = true; t.dataset.invalid = 'true'; continue; }
+      if (t.dataset.invalid) { delete t.dataset.invalid; t.hidden = false; }
+      const left = Math.max(0, Math.floor((end - now) / 1000));
+      const v = {d: Math.floor(left / 86400), h: Math.floor(left % 86400 / 3600), m: Math.floor(left % 3600 / 60), s: left % 60};
+      for (const u of t.querySelectorAll('[data-u]')) { const x = String(v[u.dataset.u]).padStart(2, '0'); if (u.textContent !== x) u.textContent = x; }
+      const ended = left === 0, e = t.querySelector('[data-an-ended]');
+      if (t.dataset.ended !== String(ended)) t.dataset.ended = String(ended);
+      if (e) { const show = ended && !!e.textContent.trim(); if (e.hidden === show) e.hidden = !show; }
+      if (!ended) running = true;
+    }
+    if (running && st.visible && !document.hidden) st.tickTimer = setTimeout(() => tick(root, st), 1000 - now % 1000 + 10);
+  }
+  function rotator(root, st) {
+    const box = root.querySelector('[data-an-slides]');
+    if (!box || st.slideBox === box) return;
+    st.slideBox = box;
+    if (st.slideAbort) st.slideAbort.abort();
+    const ac = new AbortController(), sig = {signal: ac.signal}; st.slideAbort = ac;
+    const all = () => [...box.querySelectorAll('.ab2__slide')];
+    const list = () => all().filter(x => !x.hidden);
+    let hold = false;
+    const multi = () => root.dataset.multi === 'true';
+    const paint = active => { for (const x of all()) { const on = x === active; if (x.hasAttribute('data-active') !== on) x.toggleAttribute('data-active', on); const hide = multi() && !on; if ((x.getAttribute('aria-hidden') === 'true') !== hide) { if (hide) x.setAttribute('aria-hidden', 'true'); else x.removeAttribute('aria-hidden'); } } };
+    const show = i => { const l = list(); if (!l.length) return; i = ((i % l.length) + l.length) % l.length; st.slide = l[i]; paint(l[i]); };
+    const index = () => Math.max(0, list().indexOf(st.slide));
+    st.slide = all().find(x => x.hasAttribute('data-active')) || list()[0];
+    box.addEventListener('click', e => { const b = e.target.closest('[data-an-prev],[data-an-next]'); if (!b) return; show(index() + (b.hasAttribute('data-an-next') ? 1 : -1)); restart(); }, sig);
+    box.addEventListener('keydown', e => { if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return; e.preventDefault(); show(index() + (e.key === 'ArrowRight' ? 1 : -1)); restart(); }, sig);
+    for (const [n, v] of [['pointerenter', true], ['pointerleave', false], ['focusin', true], ['focusout', false]]) box.addEventListener(n, () => { hold = v; }, sig);
+    /* the editor shows the selected block's message */
+    document.addEventListener('shopify:block:select', e => { const x = e.target && e.target.closest && e.target.closest('.ab2__slide'); if (x && box.contains(x)) { st.editorHold = true; st.slide = x; paint(x); } }, sig);
+    document.addEventListener('shopify:block:deselect', () => { st.editorHold = false; }, sig);
+    const restart = () => {
+      if (st.slideTimer) { clearInterval(st.slideTimer); st.slideTimer = 0; }
+      if (root.dataset.mode !== 'slide' || !multi() || design() || reduced.matches || !st.visible || document.hidden) return;
+      st.slideTimer = setInterval(() => { if (!hold && !st.editorHold && root.isConnected) show(index() + 1); }, Math.max(2, num(st.s.change_every, 3)) * 1000);
+    };
+    st.rotator = {show, restart, sync: () => { const l = list(); if (!l.includes(st.slide)) st.slide = l[0]; paint(st.slide); }};
+    restart();
+  }
+  TYPES['announcement-bar'] = {
+    bp: 768,
+    derive(c) {
+      const {root, s, put} = c, own = bool(s.enable_custom_style), fonts = bool(s.enable_custom_fonts);
+      scheme(c); frame(c, 'full_width');
+      const fw = s.font_weight === 'heading_weight' ? 'var(--heading-weight, 600)' : s.font_weight === 'subheading_weight' ? 'var(--subheading-weight, 600)' : fonts ? fontWeight(s.body_font, 'var(--body-weight, 400)') : 'var(--body-weight, 400)';
+      const v = {
+        '--ab2-fs': px(s.font_size), '--ab2-pt': px(s.padding_top), '--ab2-pb': px(s.padding_bottom), '--ab2-speed': num(s.speed, 15) + 's', '--ab2-gap': px(s.space_between),
+        '--ab2-fw': fw, '--ab2-tt': bool(s.uppercase) ? 'uppercase' : 'none', '--ab2-ff': fonts ? fontCss(s.body_font, 'var(--body-font)') : 'var(--body-font)',
+        '--ab2-text': pick(own, s.text_color, 'var(--color-text)'), '--ab2-bg': pick(own, s.background_color, 'var(--color-background)'),
+        '--ab2-accent': pick(own, s.accent_color, 'var(--color-heading)'), '--ab2-line': pick(own, s.line_color, 'var(--color-border)'), '--ab2-lw': bool(s.show_separator_line) ? '1px' : '0px',
+      };
+      for (const k in v) put(root, k, v[k]);
+      const shown = c.blocks.filter(x => x.type === 'announcement' && plain(x.b.text)).length;
+      put(root, '@data-mode', s.announcement_actions === 'marquee' ? 'marquee' : 'slide'); put(root, '@data-multi', shown > 1 ? 'true' : 'false');
+      put(root, '@data-home-only', bool(s.homepage_only) ? 'true' : 'false'); put(root, '@data-show-mobile', off(s.show_mobile) ? 'false' : 'true');
+      put(root, '@data-close', bool(s.show_close) ? 'true' : 'false'); put(root, '@data-icon', s.icon_between_item || 'none');
+      put(root, '@data-own-font', fonts || null); put(root, '@data-own-weight', fonts || null);
+      for (const l of c.qa('[data-l]')) put(l, 'text', s[l.dataset.l] || '');
+      for (const i of c.qa('.ab2__icon')) put(i, 'icon', s.icon_between_item === 'star' ? 'fa-star' : 'fa-circle');
+    },
+    block(c, el, b, type, x) {
+      if (type !== 'announcement') return;
+      const {put, root} = c, own = bool(b.enable_custom_style), f = bool(b.enable_custom_fonts) ? fontCss(b.font, '') : '', has = !!plain(b.text), end = String(b.countdown_deadline || '');
+      put(el, 'hidden', !has);
+      const items = copiesOf(root, x.id);
+      for (const it of items) put(it, 'hidden', !has);
+      for (const m of [el, ...items].map(n => n.querySelector('.ab2__msg')).filter(Boolean)) {
+        put(m, '--b-c', own ? color(b.color, 'var(--ab2-text)') : null);
+        put(m, '--b-f', f || null); put(m, '--b-w', f ? fontWeight(b.font, '400') : null);
+        put(m, '@data-own-font', !!f || null); put(m, '@data-own-weight', !!f || null);
+        put(m.querySelector('[data-an-text]'), 'rich', b.text || '');
+        const t = m.querySelector('[data-an-timer]');
+        put(t, '@data-end', end); put(t, 'hidden', !end.trim());
+        put(t && t.querySelector('[data-an-ended]'), 'text', b.ended_text || '');
+      }
+    },
+    init(root, st) {
+      rotator(root, st);
+      closer(root, st, {local: 'announcement_bar_until:' + root.dataset.anSection, session: 'announcement_bar:' + root.dataset.anSection, days: () => 0});
+      tick(root, st);
+    },
+    after(root, st) { rotator(root, st); if (st.rotator) { st.rotator.sync(); st.rotator.restart(); } tick(root, st); },
+    visibility(root, st) { pauseWhenAway(root, st); if (st.rotator) st.rotator.restart(); tick(root, st); },
+    drop(root, st) { clearTimeout(st.tickTimer); if (st.slideTimer) clearInterval(st.slideTimer); if (st.slideAbort) st.slideAbort.abort(); },
   };
 
   /* ---------- engine ---------- */
