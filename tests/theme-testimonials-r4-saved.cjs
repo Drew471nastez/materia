@@ -2,12 +2,12 @@
    The saved testimonials instances keep their look: templates/home.json
    testimonial_video_kkyBQe and testimonials_mmxQjq, templates/product.json
    testimonial_video_TLf6Jb and testimonials_WHJXwN are drawn from the
-   section file at R4_BASE (default HEAD) and from the working file, with
+   section file at R4_BASE (default 4b0142b, before round 4) and from the working file, with
    their saved settings and blocks, at 375 and 1366, and compared pixel for
    pixel (with the real theme priority rules). Products in the saved blocks
    are drawn with the fixture's sample product. */
 const fs = require('fs'), path = require('path'), {execFileSync} = require('node:child_process');
-const BASE = process.env.R4_BASE || 'HEAD';
+const BASE = process.env.R4_BASE || '4b0142b'; // the last commit before round 4 changed these sections
 const realRead = fs.readFileSync;
 fs.readFileSync = function (f, ...rest) {
   const m = String(f).match(/sections\/__base__(.+)\.storelib$/);

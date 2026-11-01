@@ -12,7 +12,6 @@ run({
   addType: 'collection',
   values: {custom_ratio: '7:3'},
   hover: {collection_hover_animation: '.ll__link', 'button.bg_hover': '.lg__btn', 'button.color_hover': '.lg__btn', 'button.border_color_hover': '.lg__btn'},
-  skipEveryControl: {enable_lazy_load: true},
   addedEdit: {settings: {logo_image: IMG2}, check: async (t, id, {eq}) => { eq((await t.page.locator('[data-lg-block="' + id + '"] img').getAttribute('src')).split('?')[0], IMG2.url); return 0; }},
   async extra({browser, mount, eq, ok}) {
     for (const width of [375, 1366]) for (const editing of [true, false]) {

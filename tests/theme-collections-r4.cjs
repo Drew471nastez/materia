@@ -112,6 +112,21 @@ const CFG = {
       addedEdit: {settings: {text: 'Edited added', link: '/pages/x'}, check: (page, id) => page.evaluate(id => { const b = document.querySelector('[data-cl-block="' + id + '"] .chp__btn'); return b.textContent === 'Edited added' && b.getAttribute('href') === '/pages/x'; }, id)}},
     imgBlock: 'media_left', imgSel: '.chp__img',
   },
+  'collection-banner': {
+    blocks: () => presetBlocks('collection-banner').map(b => ({...b, settings: {...b.settings, primary_button_link: '/collections/all', description: 'Light layers for warm days and cool evenings by the sea this summer.'}})),
+    desk: ['desktop_content_position', 'inner_width', 'horizontal_padding_desktop'], mob: ['mobile_content_position', 'inner_width_mobile', 'horizontal_padding_mobile', 'image_mobile'], bp: 768,
+    pre: {buttons_corner: {use_theme_button: false}}, preBlock: {'collection.button_font_weight': {primary_button_style: 'solid'}, image_mobile: {image_desktop: IMG}},
+    anyWidth: ['collection.image_mobile'], all: ['collection.image_desktop'],
+    redraw: ['collection'], hoverSel: '.cbn__card', hover: [],
+    behaviour: ['reveal'], same: [['collection.heading_font_weight', 'theme', '700'], ['collection.description_font_weight', 'theme', '400'], ['collection.card_height', '2', '3', 375]],
+    theme: {title: '.cbn__title', button: '.cbn__btn[data-sl-button]'},
+    life: {section: {padding_top_mobile: 12, padding_top_desktop: 12, enable_custom_style: true, section_bg: '#abcdef'}, block: {type: 'collection', settings: {heading: 'Only in A'}},
+      check: (page, u) => page.evaluate(u => document.querySelector('#shopify-section-' + u + ' .cbn__title').textContent.trim() === 'Only in A', u),
+      unrelated: {items_gap: 30, card_border_radius: 4}, added: [{type: 'collection', settings: {heading: 'Added', primary_button_link: '/collections/all', primary_button_label: 'Go'}}],
+      addedEdit: {settings: {heading: 'Edited added', primary_button_link: '/pages/x'}, check: (page, id) => page.evaluate(id => { const b = document.querySelector('[data-cl-block="' + id + '"]'); return b.querySelector('.cbn__title').textContent.trim() === 'Edited added' && b.querySelector('a.cbn__btn').getAttribute('href') === '/pages/x'; }, id)}},
+    imgBlock: 'collection', imgKey: 'image_desktop', imgSel: '.cbn__img',
+    data: {picked: () => ({blocks: [{type: 'collection', settings: {collection: COLL}}]}), empty: () => ({blocks: [{type: 'collection'}, {type: 'collection', settings: {heading: 'Only a title'}}]})},
+  },
 };
 const COMMON_PRE = {section_margin_top_mobile: {reset_spacing: false}, section_margin_bottom_mobile: {reset_spacing: false}, section_margin_top_desktop: {reset_spacing: false}, section_margin_bottom_desktop: {reset_spacing: false}, reset_spacing: {section_margin_top_mobile: 20, section_margin_top_desktop: 20}, enable_custom_fonts: {heading_font: FONT, body_font: FONT}, heading_font: {enable_custom_fonts: true, body_font: {family: 'Courier New'}}, body_font: {enable_custom_fonts: true, heading_font: {family: 'Courier New'}}};
 const STRUCTURAL = ['reset_spacing'];
@@ -141,10 +156,12 @@ function valuesFor(x, cur = x.default) {
   throw new Error('no test value for ' + x.type + ' ' + x.id);
 }
 /* Settings a control's visible_if asks for, plus all colours when it is a custom styling toggle. */
+let sectionList = null;
 function prereq(x, list, base) {
   const out = {};
-  for (const m of (x.visible_if || '').matchAll(/(?:section|block)\.settings\.(\w+)(?:\s*(==|!=)\s*(?:'([^']*)'|(false|true)))?/g)) {
-    const [, id, op, str, lit] = m, want = str ?? (lit === undefined ? true : lit === 'true');
+  for (const m of (x.visible_if || '').matchAll(/(section|block)\.settings\.(\w+)(?:\s*(==|!=)\s*(?:'([^']*)'|(false|true)))?/g)) {
+    const [, scope, id, op, str, lit] = m, want = str ?? (lit === undefined ? true : lit === 'true');
+    if (scope === 'section' && list !== sectionList) { out.__section = {...out.__section, [id]: op === '==' ? want : op ? !want : true}; continue; }
     if (!op) out[id] = true;
     else if (op === '==') out[id] = want;
     else if (base[id] === want) { const s = list.find(y => y.id === id); out[id] = s.type === 'checkbox' ? !want : s.options.map(o => o.value).filter(v => v !== want).pop(); }
@@ -215,11 +232,14 @@ async function everyControl(browser, name, width) {
     let blocks0 = clone(baseBlocks), S = {...clone(base), ...(c.scope < 0 ? COMMON_PRE[x.id] || {} : {})};
     const bi = c.scope;
     const bBase = bi >= 0 ? blocks0[bi].settings : S;
+    sectionList = schema.settings;
     const pre = {...prereq(x, c.list, bBase), ...(c.scope < 0 ? cfg.pre?.[x.id] || {} : cfg.preBlock?.[key] || cfg.preBlock?.[x.id] || {})};
+    if (pre.__section) { Object.assign(S, pre.__section); delete pre.__section; }
     if (bi >= 0) Object.assign(blocks0[bi].settings, pre); else Object.assign(S, pre);
     if (cfg.preBlocks?.[key]) blocks0 = cfg.preBlocks[key](blocks0);
     const blockId = bi >= 0 ? 'test-b' + bi : undefined;
-    const isDesk = cfg.desk.includes(x.id) || cfg.desk.includes(key) || /_desktop$/.test(x.id), isMob = cfg.mob.includes(x.id) || cfg.mob.includes(key) || /_mobile$/.test(x.id);
+    const all = (cfg.all || []).includes(key);
+    const isDesk = !all && (cfg.desk.includes(x.id) || cfg.desk.includes(key) || /_desktop$/.test(x.id)), isMob = !all && (cfg.mob.includes(x.id) || cfg.mob.includes(key) || /_mobile$/.test(x.id));
     const bp = cfg.bp || 768;
     const shows = !(isDesk && width < bp) && !(isMob && width >= bp) && !(cfg.never || []).includes(key);
     const structural = STRUCTURAL.includes(x.id) || (cfg.redraw || []).includes(x.id) || (cfg.redraw || []).includes(key);

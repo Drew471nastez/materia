@@ -129,7 +129,8 @@ const CT3 = {
   desk: ['content_align', 'left_col_fr', 'right_col_fr'],
   both: ['section_max_width_desktop'],
   /* column A paints the whole column (the table carries its values) */
-  blockElsewhere: ['col_a.radius', 'col_a.bg', 'col_a.text_color'],
+  /* row values on column B's side sit in cells that carry column B's colour */
+  blockElsewhere: ['col_a.radius', 'col_a.bg', 'col_a.text_color', 'row.type_b', 'row.text_b', 'row.image_b', 'row.svg_b'],
   themeProbes: [['.fbt3__colhead--a', 'fontFamily', 'Georgia'], ['tbody .fbt3__label', 'color', 'rgb(255, 255, 255)'], ['tbody .fbt3__a', 'backgroundColor', 'rgb(18, 52, 86)'], ['tbody .fbt3__b', 'color', 'rgb(204, 204, 204)']],
   customProbes: [['tbody .fbt3__label', 'color', 'rgb(161, 178, 195)'], ['tbody .fbt3__b', 'color', 'rgb(161, 178, 195)'], ['.fbt3__i--check-circle', 'backgroundColor', 'rgb(161, 178, 195)']],
   blockColourProbes: [['heading', '.fbt3__heading', 'color'], ['subheading', '.fbt3__sub', 'color'], ['col_a', 'tbody .fbt3__a', 'backgroundColor'], ['col_b', 'tbody .fbt3__b', 'color'], ['rating', '.fbt3__rating', 'color']],

@@ -438,7 +438,7 @@
         '--t4-bg': pick(c, s.background_color, 'var(--color-background)'), '--t4-bg-img': c && s.background_gradient ? s.background_gradient : 'none',
         '--t4-border': pick(c, s.border_color, 'var(--color-border)'), '--t4-border-w': px(s.border_thickness),
         '--t4-heading-c': pick(c, s.heading_color, 'var(--color-heading)'), '--t4-rating-c': pick(c, s.rating_text_color, 'var(--color-heading)'), '--t4-text': pick(c, s.text_color, 'var(--color-text)'),
-        '--t4-star-glyph': pick(c, s.stars_color, 'var(--color-background)'), '--lt-star-on': pick(c, s.stars_bg_color, 'var(--color-primary)'), '--lt-star-off': pick(c, s.stars_bg_half_color, 'var(--color-border)'),
+        '--t4-star-glyph': pick(c, s.stars_color, 'var(--btn-primary-color, #fff)'), '--lt-star-on': pick(c, s.stars_bg_color, 'var(--color-primary)'), '--lt-star-off': pick(c, s.stars_bg_half_color, 'var(--color-border)'),
         '--t4-card-bg': pick(c, s.card_bg_color, 'var(--color-background)'), '--t4-card-border': pick(c, s.card_border_color, 'var(--color-border)'),
         '--t4-shadow': bool(s.card_shadow) ? '0 0 20px 0 color-mix(in srgb, ' + pick(c, s.card_shadow_color, 'var(--color-text)') + ' 20%, transparent)' : 'none',
         '--t4-ch-c': pick(c, s.card_heading_color, 'var(--color-heading)'), '--t4-ct-c': pick(c, s.card_text_color, 'var(--color-text)'), '--t4-au-c': pick(c, s.card_author_date_text_color, 'var(--color-text)'),

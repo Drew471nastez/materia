@@ -602,7 +602,7 @@
       put(root, '.LoudzValueIconsBar--fullWidth', num(s.bar_width) === 100);
       const style = own && s.section_background_style === 'gradient' ? 'gradient' : 'color', box = q('.LoudzValueIconsBarContainer');
       put(box, '.LoudzValueIconsBarContainer--backgroundStyle-color', style === 'color'); put(box, '.LoudzValueIconsBarContainer--backgroundStyle-gradient', style === 'gradient');
-      const v = {'--section-left-margin': raw(s.left_margin_desktop), '--section-right-margin': raw(s.right_margin_desktop), '--section-top-padding': raw(s.top_padding_desktop), '--section-bottom-padding': raw(s.bottom_padding_desktop),
+      const v = {'--section-top-margin': '0px', '--section-bottom-margin': '0px', '--section-top-margin-mobile': '0px', '--section-bottom-margin-mobile': '0px', '--section-left-margin': raw(s.left_margin_desktop), '--section-right-margin': raw(s.right_margin_desktop), '--section-top-padding': raw(s.top_padding_desktop), '--section-bottom-padding': raw(s.bottom_padding_desktop),
         '--section-left-padding': raw(s.left_padding_desktop), '--section-right-padding': raw(s.right_padding_desktop), '--section-left-margin-mobile': raw(s.left_margin_mobile), '--section-right-margin-mobile': raw(s.right_margin_mobile),
         '--section-top-padding-mobile': raw(s.top_padding_mobile), '--section-bottom-padding-mobile': raw(s.bottom_padding_mobile), '--section-left-padding-mobile': raw(s.left_padding_mobile), '--section-right-padding-mobile': raw(s.right_padding_mobile),
         '--section-width': (s.bar_width ?? '') + '%', '--horizontal-gap-desktop': raw(s.horizontal_gap_desktop), '--horizontal-gap-mobile': raw(s.horizontal_gap_mobile), '--vertical-gap-mobile': raw(s.vertical_gap_mobile),

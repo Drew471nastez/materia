@@ -15,7 +15,7 @@ const blocks = [
   {type: 'heading', settings: {text: 'What customers say'}},
   {type: 'subheading', settings: {text: '<p>Quotes from buyers.</p>'}},
   {type: 'testimonial', settings: {quote: '<p>First quote</p>', rating: 4.5, name: 'First buyer', role: 'Verified buyer'}},
-  {type: 'testimonial', settings: {quote: '<p>Second quote</p>', rating: 5, name: 'Second buyer', role: 'Verified buyer'}},
+  {type: 'testimonial', settings: {quote: '<p>Second quote</p>', rating: 5, name: 'Second buyer', role: 'Verified buyer', avatar: {src: '/img/second.png', url: '/img/second.png', width: 160, height: 160}}},
   {type: 'testimonial', settings: {quote: '<p>Third quote</p>', rating: 3, name: 'Third buyer', role: 'Verified buyer'}},
   {type: 'testimonial', settings: {quote: '<p>Fourth quote</p>', rating: 4, name: 'Fourth buyer', role: 'Verified buyer'}},
 ];
@@ -33,7 +33,7 @@ const slideW = el => Math.round(el.getBoundingClientRect().width);
     ready: async t => { await t.page.evaluate(() => { window.Motion = window.Motion || {inView: (el, fn) => { fn(); return () => {}; }, animate: () => ({finished: Promise.resolve(), cancel() {}, stop() {}})}; }); await t.page.waitForFunction(() => [...document.querySelectorAll('slide-section')].every(s => s.globalSlide), null, {timeout: 5000}).catch(() => {}); },
     inherit: [[ROOT, 'backgroundColor', 'rgb(24, 32, 40)'], ['.tm-head--heading', 'color', 'rgb(255, 255, 255)'], ['.tm-head--heading', 'fontFamily', /Georgia/], ['.tm-card__quote p', 'fontFamily', /Arial/], ['.tm-card', 'color', 'rgb(204, 204, 204)'], ['.tm-card__rating', 'color', 'rgb(255, 255, 255)']],
     controls: [
-      S('section_width', 'container', '.tm-header', null, v => v > 1290 && v < 1340, {w: D, get: el => Math.round(el.parentElement.getBoundingClientRect().width)}),
+      S('section_width', 'container', '.tm-header', null, v => v > 1100 && v < 1300, {w: D, get: el => Math.round(el.parentElement.getBoundingClientRect().width)}),
       S('reset_spacing', false, ROOT, null, '5px', {pre: {section_margin_top_desktop: 5, section_margin_top_mobile: 5}, get: el => getComputedStyle(el.closest('.shopify-section')).marginTop}),
       S('display_mode', 'grid', '.tm-cards-wrap', null, true, {live: false, get: el => !!el.querySelector('.tm-grid')}),
       S('show_quote_mark', false, '.tm-card', null, 0, {get: el => el.querySelectorAll('.tm-card__quote-mark').length}),
@@ -100,7 +100,7 @@ const slideW = el => Math.round(el.getBoundingClientRect().width);
       {id: 'card_align', values: ['left', 'center', 'right'], sel: '.tm-card', read: el => getComputedStyle(el).textAlign, reset: 'left'},
       {id: 'avatar_shape', values: ['circle', 'rounded', 'square'], pre: {}, sel: '.tm-card__avatar', read: el => getComputedStyle(el).borderTopLeftRadius, reset: 'circle'},
       {id: 'header_alignment', values: ['left', 'center', 'right'], sel: '.tm-header', read: el => getComputedStyle(el).textAlign, reset: 'center'},
-      {id: 'pagination_position', values: ['left', 'center', 'right'], sel: '.tm-pagination', read: el => Math.round(el.getBoundingClientRect().x), reset: 'center'},
+      {id: 'pagination_position', values: ['left', 'center', 'right'], sel: '.tm-pagination', read: el => Math.round((el.querySelector('.swiper-pagination-bullet') || el).getBoundingClientRect().x), reset: 'center'},
       {id: 'pagination_style', values: ['dot', 'pill', 'line', 'square', 'ring', 'number', 'progress'], sel: '.tm-pagination', read: el => { const b = el.querySelector('.swiper-pagination-bullet-active, .swiper-pagination-progressbar-fill') || el; const c = getComputedStyle(b); return [el.className.includes('progressbar'), c.width, c.height, c.borderTopLeftRadius, c.borderTopWidth, b.textContent]; }, reset: 'pill'},
       {id: 'section_width', values: ['container', 'fluid_container', 'stretch_width', 'full_width'], sel: '.tm-header', read: el => [Math.round(el.parentElement.getBoundingClientRect().width), getComputedStyle(el.parentElement).paddingLeft], reset: 'container'},
     ],

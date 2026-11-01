@@ -19,6 +19,7 @@ run({
   preBlock: {'icon.custom_icon': {icon_type: 'upload'}, 'icon.icon_type': {custom_icon: IMG}, 'icon.font_awesome': {icon_type: 'icon'}},
   values: {font_awesome: [SVG]},
   redrawOnly: ['icons_mobile_layout'], /* the slider is other markup: the builder draws the section again */
+  both: ['icons_mobile_layout', 'vertical_gap_mobile'], /* the slider markup is there at every width; the row gap also spaces wrapped desktop rows (as the saved bar has it) */
   only: {bar_width: 1366, icons_per_row_desktop: 1366, horizontal_gap_desktop: 1366, icons_mobile_layout: 375},
   noEffect: ['enable_circle_icons', 'reveal'], /* round uploaded icons: checked below with a picture */
   async extra({browser, mount, ok, eq, prep, FONT}) {

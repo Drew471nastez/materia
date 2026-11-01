@@ -36,7 +36,7 @@ async function run(spec) {
   ok(schemaProblems(name).length === 0, name + ': schema problems ' + JSON.stringify(schemaProblems(name)));
   /* every setting id kept since HEAD, and every non hidden control covered */
   let old = null;
-  try { old = JSON.parse(execFileSync('git', ['show', (process.env.R4_BASE || 'HEAD') + ':sections/' + name + '.storelib'], {encoding: 'utf8', cwd: path.join(__dirname, '..')}).split('<schema>')[1].split('</schema>')[0]).shopify; } catch (_) {}
+  try { old = JSON.parse(execFileSync('git', ['show', (process.env.R4_BASE || '4b0142b') + ':sections/' + name + '.storelib'], {encoding: 'utf8', cwd: path.join(__dirname, '..')}).split('<schema>')[1].split('</schema>')[0]).shopify; } catch (_) {}
   if (old) {
     for (const x of old.settings.filter(x => x.id)) ok(schema.settings.some(y => y.id === x.id), name + ': keeps ' + x.id);
     for (const b of old.blocks || []) for (const x of (b.settings || []).filter(x => x.id)) ok(((schema.blocks.find(y => y.type === b.type) || {}).settings || []).some(y => y.id === x.id), name + ': keeps ' + b.type + '.' + x.id);
@@ -169,7 +169,7 @@ async function run(spec) {
       await t.redraw({uid: 'a', blocks}); await t.redraw({uid: 'a', blocks});
       ok(await count() === 2, name + ': redraws keep one root per instance');
       if (spec.addBlock) {
-        const n = await t.page.locator('#shopify-section-a [data-lt-block]').count();
+        const n = await t.page.locator('#shopify-section-a :is([data-lt-block], [data-tm-block])').count();
         ok(n === blocks.filter(b => spec.blockCount ? spec.blockCount(b) : true).length || n > 0, name + ': added block rendered');
         const last = t.rendered.find(x => x.section.id === 'a').section.blocks.slice(-1)[0];
         if (spec.addBlockLive) { await t.emit(spec.addBlockLive.settings, last.id, 'a'); await wait2(t.page); ok(same(await value(t, spec.addBlockLive, 'a'), spec.addBlockLive.expect), name + ': added block is live editable'); }
