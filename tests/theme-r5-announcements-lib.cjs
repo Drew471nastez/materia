@@ -27,7 +27,7 @@ async function fingerprint(page, uid) {
   return page.evaluate(({uid, PROPS, NO_RECT}) => {
     const wrap = document.getElementById('shopify-section-' + uid);
     const out = [];
-    const skip = /^(style|data-an-ready|data-paused|data-an-settings|data-an-defaults|data-an-block-defaults|tabindex|aria-current|aria-selected|data-active|class)$/;
+    const skip = /^(style|data-an-ready|data-paused|data-an-settings|data-an-defaults|data-an-block-defaults|data-announcement-settings|data-block-settings|data-link-settings|data-live|data-announcement-spacing|data-ended|data-message-raw|tabindex|aria-current|aria-selected|data-active|class)$/;
     const w = wrap.getBoundingClientRect();
     for (const el of [wrap, ...wrap.querySelectorAll('*')]) {
       if (el.closest('template, style, script')) continue;
@@ -84,6 +84,10 @@ function visibleBase(x, scope) {
 async function run(spec) {
   const {name, blockTypes = [], extra, hover = {}, values = {}, skipEveryControl = {}, liveOnly = {}, bp = 768, button = false, globals = {}, heading = null, text = null, bgSel = '[data-an-root]', bgProp = 'backgroundColor', baseSettings = {}, baseBlocks, imageBlocks = {}} = spec;
   let checks = 0;
+  /* the runtime under test: live-announcements.js, or a section's own (spec.assets, spec.audit, spec.roots as page functions) */
+  const ASSETS = spec.assets || ['live-announcements.js'];
+  const AUDIT = spec.audit || (() => [...document.querySelectorAll('[data-an-root]')].flatMap(r => window.MateriaAnnouncements.audit(r)));
+  const ROOTS = spec.roots || (() => window.MateriaAnnouncements.roots.size);
   const ok = (cond, msg) => { assert.ok(cond, msg); checks++; };
   const eq = (a, b, msg) => { assert.deepEqual(a, b, msg); checks++; };
   const {schema} = schemaOf(name);
@@ -96,11 +100,11 @@ async function run(spec) {
   try {
     /* 1. inheritance, audit, overflow, errors: 375/1366 x editor/storefront */
     for (const width of [375, 1366]) for (const editing of [true, false]) {
-      const t = await mount(browser, name, {width, editing, assets: ['live-announcements.js'], globals, settings: baseSettings, blocks: baseBlocks});
+      const t = await mount(browser, name, {width, editing, assets: ASSETS, globals, settings: baseSettings, blocks: baseBlocks});
       await t.page.waitForTimeout(80);
       const where = name + ' ' + width + (editing ? ' editor' : ' storefront');
       eq(t.errors, [], where + ' errors');
-      eq(await t.page.evaluate(() => [...document.querySelectorAll('[data-an-root]')].flatMap(r => window.MateriaAnnouncements.audit(r))), [], where + ' markup = controller');
+      eq(await t.page.evaluate(AUDIT), [], where + ' markup = controller');
       ok(await t.noOverflow(), where + ' no horizontal overflow');
       eq(await t.css(bgSel, bgProp), 'rgb(24, 32, 40)', where + ' scheme background');
       if (heading) { eq(await t.css(heading, 'color'), 'rgb(255, 255, 255)', where + ' heading colour'); ok(/Georgia/.test(await t.css(heading, 'fontFamily')), where + ' heading font'); }
@@ -115,8 +119,8 @@ async function run(spec) {
     /* 2. first paint = hydrated */
     for (const width of [375, 1366]) {
       const fpBlocks = spec.firstPaintBlocks || baseBlocks;
-      const a = await mount(browser, name, {width, assets: [], globals, settings: baseSettings, blocks: fpBlocks, inlineScripts: false});
-      const b = await mount(browser, name, {width, assets: ['live-announcements.js'], globals, settings: baseSettings, blocks: fpBlocks});
+      const a = await mount(browser, name, {width, assets: ASSETS.filter(f => f.endsWith('.css')), globals, settings: baseSettings, blocks: fpBlocks, inlineScripts: false});
+      const b = await mount(browser, name, {width, assets: ASSETS, globals, settings: baseSettings, blocks: fpBlocks});
       await b.page.waitForTimeout(120);
       const fa = await fingerprint(a.page, 'test'), fb = await fingerprint(b.page, 'test');
       ok(JSON.stringify(fa) === JSON.stringify(fb), name + ' ' + width + ' first paint equals hydrated paint: ' + diffAt(fa, fb));
@@ -127,7 +131,7 @@ async function run(spec) {
     const types = [...new Set([...presetBlocks.map(b => b.type), ...blockTypes])];
     const allBlocks = presetBlocks.concat(blockTypes.filter(ty => !presetBlocks.some(b => b.type === ty)).map(type => ({type, settings: imageBlocks[type] || {}})));
     const pages = {};
-    for (const width of [375, 1366]) { pages[width] = await mount(browser, name, {width, assets: ['live-announcements.js'], globals, settings: baseSettings, blocks: allBlocks}); await pages[width].page.addStyleTag({content: '.shopify-section{padding-top:11px;padding-bottom:13px}'}); await pages[width].page.waitForTimeout(80); }
+    for (const width of [375, 1366]) { pages[width] = await mount(browser, name, {width, assets: ASSETS, globals, settings: baseSettings, blocks: allBlocks}); await pages[width].page.addStyleTag({content: '.shopify-section{padding-top:11px;padding-bottom:13px}'}); await pages[width].page.waitForTimeout(80); }
     const targets = [['section', null, schema.settings]].concat(types.map(ty => ['block', ty, (schema.blocks.find(b => b.type === ty) || {}).settings || []]));
     let controls = 0;
     for (const [scope, ty, list] of targets) {
@@ -158,7 +162,7 @@ async function run(spec) {
           const before = await fp();
           for (const v of values) {
             await t.emit({[x.id]: v}, blockId);
-            await t.page.waitForTimeout(40);
+            await t.page.waitForTimeout(40 + (spec.settle || 0));
             const live = await fp();
             await baseRedraw({[x.id]: v});
             const redrawn = await fp();
@@ -181,7 +185,7 @@ async function run(spec) {
     for (const w of [375, 1366]) { eq(pages[w].errors, [], name + ' ' + w + ' errors in the control sweep'); await pages[w].page.close(); }
     /* 4. colour scheme live and redraw */
     {
-      const t = await mount(browser, name, {width: 1366, assets: ['live-announcements.js'], globals, settings: baseSettings, blocks: baseBlocks});
+      const t = await mount(browser, name, {width: 1366, assets: ASSETS, globals, settings: baseSettings, blocks: baseBlocks});
       await t.emit({color_scheme: 'alt-scheme'}); await t.page.waitForTimeout(40);
       eq(await t.css(bgSel, bgProp), 'rgb(250, 250, 250)', name + ' scheme switch live');
       if (heading) eq(await t.css(heading, 'color'), 'rgb(16, 16, 16)', name + ' scheme heading live');
@@ -191,7 +195,7 @@ async function run(spec) {
     }
     /* 5. two instances stay independent; an added block renders and is live; redraw initialises once */
     {
-      const t = await mount(browser, name, {width: 1366, assets: ['live-announcements.js'], globals, instances: [{uid: 'a', settings: baseSettings, blocks: baseBlocks}, {uid: 'b', settings: baseSettings, blocks: baseBlocks}]});
+      const t = await mount(browser, name, {width: 1366, assets: ASSETS, globals, instances: [{uid: 'a', settings: baseSettings, blocks: baseBlocks}, {uid: 'b', settings: baseSettings, blocks: baseBlocks}]});
       const bBefore = await fingerprint(t.page, 'b');
       await t.emit({color_scheme: 'alt-scheme', ...(spec.instanceEdit || {})}, undefined, 'a'); await t.page.waitForTimeout(40);
       ok(JSON.stringify(await fingerprint(t.page, 'b')) === JSON.stringify(bBefore), name + ' editing instance a leaves b alone');
@@ -199,16 +203,16 @@ async function run(spec) {
       const addType = spec.addType || types[types.length - 1];
       const blocks = t.rendered[0].section.blocks.map(b => ({type: b.type, settings: b.settings})).concat([{type: addType, settings: imageBlocks[addType] || {}}]);
       for (let i = 0; i < 3; i++) await t.redraw({uid: 'a', blocks});
-      eq(await t.page.evaluate(() => window.MateriaAnnouncements.roots.size), 2, name + ' redraws keep one controller per section');
+      eq(await t.page.evaluate(ROOTS), 2, name + ' redraws keep one controller per section');
       const added = t.rendered[0].section.blocks[t.rendered[0].section.blocks.length - 1];
-      ok(await t.page.locator('[data-an-block="' + added.id + '"]').count() >= 1, name + ' added block renders');
+      ok(await t.page.locator('[' + (spec.blockAttr || 'data-an-block') + '="' + added.id + '"]').count() >= 1, name + ' added block renders');
       if (spec.addedEdit) { await t.emit(spec.addedEdit.settings, added.id, 'a'); await t.page.waitForTimeout(40); { const n = await spec.addedEdit.check(t, added.id, {eq, ok}); checks += n || 0; } }
       eq(t.errors, [], name + ' two-instance errors');
       await t.page.close();
     }
     /* 6. reduced motion: content visible, no running animation */
     {
-      const t = await mount(browser, name, {width: 1366, editing: false, reducedMotion: 'reduce', assets: ['live-announcements.js'], globals, settings: {...baseSettings, ...(spec.motionSettings || {})}, blocks: baseBlocks});
+      const t = await mount(browser, name, {width: 1366, editing: false, reducedMotion: 'reduce', assets: ASSETS, globals, settings: {...baseSettings, ...(spec.motionSettings || {})}, blocks: baseBlocks});
       await t.page.waitForTimeout(150);
       eq(await t.page.evaluate(() => document.getAnimations().filter(a => a.playState === 'running' && a.effect && a.effect.getTiming().iterations === Infinity).length), 0, name + ' reduced motion stops looping animation');
       eq(await t.page.evaluate(() => [...document.querySelectorAll('[data-an-root] *')].filter(el => getComputedStyle(el).opacity === '0' && el.getBoundingClientRect().height > 0 && !el.closest('[aria-hidden="true"]') && !el.hidden).length), 0, name + ' reduced motion keeps content visible');
@@ -217,7 +221,7 @@ async function run(spec) {
     }
     /* 7. priority off: theme inheritance still holds */
     {
-      const t = await mount(browser, name, {width: 1366, priority: 'off', assets: ['live-announcements.js'], globals, settings: baseSettings, blocks: baseBlocks});
+      const t = await mount(browser, name, {width: 1366, priority: 'off', assets: ASSETS, globals, settings: baseSettings, blocks: baseBlocks});
       eq(await t.css(bgSel, bgProp), 'rgb(24, 32, 40)', name + ' priority off background');
       if (heading) ok(/Georgia/.test(await t.css(heading, 'fontFamily')), name + ' priority off heading font');
       if (text) ok(/Arial/.test(await t.css(text, 'fontFamily')), name + ' priority off text font');
@@ -232,10 +236,11 @@ async function run(spec) {
 module.exports = {run, fingerprint, IMG, IMG2, FONT};
 if (require.main === module) console.log('theme-r5-announcements-lib: shared helpers, run a tests/theme-r5-announcements-<section>.cjs file');
 
-/* Saved instance: the file as it was (git HEAD, or rev) and as it is now, rendered with the same saved
+/* Saved instance: the file as it was (git rev, default 2002b49) and as it is now, rendered with the same saved
    settings, mounted on the storefront with the theme priority on; probe(page) returns the look to compare.
    toggles: settings added to the new render only (the opt-in switches a template must set). */
-async function savedLook(browser, {name, rev = 'HEAD', key, file, width, toggles = {}, blockToggles = {}, probe, assets = ['live-announcements.js'], shot}) {
+/* rev: the commit before round 5 changed the Announcements sections (the look the saved instances were made with). */
+async function savedLook(browser, {name, rev = '2002b49', key, file, width, toggles = {}, blockToggles = {}, probe, assets = ['live-announcements.js'], shot}) {
   const fs = require('fs'), path = require('path'), {execSync} = require('child_process');
   const {render: renderNew, themeControls, THEME_VARS} = require('./media-fixture.cjs');
   const repo = path.join(__dirname, '..');

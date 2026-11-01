@@ -143,7 +143,14 @@ const NOPILL = clone(BLOCKS); NOPILL[0].settings.header_pill_enable = false; NOP
           const blocksB = clone(blocksA); blocksB[idx].settings[s.id] = L.changed(s, blocksA[idx].settings[s.id], {...ctxValues, schemes});
           await draw(p, r, base, restore(blocksB));
           const b = await L.signature(p, SEL);
-          if (!L.diff(a, b).length) bmissed.push(bt.type + '.' + s.id);
+          let moved = L.diff(a, b).length > 0;
+          if (!moved && bt.type === 'pill_glass') {
+            /* the pill is the homepage's; glass alone is every other page's bar (the pill never draws a shadow) */
+            const offA = clone(blocksA), offB = clone(blocksB); offA[idx].settings.header_pill_enable = false; offB[idx].settings.header_pill_enable = false;
+            await draw(p, r, base, offA); const a2 = await L.signature(p, SEL);
+            await draw(p, r, base, offB); moved = L.diff(a2, await L.signature(p, SEL)).length > 0;
+          }
+          if (!moved) bmissed.push(bt.type + '.' + s.id);
           else checks++;
         }
       }

@@ -3,7 +3,7 @@
    Bar Pro 3 = sections/top-bar, then sections/theme-header) and serves the
    repository's shopify/assets, so Theme settings > Typography "Use in every
    section" (snippets/theme-controls) and every header stylesheet apply as on
-   the site. `old: true` renders the files as they are at HEAD (sections,
+   the site. `old: true` renders the files as they were before round 5 (sections,
    snippets and assets), for the saved-look comparison. liquidjs stands in
    for Storelib's renderer (LIQUIDJS=<path>); filters it lacks are stubbed. */
 const fs = require('node:fs');
@@ -11,8 +11,11 @@ const path = require('node:path');
 const {execFileSync} = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const read = f => fs.readFileSync(path.join(root, f), 'utf8');
+/* "old" is the theme before round 5 (2002b49, the last commit before the
+   header group's round 5 work), or HEADER_BASE=<ref>. */
+const BASE = process.env.HEADER_BASE || '2002b49';
 const headCache = new Map();
-const readHead = f => { if (!headCache.has(f)) { let t = null; try { t = execFileSync('git', ['show', 'HEAD:' + f], {cwd: root, encoding: 'utf8', maxBuffer: 64 << 20}); } catch (_) { t = null; } headCache.set(f, t); } return headCache.get(f); };
+const readHead = f => { if (!headCache.has(f)) { let t = null; try { t = execFileSync('git', ['show', BASE + ':' + f], {cwd: root, encoding: 'utf8', maxBuffer: 64 << 20}); } catch (_) { t = null; } headCache.set(f, t); } return headCache.get(f); };
 const body = text => text.split('\n<schema>')[0].replace(/^<template compat="shopify">\n?/, '').replace(/<\/template>\s*$/, '');
 const schemaOf = (f, old) => { const t = old ? readHead(f) : read(f); return JSON.parse(t.slice(t.indexOf('\n<schema>') + 9, t.lastIndexOf('</schema>'))).shopify; };
 const clean = s => s.replace(/\{\{-\s*-\}\}/g, "{{- '' -}}").replace(/^[ \t]*comment[ \t]*\n[\s\S]*?^[ \t]*endcomment[ \t]*$/gm, '').replace(/^[ \t]*# .*$/gm, '');

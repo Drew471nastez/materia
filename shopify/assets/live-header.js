@@ -373,6 +373,7 @@
         case 'section_width': if (WIDTHS.includes(v)) { swap(T.firstElementChild, WIDTHS, v); attr(T, 'data-tb-width', v); } break;
         case 'sticky_top':
           attr(T, 'data-sticky-announcement', String(bool(v)));
+          prop(T, 'position', bool(v) ? 'relative' : '');
           if (bool(v)) { prop(S, 'position', 'sticky', true); prop(S, 'top', 'var(--storelib-announcement-top, 0px)', true); prop(S, 'z-index', '12'); }
           else { prop(S, 'position', 'relative', true); prop(S, 'top', 'auto', true); prop(S, 'z-index', ''); }
           break;

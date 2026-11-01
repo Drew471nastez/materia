@@ -211,15 +211,15 @@ const clone = v => JSON.parse(JSON.stringify(v));
     /* ---------- 4. live equals redraw ---------- */
     const LIVE = {
       color_scheme: schemes.find(s => s.id !== T0.color_scheme).id, section_width: 'container', sticky_top: true, show_mobile: false, text_align: 'left', uppercase: true, font_size: 18,
-      font_weight: 'heading_weight', letter_spacing: 2, border_position: 'both', border_width: 3, show_arrows: false, show_arrows_mobile: false, transition_speed: 300, change_every: 9,
+      font_weight: 'heading_weight', letter_spacing: 2, border_position: 'both', border_width: 3, show_arrows_mobile: false, transition_speed: 300, change_every: 9,
       padding_top: 40, padding_bottom: 36, enable_custom_position: true, enable_custom_colors: true,
     };
-    const DEP = [[{enable_custom_position: true}, {desktop_horizontal_offset: 12}], [{enable_custom_colors: true}, {custom_bg_color: '#fff3bf', custom_text_color: '#212529', custom_link_color: '#0b7285', custom_arrow_color: '#d21f3c', border_color: '#d21f3c'}],
+    const DEP = [[{border_width: 2}, {border_position: 'top'}], [{enable_custom_position: true}, {desktop_horizontal_offset: 12}], [{enable_custom_colors: true}, {custom_bg_color: '#fff3bf', custom_text_color: '#212529', custom_link_color: '#0b7285', custom_arrow_color: '#d21f3c', border_color: '#d21f3c'}],
       [{reset_spacing: false}, {section_margin_top_desktop: 14, section_margin_bottom_desktop: 18, section_margin_top_mobile: 6, section_margin_bottom_mobile: 8}], [{}, {enable_custom_fonts: true}], [{enable_custom_fonts: true}, {font: {family: 'Georgia', fallback_families: 'serif'}}], [{enable_custom_fonts: true}, {enable_custom_fonts: false}]];
     const BL = {
       m1: {text: 'Free returns, <em>always</em>', text_mobile: 'Returns are free'}, m2: {text: 'Ships fast', link: '/pages/fast'}, m3: {enable_custom_style: false},
       slider: {text1: 'First legacy', text2_mobile: 'Second on phones', change_every: 7, hidden_on_mobile: true},
-      info: {show_email: false, show_phone: false, hidden_on_mobile: false}, loc: {show_currency: false, show_language: false, hidden_on_mobile: false}, social: {hidden_on_mobile: false},
+      info: {hidden_on_mobile: false}, loc: {hidden_on_mobile: false}, social: {hidden_on_mobile: false},
     };
     for (const width of part('live') ? [1366, 375] : []) {
       const {p, ctx, r} = await page(width);
@@ -238,6 +238,7 @@ const clone = v => JSON.parse(JSON.stringify(v));
         const after = await L.signature(p, SEL, false);
         const d = L.diff(live, after);
         ok(d.length === 0, `${width} live ${label} equals the redraw\n` + L.explain(d));
+        if (block && block[1].link) ok(await p.evaluate(([sel, id]) => document.querySelector(sel + ' [data-tb-block="' + id + '"] a').getAttribute('href'), [SEL, block[0]]) === block[1].link, `${width} ${label}: the link`);
         return L.diff(before, live).length;
       };
       const flat = [];
@@ -245,8 +246,28 @@ const clone = v => JSON.parse(JSON.stringify(v));
       for (const [dep, set] of DEP) for (const [k, v] of Object.entries(set)) if (!await one(k + ' with ' + JSON.stringify(dep), {...T0, ...dep}, {[k]: v})) flat.push(k);
       for (const [bid, set] of Object.entries(BL)) for (const [k, v] of Object.entries(set)) if (!await one(bid + '.' + k, T0, null, [bid, {[k]: v}])) flat.push(bid + '.' + k);
       await one('several at once', T0, {font_size: 16, letter_spacing: 1, uppercase: true, padding_top: 20});
+      /* store details and pickers off: hidden at once, left out by the redraw */
+      if (width > 1024) for (const [bid, k, q] of [['info', 'show_email', 'a[href^="mailto:"]'], ['info', 'show_phone', 'a[href^="tel:"]'], ['loc', 'show_currency', 'localization-form:has(input[name="country_code"])'], ['loc', 'show_language', 'localization-form:has(input[name="language_code"])']]) {
+        await draw(p, r, T0);
+        await L.emit(p, {section: ID, block: bid, settings: {[k]: false}, live: true});
+        const live = await p.evaluate(([sel, q]) => { const e = document.querySelector(sel + ' ' + q); return e && getComputedStyle(e).display; }, [SEL, q]);
+        const blocks = clone(BLOCKS); blocks.find(b => b.id === bid).settings[k] = false;
+        await draw(p, r, T0, blocks);
+        const gone = await p.evaluate(([sel, q]) => !document.querySelector(sel + ' ' + q), [SEL, q]);
+        ok(live === 'none' && gone, `${width} ${bid}.${k} off: hidden live, left out after the redraw`);
+      }
+      /* Show navigation arrows off: hidden at once, left out by the redraw, the messages in the same place */
+      {
+        await draw(p, r, T0);
+        await L.emit(p, {section: ID, settings: {show_arrows: false}, live: true});
+        const box = () => p.evaluate(sel => { const a = [...document.querySelectorAll(sel + ' .topbar-slider-arrow')].filter(b => getComputedStyle(b).display !== 'none').length; const t = document.querySelector(sel + ' [data-tb-block="m1"] .topbar-text-cell').getBoundingClientRect(); return {a, x: Math.round(t.x), w: Math.round(t.width)}; }, SEL);
+        const live = await box();
+        await draw(p, r, {...T0, show_arrows: false});
+        const after = await box();
+        ok(live.a === 0 && after.a === 0 && live.x === after.x && live.w === after.w, `${width} Show navigation arrows off: live ${JSON.stringify(live)} = redraw ${JSON.stringify(after)}`);
+      }
       /* values seen only on scroll, on phones / desktop, or by the timer */
-      const quiet = ['sticky_top', 'transition_speed', 'change_every', 'slider.change_every', 'enable_custom_position', 'show_arrows_mobile', 'm3.enable_custom_style'];
+      const quiet = ['font_weight', 'border_position', 'm2.link', 'sticky_top', 'transition_speed', 'change_every', 'slider.change_every', 'enable_custom_position', 'show_arrows_mobile', 'm3.enable_custom_style'];
       const shown = flat.filter(k => !quiet.includes(k) && !(width > 1024 ? /mobile|text_mobile/.test(k) : /desktop|horizontal_offset|^show_mobile$/.test(k)));
       assert.deepEqual(shown.filter(k => !(width < 1025 && /^(info|loc|social)\./.test(k)) && !(width > 1024 && /hidden_on_mobile|show_mobile/.test(k))), [], `${width}: live values that changed nothing: ${shown.join(', ')}`);
       await ctx.close();

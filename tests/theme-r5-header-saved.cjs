@@ -2,7 +2,7 @@
    Round 5, header group: the saved header group (sections/header-group.json:
    Announcement Bar Pro 3 + Header, with the saved main menu, mega menu
    banner and phone menu banner) looks the same before and after this round.
-   The page is rendered twice, once with the files at HEAD and once with the
+   The page is rendered twice, once with the files before round 5 (commit 2002b49) and once with the
    working tree, at 375 and 1366, closed, with the phone menu drawer and its
    Home submenu open (375) and with the Home mega menu open (1366). Every
    element of both sections is compared: box, computed colours, type,
