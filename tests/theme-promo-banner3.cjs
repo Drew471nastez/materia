@@ -7,7 +7,7 @@ const ids=x=>x.settings.filter(x=>x.id).map(x=>x.id);
 const source=read('sections/banner3.storelib').split('<schema>')[0].replace(/^<template compat="shopify">/,'').replace(/<\/template>\s*$/,'');
 (async()=>{let checks=0;for(const id of ids(old))assert(ids(schema).includes(id));for(const block of old.blocks)for(const id of ids(block))assert(ids(schema.blocks.find(x=>x.type===block.type)).includes(id));checks++;
  for(const model of [schema,...schema.blocks])assert.equal(new Set(ids(model)).size,ids(model).length);checks++;
- assert.deepEqual(schema.settings.filter(x=>x.type==='header').map(x=>x.content),['Layout','General','Style & Colors','Animation & Behavior','Layout & Spacing','Mobile']);checks++;
+ assert.deepEqual(schema.settings.filter(x=>x.type==='header').map(x=>x.content),['General','Style & Colors','Animation & Behavior','Layout & Spacing','Mobile']);checks++;
  const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});try{
  for(const width of [390,1366])for(const custom of [false,true]){
   const settings={...defaults(schema),enable_custom_style:custom,use_custom_bg:custom,use_custom_text:false,banner_surface:'section',use_theme_radius:false,section_padding_top_mobile:12,section_padding_bottom_mobile:16,section_width:'full_width',text_align:'right',section_padding_top:12,section_padding_bottom:16,section_pad_left:24,section_pad_right:40,section_pad_left_mobile:8,section_pad_right_mobile:20,bg_color:'#234567',section_bg_color:'#123456',section_border_radius:18};
