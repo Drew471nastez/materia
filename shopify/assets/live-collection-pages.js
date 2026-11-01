@@ -104,6 +104,52 @@
     for (const svg of root.querySelectorAll('svg[data-bc-dir]')) { const html = icons[svg.dataset.bcDir]; if (html && svg.innerHTML !== html) svg.innerHTML = html; }
   };
 
+  /* ---------- Page heading and Collection banner ---------- */
+  const SIZES = ['h3', 'h1-size'];
+  const prop = (el, p, v) => { if (!el) return; if (v == null || v === '') { if (el.style.getPropertyValue(p)) el.style.removeProperty(p); } else if (el.style.getPropertyValue(p) !== String(v)) el.style.setProperty(p, String(v)); };
+  function blockFont(el, b) { const f = bool(b.enable_custom_fonts) ? font(b.font) : ''; attr(el, 'data-own-font', !!f); prop(el, 'font-family', f); }
+  const heading = kind => (root, st) => {
+    const s = st.s, align = s.alignment || 'center';
+    scheme(root, s);
+    width(root.querySelector(':scope > div:not(.overlay-bg)'), s.section_width);
+    swapPrefix(root, 'justify-content-', align);
+    if (root.hasAttribute('data-align')) attr(root, 'data-align', true, align);
+    swapPrefix(root.querySelector('.heading-content'), 'text-', align);
+    setVar(root, '--section-pt', String(num(s.padding_top)));
+    setVar(root, '--section-pb', String(num(s.padding_bottom)));
+    setVar(root, '--overlay-opacity', num(s.overlay_opacity) + '%');
+    for (const [el, b] of blocksIn(root, st)) {
+      const touched = st.touchedBlocks.has(el.dataset.lcpBlock);
+      if (el.dataset.lcpBlockType === 'heading') {
+        const h = el.querySelector('.heading-title');
+        if (!h) continue;
+        if (touched) text(h, String(b.page_title || '').trim() ? b.page_title : h.dataset.lcpFallback || '');
+        swap(h, SIZES, b.header_size === 'small' ? 'h3' : b.header_size === 'large' ? 'h1-size' : '');
+        blockFont(h, b);
+        if (kind === 'page') {
+          prop(h, 'margin-bottom', num(b.vertical_gap) + 'px');
+          prop(h, 'font-size', b.header_size === 'medium' ? num(b.heading_font_size, 34) + 'px' : '');
+          prop(h, 'color', bool(b.enable_heading_color) ? color(b.heading_color, 'var(--color-heading)') : '');
+        }
+      } else if (el.dataset.lcpBlockType === 'description') {
+        blockFont(el, b);
+        if (kind === 'page') {
+          prop(el, 'color', bool(b.enable_custom_style) ? color(b.description_color, 'var(--color-text)') : 'var(--color-text)');
+          prop(el, 'font-size', num(b.description_font_size, 15) + 'px');
+          if (touched) {
+            const has = !!String(b.description || '').replace(/<[^>]*>/g, '').trim();
+            if (has) { show(el, true); rich(el, b.description, st.cache); }
+            else if (!el.hasAttribute('data-lcp-has-fallback')) show(el, false);
+          }
+        }
+      } else if (el.dataset.lcpBlockType === 'breadcrumb') {
+        trail(el.querySelector('nav.bc'), b, align, true);
+      }
+    }
+  };
+  T['page-heading'] = heading('page');
+  T['main-collection-heading'] = heading('collection');
+
   /* ---------- Shared wiring ---------- */
   const S = new Map();
   function init(root) {

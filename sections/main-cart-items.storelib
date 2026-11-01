@@ -402,7 +402,19 @@
 {%- capture style -%}
   --section-pt: {{ section_st.padding_top }}; --section-pb: {{ section_st.padding_bottom }};--col-gap-desktop: 5rem;--col-width: 45rem;
 {%- endcapture -%}
+{%- comment -%}
+  The cart's colour scheme: this section's Color scheme when one is picked,
+  otherwise Theme settings > Cart & checkout, otherwise the first scheme.
+{%- endcomment -%}
 {%- assign cart_scheme = theme_st.cart_page_cart_color_scheme -%}
+{%- assign own_scheme_id = section_st.color_scheme.id | default: section_st.color_scheme -%}
+{%- if own_scheme_id != blank -%}
+  {%- assign cart_scheme = own_scheme_id -%}
+  {%- for s in settings.color_schemes -%}
+    {%- assign s_id = s.id | default: s -%}
+    {%- if s_id == own_scheme_id -%}{%- assign cart_scheme = s -%}{%- break -%}{%- endif -%}
+  {%- endfor -%}
+{%- endif -%}
 {%- if cart_scheme == blank -%}
   {%- for s in settings.color_schemes -%}
     {%- assign cart_scheme = s -%}
@@ -505,9 +517,22 @@
   class="page-cart bls-image-js section{% if section_st.padding_top < 30 %} pt-min{% endif %}{% if section_st.padding_bottom < 30 %} pb-min{% endif %}{% if section_st.reset_spacing %} remove_spacing{% endif %} {% if cart == empty %} is-empty{% endif %}{{ cart_color_scheme_class }}"
   id="main-cart-items"
   data-id="{{ section.id }}"
+  data-lcs-root="main-cart-items"
+  data-lcs-section="{{ section.id }}"
+  data-lcs-settings="{{ section.settings | json | escape }}"
+  data-lcs-w="{{ section_width }}"
   style="{{ style | strip | strip_newlines }} {{ cart_scheme_inline | strip | strip_newlines }}"
 >
-  <div class="{{ section_width }}">
+  {%- if request.design_mode -%}
+    {%- comment -%} The block icons, for live edits of an icon choice (live-cart-search.js). Inert. {%- endcomment -%}
+    <template data-lcs-icons>
+      {%- assign lcs_pill_icons = 'leaf,smile,heart,shield,lightning,star,drop,fire,sparkle,sun,moon,brain,check,flower,gem,flame,zap,muscle,pill,trophy' | split: ',' -%}
+      {%- for k in lcs_pill_icons -%}<span data-icon="pill:{{ k }}">{%- render 'cart-page-pill-icon', icon: k -%}</span>{%- endfor -%}
+      {%- assign lcs_g_icons = 'shield,shield_check,check,lock,truck' | split: ',' -%}
+      {%- for k in lcs_g_icons -%}<span data-icon="guarantee:{{ k }}">{%- render 'cart-page-pill-icon', icon: k, set: 'guarantee' -%}</span>{%- endfor -%}
+    </template>
+  {%- endif -%}
+  <div class="{{ section_width }}" data-lcs-width>
     <svg hidden>
       <symbol id="icon-trash">
         <path fill="currentColor" d="M10.5 4.25h-7v7.588c0 .073.014.146.041.219a.727.727 0 0 0 .137.191.416.416 0 0 0 .177.123c.073.027.15.041.233.041h5.824c.082 0 .16-.014.232-.04a.416.416 0 0 0 .178-.124.53.53 0 0 0 .123-.191.485.485 0 0 0 .055-.22V4.25Zm-.588-1.162h2.338c.164 0 .3.06.41.178a.52.52 0 0 1 .178.396c0 .164-.06.305-.178.424a.557.557 0 0 1-.41.164h-.588v7.588c0 .237-.046.465-.137.684-.09.21-.214.391-.369.546a1.615 1.615 0 0 1-.56.383c-.21.091-.438.137-.684.137H4.088c-.246 0-.474-.05-.684-.15a1.931 1.931 0 0 1-.56-.37 1.755 1.755 0 0 1-.37-.546 1.76 1.76 0 0 1-.136-.684V4.25H1.75a.603.603 0 0 1-.424-.164.603.603 0 0 1-.164-.424.54.54 0 0 1 .164-.396.579.579 0 0 1 .424-.178h2.338V2.5c0-.237.045-.46.137-.67.09-.219.214-.406.369-.56.155-.165.337-.292.547-.383.218-.091.45-.137.697-.137h2.324c.246 0 .474.046.684.137.21.09.396.218.56.383.155.154.278.341.37.56.09.21.136.433.136.67v.588Zm-4.662 0h3.5V2.5a.433.433 0 0 0-.055-.219.531.531 0 0 0-.123-.191.416.416 0 0 0-.177-.123.513.513 0 0 0-.233-.055H5.838a.513.513 0 0 0-.233.055.416.416 0 0 0-.177.123.73.73 0 0 0-.137.191.55.55 0 0 0-.041.219v.588Zm0 3.5c0-.164.055-.3.164-.41A.579.579 0 0 1 5.838 6a.52.52 0 0 1 .396.178c.119.11.178.246.178.41v3.5c0 .155-.06.292-.178.41a.54.54 0 0 1-.396.164.603.603 0 0 1-.424-.164.587.587 0 0 1-.164-.41v-3.5Zm2.338 0c0-.164.055-.3.164-.41a.563.563 0 0 1 .82 0c.119.11.178.246.178.41v3.5c0 .155-.06.292-.178.41a.556.556 0 0 1-.41.164.587.587 0 0 1-.41-.164.587.587 0 0 1-.164-.41v-3.5Z"/>
@@ -4926,7 +4951,13 @@
     "settings": [
       {
         "type": "header",
-        "content": "Basics"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "info": "Empty: the cart scheme from Theme settings > Cart & checkout."
       },
       {
         "type": "select",
@@ -4934,56 +4965,38 @@
         "options": [
           {
             "value": "container",
-            "label": "t:sections.all.section_width.container.label"
+            "label": "Default"
           },
           {
             "value": "fluid_container",
-            "label": "t:sections.all.section_width.fluid_container.label"
+            "label": "Fluid container"
           },
           {
             "value": "stretch_width",
-            "label": "t:sections.all.section_width.stretch_width.label"
+            "label": "Stretched"
           },
           {
             "value": "full_width",
-            "label": "t:sections.all.section_width.full_width.label"
+            "label": "Full width"
           }
         ],
         "default": "fluid_container",
-        "label": "t:sections.all.section_width.label"
+        "label": "Section width"
       },
       {
         "type": "checkbox",
-        "id": "enable_cart_note",
-        "label": "Cart note",
-        "info": "Not used: the cart note follows Theme settings → Shopping Cart.",
-        "default": true,
-        "visible_if": "{{ false }}"
-      },
-      {
-        "type": "checkbox",
-        "id": "enable_discount_code",
-        "label": "Discount code",
-        "info": "Not used: the discount box follows Theme settings → Shopping Cart.",
-        "default": false,
-        "visible_if": "{{ false }}"
-      },
-      {
-        "type": "checkbox",
-        "id": "show_estimate_shipping",
-        "label": "Estimate shipping",
-        "info": "Not used: follows Theme settings → Shopping Cart.",
-        "default": true,
-        "visible_if": "{{ false }}"
+        "id": "reset_spacing",
+        "label": "Remove space between sections",
+        "default": true
       },
       {
         "type": "header",
-        "content": "Layout & spacing"
+        "content": "Desktop spacing"
       },
       {
         "type": "range",
         "id": "padding_top",
-        "label": "t:sections.all.section_padding.top.label",
+        "label": "Top padding",
         "default": 0,
         "min": 0,
         "max": 100,
@@ -4993,7 +5006,7 @@
       {
         "type": "range",
         "id": "padding_bottom",
-        "label": "t:sections.all.section_padding.bottom.label",
+        "label": "Bottom padding",
         "default": 0,
         "min": 0,
         "max": 100,
@@ -5001,14 +5014,28 @@
         "unit": "px"
       },
       {
-        "type": "header",
-        "content": "Advanced spacing"
+        "type": "checkbox",
+        "id": "enable_cart_note",
+        "label": "Cart note",
+        "info": "Legacy, not used: this follows Theme settings > Shopping Cart.",
+        "default": true,
+        "hidden": true
       },
       {
         "type": "checkbox",
-        "id": "reset_spacing",
-        "label": "Remove default space between sections",
-        "default": true
+        "id": "enable_discount_code",
+        "label": "Discount code",
+        "info": "Legacy, not used: this follows Theme settings > Shopping Cart.",
+        "default": false,
+        "hidden": true
+      },
+      {
+        "type": "checkbox",
+        "id": "show_estimate_shipping",
+        "label": "Estimate shipping",
+        "info": "Legacy, not used: this follows Theme settings > Shopping Cart.",
+        "default": true,
+        "hidden": true
       }
     ],
     "blocks": [
@@ -5028,7 +5055,7 @@
           {
             "type": "range",
             "id": "margin_top",
-            "label": "Margin top",
+            "label": "Top margin",
             "min": 0,
             "max": 60,
             "step": 1,
@@ -5038,7 +5065,7 @@
           {
             "type": "range",
             "id": "margin_bottom",
-            "label": "Margin bottom",
+            "label": "Bottom margin",
             "min": 0,
             "max": 60,
             "step": 1,
@@ -5063,7 +5090,7 @@
           {
             "type": "range",
             "id": "margin_top",
-            "label": "Margin top",
+            "label": "Top margin",
             "min": 0,
             "max": 60,
             "step": 1,
@@ -5073,7 +5100,7 @@
           {
             "type": "range",
             "id": "margin_bottom",
-            "label": "Margin bottom",
+            "label": "Bottom margin",
             "min": 0,
             "max": 60,
             "step": 1,
@@ -5098,7 +5125,7 @@
           {
             "type": "range",
             "id": "margin_top",
-            "label": "Margin top",
+            "label": "Top margin",
             "min": 0,
             "max": 60,
             "step": 1,
@@ -5108,7 +5135,7 @@
           {
             "type": "range",
             "id": "margin_bottom",
-            "label": "Margin bottom",
+            "label": "Bottom margin",
             "min": 0,
             "max": 60,
             "step": 1,
@@ -5133,7 +5160,7 @@
           {
             "type": "range",
             "id": "margin_top",
-            "label": "Margin top",
+            "label": "Top margin",
             "min": 0,
             "max": 60,
             "step": 1,
@@ -5143,7 +5170,7 @@
           {
             "type": "range",
             "id": "margin_bottom",
-            "label": "Margin bottom",
+            "label": "Bottom margin",
             "min": 0,
             "max": 60,
             "step": 1,
@@ -5168,7 +5195,7 @@
           {
             "type": "range",
             "id": "margin_top",
-            "label": "Margin top",
+            "label": "Top margin",
             "min": 0,
             "max": 60,
             "step": 1,
@@ -5178,7 +5205,7 @@
           {
             "type": "range",
             "id": "margin_bottom",
-            "label": "Margin bottom",
+            "label": "Bottom margin",
             "min": 0,
             "max": 60,
             "step": 1,
@@ -5194,71 +5221,76 @@
         "settings": [
           {
             "type": "header",
-            "content": "Basics"
+            "content": "Content"
           },
           {
             "type": "checkbox",
             "id": "show_payment_badges",
-            "label": "Payment badges under Checkout",
+            "label": "Show payment badges",
             "default": true
-          },
-          {
-            "type": "header",
-            "content": "Methods"
           },
           {
             "type": "checkbox",
             "id": "show_visa",
-            "label": "Show Visa",
-            "default": true
+            "label": "Visa",
+            "default": true,
+            "visible_if": "{{ block.settings.show_payment_badges }}"
           },
           {
             "type": "checkbox",
             "id": "show_mastercard",
-            "label": "Show Mastercard",
-            "default": true
+            "label": "Mastercard",
+            "default": true,
+            "visible_if": "{{ block.settings.show_payment_badges }}"
           },
           {
             "type": "checkbox",
             "id": "show_amex",
-            "label": "Show American Express",
-            "default": true
+            "label": "American Express",
+            "default": true,
+            "visible_if": "{{ block.settings.show_payment_badges }}"
           },
           {
             "type": "checkbox",
             "id": "show_paypal",
-            "label": "Show PayPal",
-            "default": true
+            "label": "PayPal",
+            "default": true,
+            "visible_if": "{{ block.settings.show_payment_badges }}"
           },
           {
             "type": "checkbox",
             "id": "show_apple_pay",
-            "label": "Show Apple Pay",
-            "default": true
+            "label": "Apple Pay",
+            "default": true,
+            "visible_if": "{{ block.settings.show_payment_badges }}"
           },
           {
             "type": "checkbox",
             "id": "show_google_pay",
-            "label": "Show Google Pay",
-            "default": true
+            "label": "Google Pay",
+            "default": true,
+            "visible_if": "{{ block.settings.show_payment_badges }}"
           },
           {
             "type": "checkbox",
             "id": "show_klarna",
-            "label": "Show Klarna",
-            "default": false
+            "label": "Klarna",
+            "default": false,
+            "visible_if": "{{ block.settings.show_payment_badges }}"
           },
           {
             "type": "checkbox",
             "id": "show_discover",
-            "label": "Show Discover",
-            "default": false
+            "label": "Discover",
+            "default": false,
+            "visible_if": "{{ block.settings.show_payment_badges }}"
           },
           {
             "type": "checkbox",
             "id": "show_amazon",
-            "label": "Show Amazon Pay",
-            "default": false
+            "label": "Amazon Pay",
+            "default": false,
+            "visible_if": "{{ block.settings.show_payment_badges }}"
           }
         ]
       },
@@ -5269,24 +5301,21 @@
         "settings": [
           {
             "type": "header",
-            "content": "Basics"
+            "content": "Content"
           },
           {
             "type": "checkbox",
             "id": "show_faq",
-            "label": "Enable FAQ section",
+            "label": "Show questions",
             "default": true
-          },
-          {
-            "type": "header",
-            "content": "Content"
           },
           {
             "type": "text",
             "id": "faq_heading",
-            "label": "FAQ heading",
+            "label": "Heading",
             "default": "Frequently asked questions",
-            "info": "Add FAQ items as separate \"FAQ item\" blocks — each block has an editable question and answer."
+            "info": "Add FAQ items as separate \"FAQ item\" blocks — each block has an editable question and answer.",
+            "visible_if": "{{ block.settings.show_faq }}"
           }
         ]
       },
@@ -5297,53 +5326,122 @@
         "settings": [
           {
             "type": "header",
-            "content": "Placement"
-          },
-          {
-            "type": "checkbox",
-            "id": "render_in_sidebar",
-            "label": "Enable in right container",
-            "default": false,
-            "info": "Shows in the cart sidebar, in block order."
-          },
-          {
-            "type": "header",
             "content": "Content"
           },
           {
             "type": "text",
             "id": "text",
             "label": "Rating text",
-            "default": "4.9 / 5"
+            "default": "",
+            "info": "Your store's real rating, for example from your reviews app."
+          },
+          {
+            "type": "range",
+            "id": "total_stars",
+            "label": "Total stars",
+            "min": 3,
+            "max": 5,
+            "step": 1,
+            "default": 5
+          },
+          {
+            "type": "range",
+            "id": "filled_stars",
+            "label": "Filled stars",
+            "min": 0,
+            "max": 5,
+            "step": 0.5,
+            "default": 5,
+            "info": "Supports half stars (e.g., 4.5)."
+          },
+          {
+            "type": "header",
+            "content": "Layout"
+          },
+          {
+            "type": "checkbox",
+            "id": "render_in_sidebar",
+            "label": "Show in the order summary",
+            "default": false,
+            "info": "On: in the order summary column. Off: below the cart."
+          },
+          {
+            "type": "select",
+            "id": "alignment",
+            "label": "Alignment",
+            "default": "left",
+            "options": [
+              {
+                "value": "left",
+                "label": "Left"
+              },
+              {
+                "value": "center",
+                "label": "Center"
+              },
+              {
+                "value": "right",
+                "label": "Right"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "star_size",
+            "label": "Star size",
+            "min": 12,
+            "max": 36,
+            "step": 1,
+            "unit": "px",
+            "default": 18
+          },
+          {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false,
+            "info": "Off: colours follow the cart's colour scheme."
+          },
+          {
+            "type": "color",
+            "id": "filled_color",
+            "label": "Filled star color",
+            "default": "#fbbf24",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "unfilled_color",
+            "label": "Unfilled star color",
+            "default": "#e5e7eb",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "text_color",
+            "label": "Text color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           },
           {
             "type": "header",
             "content": "Typography"
           },
           {
-            "type": "color",
-            "id": "text_color",
-            "label": "Text color (optional)"
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom fonts",
+            "default": false
           },
           {
-            "type": "range",
-            "id": "font_size_desktop",
-            "label": "Font size (desktop)",
-            "min": 12,
-            "max": 28,
-            "step": 1,
-            "unit": "px",
-            "default": 16
-          },
-          {
-            "type": "range",
-            "id": "font_size_mobile",
-            "label": "Font size (mobile)",
-            "min": 11,
-            "max": 22,
-            "step": 1,
-            "unit": "px",
-            "default": 14
+            "type": "font_picker",
+            "id": "font",
+            "label": "Font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
           },
           {
             "type": "select",
@@ -5370,24 +5468,28 @@
             ]
           },
           {
+            "type": "range",
+            "id": "font_size_desktop",
+            "label": "Font size (desktop)",
+            "min": 12,
+            "max": 28,
+            "step": 1,
+            "unit": "px",
+            "default": 16
+          },
+          {
+            "type": "range",
+            "id": "font_size_mobile",
+            "label": "Font size (mobile)",
+            "min": 11,
+            "max": 22,
+            "step": 1,
+            "unit": "px",
+            "default": 14
+          },
+          {
             "type": "header",
-            "content": "Colors & appearance"
-          },
-          {
-            "type": "color",
-            "id": "filled_color",
-            "label": "Filled star color",
-            "default": "#fbbf24"
-          },
-          {
-            "type": "color",
-            "id": "unfilled_color",
-            "label": "Unfilled star color",
-            "default": "#e5e7eb"
-          },
-          {
-            "type": "header",
-            "content": "Layout & spacing"
+            "content": "Spacing"
           },
           {
             "type": "range",
@@ -5408,59 +5510,6 @@
             "step": 1,
             "unit": "px",
             "default": 8
-          },
-          {
-            "type": "header",
-            "content": "Advanced"
-          },
-          {
-            "type": "select",
-            "id": "alignment",
-            "label": "Alignment",
-            "default": "left",
-            "options": [
-              {
-                "value": "left",
-                "label": "Left"
-              },
-              {
-                "value": "center",
-                "label": "Center"
-              },
-              {
-                "value": "right",
-                "label": "Right"
-              }
-            ]
-          },
-          {
-            "type": "range",
-            "id": "total_stars",
-            "label": "Total stars",
-            "min": 3,
-            "max": 5,
-            "step": 1,
-            "default": 5
-          },
-          {
-            "type": "range",
-            "id": "filled_stars",
-            "label": "Filled stars",
-            "min": 0,
-            "max": 5,
-            "step": 0.5,
-            "default": 5,
-            "info": "Supports half stars (e.g., 4.5)."
-          },
-          {
-            "type": "range",
-            "id": "star_size",
-            "label": "Star size",
-            "min": 12,
-            "max": 36,
-            "step": 1,
-            "unit": "px",
-            "default": 18
           }
         ]
       },
@@ -5471,18 +5520,14 @@
         "settings": [
           {
             "type": "header",
-            "content": "Placement"
+            "content": "Content"
           },
           {
-            "type": "checkbox",
-            "id": "render_in_sidebar",
-            "label": "Enable in right container",
-            "default": false,
-            "info": "Shows in the cart sidebar, in block order."
-          },
-          {
-            "type": "header",
-            "content": "Basics"
+            "type": "text",
+            "id": "heading",
+            "label": "Heading",
+            "default": "",
+            "info": "For example your real number of customers."
           },
           {
             "type": "checkbox",
@@ -5491,85 +5536,189 @@
             "default": true
           },
           {
+            "type": "image_picker",
+            "id": "avatar_1",
+            "label": "Avatar 1",
+            "visible_if": "{{ block.settings.show_avatars }}"
+          },
+          {
+            "type": "image_picker",
+            "id": "avatar_2",
+            "label": "Avatar 2",
+            "visible_if": "{{ block.settings.show_avatars }}"
+          },
+          {
+            "type": "image_picker",
+            "id": "avatar_3",
+            "label": "Avatar 3",
+            "visible_if": "{{ block.settings.show_avatars }}"
+          },
+          {
+            "type": "image_picker",
+            "id": "avatar_4",
+            "label": "Avatar 4",
+            "visible_if": "{{ block.settings.show_avatars }}"
+          },
+          {
+            "type": "image_picker",
+            "id": "avatar_5",
+            "label": "Avatar 5",
+            "visible_if": "{{ block.settings.show_avatars }}"
+          },
+          {
+            "type": "image_picker",
+            "id": "avatar_6",
+            "label": "Avatar 6",
+            "visible_if": "{{ block.settings.show_avatars }}"
+          },
+          {
+            "type": "range",
+            "id": "avatar_count",
+            "label": "Number of avatars",
+            "min": 1,
+            "max": 6,
+            "step": 1,
+            "default": 4,
+            "visible_if": "{{ block.settings.show_avatars }}"
+          },
+          {
             "type": "checkbox",
             "id": "show_stars",
             "label": "Show stars",
             "default": true
           },
           {
+            "type": "range",
+            "id": "total_stars",
+            "label": "Total stars",
+            "min": 3,
+            "max": 5,
+            "step": 1,
+            "default": 5,
+            "visible_if": "{{ block.settings.show_stars }}"
+          },
+          {
+            "type": "range",
+            "id": "filled_stars",
+            "label": "Filled stars",
+            "min": 0,
+            "max": 5,
+            "step": 0.5,
+            "default": 5,
+            "info": "Supports half stars (e.g., 4.5).",
+            "visible_if": "{{ block.settings.show_stars }}"
+          },
+          {
             "type": "checkbox",
             "id": "show_rating_text",
             "label": "Show rating text after stars",
-            "default": false
-          },
-          {
-            "type": "header",
-            "content": "Section heading"
-          },
-          {
-            "type": "text",
-            "id": "heading",
-            "label": "Heading text",
-            "default": "100K+ Happy Customers"
-          },
-          {
-            "type": "header",
-            "content": "Image / Media"
-          },
-          {
-            "type": "image_picker",
-            "id": "avatar_1",
-            "label": "Avatar 1"
-          },
-          {
-            "type": "image_picker",
-            "id": "avatar_2",
-            "label": "Avatar 2"
-          },
-          {
-            "type": "image_picker",
-            "id": "avatar_3",
-            "label": "Avatar 3"
-          },
-          {
-            "type": "image_picker",
-            "id": "avatar_4",
-            "label": "Avatar 4"
-          },
-          {
-            "type": "image_picker",
-            "id": "avatar_5",
-            "label": "Avatar 5"
-          },
-          {
-            "type": "image_picker",
-            "id": "avatar_6",
-            "label": "Avatar 6"
-          },
-          {
-            "type": "header",
-            "content": "Content"
+            "default": false,
+            "visible_if": "{{ block.settings.show_stars }}"
           },
           {
             "type": "text",
             "id": "rating_text",
             "label": "Rating text",
-            "default": "4.7"
+            "default": "",
+            "visible_if": "{{ block.settings.show_stars and block.settings.show_rating_text }}"
+          },
+          {
+            "type": "header",
+            "content": "Layout"
+          },
+          {
+            "type": "checkbox",
+            "id": "render_in_sidebar",
+            "label": "Show in the order summary",
+            "default": false,
+            "info": "On: in the order summary column. Off: below the cart."
+          },
+          {
+            "type": "range",
+            "id": "avatar_size",
+            "label": "Avatar size",
+            "min": 24,
+            "max": 80,
+            "step": 2,
+            "unit": "px",
+            "default": 40,
+            "visible_if": "{{ block.settings.show_avatars }}"
+          },
+          {
+            "type": "range",
+            "id": "avatar_overlap",
+            "label": "Avatar overlap",
+            "min": 0,
+            "max": 80,
+            "step": 5,
+            "unit": "%",
+            "default": 35,
+            "visible_if": "{{ block.settings.show_avatars }}"
+          },
+          {
+            "type": "range",
+            "id": "star_size",
+            "label": "Star size",
+            "min": 10,
+            "max": 30,
+            "step": 1,
+            "unit": "px",
+            "default": 14,
+            "visible_if": "{{ block.settings.show_stars }}"
+          },
+          {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false,
+            "info": "Off: colours follow the cart's colour scheme."
+          },
+          {
+            "type": "color",
+            "id": "text_color",
+            "label": "Text color",
+            "info": "Leave blank to inherit theme color.",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "filled_color",
+            "label": "Filled star color",
+            "default": "#22c55e",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "unfilled_color",
+            "label": "Unfilled star color",
+            "default": "#e5e7eb",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           },
           {
             "type": "header",
             "content": "Typography"
           },
           {
-            "type": "color",
-            "id": "text_color",
-            "label": "Text color (optional)",
-            "info": "Leave blank to inherit theme color."
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom fonts",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
           },
           {
             "type": "select",
             "id": "font_weight",
-            "label": "Heading font weight",
+            "label": "Heading weight",
             "default": "600",
             "options": [
               {
@@ -5597,308 +5746,6 @@
           {
             "type": "range",
             "id": "font_size_desktop",
-            "label": "Heading font size (desktop)",
-            "min": 12,
-            "max": 28,
-            "step": 1,
-            "unit": "px",
-            "default": 16
-          },
-          {
-            "type": "range",
-            "id": "font_size_mobile",
-            "label": "Heading font size (mobile)",
-            "min": 11,
-            "max": 22,
-            "step": 1,
-            "unit": "px",
-            "default": 14
-          },
-          {
-            "type": "header",
-            "content": "Colors & appearance"
-          },
-          {
-            "type": "color",
-            "id": "filled_color",
-            "label": "Filled star color",
-            "default": "#22c55e"
-          },
-          {
-            "type": "color",
-            "id": "unfilled_color",
-            "label": "Unfilled star color",
-            "default": "#e5e7eb"
-          },
-          {
-            "type": "header",
-            "content": "Layout & spacing"
-          },
-          {
-            "type": "range",
-            "id": "padding_top",
-            "label": "Top padding",
-            "min": 0,
-            "max": 60,
-            "step": 1,
-            "unit": "px",
-            "default": 12
-          },
-          {
-            "type": "range",
-            "id": "padding_bottom",
-            "label": "Bottom padding",
-            "min": 0,
-            "max": 60,
-            "step": 1,
-            "unit": "px",
-            "default": 12
-          },
-          {
-            "type": "header",
-            "content": "Advanced"
-          },
-          {
-            "type": "range",
-            "id": "avatar_count",
-            "label": "Number of avatars",
-            "min": 1,
-            "max": 6,
-            "step": 1,
-            "default": 4
-          },
-          {
-            "type": "range",
-            "id": "avatar_size",
-            "label": "Avatar size",
-            "min": 24,
-            "max": 80,
-            "step": 2,
-            "unit": "px",
-            "default": 40
-          },
-          {
-            "type": "range",
-            "id": "avatar_overlap",
-            "label": "Avatar overlap",
-            "min": 0,
-            "max": 80,
-            "step": 5,
-            "unit": "%",
-            "default": 35
-          },
-          {
-            "type": "range",
-            "id": "total_stars",
-            "label": "Total stars",
-            "min": 3,
-            "max": 5,
-            "step": 1,
-            "default": 5
-          },
-          {
-            "type": "range",
-            "id": "filled_stars",
-            "label": "Filled stars",
-            "min": 0,
-            "max": 5,
-            "step": 0.5,
-            "default": 5,
-            "info": "Supports half stars (e.g., 4.5)."
-          },
-          {
-            "type": "range",
-            "id": "star_size",
-            "label": "Star size",
-            "min": 10,
-            "max": 30,
-            "step": 1,
-            "unit": "px",
-            "default": 14
-          }
-        ]
-      },
-      {
-        "type": "benefits_pills",
-        "name": "Benefits Pills",
-        "limit": 3,
-        "settings": [
-          {
-            "type": "header",
-            "content": "Theme style"
-          },
-          {
-            "type": "checkbox",
-            "id": "custom_style",
-            "label": "Enable custom styling",
-            "default": false,
-            "info": "Off: use the section color scheme and general theme typography. On: apply saved colors and typography, including per-pill overrides. Layout controls always apply."
-          },
-          {
-            "type": "header",
-            "content": "Placement"
-          },
-          {
-            "type": "checkbox",
-            "id": "render_in_sidebar",
-            "label": "Enable in right container",
-            "default": false,
-            "info": "Shows in the cart sidebar, in block order."
-          },
-          {
-            "type": "header",
-            "content": "Basics"
-          },
-          {
-            "type": "checkbox",
-            "id": "show_heading",
-            "label": "Show heading",
-            "default": true
-          },
-          {
-            "type": "select",
-            "id": "alignment",
-            "label": "Pills alignment",
-            "default": "flex-start",
-            "options": [
-              {
-                "value": "flex-start",
-                "label": "Left"
-              },
-              {
-                "value": "center",
-                "label": "Center"
-              },
-              {
-                "value": "flex-end",
-                "label": "Right"
-              }
-            ]
-          },
-          {
-            "type": "select",
-            "id": "mobile_layout",
-            "label": "Mobile layout",
-            "default": "wrap",
-            "options": [
-              {
-                "value": "stack",
-                "label": "1 per row (stacked)"
-              },
-              {
-                "value": "two",
-                "label": "2 per row"
-              },
-              {
-                "value": "wrap",
-                "label": "Auto wrap (fit as many as fit)"
-              }
-            ],
-            "info": "How the pills arrange on mobile. 'Auto wrap' fits 2 per row when there's space, else 1."
-          },
-          {
-            "type": "range",
-            "id": "gap_x",
-            "label": "Horizontal gap between pills",
-            "min": 0,
-            "max": 32,
-            "step": 1,
-            "unit": "px",
-            "default": 8
-          },
-          {
-            "type": "range",
-            "id": "gap_y",
-            "label": "Vertical gap between pills",
-            "min": 0,
-            "max": 32,
-            "step": 1,
-            "unit": "px",
-            "default": 8
-          },
-          {
-            "type": "range",
-            "id": "padding_top",
-            "label": "Top padding",
-            "min": 0,
-            "max": 60,
-            "step": 1,
-            "unit": "px",
-            "default": 12
-          },
-          {
-            "type": "range",
-            "id": "padding_bottom",
-            "label": "Bottom padding",
-            "min": 0,
-            "max": 60,
-            "step": 1,
-            "unit": "px",
-            "default": 12
-          },
-          {
-            "type": "header",
-            "content": "Heading"
-          },
-          {
-            "type": "text",
-            "id": "heading_text",
-            "label": "Heading text",
-            "default": "Benefits include:"
-          },
-          {
-            "type": "color",
-            "id": "heading_color",
-            "label": "Heading color",
-            "default": "#111111"
-          },
-          {
-            "type": "select",
-            "id": "heading_weight",
-            "label": "Heading weight",
-            "default": "700",
-            "options": [
-              {
-                "value": "400",
-                "label": "Regular"
-              },
-              {
-                "value": "500",
-                "label": "Medium"
-              },
-              {
-                "value": "600",
-                "label": "Semibold"
-              },
-              {
-                "value": "700",
-                "label": "Bold"
-              }
-            ]
-          },
-          {
-            "type": "select",
-            "id": "heading_alignment",
-            "label": "Heading alignment",
-            "default": "left",
-            "options": [
-              {
-                "value": "left",
-                "label": "Left"
-              },
-              {
-                "value": "center",
-                "label": "Center"
-              },
-              {
-                "value": "right",
-                "label": "Right"
-              }
-            ]
-          },
-          {
-            "type": "range",
-            "id": "heading_size_desktop",
             "label": "Heading size (desktop)",
             "min": 12,
             "max": 28,
@@ -5908,194 +5755,61 @@
           },
           {
             "type": "range",
-            "id": "heading_size_mobile",
+            "id": "font_size_mobile",
             "label": "Heading size (mobile)",
             "min": 11,
-            "max": 24,
+            "max": 22,
             "step": 1,
             "unit": "px",
-            "default": 15
+            "default": 14
+          },
+          {
+            "type": "header",
+            "content": "Spacing"
           },
           {
             "type": "range",
-            "id": "heading_margin_bottom",
-            "label": "Space below heading",
+            "id": "padding_top",
+            "label": "Top padding",
             "min": 0,
-            "max": 40,
+            "max": 60,
             "step": 1,
             "unit": "px",
             "default": 12
           },
           {
+            "type": "range",
+            "id": "padding_bottom",
+            "label": "Bottom padding",
+            "min": 0,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 12
+          }
+        ]
+      },
+      {
+        "type": "benefits_pills",
+        "name": "Benefits pills",
+        "limit": 3,
+        "settings": [
+          {
             "type": "header",
-            "content": "Pill style (shared)"
-          },
-          {
-            "type": "color",
-            "id": "pill_text_color",
-            "label": "Pill text color",
-            "default": "#1f1147"
-          },
-          {
-            "type": "select",
-            "id": "pill_font_weight",
-            "label": "Pill text weight",
-            "default": "600",
-            "options": [
-              {
-                "value": "400",
-                "label": "Regular"
-              },
-              {
-                "value": "500",
-                "label": "Medium"
-              },
-              {
-                "value": "600",
-                "label": "Semibold"
-              },
-              {
-                "value": "700",
-                "label": "Bold"
-              }
-            ]
-          },
-          {
-            "type": "range",
-            "id": "pill_font_size_desktop",
-            "label": "Pill text size (desktop)",
-            "min": 10,
-            "max": 20,
-            "step": 1,
-            "unit": "px",
-            "default": 14
-          },
-          {
-            "type": "range",
-            "id": "pill_font_size_mobile",
-            "label": "Pill text size (mobile)",
-            "min": 9,
-            "max": 18,
-            "step": 1,
-            "unit": "px",
-            "default": 13
-          },
-          {
-            "type": "color",
-            "id": "pill_bg",
-            "label": "Pill background",
-            "default": "#F2F0FF"
-          },
-          {
-            "type": "range",
-            "id": "pill_radius",
-            "label": "Pill radius",
-            "min": 0,
-            "max": 100,
-            "step": 1,
-            "unit": "px",
-            "default": 100
-          },
-          {
-            "type": "range",
-            "id": "pill_padding_x",
-            "label": "Pill horizontal padding",
-            "min": 0,
-            "max": 32,
-            "step": 1,
-            "unit": "px",
-            "default": 14
-          },
-          {
-            "type": "range",
-            "id": "pill_padding_y",
-            "label": "Pill vertical padding",
-            "min": 0,
-            "max": 24,
-            "step": 1,
-            "unit": "px",
-            "default": 8
-          },
-          {
-            "type": "range",
-            "id": "pill_gap",
-            "label": "Gap between icon and text",
-            "min": 0,
-            "max": 16,
-            "step": 1,
-            "unit": "px",
-            "default": 8
-          },
-          {
-            "type": "range",
-            "id": "pill_icon_size_desktop",
-            "label": "Pill icon size (desktop)",
-            "min": 10,
-            "max": 32,
-            "step": 1,
-            "unit": "px",
-            "default": 16
-          },
-          {
-            "type": "range",
-            "id": "pill_icon_size_mobile",
-            "label": "Pill icon size (mobile)",
-            "min": 9,
-            "max": 28,
-            "step": 1,
-            "unit": "px",
-            "default": 14
-          },
-          {
-            "type": "color",
-            "id": "pill_icon_color",
-            "label": "Pill icon color",
-            "default": "#1f1147"
-          },
-          {
-            "type": "select",
-            "id": "pill_border_style",
-            "label": "Pill border style",
-            "default": "none",
-            "options": [
-              {
-                "value": "none",
-                "label": "None"
-              },
-              {
-                "value": "solid",
-                "label": "Solid"
-              },
-              {
-                "value": "dashed",
-                "label": "Dashed"
-              },
-              {
-                "value": "dotted",
-                "label": "Dotted"
-              }
-            ]
-          },
-          {
-            "type": "range",
-            "id": "pill_border_width",
-            "label": "Pill border width",
-            "min": 0,
-            "max": 4,
-            "step": 1,
-            "unit": "px",
-            "default": 0
-          },
-          {
-            "type": "color",
-            "id": "pill_border_color",
-            "label": "Pill border color"
+            "content": "Content"
           },
           {
             "type": "checkbox",
-            "id": "pill_shadow",
-            "label": "Pill shadow",
-            "default": false
+            "id": "show_heading",
+            "label": "Show heading",
+            "default": true
+          },
+          {
+            "type": "text",
+            "id": "heading_text",
+            "label": "Heading text",
+            "default": "Benefits include:",
+            "visible_if": "{{ block.settings.show_heading }}"
           },
           {
             "type": "header",
@@ -6111,7 +5825,8 @@
             "type": "text",
             "id": "pill1_text",
             "label": "Text",
-            "default": "Immune boost"
+            "default": "",
+            "visible_if": "{{ block.settings.pill1_enable }}"
           },
           {
             "type": "select",
@@ -6136,7 +5851,8 @@
                 "label": "No icon"
               }
             ],
-            "info": "Pick a preset, paste an SVG or upload an image."
+            "info": "Pick a preset, paste an SVG or upload an image.",
+            "visible_if": "{{ block.settings.pill1_enable }}"
           },
           {
             "type": "select",
@@ -6224,33 +5940,39 @@
                 "value": "trophy",
                 "label": "Trophy"
               }
-            ]
+            ],
+            "visible_if": "{{ block.settings.pill1_enable and block.settings.pill1_icon_source == 'preset' }}"
           },
           {
             "type": "image_picker",
             "id": "pill1_icon_image",
-            "label": "Icon image"
+            "label": "Icon image",
+            "visible_if": "{{ block.settings.pill1_enable and block.settings.pill1_icon_source == 'image' }}"
           },
           {
             "type": "textarea",
             "id": "pill1_icon_svg",
             "label": "Custom SVG",
-            "info": "Paste raw <svg> markup. Stroke uses currentColor."
+            "info": "Paste raw <svg> markup. Stroke uses currentColor.",
+            "visible_if": "{{ block.settings.pill1_enable and block.settings.pill1_icon_source == 'svg' }}"
           },
           {
             "type": "color",
             "id": "pill1_icon_color",
-            "label": "Icon color (override)"
+            "label": "Icon color (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill1_enable }}"
           },
           {
             "type": "color",
             "id": "pill1_bg_color",
-            "label": "Background (override)"
+            "label": "Background (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill1_enable }}"
           },
           {
             "type": "color",
             "id": "pill1_text_color",
-            "label": "Text color (override)"
+            "label": "Text color (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill1_enable }}"
           },
           {
             "type": "header",
@@ -6266,7 +5988,8 @@
             "type": "text",
             "id": "pill2_text",
             "label": "Text",
-            "default": "Improved mood"
+            "default": "",
+            "visible_if": "{{ block.settings.pill2_enable }}"
           },
           {
             "type": "select",
@@ -6291,7 +6014,8 @@
                 "label": "No icon"
               }
             ],
-            "info": "Pick a preset, paste an SVG or upload an image."
+            "info": "Pick a preset, paste an SVG or upload an image.",
+            "visible_if": "{{ block.settings.pill2_enable }}"
           },
           {
             "type": "select",
@@ -6379,32 +6103,38 @@
                 "value": "trophy",
                 "label": "Trophy"
               }
-            ]
+            ],
+            "visible_if": "{{ block.settings.pill2_enable and block.settings.pill2_icon_source == 'preset' }}"
           },
           {
             "type": "image_picker",
             "id": "pill2_icon_image",
-            "label": "Icon image"
+            "label": "Icon image",
+            "visible_if": "{{ block.settings.pill2_enable and block.settings.pill2_icon_source == 'image' }}"
           },
           {
             "type": "textarea",
             "id": "pill2_icon_svg",
-            "label": "Custom SVG"
+            "label": "Custom SVG",
+            "visible_if": "{{ block.settings.pill2_enable and block.settings.pill2_icon_source == 'svg' }}"
           },
           {
             "type": "color",
             "id": "pill2_icon_color",
-            "label": "Icon color (override)"
+            "label": "Icon color (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill2_enable }}"
           },
           {
             "type": "color",
             "id": "pill2_bg_color",
-            "label": "Background (override)"
+            "label": "Background (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill2_enable }}"
           },
           {
             "type": "color",
             "id": "pill2_text_color",
-            "label": "Text color (override)"
+            "label": "Text color (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill2_enable }}"
           },
           {
             "type": "header",
@@ -6420,7 +6150,8 @@
             "type": "text",
             "id": "pill3_text",
             "label": "Text",
-            "default": "Skin health"
+            "default": "",
+            "visible_if": "{{ block.settings.pill3_enable }}"
           },
           {
             "type": "select",
@@ -6445,7 +6176,8 @@
                 "label": "No icon"
               }
             ],
-            "info": "Pick a preset, paste an SVG or upload an image."
+            "info": "Pick a preset, paste an SVG or upload an image.",
+            "visible_if": "{{ block.settings.pill3_enable }}"
           },
           {
             "type": "select",
@@ -6533,32 +6265,38 @@
                 "value": "trophy",
                 "label": "Trophy"
               }
-            ]
+            ],
+            "visible_if": "{{ block.settings.pill3_enable and block.settings.pill3_icon_source == 'preset' }}"
           },
           {
             "type": "image_picker",
             "id": "pill3_icon_image",
-            "label": "Icon image"
+            "label": "Icon image",
+            "visible_if": "{{ block.settings.pill3_enable and block.settings.pill3_icon_source == 'image' }}"
           },
           {
             "type": "textarea",
             "id": "pill3_icon_svg",
-            "label": "Custom SVG"
+            "label": "Custom SVG",
+            "visible_if": "{{ block.settings.pill3_enable and block.settings.pill3_icon_source == 'svg' }}"
           },
           {
             "type": "color",
             "id": "pill3_icon_color",
-            "label": "Icon color (override)"
+            "label": "Icon color (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill3_enable }}"
           },
           {
             "type": "color",
             "id": "pill3_bg_color",
-            "label": "Background (override)"
+            "label": "Background (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill3_enable }}"
           },
           {
             "type": "color",
             "id": "pill3_text_color",
-            "label": "Text color (override)"
+            "label": "Text color (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill3_enable }}"
           },
           {
             "type": "header",
@@ -6573,7 +6311,8 @@
           {
             "type": "text",
             "id": "pill4_text",
-            "label": "Text"
+            "label": "Text",
+            "visible_if": "{{ block.settings.pill4_enable }}"
           },
           {
             "type": "select",
@@ -6598,7 +6337,8 @@
                 "label": "No icon"
               }
             ],
-            "info": "Pick a preset, paste an SVG or upload an image."
+            "info": "Pick a preset, paste an SVG or upload an image.",
+            "visible_if": "{{ block.settings.pill4_enable }}"
           },
           {
             "type": "select",
@@ -6686,32 +6426,38 @@
                 "value": "trophy",
                 "label": "Trophy"
               }
-            ]
+            ],
+            "visible_if": "{{ block.settings.pill4_enable and block.settings.pill4_icon_source == 'preset' }}"
           },
           {
             "type": "image_picker",
             "id": "pill4_icon_image",
-            "label": "Icon image"
+            "label": "Icon image",
+            "visible_if": "{{ block.settings.pill4_enable and block.settings.pill4_icon_source == 'image' }}"
           },
           {
             "type": "textarea",
             "id": "pill4_icon_svg",
-            "label": "Custom SVG"
+            "label": "Custom SVG",
+            "visible_if": "{{ block.settings.pill4_enable and block.settings.pill4_icon_source == 'svg' }}"
           },
           {
             "type": "color",
             "id": "pill4_icon_color",
-            "label": "Icon color (override)"
+            "label": "Icon color (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill4_enable }}"
           },
           {
             "type": "color",
             "id": "pill4_bg_color",
-            "label": "Background (override)"
+            "label": "Background (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill4_enable }}"
           },
           {
             "type": "color",
             "id": "pill4_text_color",
-            "label": "Text color (override)"
+            "label": "Text color (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill4_enable }}"
           },
           {
             "type": "header",
@@ -6726,7 +6472,8 @@
           {
             "type": "text",
             "id": "pill5_text",
-            "label": "Text"
+            "label": "Text",
+            "visible_if": "{{ block.settings.pill5_enable }}"
           },
           {
             "type": "select",
@@ -6751,7 +6498,8 @@
                 "label": "No icon"
               }
             ],
-            "info": "Pick a preset, paste an SVG or upload an image."
+            "info": "Pick a preset, paste an SVG or upload an image.",
+            "visible_if": "{{ block.settings.pill5_enable }}"
           },
           {
             "type": "select",
@@ -6839,32 +6587,38 @@
                 "value": "trophy",
                 "label": "Trophy"
               }
-            ]
+            ],
+            "visible_if": "{{ block.settings.pill5_enable and block.settings.pill5_icon_source == 'preset' }}"
           },
           {
             "type": "image_picker",
             "id": "pill5_icon_image",
-            "label": "Icon image"
+            "label": "Icon image",
+            "visible_if": "{{ block.settings.pill5_enable and block.settings.pill5_icon_source == 'image' }}"
           },
           {
             "type": "textarea",
             "id": "pill5_icon_svg",
-            "label": "Custom SVG"
+            "label": "Custom SVG",
+            "visible_if": "{{ block.settings.pill5_enable and block.settings.pill5_icon_source == 'svg' }}"
           },
           {
             "type": "color",
             "id": "pill5_icon_color",
-            "label": "Icon color (override)"
+            "label": "Icon color (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill5_enable }}"
           },
           {
             "type": "color",
             "id": "pill5_bg_color",
-            "label": "Background (override)"
+            "label": "Background (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill5_enable }}"
           },
           {
             "type": "color",
             "id": "pill5_text_color",
-            "label": "Text color (override)"
+            "label": "Text color (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill5_enable }}"
           },
           {
             "type": "header",
@@ -6879,7 +6633,8 @@
           {
             "type": "text",
             "id": "pill6_text",
-            "label": "Text"
+            "label": "Text",
+            "visible_if": "{{ block.settings.pill6_enable }}"
           },
           {
             "type": "select",
@@ -6904,7 +6659,8 @@
                 "label": "No icon"
               }
             ],
-            "info": "Pick a preset, paste an SVG or upload an image."
+            "info": "Pick a preset, paste an SVG or upload an image.",
+            "visible_if": "{{ block.settings.pill6_enable }}"
           },
           {
             "type": "select",
@@ -6992,32 +6748,420 @@
                 "value": "trophy",
                 "label": "Trophy"
               }
-            ]
+            ],
+            "visible_if": "{{ block.settings.pill6_enable and block.settings.pill6_icon_source == 'preset' }}"
           },
           {
             "type": "image_picker",
             "id": "pill6_icon_image",
-            "label": "Icon image"
+            "label": "Icon image",
+            "visible_if": "{{ block.settings.pill6_enable and block.settings.pill6_icon_source == 'image' }}"
           },
           {
             "type": "textarea",
             "id": "pill6_icon_svg",
-            "label": "Custom SVG"
+            "label": "Custom SVG",
+            "visible_if": "{{ block.settings.pill6_enable and block.settings.pill6_icon_source == 'svg' }}"
           },
           {
             "type": "color",
             "id": "pill6_icon_color",
-            "label": "Icon color (override)"
+            "label": "Icon color (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill6_enable }}"
           },
           {
             "type": "color",
             "id": "pill6_bg_color",
-            "label": "Background (override)"
+            "label": "Background (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill6_enable }}"
           },
           {
             "type": "color",
             "id": "pill6_text_color",
-            "label": "Text color (override)"
+            "label": "Text color (override)",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill6_enable }}"
+          },
+          {
+            "type": "header",
+            "content": "Layout"
+          },
+          {
+            "type": "checkbox",
+            "id": "render_in_sidebar",
+            "label": "Show in the order summary",
+            "default": false,
+            "info": "On: in the order summary column. Off: below the cart."
+          },
+          {
+            "type": "select",
+            "id": "alignment",
+            "label": "Pills alignment",
+            "default": "flex-start",
+            "options": [
+              {
+                "value": "flex-start",
+                "label": "Left"
+              },
+              {
+                "value": "center",
+                "label": "Center"
+              },
+              {
+                "value": "flex-end",
+                "label": "Right"
+              }
+            ]
+          },
+          {
+            "type": "select",
+            "id": "mobile_layout",
+            "label": "Mobile layout",
+            "default": "wrap",
+            "options": [
+              {
+                "value": "stack",
+                "label": "1 per row (stacked)"
+              },
+              {
+                "value": "two",
+                "label": "2 per row"
+              },
+              {
+                "value": "wrap",
+                "label": "Auto wrap (fit as many as fit)"
+              }
+            ],
+            "info": "How the pills arrange on mobile. 'Auto wrap' fits 2 per row when there's space, else 1."
+          },
+          {
+            "type": "range",
+            "id": "gap_x",
+            "label": "Horizontal gap between pills",
+            "min": 0,
+            "max": 32,
+            "step": 1,
+            "unit": "px",
+            "default": 8
+          },
+          {
+            "type": "range",
+            "id": "gap_y",
+            "label": "Vertical gap between pills",
+            "min": 0,
+            "max": 32,
+            "step": 1,
+            "unit": "px",
+            "default": 8
+          },
+          {
+            "type": "select",
+            "id": "heading_alignment",
+            "label": "Heading alignment",
+            "default": "left",
+            "options": [
+              {
+                "value": "left",
+                "label": "Left"
+              },
+              {
+                "value": "center",
+                "label": "Center"
+              },
+              {
+                "value": "right",
+                "label": "Right"
+              }
+            ],
+            "visible_if": "{{ block.settings.show_heading }}"
+          },
+          {
+            "type": "range",
+            "id": "heading_margin_bottom",
+            "label": "Space below heading",
+            "min": 0,
+            "max": 40,
+            "step": 1,
+            "unit": "px",
+            "default": 12,
+            "visible_if": "{{ block.settings.show_heading }}"
+          },
+          {
+            "type": "range",
+            "id": "pill_radius",
+            "label": "Pill radius",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "unit": "px",
+            "default": 100
+          },
+          {
+            "type": "range",
+            "id": "pill_padding_x",
+            "label": "Pill horizontal padding",
+            "min": 0,
+            "max": 32,
+            "step": 1,
+            "unit": "px",
+            "default": 14
+          },
+          {
+            "type": "range",
+            "id": "pill_padding_y",
+            "label": "Pill vertical padding",
+            "min": 0,
+            "max": 24,
+            "step": 1,
+            "unit": "px",
+            "default": 8
+          },
+          {
+            "type": "range",
+            "id": "pill_gap",
+            "label": "Gap between icon and text",
+            "min": 0,
+            "max": 16,
+            "step": 1,
+            "unit": "px",
+            "default": 8
+          },
+          {
+            "type": "range",
+            "id": "pill_icon_size_desktop",
+            "label": "Pill icon size (desktop)",
+            "min": 10,
+            "max": 32,
+            "step": 1,
+            "unit": "px",
+            "default": 16
+          },
+          {
+            "type": "range",
+            "id": "pill_icon_size_mobile",
+            "label": "Pill icon size (mobile)",
+            "min": 9,
+            "max": 28,
+            "step": 1,
+            "unit": "px",
+            "default": 14
+          },
+          {
+            "type": "select",
+            "id": "pill_border_style",
+            "label": "Pill border style",
+            "default": "none",
+            "options": [
+              {
+                "value": "none",
+                "label": "None"
+              },
+              {
+                "value": "solid",
+                "label": "Solid"
+              },
+              {
+                "value": "dashed",
+                "label": "Dashed"
+              },
+              {
+                "value": "dotted",
+                "label": "Dotted"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "pill_border_width",
+            "label": "Pill border width",
+            "min": 0,
+            "max": 4,
+            "step": 1,
+            "unit": "px",
+            "default": 0,
+            "visible_if": "{{ block.settings.pill_border_style != 'none' }}"
+          },
+          {
+            "type": "checkbox",
+            "id": "pill_shadow",
+            "label": "Pill shadow",
+            "default": false
+          },
+          {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "custom_style",
+            "label": "Enable custom styling",
+            "default": false,
+            "info": "Off: colours follow the cart's colour scheme."
+          },
+          {
+            "type": "color",
+            "id": "heading_color",
+            "label": "Heading color",
+            "default": "#111111",
+            "visible_if": "{{ block.settings.custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "pill_text_color",
+            "label": "Pill text color",
+            "default": "#1f1147",
+            "visible_if": "{{ block.settings.custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "pill_bg",
+            "label": "Pill background",
+            "default": "#F2F0FF",
+            "visible_if": "{{ block.settings.custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "pill_icon_color",
+            "label": "Pill icon color",
+            "default": "#1f1147",
+            "visible_if": "{{ block.settings.custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "pill_border_color",
+            "label": "Pill border color",
+            "visible_if": "{{ block.settings.custom_style and block.settings.pill_border_style != 'none' }}"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom fonts",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
+          },
+          {
+            "type": "select",
+            "id": "heading_weight",
+            "label": "Heading weight",
+            "default": "700",
+            "options": [
+              {
+                "value": "400",
+                "label": "Regular"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semibold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              }
+            ],
+            "visible_if": "{{ block.settings.show_heading }}"
+          },
+          {
+            "type": "range",
+            "id": "heading_size_desktop",
+            "label": "Heading size (desktop)",
+            "min": 12,
+            "max": 28,
+            "step": 1,
+            "unit": "px",
+            "default": 16,
+            "visible_if": "{{ block.settings.show_heading }}"
+          },
+          {
+            "type": "range",
+            "id": "heading_size_mobile",
+            "label": "Heading size (mobile)",
+            "min": 11,
+            "max": 24,
+            "step": 1,
+            "unit": "px",
+            "default": 15,
+            "visible_if": "{{ block.settings.show_heading }}"
+          },
+          {
+            "type": "select",
+            "id": "pill_font_weight",
+            "label": "Pill text weight",
+            "default": "600",
+            "options": [
+              {
+                "value": "400",
+                "label": "Regular"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semibold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              }
+            ]
+          },
+          {
+            "type": "range",
+            "id": "pill_font_size_desktop",
+            "label": "Pill text size (desktop)",
+            "min": 10,
+            "max": 20,
+            "step": 1,
+            "unit": "px",
+            "default": 14
+          },
+          {
+            "type": "range",
+            "id": "pill_font_size_mobile",
+            "label": "Pill text size (mobile)",
+            "min": 9,
+            "max": 18,
+            "step": 1,
+            "unit": "px",
+            "default": 13
+          },
+          {
+            "type": "header",
+            "content": "Spacing"
+          },
+          {
+            "type": "range",
+            "id": "padding_top",
+            "label": "Top padding",
+            "min": 0,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 12
+          },
+          {
+            "type": "range",
+            "id": "padding_bottom",
+            "label": "Bottom padding",
+            "min": 0,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 12
           }
         ]
       },
@@ -7028,20 +7172,14 @@
         "settings": [
           {
             "type": "header",
-            "content": "Placement"
+            "content": "Layout"
           },
           {
             "type": "checkbox",
             "id": "render_in_sidebar",
-            "label": "Enable in right container",
+            "label": "Show in the order summary",
             "default": false,
-            "info": "Shows in the cart sidebar, in block order."
-          },
-          {
-            "type": "color",
-            "id": "color",
-            "label": "Color",
-            "default": "#E5E7EB"
+            "info": "On: in the order summary column. Off: below the cart."
           },
           {
             "type": "range",
@@ -7054,9 +7192,31 @@
             "default": 1
           },
           {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false,
+            "info": "Off: colours follow the cart's colour scheme."
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "default": "#E5E7EB",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "header",
+            "content": "Spacing"
+          },
+          {
             "type": "range",
             "id": "margin_top",
-            "label": "Margin top",
+            "label": "Top margin",
             "min": 0,
             "max": 80,
             "step": 1,
@@ -7066,7 +7226,7 @@
           {
             "type": "range",
             "id": "margin_bottom",
-            "label": "Margin bottom",
+            "label": "Bottom margin",
             "min": 0,
             "max": 80,
             "step": 1,
@@ -7082,24 +7242,13 @@
         "settings": [
           {
             "type": "header",
-            "content": "Placement"
-          },
-          {
-            "type": "checkbox",
-            "id": "render_in_sidebar",
-            "label": "Enable in right container",
-            "default": false,
-            "info": "Shows in the cart sidebar, in block order."
-          },
-          {
-            "type": "header",
             "content": "Content"
           },
           {
             "type": "text",
             "id": "text",
             "label": "Text",
-            "default": "30-Day Money-Back Guarantee"
+            "default": "Secure checkout"
           },
           {
             "type": "select",
@@ -7131,19 +7280,34 @@
           },
           {
             "type": "header",
-            "content": "Colors & appearance"
+            "content": "Layout"
           },
           {
-            "type": "color",
-            "id": "icon_color",
-            "label": "Icon color",
-            "default": "#475569"
+            "type": "checkbox",
+            "id": "render_in_sidebar",
+            "label": "Show in the order summary",
+            "default": false,
+            "info": "On: in the order summary column. Off: below the cart."
           },
           {
-            "type": "color",
-            "id": "text_color",
-            "label": "Text color",
-            "default": "#475569"
+            "type": "select",
+            "id": "alignment",
+            "label": "Alignment",
+            "default": "flex-start",
+            "options": [
+              {
+                "value": "flex-start",
+                "label": "Left"
+              },
+              {
+                "value": "center",
+                "label": "Center"
+              },
+              {
+                "value": "flex-end",
+                "label": "Right"
+              }
+            ]
           },
           {
             "type": "range",
@@ -7157,7 +7321,45 @@
           },
           {
             "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false,
+            "info": "Off: colours follow the cart's colour scheme."
+          },
+          {
+            "type": "color",
+            "id": "text_color",
+            "label": "Text color",
+            "default": "#475569",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "icon_color",
+            "label": "Icon color",
+            "default": "#475569",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "header",
             "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom fonts",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
           },
           {
             "type": "range",
@@ -7195,32 +7397,12 @@
           },
           {
             "type": "header",
-            "content": "Layout & spacing"
-          },
-          {
-            "type": "select",
-            "id": "alignment",
-            "label": "Alignment",
-            "default": "flex-start",
-            "options": [
-              {
-                "value": "flex-start",
-                "label": "Left"
-              },
-              {
-                "value": "center",
-                "label": "Center"
-              },
-              {
-                "value": "flex-end",
-                "label": "Right"
-              }
-            ]
+            "content": "Spacing"
           },
           {
             "type": "range",
             "id": "margin_top",
-            "label": "Margin top",
+            "label": "Top margin",
             "min": 0,
             "max": 60,
             "step": 1,
@@ -7230,7 +7412,7 @@
           {
             "type": "range",
             "id": "margin_bottom",
-            "label": "Margin bottom",
+            "label": "Bottom margin",
             "min": 0,
             "max": 60,
             "step": 1,
@@ -7246,83 +7428,27 @@
         "settings": [
           {
             "type": "header",
-            "content": "Placement"
-          },
-          {
-            "type": "checkbox",
-            "id": "render_in_sidebar",
-            "label": "Enable in right container",
-            "default": false,
-            "info": "Shows in the cart sidebar, in block order."
-          },
-          {
-            "type": "header",
             "content": "Content"
           },
           {
             "type": "text",
             "id": "referral_text",
             "label": "Message",
-            "default": "4.8/5 based on 137,135 reviews"
+            "default": "",
+            "info": "Your real numbers, for example from your reviews app."
           },
           {
             "type": "text",
             "id": "referral_accent_text",
-            "label": "Accent substring",
-            "info": "Exact text within the message to color with the accent.",
-            "default": "4.8/5"
-          },
-          {
-            "type": "color",
-            "id": "referral_text_color",
-            "label": "Message color",
-            "default": "#0F172A"
-          },
-          {
-            "type": "color",
-            "id": "referral_accent_color",
-            "label": "Accent color",
-            "default": "#FF5A3D"
-          },
-          {
-            "type": "header",
-            "content": "Stars"
+            "label": "Highlighted words",
+            "info": "Part of the message drawn in the accent colour.",
+            "default": ""
           },
           {
             "type": "checkbox",
             "id": "show_stars",
             "label": "Show 5 stars",
             "default": true
-          },
-          {
-            "type": "color",
-            "id": "star_color",
-            "label": "Star color",
-            "default": "#FBBF24"
-          },
-          {
-            "type": "range",
-            "id": "star_size_desktop",
-            "label": "Star size (desktop)",
-            "min": 10,
-            "max": 32,
-            "step": 1,
-            "unit": "px",
-            "default": 18
-          },
-          {
-            "type": "range",
-            "id": "star_size_mobile",
-            "label": "Star size (mobile)",
-            "min": 10,
-            "max": 28,
-            "step": 1,
-            "unit": "px",
-            "default": 16
-          },
-          {
-            "type": "header",
-            "content": "Avatars"
           },
           {
             "type": "image_picker",
@@ -7348,6 +7474,39 @@
             "type": "image_picker",
             "id": "ref_avatar_5",
             "label": "Avatar 5"
+          },
+          {
+            "type": "header",
+            "content": "Layout"
+          },
+          {
+            "type": "checkbox",
+            "id": "render_in_sidebar",
+            "label": "Show in the order summary",
+            "default": false,
+            "info": "On: in the order summary column. Off: below the cart."
+          },
+          {
+            "type": "range",
+            "id": "star_size_desktop",
+            "label": "Star size (desktop)",
+            "min": 10,
+            "max": 32,
+            "step": 1,
+            "unit": "px",
+            "default": 18,
+            "visible_if": "{{ block.settings.show_stars }}"
+          },
+          {
+            "type": "range",
+            "id": "star_size_mobile",
+            "label": "Star size (mobile)",
+            "min": 10,
+            "max": 28,
+            "step": 1,
+            "unit": "px",
+            "default": 16,
+            "visible_if": "{{ block.settings.show_stars }}"
           },
           {
             "type": "range",
@@ -7395,14 +7554,60 @@
             "default": 2
           },
           {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false,
+            "info": "Off: colours follow the cart's colour scheme."
+          },
+          {
+            "type": "color",
+            "id": "referral_text_color",
+            "label": "Message color",
+            "default": "#0F172A",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "referral_accent_color",
+            "label": "Accent color",
+            "default": "#FF5A3D",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "star_color",
+            "label": "Star color",
+            "default": "#FBBF24",
+            "visible_if": "{{ block.settings.enable_custom_style and block.settings.show_stars }}"
+          },
+          {
             "type": "color",
             "id": "ref_avatar_border_color",
             "label": "Avatar border color",
-            "default": "#FFFFFF"
+            "default": "#FFFFFF",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           },
           {
             "type": "header",
             "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom fonts",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
           },
           {
             "type": "range",
@@ -7430,28 +7635,18 @@
           },
           {
             "type": "range",
-            "id": "referral_inline_gap_desktop",
-            "label": "Avatar gap (desktop)",
+            "id": "margin_top",
+            "label": "Top margin",
             "min": 0,
-            "max": 60,
+            "max": 80,
             "step": 1,
             "unit": "px",
-            "default": 12
-          },
-          {
-            "type": "range",
-            "id": "referral_inline_gap_mobile",
-            "label": "Avatar gap (mobile)",
-            "min": 0,
-            "max": 60,
-            "step": 1,
-            "unit": "px",
-            "default": 8
+            "default": 0
           },
           {
             "type": "range",
             "id": "referral_to_title_gap_desktop",
-            "label": "Margin bottom (desktop)",
+            "label": "Bottom margin (desktop)",
             "min": 0,
             "max": 80,
             "step": 1,
@@ -7461,7 +7656,7 @@
           {
             "type": "range",
             "id": "referral_to_title_gap_mobile",
-            "label": "Margin bottom (mobile)",
+            "label": "Bottom margin (mobile)",
             "min": 0,
             "max": 80,
             "step": 1,
@@ -7470,120 +7665,39 @@
           },
           {
             "type": "range",
-            "id": "margin_top",
-            "label": "Margin top",
+            "id": "referral_inline_gap_desktop",
+            "label": "Gap between items (desktop)",
             "min": 0,
-            "max": 80,
+            "max": 60,
             "step": 1,
             "unit": "px",
-            "default": 0
+            "default": 12
+          },
+          {
+            "type": "range",
+            "id": "referral_inline_gap_mobile",
+            "label": "Gap between items (mobile)",
+            "min": 0,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 8
           }
         ]
       },
       {
         "type": "info_box",
-        "name": "Info Box",
+        "name": "Info box",
         "settings": [
           {
             "type": "header",
-            "content": "Placement"
-          },
-          {
-            "type": "checkbox",
-            "id": "render_in_sidebar",
-            "label": "Enable in right container",
-            "default": false,
-            "info": "Shows in the cart sidebar, in block order."
-          },
-          {
-            "type": "header",
-            "content": "Box style"
-          },
-          {
-            "type": "color",
-            "id": "box_bg",
-            "label": "Background",
-            "default": "rgba(0,0,0,0)"
-          },
-          {
-            "type": "color",
-            "id": "border_color",
-            "label": "Border / divider",
-            "default": "#E5E7EB"
-          },
-          {
-            "type": "color",
-            "id": "text_color",
-            "label": "Text color",
-            "default": "rgba(0,0,0,0)",
-            "info": "Leave transparent to inherit the active color scheme's text colour. Pick a colour to override."
-          },
-          {
-            "type": "color",
-            "id": "muted_color",
-            "label": "Body text color",
-            "default": "rgba(0,0,0,0)",
-            "info": "Leave transparent to inherit the active color scheme. Pick a colour to override."
-          },
-          {
-            "type": "range",
-            "id": "box_radius",
-            "label": "Corner radius",
-            "min": 0,
-            "max": 24,
-            "step": 1,
-            "unit": "px",
-            "default": 12
-          },
-          {
-            "type": "range",
-            "id": "row_pad_y",
-            "label": "Row padding y",
-            "min": 8,
-            "max": 28,
-            "step": 1,
-            "unit": "px",
-            "default": 16
-          },
-          {
-            "type": "range",
-            "id": "row_pad_x",
-            "label": "Row padding x",
-            "min": 8,
-            "max": 28,
-            "step": 1,
-            "unit": "px",
-            "default": 18
-          },
-          {
-            "type": "range",
-            "id": "margin_top",
-            "label": "Margin top",
-            "min": 0,
-            "max": 60,
-            "step": 2,
-            "unit": "px",
-            "default": 16
-          },
-          {
-            "type": "range",
-            "id": "margin_bottom",
-            "label": "Margin bottom",
-            "min": 0,
-            "max": 60,
-            "step": 2,
-            "unit": "px",
-            "default": 16
-          },
-          {
-            "type": "header",
-            "content": "Top message row"
+            "content": "Content"
           },
           {
             "type": "richtext",
             "id": "top_text",
             "label": "Message",
-            "default": "<p>Free delivery on orders over $100</p>"
+            "default": ""
           },
           {
             "type": "checkbox",
@@ -7621,13 +7735,8 @@
                 "value": "clock",
                 "label": "Clock"
               }
-            ]
-          },
-          {
-            "type": "color",
-            "id": "top_icon_color",
-            "label": "Icon color",
-            "default": "#111111"
+            ],
+            "visible_if": "{{ block.settings.top_show_icon }}"
           },
           {
             "type": "header",
@@ -7637,13 +7746,13 @@
             "type": "text",
             "id": "collapse_title",
             "label": "Title",
-            "default": "Delivery information"
+            "default": ""
           },
           {
             "type": "richtext",
             "id": "collapse_body",
             "label": "Body",
-            "default": "<p><em>All orders are shipped from Texas and you will have your package within 2-3 business days.</em></p><p><em>Orders placed before 12:00 Monday to Thursday will be shipped the same day.</em></p>"
+            "default": ""
           },
           {
             "type": "checkbox",
@@ -7653,7 +7762,7 @@
           },
           {
             "type": "header",
-            "content": "Collapsible row 2 (optional)"
+            "content": "Collapsible row 2"
           },
           {
             "type": "text",
@@ -7682,6 +7791,110 @@
             "default": true
           },
           {
+            "type": "checkbox",
+            "id": "badge_visa",
+            "label": "Visa",
+            "default": true,
+            "visible_if": "{{ block.settings.show_badges }}"
+          },
+          {
+            "type": "checkbox",
+            "id": "badge_master",
+            "label": "Mastercard",
+            "default": true,
+            "visible_if": "{{ block.settings.show_badges }}"
+          },
+          {
+            "type": "checkbox",
+            "id": "badge_amex",
+            "label": "Amex",
+            "default": true,
+            "visible_if": "{{ block.settings.show_badges }}"
+          },
+          {
+            "type": "checkbox",
+            "id": "badge_apple_pay",
+            "label": "Apple Pay",
+            "default": true,
+            "visible_if": "{{ block.settings.show_badges }}"
+          },
+          {
+            "type": "checkbox",
+            "id": "badge_google_pay",
+            "label": "Google Pay",
+            "default": true,
+            "visible_if": "{{ block.settings.show_badges }}"
+          },
+          {
+            "type": "checkbox",
+            "id": "badge_paypal",
+            "label": "PayPal",
+            "default": true,
+            "visible_if": "{{ block.settings.show_badges }}"
+          },
+          {
+            "type": "checkbox",
+            "id": "badge_klarna",
+            "label": "Klarna",
+            "default": false,
+            "visible_if": "{{ block.settings.show_badges }}"
+          },
+          {
+            "type": "checkbox",
+            "id": "badge_discover",
+            "label": "Discover",
+            "default": false,
+            "visible_if": "{{ block.settings.show_badges }}"
+          },
+          {
+            "type": "checkbox",
+            "id": "badge_amazon",
+            "label": "Amazon Pay",
+            "default": false,
+            "visible_if": "{{ block.settings.show_badges }}"
+          },
+          {
+            "type": "header",
+            "content": "Layout"
+          },
+          {
+            "type": "checkbox",
+            "id": "render_in_sidebar",
+            "label": "Show in the order summary",
+            "default": false,
+            "info": "On: in the order summary column. Off: below the cart."
+          },
+          {
+            "type": "range",
+            "id": "box_radius",
+            "label": "Corner radius",
+            "min": 0,
+            "max": 24,
+            "step": 1,
+            "unit": "px",
+            "default": 12
+          },
+          {
+            "type": "range",
+            "id": "row_pad_y",
+            "label": "Row padding (vertical)",
+            "min": 8,
+            "max": 28,
+            "step": 1,
+            "unit": "px",
+            "default": 16
+          },
+          {
+            "type": "range",
+            "id": "row_pad_x",
+            "label": "Row padding (horizontal)",
+            "min": 8,
+            "max": 28,
+            "step": 1,
+            "unit": "px",
+            "default": 18
+          },
+          {
             "type": "range",
             "id": "badge_height",
             "label": "Badge height",
@@ -7689,61 +7902,97 @@
             "max": 40,
             "step": 1,
             "unit": "px",
-            "default": 24
+            "default": 24,
+            "visible_if": "{{ block.settings.show_badges }}"
+          },
+          {
+            "type": "header",
+            "content": "Appearance"
           },
           {
             "type": "checkbox",
-            "id": "badge_visa",
-            "label": "Visa",
-            "default": true
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false,
+            "info": "Off: colours follow the cart's colour scheme."
+          },
+          {
+            "type": "color",
+            "id": "box_bg",
+            "label": "Background",
+            "default": "rgba(0,0,0,0)",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "border_color",
+            "label": "Border / divider",
+            "default": "#E5E7EB",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "text_color",
+            "label": "Title color",
+            "default": "rgba(0,0,0,0)",
+            "info": "Leave transparent to inherit the active color scheme's text colour. Pick a colour to override.",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "muted_color",
+            "label": "Body text color",
+            "default": "rgba(0,0,0,0)",
+            "info": "Leave transparent to inherit the active color scheme. Pick a colour to override.",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "top_icon_color",
+            "label": "Icon color",
+            "default": "#111111",
+            "visible_if": "{{ block.settings.enable_custom_style and block.settings.top_show_icon }}"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
           },
           {
             "type": "checkbox",
-            "id": "badge_master",
-            "label": "Mastercard",
-            "default": true
-          },
-          {
-            "type": "checkbox",
-            "id": "badge_amex",
-            "label": "Amex",
-            "default": true
-          },
-          {
-            "type": "checkbox",
-            "id": "badge_apple_pay",
-            "label": "Apple Pay",
-            "default": true
-          },
-          {
-            "type": "checkbox",
-            "id": "badge_google_pay",
-            "label": "Google Pay",
-            "default": true
-          },
-          {
-            "type": "checkbox",
-            "id": "badge_paypal",
-            "label": "PayPal",
-            "default": true
-          },
-          {
-            "type": "checkbox",
-            "id": "badge_klarna",
-            "label": "Klarna",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom fonts",
             "default": false
           },
           {
-            "type": "checkbox",
-            "id": "badge_discover",
-            "label": "Discover",
-            "default": false
+            "type": "font_picker",
+            "id": "font",
+            "label": "Font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
           },
           {
-            "type": "checkbox",
-            "id": "badge_amazon",
-            "label": "Amazon Pay",
-            "default": false
+            "type": "header",
+            "content": "Spacing"
+          },
+          {
+            "type": "range",
+            "id": "margin_top",
+            "label": "Top margin",
+            "min": 0,
+            "max": 60,
+            "step": 2,
+            "unit": "px",
+            "default": 16
+          },
+          {
+            "type": "range",
+            "id": "margin_bottom",
+            "label": "Bottom margin",
+            "min": 0,
+            "max": 60,
+            "step": 2,
+            "unit": "px",
+            "default": 16
           }
         ]
       },

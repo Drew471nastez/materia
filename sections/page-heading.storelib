@@ -75,10 +75,67 @@
 {%- capture style -%}
   --section-pt: {{ section_st.padding_top }}; --section-pb: {{ section_st.padding_bottom }};{%- if background_image != blank and height == 'adapt' -%}--aspect-ratio: {{ background_image.aspect_ratio }};{% endif %}--overlay-opacity: {{ section_st.overlay_opacity }}%;
 {%- endcapture -%}
+{%- liquid
+  comment
+    The page's own title and text, shown when the heading or description
+    block is left empty. The live controller reads them back from the page.
+  endcomment
+  if template contains 'blog'
+    assign ph_title = blog.title | default: page_title
+  elsif template contains 'cart'
+    assign ph_title = 'general.cart.title' | t
+  else
+    assign ph_title = page.title | default: page_title
+  endif
+  assign ph_justify = 'center'
+  if section_st.alignment == 'left'
+    assign ph_justify = 'flex-start'
+  elsif section_st.alignment == 'right'
+    assign ph_justify = 'flex-end'
+  endif
+-%}
 {%- if section.blocks.size > 0 -%}
+  {%- comment -%} The breadcrumb trail: the same separators and colours as the Breadcrumbs section, every value a variable on the trail. {%- endcomment -%}
+  <style>
+    #shopify-section-{{ section.id }} .bc {
+      font-family: var(--bc-font, var(--body-font, inherit));
+      font-size: var(--bc-size, 13px);
+      font-weight: var(--body-weight, 400);
+      line-height: 1.4;
+    }
+    #shopify-section-{{ section.id }} .bc[data-bc-upper] { text-transform: uppercase; letter-spacing: 0.06em; }
+    #shopify-section-{{ section.id }} .bc__trail {
+      display: flex; align-items: center; flex-wrap: wrap; row-gap: 4px; min-width: 0; margin: 0; padding: 0; list-style: none;
+      justify-content: var(--bc-justify, center);
+    }
+    #shopify-section-{{ section.id }} .bc__item { display: inline-flex; align-items: center; min-width: 0; }
+    #shopify-section-{{ section.id }} .bc__item + .bc__item::before {
+      flex: none; margin-inline: 10px; color: color-mix(in srgb, var(--bc-link) 70%, transparent);
+      content: ""; width: 6px; height: 6px; border: solid currentColor; border-width: 1.5px 1.5px 0 0; transform: scaleX(var(--rtl-flip, 1)) rotate(45deg); margin-inline: 9px 11px;
+    }
+    #shopify-section-{{ section.id }} .bc[data-bc-sep="slash"] .bc__item + .bc__item::before { content: "/"; width: auto; height: auto; border: 0; transform: none; margin-inline: 10px; }
+    #shopify-section-{{ section.id }} .bc[data-bc-sep="dot"] .bc__item + .bc__item::before { content: ""; width: 3px; height: 3px; border: 0; border-radius: 50%; background: currentColor; transform: none; margin-inline: 10px; }
+    #shopify-section-{{ section.id }} .bc__link {
+      position: relative;
+      color: var(--bc-link); text-decoration: none; white-space: nowrap;
+      background: linear-gradient(currentColor, currentColor) no-repeat 0 100% / 0 1px;
+      transition: color .2s ease, background-size .3s cubic-bezier(.2,.7,.2,1);
+    }
+    #shopify-section-{{ section.id }} .bc__link::after { content: ""; position: absolute; inset: calc(50% - 22px) 0; }
+    #shopify-section-{{ section.id }} .bc__link:is(:hover, :focus-visible) { color: var(--bc-current); background-size: 100% 1px; }
+    #shopify-section-{{ section.id }} .bc__link:focus-visible { outline: 2px solid var(--bc-current); outline-offset: 3px; border-radius: 2px; }
+    #shopify-section-{{ section.id }} .bc__current { color: var(--bc-current); overflow-wrap: anywhere; }
+    @media (prefers-reduced-motion: reduce) { #shopify-section-{{ section.id }} .bc__link { transition: none; } }
+  {% comment %}{% endcomment %}</style>
+  {%- for block in section.blocks -%}
+    {%- if block.settings.enable_custom_fonts -%}<style>{{ block.settings.font | font_face: font_display: 'swap' }}{% comment %}{% endcomment %}</style>{%- endif -%}
+  {%- endfor -%}
   <div
     class="section{% if section_st.reset_spacing %} remove_spacing{% endif %} sec__page-heading color-{{ color_scheme }} gradient{% if background_image != blank %} bg-transparent relative{% if section_st.reset_spacing == false %} mb-60{% endif %}{% else %}{% if section_st.reset_spacing == false %} mb-60{% endif %}{% endif %} align-center justify-content-{{ section_st.alignment }}{% if t == 'cart' and cart == empty %} hidden{% else %} flex{% endif %}"
     style="{{ style | strip | strip_newlines }}"
+    data-lcp="page-heading"
+    data-lcp-id="{{ section.id }}"
+    data-lcp-settings="{{ section.settings | json | escape }}"
   >
     {%- if background_image != blank -%}
       <div class="overlay-bg">
@@ -103,6 +160,13 @@
             elsif block_st.header_size == 'large'
               assign header_size = 'h1-size'
             endif
+            assign block_font = ''
+            if block_st.enable_custom_fonts and block_st.font.family != blank
+              assign block_font = block_st.font.family
+              if block_st.font.fallback_families != blank
+                assign block_font = block_font | append: ', ' | append: block_st.font.fallback_families
+              endif
+            endif
           -%}
           {%- case block.type -%}
             {%- when 'heading' -%}
@@ -113,21 +177,21 @@
                 {% endif %}
                 data-motion-delay="{{ forloop.index0 | times: 50 }}"
                 class="{% if scroll_animation == 'slide_in' %} opacity-0 {% endif %} block"
+                data-lcp-block="{{ block.id }}"
+                data-lcp-block-type="heading"
+                data-lcp-block-settings="{{ block.settings | json | escape }}"
+                {{ block.shopify_attributes }}
               >
                 <h1
                   class="heading-title heading-letter-spacing h2 mt-8 mb-0 {{ header_size }}"
-                  style="margin-bottom: {{ block_st.vertical_gap | default: 0 }}px;{% if block_st.header_size == 'medium' %} font-size: {{ block_st.heading_font_size }}px;{% endif %}{% if block_st.enable_heading_color %} color: {% render 'scheme-color', color: block_st.heading_color, fallback: 'var(--color-heading)' %};{% endif %}"
+                  data-lcp-fallback="{{ ph_title | strip | escape }}"
+                  {%- if block_font != blank %} data-own-font{% endif %}
+                  style="margin-bottom: {{ block_st.vertical_gap | default: 0 }}px;{% if block_st.header_size == 'medium' %} font-size: {{ block_st.heading_font_size }}px;{% endif %}{% if block_st.enable_heading_color %} color: {% render 'scheme-color', color: block_st.heading_color, fallback: 'var(--color-heading)' %};{% endif %}{% if block_font != blank %} font-family: {{ block_font }};{% endif %}"
                 >
                   {%- if block_st.page_title != blank -%}
                     {{ block_st.page_title }}
                   {%- else -%}
-                    {% if template contains 'blog' %}
-                      {{ blog.title | default: page_title }}
-                    {% elsif template contains 'cart' %}
-                      {{- 'general.cart.title' | t -}}
-                    {% else %}
-                      {{ page.title | default: page_title }}
-                    {% endif %}
+                    {{ ph_title }}
                   {% endif %}
                 </h1>
               </motion-element>
@@ -140,7 +204,13 @@
                   {% endif %}
                   data-motion-delay="{{ forloop.index0 | times: 50 }}"
                   class="heading-description block {% if scroll_animation == 'slide_in' %} opacity-0 {% endif %} mt-10 rich__text-m0"
-                  style="color: {% render 'scheme-color', color: block_st.description_color, fallback: 'var(--color-text)' %}; font-size: {{ block_st.description_font_size | default: 15 }}px;"
+                  data-lcp-block="{{ block.id }}"
+                  data-lcp-block-type="description"
+                  data-lcp-block-settings="{{ block.settings | json | escape }}"
+                  {%- if page.content != blank %} data-lcp-has-fallback{% endif %}
+                  {%- if block_font != blank %} data-own-font{% endif %}
+                  {{ block.shopify_attributes }}
+                  style="color: {% if block_st.enable_custom_style %}{% render 'scheme-color', color: block_st.description_color, fallback: 'var(--color-text)' %}{% else %}var(--color-text){% endif %}; font-size: {{ block_st.description_font_size | default: 15 }}px;{% if block_font != blank %} font-family: {{ block_font }};{% endif %}"
                 >
                   {% if block_st.description != blank -%}
                     {{- block_st.description -}}
@@ -157,10 +227,11 @@
                 {% endif %}
                 data-motion-delay="{{ forloop.index0 | times: 50 }}"
                 class="{% if scroll_animation == 'slide_in' %} opacity-0 {% endif %} block"
+                data-lcp-block="{{ block.id }}"
+                data-lcp-block-type="breadcrumb"
+                data-lcp-block-settings="{{ block.settings | json | escape }}"
               >
                 {%- liquid
-                  assign bc_sep = block_st.separator | default: 'chevron'
-                  assign bc_align = section_st.alignment | default: 'center'
                   assign bc_current = page_title
                   case t
                     when 'page'
@@ -173,40 +244,14 @@
                       assign bc_current = article.title | default: page_title
                   endcase
                 -%}
-                {%- comment -%} The same trail, separators and colours as the Breadcrumb section. {%- endcomment -%}
-                <style>
-                  #shopify-section-{{ section.id }} .bc {
-                    --bc-link: {% render 'scheme-color', color: block_st.link_color, fallback: 'color-mix(in srgb, var(--color-text) 72%, transparent)' %};
-                    --bc-current: {% render 'scheme-color', color: block_st.current_color, fallback: 'var(--color-heading)' %};
-                    font-family: var(--body-font, inherit);
-                    font-size: {{ block_st.font_size | default: 13 }}px;
-                    font-weight: var(--body-weight, 400);
-                    line-height: 1.4;
-                    {%- if block_st.uppercase %} text-transform: uppercase; letter-spacing: 0.06em;{% endif %}
-                  }
-                  #shopify-section-{{ section.id }} .bc__trail {
-                    display: flex; align-items: center; flex-wrap: wrap; row-gap: 4px; min-width: 0; margin: 0; padding: 0; list-style: none;
-                    justify-content: {% case bc_align %}{% when 'center' %}center{% when 'right' %}flex-end{% else %}flex-start{% endcase %};
-                  }
-                  #shopify-section-{{ section.id }} .bc__item { display: inline-flex; align-items: center; min-width: 0; }
-                  #shopify-section-{{ section.id }} .bc__item + .bc__item::before {
-                    flex: none; margin-inline: 10px; color: color-mix(in srgb, var(--bc-link) 70%, transparent);
-                    {%- case bc_sep -%}
-                      {%- when 'slash' %} content: "/";
-                      {%- when 'dot' %} content: ""; width: 3px; height: 3px; border-radius: 50%; background: currentColor;
-                      {%- else %} content: ""; width: 6px; height: 6px; border: solid currentColor; border-width: 1.5px 1.5px 0 0; transform: scaleX(var(--rtl-flip, 1)) rotate(45deg); margin-inline: 9px 11px;
-                    {%- endcase %}
-                  }
-                  #shopify-section-{{ section.id }} .bc__link {
-                    color: var(--bc-link); text-decoration: none; white-space: nowrap;
-                    background: linear-gradient(currentColor, currentColor) no-repeat 0 100% / 0 1px;
-                    transition: color .2s ease, background-size .3s cubic-bezier(.2,.7,.2,1);
-                  }
-                  #shopify-section-{{ section.id }} .bc__link:is(:hover, :focus-visible) { color: var(--bc-current); background-size: 100% 1px; }
-                  #shopify-section-{{ section.id }} .bc__current { color: var(--bc-current); overflow-wrap: anywhere; }
-                  @media (prefers-reduced-motion: reduce) { #shopify-section-{{ section.id }} .bc__link { transition: none; } }
-{% comment %}{% endcomment %}                </style>
-                <nav class="bc page-title-breadcrumb" aria-label="{{ 'general.breadcrumb.home' | t | escape }}" {{ block.shopify_attributes }}>
+                <nav
+                  class="bc page-title-breadcrumb"
+                  aria-label="{{ 'general.breadcrumb.home' | t | escape }}"
+                  data-bc-sep="{{ block_st.separator | default: 'chevron' }}"
+                  {%- if block_st.uppercase %} data-bc-upper{% endif %}
+                  style="--bc-link: {% render 'scheme-color', color: block_st.link_color, fallback: 'color-mix(in srgb, var(--color-text) 72%, transparent)' %}; --bc-current: {% render 'scheme-color', color: block_st.current_color, fallback: 'var(--color-heading)' %}; --bc-size: {{ block_st.font_size | default: 13 }}px; --bc-justify: {{ ph_justify }};"
+                  {{ block.shopify_attributes }}
+                >
                   <ol class="bc__trail">
                     <li class="bc__item"><a class="bc__link" href="{{ routes.root_url }}">{{ 'general.breadcrumb.home' | t }}</a></li>
                     {%- if t == 'blog' and current_tags -%}
@@ -229,7 +274,6 @@
     </div>
   </div>
 {% endif %}
-
 
 </template>
 
@@ -562,13 +606,19 @@
   ],
   "max_blocks": 3,
   "shopify": {
-    "name": "t:sections.all.page_heading.label",
+    "name": "Page heading",
     "tag": "section",
     "class": "page-title",
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Colour scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "select",
@@ -576,29 +626,23 @@
         "options": [
           {
             "value": "container",
-            "label": "t:sections.all.section_width.container.label"
+            "label": "Default"
           },
           {
             "value": "fluid_container",
-            "label": "t:sections.all.section_width.fluid_container.label"
+            "label": "Fluid container"
           },
           {
             "value": "stretch_width",
-            "label": "t:sections.all.section_width.stretch_width.label"
+            "label": "Stretched"
           },
           {
             "value": "full_width",
-            "label": "t:sections.all.section_width.full_width.label"
+            "label": "Full width"
           }
         ],
         "default": "stretch_width",
         "label": "Section width"
-      },
-      {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
       },
       {
         "type": "checkbox",
@@ -608,16 +652,53 @@
       },
       {
         "type": "header",
-        "content": "Image / Media"
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "alignment",
+        "label": "Text alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "height",
+        "options": [
+          {
+            "value": "adapt",
+            "label": "Picture shape"
+          },
+          {
+            "value": "based_on_content",
+            "label": "Fit the text"
+          }
+        ],
+        "default": "adapt",
+        "label": "Height with a picture",
+        "visible_if": "{{ section.settings.background_image != blank }}"
+      },
+      {
+        "type": "header",
+        "content": "Media"
       },
       {
         "type": "image_picker",
         "id": "background_image",
-        "label": "Background image"
-      },
-      {
-        "type": "header",
-        "content": "Style & Colors"
+        "label": "Background picture"
       },
       {
         "type": "range",
@@ -627,27 +708,12 @@
         "step": 1,
         "unit": "%",
         "label": "Overlay opacity",
-        "default": 0
+        "default": 0,
+        "visible_if": "{{ section.settings.background_image != blank }}"
       },
       {
         "type": "header",
-        "content": "Layout & Spacing"
-      },
-      {
-        "type": "select",
-        "id": "height",
-        "options": [
-          {
-            "value": "adapt",
-            "label": "t:sections.all.page_heading.height.option__1"
-          },
-          {
-            "value": "based_on_content",
-            "label": "t:sections.all.page_heading.height.option__2"
-          }
-        ],
-        "default": "adapt",
-        "label": "Section height"
+        "content": "Desktop spacing"
       },
       {
         "type": "range",
@@ -668,39 +734,19 @@
         "max": 100,
         "step": 1,
         "unit": "px"
-      },
-      {
-        "type": "header",
-        "content": "Advanced"
-      },
-      {
-        "type": "select",
-        "id": "alignment",
-        "label": "Text alignment",
-        "default": "center",
-        "options": [
-          {
-            "value": "left",
-            "label": "t:sections.all.content_settings.content_alignment.left.label"
-          },
-          {
-            "value": "center",
-            "label": "t:sections.all.content_settings.content_alignment.center.label"
-          },
-          {
-            "value": "right",
-            "label": "t:sections.all.content_settings.content_alignment.right.label"
-          }
-        ]
       }
     ],
     "max_blocks": 3,
     "blocks": [
       {
         "type": "breadcrumb",
-        "name": "t:sections.all.page_heading.breadcrumb.label",
+        "name": "Breadcrumbs",
         "limit": 1,
         "settings": [
+          {
+            "type": "header",
+            "content": "Layout"
+          },
           {
             "type": "select",
             "id": "separator",
@@ -722,6 +768,26 @@
             "default": "chevron"
           },
           {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "color",
+            "id": "link_color",
+            "label": "Link colour",
+            "info": "Empty follows the colour scheme."
+          },
+          {
+            "type": "color",
+            "id": "current_color",
+            "label": "Current page colour",
+            "info": "Empty follows the colour scheme."
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
             "type": "range",
             "id": "font_size",
             "label": "Text size",
@@ -734,52 +800,87 @@
           {
             "type": "checkbox",
             "id": "uppercase",
-            "label": "Uppercase",
+            "label": "Capital letters",
             "default": false
-          },
-          {
-            "type": "color",
-            "id": "link_color",
-            "label": "Link colour",
-            "info": "Empty: the colour scheme's text."
-          },
-          {
-            "type": "color",
-            "id": "current_color",
-            "label": "Current page colour",
-            "info": "Empty: the colour scheme's heading."
           }
         ]
       },
       {
         "type": "heading",
-        "name": "t:sections.all.page_heading.heading.label",
+        "name": "Heading",
         "limit": 1,
         "settings": [
           {
             "type": "header",
-            "content": "General"
+            "content": "Content"
+          },
+          {
+            "type": "text",
+            "id": "page_title",
+            "label": "Heading",
+            "info": "Empty shows the page's own title."
+          },
+          {
+            "type": "header",
+            "content": "Appearance"
           },
           {
             "type": "checkbox",
             "id": "enable_heading_color",
-            "label": "Enable custom heading color",
+            "label": "Enable custom styling",
             "default": false
-          },
-          {
-            "type": "header",
-            "content": "Header Typography"
           },
           {
             "type": "color",
             "id": "heading_color",
-            "label": "Heading color",
+            "label": "Heading colour",
             "visible_if": "{{ block.settings.enable_heading_color }}"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom font",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Heading font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
+          },
+          {
+            "type": "select",
+            "id": "header_size",
+            "label": "Heading size",
+            "default": "default",
+            "options": [
+              {
+                "value": "default",
+                "label": "Default"
+              },
+              {
+                "value": "small",
+                "label": "Small"
+              },
+              {
+                "value": "medium",
+                "label": "Custom size"
+              },
+              {
+                "value": "large",
+                "label": "Large"
+              }
+            ]
           },
           {
             "type": "range",
             "id": "heading_font_size",
-            "label": "Heading font size",
+            "label": "Custom heading size",
             "min": 16,
             "max": 80,
             "step": 1,
@@ -789,50 +890,12 @@
           },
           {
             "type": "header",
-            "content": "Content"
-          },
-          {
-            "type": "text",
-            "id": "page_title",
-            "label": "t:sections.all.page_heading.heading.label",
-            "info": "t:sections.all.page_heading.heading.info"
-          },
-          {
-            "type": "header",
-            "content": "Typography"
-          },
-          {
-            "type": "select",
-            "id": "header_size",
-            "label": "t:sections.all.content_settings.font_size.label",
-            "default": "default",
-            "options": [
-              {
-                "value": "default",
-                "label": "t:sections.all.content_settings.font_size.default.label"
-              },
-              {
-                "value": "small",
-                "label": "t:sections.all.content_settings.font_size.small.label"
-              },
-              {
-                "value": "medium",
-                "label": "Custom"
-              },
-              {
-                "value": "large",
-                "label": "t:sections.all.content_settings.font_size.large.label"
-              }
-            ]
-          },
-          {
-            "type": "header",
-            "content": "Layout & Spacing"
+            "content": "Spacing"
           },
           {
             "type": "range",
             "id": "vertical_gap",
-            "label": "Spacing below heading",
+            "label": "Space below the heading",
             "min": 0,
             "max": 60,
             "step": 1,
@@ -853,21 +916,46 @@
           {
             "type": "richtext",
             "id": "description",
-            "label": "Description"
+            "label": "Text",
+            "info": "Empty shows the page's own text."
+          },
+          {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "description_color",
+            "label": "Text colour",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
           },
           {
             "type": "header",
             "content": "Typography"
           },
           {
-            "type": "color",
-            "id": "description_color",
-            "label": "Description color"
+            "type": "checkbox",
+            "id": "enable_custom_fonts",
+            "label": "Enable custom font",
+            "default": false
+          },
+          {
+            "type": "font_picker",
+            "id": "font",
+            "label": "Text font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
           },
           {
             "type": "range",
             "id": "description_font_size",
-            "label": "Description font size",
+            "label": "Text size",
             "min": 12,
             "max": 36,
             "step": 1,

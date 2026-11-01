@@ -3,6 +3,28 @@
 {%- liquid
   assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
 -%}
+{%- comment -%} Custom colours are opt in: off, every colour below is empty and the popup follows its colour scheme. {%- endcomment -%}
+{%- liquid
+  assign pg_custom = false
+  if section.settings.enable_custom_style == true
+    assign pg_custom = true
+  endif
+  assign pg_s_circle_bg_color = ''
+  assign pg_s_circle_bg_hover_color = ''
+  assign pg_s_arrow_color = ''
+  assign pg_s_arrow_hover_color = ''
+  assign pg_s_progress_color = ''
+  assign pg_s_progress_active_color = ''
+  if pg_custom
+    assign pg_s_circle_bg_color = section.settings.circle_bg_color
+    assign pg_s_circle_bg_hover_color = section.settings.circle_bg_hover_color
+    assign pg_s_arrow_color = section.settings.arrow_color
+    assign pg_s_arrow_hover_color = section.settings.arrow_hover_color
+    assign pg_s_progress_color = section.settings.progress_color
+    assign pg_s_progress_active_color = section.settings.progress_active_color
+  endif
+-%}
+
 <style>
   {%- case section.settings.section_width -%}
     {%- when 'container' -%}
@@ -37,27 +59,27 @@
   assign circle_size_mobile = section.settings.circle_size_mobile
   assign progress_thickness = section.settings.progress_thickness
 
-  assign circle_bg_color = section.settings.circle_bg_color
+  assign circle_bg_color = pg_s_circle_bg_color
   if circle_bg_color == blank or circle_bg_color.alpha == 0
     assign circle_bg_color = 'var(--color-background)'
   endif
-  assign circle_bg_hover_color = section.settings.circle_bg_hover_color
+  assign circle_bg_hover_color = pg_s_circle_bg_hover_color
   if circle_bg_hover_color == blank or circle_bg_hover_color.alpha == 0
     assign circle_bg_hover_color = 'var(--color-primary)'
   endif
-  assign progress_color = section.settings.progress_color
+  assign progress_color = pg_s_progress_color
   if progress_color == blank or progress_color.alpha == 0
     assign progress_color = 'var(--color-border)'
   endif
-  assign progress_active_color = section.settings.progress_active_color
+  assign progress_active_color = pg_s_progress_active_color
   if progress_active_color == blank or progress_active_color.alpha == 0
     assign progress_active_color = 'var(--color-primary)'
   endif
-  assign arrow_color = section.settings.arrow_color
+  assign arrow_color = pg_s_arrow_color
   if arrow_color == blank or arrow_color.alpha == 0
     assign arrow_color = 'var(--color-heading)'
   endif
-  assign arrow_hover_color = section.settings.arrow_hover_color
+  assign arrow_hover_color = pg_s_arrow_hover_color
   if arrow_hover_color == blank or arrow_hover_color.alpha == 0
     assign arrow_hover_color = 'var(--color-background)'
   endif
@@ -179,9 +201,9 @@
   }
 {%- endstyle -%}
 
-<div class="buttontoppro {{ section.settings.section_width | default: 'full_width' }}">
+<div class="buttontoppro {{ section.settings.section_width | default: 'full_width' }}" data-pg-root="back-to-top-pro" data-pg-section="{{ section.id }}">
   <button type="button" class="top-{{ section.id }}" data-back-to-top="{{ section.id }}" data-show-after="{{ section.settings.show_after | default: 300 }}" aria-label="{{ section.settings.label | default: 'Back to top' | escape }}">
-    <span class="top-circle-{{ section.id }} color-{{ color_scheme }}">
+    <span class="top-circle-{{ section.id }} color-{{ color_scheme }}" data-pg-scheme>
       <svg class="top-progress-circle-{{ section.id }}" width="100%" height="100%" viewBox="-1 -1 102 102" aria-hidden="true" focusable="false">
         <path class="progress-path-{{ section.id }}" d="M50,1 a49,49 0 0,1 0,98 a49,49 0 0,1 0,-98" pathLength="100" style="stroke-dasharray: 100; stroke-dashoffset: 100;"></path>
       </svg>
@@ -200,6 +222,8 @@
     var btn = document.querySelector('[data-back-to-top="' + SID + '"]');
     if (!btn || btn.__btt) return;
     btn.__btt = true;
+    // A redraw sets up the new button: the old one's listeners go with it.
+    if (window['__bttStop_' + SID]) window['__bttStop_' + SID]();
     var path = btn.querySelector('.progress-path-' + SID);
     var showAfter = parseInt(btn.getAttribute('data-show-after'), 10) || 0;
     var frame = 0, shown = null;
@@ -228,6 +252,7 @@
     // First read in the next frame, not at DOMContentLoaded: the page height
     // read here forced the page's first layout inside this script.
     queue();
+    window['__bttStop_' + SID] = function(){ window.removeEventListener('scroll', queue); window.removeEventListener('resize', queue); cancelAnimationFrame(frame); frame = 0; };
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setup, { once: true }); else setup();
   function reload(e){ if (e.detail && String(e.detail.sectionId) === SID) setup(); }
@@ -457,6 +482,16 @@
     "settings": [
       {
         "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "header",
         "content": "Behaviour"
       },
       {
@@ -581,43 +616,50 @@
       },
       {
         "type": "header",
-        "content": "Style"
+        "content": "Appearance"
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Custom colours",
+        "default": false,
+        "info": "Off, the popup follows its colour scheme."
       },
       {
         "type": "color",
         "id": "circle_bg_color",
-        "label": "Fill"
+        "label": "Fill",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "color",
         "id": "circle_bg_hover_color",
-        "label": "Hover fill"
+        "label": "Hover fill",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "color",
         "id": "arrow_color",
-        "label": "Arrow"
+        "label": "Arrow",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "color",
         "id": "arrow_hover_color",
-        "label": "Hover arrow"
+        "label": "Hover arrow",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "color",
         "id": "progress_color",
-        "label": "Ring"
+        "label": "Ring",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "color",
         "id": "progress_active_color",
-        "label": "Ring progress"
+        "label": "Ring progress",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "header",

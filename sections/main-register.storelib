@@ -1,112 +1,104 @@
 <template compat="shopify">
-<style>
-  /* Theme font-weight inheritance — inherit theme weights by default; explicit rules still override */
-  #shopify-section-{{ section.id }} {
-    font-weight: var(--body-weight, inherit);
-  }
-  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
-    font-weight: var(--heading-weight, inherit);
-  }
-{% comment %}{% endcomment %}</style>
-{%- comment -%}Section isolation — prevent CSS/JS bleed between sections{%- endcomment -%}
-<style>
-  #shopify-section-{{ section.id }} { isolation: isolate; position: relative; }
-{% comment %}{% endcomment %}</style>
-{%- comment -%}
-  Materia Themes. Developed By Materia Themes.
-{%- endcomment -%}
-{{ 'my-account.css' | asset_url | stylesheet_tag }}
-
 {% render 'theme-type' %}
-<div class="customer-register">
-  <div class="container">
-    <div
-      class="customer-form register-form w-full max-w-custom m-auto col-sm-w-custom"
-      style="--col-width: 80%; --max-width: 63rem"
-    >
-      {% form 'create_customer', class: 'custormer-register-form' %}
+{%- comment -%}
+  Materia Themes. Create account (/account/register). Storelib signs a visitor in with a code emailed to them, so a new account is a name and an email; there is no password field. The store's create_customer form is kept and Storelib sends the code.
+  Live edits: shopify/assets/live-account-pages.js.
+{%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+  <style>
+    #shopify-section-{{ section.id }}.scroll-trigger {
+      --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+      --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+    }
+{% comment %}{% endcomment %}  </style>
+  <script>
+    (function(){
+      var el = document.getElementById('shopify-section-{{ section.id }}');
+      if (!el || el.classList.contains('scroll-trigger')) return;
+      el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+    })();
+{% comment %}{% endcomment %}  </script>
+{%- endif -%}
+{%- liquid
+  assign st = section.settings
+  assign sid = section.id
+  assign scheme = st.color_scheme.id | default: st.color_scheme | default: 'default-color-scheme'
+  assign custom = st.enable_custom_style
+-%}
+{% render 'account-pages-base', sid: sid %}
+{% render 'account-pages-font-face', st: st %}
+<style>
+  #shopify-section-{{ sid }} .ap-form__box { max-width: var(--ap-maxw, 560px); margin-inline: auto; }
+  #shopify-section-{{ sid }} .ap-form__row { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  @container (min-width: 480px) { #shopify-section-{{ sid }} .ap-form__row { grid-template-columns: 1fr 1fr; } }
+  #shopify-section-{{ sid }} .ap-form__box { container-type: inline-size; }
+  #shopify-section-{{ sid }} .ap-form__note { margin: 0; font-size: .9em; }
+  #shopify-section-{{ sid }} .ap-form__alt { text-align: center; }
+{% comment %}{% endcomment %}</style>
+{%- capture fonts -%}{% render 'account-pages-font-vars', st: st %}{%- endcapture -%}
+<div
+  class="ap ap-form ap-register customer-register color-{{ scheme }} gradient"
+  data-ap-root="main-register"
+  data-ap-section="{{ sid }}"
+  data-ap-settings="{{ st | json | escape }}"
+  {% if st.reset_spacing %}data-ap-reset{% endif %}
+  {% if st.enable_custom_fonts %}data-own-font{% endif %}
+  style="--ap-pt: {{ st.padding_top | default: 0 }}px; --ap-pb: {{ st.padding_bottom | default: 0 }}px; --ap-pt-m: {{ st.padding_top_mobile | default: 0 }}px; --ap-pb-m: {{ st.padding_bottom_mobile | default: 0 }}px; --ap-hfs-d: {{ st.heading_size_desktop | default: 30 }}px; --ap-hfs-m: {{ st.heading_size_mobile | default: 24 }}px; --ap-tfs-d: {{ st.text_size_desktop | default: 16 }}px; --ap-tfs-m: {{ st.text_size_mobile | default: 14 }}px; --ap-maxw: {{ st.form_width | default: 560 }}px; --ap-align: {{ st.content_alignment | default: 'center' }};{% if custom and st.heading_color != blank %} --ap-h-c: {{ st.heading_color }};{% endif %}{% if custom and st.text_color != blank %} --ap-t-c: {{ st.text_color }};{% endif %}{{ fonts }}"
+>
+  <div class="{{ st.section_width | default: 'container' }}" data-ap-width>
+    <div class="ap-form__box customer-form register-form">
+      <h1 class="ap__h" data-ap-text="heading"{% if st.heading == blank %} hidden{% endif %}>{{ st.heading | escape }}</h1>
+      <div class="ap__t" data-ap-rich="text"{% if st.text == blank %} hidden{% endif %}>{{ st.text }}</div>
+      {%- form 'create_customer', class: 'ap__form custormer-register-form' -%}
         {%- if form.errors -%}
-          <ul class="error error-list flex flex-wrap">
+          <div class="ap__msg ap__msg--error error" role="alert">
             {%- render 'icon-error' -%}
-            {%- for field in form.errors -%}
-              <li class="flex gap-5 align-center flex-wrap">
-                {%- if field == 'form' -%}
-                  {{ form.errors.messages[field] | append: '.' }}
-                {%- else -%}
-                  <a href="#RegisterForm-{{ field }}" class="link link-underline no-underline">
-                    <span class="text">
-                      {{ form.errors.translated_fields[field] | capitalize }}
-                      {{ form.errors.messages[field] | append: '.' }}
-                    </span>
-                  </a>
-                {% endif %}
-              </li>
-            {%- endfor -%}
-          </ul>
-        {% endif %}
-        <div class="form-group mb-20 flex flex-column first-name form-floating">         
+            <div>
+              <span data-ap-text="error_message">{{ st.error_message | escape }}</span>
+              <ul>
+                {%- for field in form.errors -%}
+                  <li>{% if field == 'form' %}{{ form.errors.messages[field] }}{% else %}{{ form.errors.translated_fields[field] | capitalize }} {{ form.errors.messages[field] }}{% endif %}</li>
+                {%- endfor -%}
+              </ul>
+            </div>
+          </div>
+        {%- endif -%}
+        <div class="ap-form__row">
+          <div class="ap__field">
+          <label for="first_name-{{ sid }}"><span data-ap-text="first_name_label">{{ st.first_name_label | escape }}</span></label>
           <input
             type="text"
-            id="first-name"
-             class="form-control"
-            placeholder="{{ 'customer.register.first_name' | t }}"
             name="customer[first_name]"
-            required
+            id="first_name-{{ sid }}"
+            autocomplete="given-name"
           >
-          <label class="form-label pb-5" for="first-name">
-            {{- 'customer.register.first_name' | t -}}
-          </label>
         </div>
-        <div class="form-group mb-20 flex flex-column last-name form-floating"> 
+        <div class="ap__field">
+          <label for="last_name-{{ sid }}"><span data-ap-text="last_name_label">{{ st.last_name_label | escape }}</span></label>
           <input
             type="text"
-            id="last-name"
-            class="form-control"
             name="customer[last_name]"
-            placeholder="{{ 'customer.register.last_name' | t }}"
-            required
+            id="last_name-{{ sid }}"
+            autocomplete="family-name"
           >
-        <label class="form-label pb-5" for="last-name">{{ 'customer.register.last_name' | t }}</label>
         </div>
-        <div class="form-group mb-20 flex flex-column email form-floating">
+        </div>
+        <div class="ap__field">
+          <label for="email-{{ sid }}"><span data-ap-text="email_label">{{ st.email_label | escape }}</span><span class="ap__req" aria-hidden="true">*</span></label>
           <input
             type="email"
             name="customer[email]"
-            placeholder="{{ 'customer.login_page.placeholder_email' | t }}"
+            id="email-{{ sid }}"
+            autocomplete="email"
+            placeholder="{{ st.email_placeholder | escape }}" data-ap-attr-placeholder="email_placeholder"
             required
-            id="email"
-             class="form-control"
-          >
-          <label class="pb-5" for="email">
-            {{- 'customer.register.email' | t -}}
-            <span class="required">*</span></label
+            aria-required="true"
           >
         </div>
-        <div class="form-group mb-20 flex flex-column password form-floating">
-          <input
-            type="password"
-            name="customer[password]"
-            placeholder="{{ 'customer.login_page.placeholder_pass' | t }}"
-            required
-            id="password"
-             class="form-control"
-          >
-          <label class="form-label pb-5" for="password">
-            {{- 'customer.register.password' | t -}}
-            <span class="required">*</span></label
-          > 
-        </div>
-        <p>
-          {% assign policy = shop.privacy_policy.url %}
-          {{ 'customer.register.content_form_html' | t: link: policy }}
-        </p>
-        <div class="submit mt-30 flex flex-column">
-          <button class="btn-primary text-center" data-theme-button="primary" data-sl-button type="submit">{{ 'customer.register.submit' | t }}</button>
-          <a href="{{ routes.account_login_url }}" class="btn btn-outline no-underline w-full text-center mt-20" data-theme-button="secondary" data-sl-button>
-            {{ 'customer.login_page.submit' | t }}
-          </a>
-        </div>
-      {% endform %}
+        <div class="ap__t ap-form__note" data-ap-rich="privacy_text"{% if st.privacy_text == blank %} hidden{% endif %}>{{ st.privacy_text }}</div>
+        <button type="submit" class="btn-primary ap__btn" data-theme-button="primary" data-sl-button><span data-ap-text="button_label">{{ st.button_label | escape }}</span></button>
+        <p class="ap-form__alt"><a class="ap__link" href="{{ routes.account_login_url }}" data-ap-text="login_link_label"{% if st.login_link_label == blank %} hidden{% endif %}>{{ st.login_link_label | escape }}</a></p>
+      {%- endform -%}
     </div>
   </div>
 </div>
@@ -117,6 +109,289 @@
   "type": "main-register",
   "name": "Main register",
   "settings": [],
-  "shopify": {}
+  "shopify": {
+    "name": "Create account",
+    "tag": "section",
+    "settings": [
+      {
+        "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "container",
+        "options": [
+          {
+            "value": "container",
+            "label": "Default"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Content"
+      },
+      {
+        "type": "text",
+        "id": "heading",
+        "label": "Heading",
+        "default": "Create account"
+      },
+      {
+        "type": "richtext",
+        "id": "text",
+        "label": "Text",
+        "default": "<p>Add your name and email. We will email you a code to finish.</p>"
+      },
+      {
+        "type": "text",
+        "id": "first_name_label",
+        "label": "First name label",
+        "default": "First name"
+      },
+      {
+        "type": "text",
+        "id": "last_name_label",
+        "label": "Last name label",
+        "default": "Last name"
+      },
+      {
+        "type": "text",
+        "id": "email_label",
+        "label": "Email label",
+        "default": "Email"
+      },
+      {
+        "type": "text",
+        "id": "email_placeholder",
+        "label": "Email placeholder",
+        "default": "you@example.com"
+      },
+      {
+        "type": "richtext",
+        "id": "privacy_text",
+        "label": "Privacy note",
+        "default": "<p>We use your details to run your account and your orders.</p>"
+      },
+      {
+        "type": "text",
+        "id": "button_label",
+        "label": "Button label",
+        "default": "Create account"
+      },
+      {
+        "type": "text",
+        "id": "login_link_label",
+        "label": "Sign in link",
+        "default": "Already have an account? Sign in"
+      },
+      {
+        "type": "header",
+        "content": "Messages"
+      },
+      {
+        "type": "text",
+        "id": "error_message",
+        "label": "Error message",
+        "default": "Something went wrong. Check the fields and try again."
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "content_alignment",
+        "label": "Text alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "form_width",
+        "label": "Form width",
+        "min": 320,
+        "max": 900,
+        "step": 10,
+        "default": 560,
+        "unit": "px"
+      },
+      {
+        "type": "header",
+        "content": "Appearance"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Enable custom styling",
+        "default": false,
+        "info": "Off: colours follow the colour scheme."
+      },
+      {
+        "type": "color",
+        "id": "heading_color",
+        "label": "Heading color",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "text_color",
+        "label": "Text color",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Enable custom fonts",
+        "default": false,
+        "info": "Off: fonts follow Theme settings > Typography."
+      },
+      {
+        "type": "font_picker",
+        "id": "heading_font",
+        "label": "Heading font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Body font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "range",
+        "id": "heading_size_desktop",
+        "label": "Heading size (desktop)",
+        "min": 14,
+        "max": 60,
+        "step": 1,
+        "default": 30,
+        "unit": "px"
+      },
+      {
+        "type": "range",
+        "id": "text_size_desktop",
+        "label": "Text size (desktop)",
+        "min": 10,
+        "max": 24,
+        "step": 1,
+        "default": 16,
+        "unit": "px"
+      },
+      {
+        "type": "header",
+        "content": "Desktop spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "default": 60,
+        "unit": "px"
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "default": 60,
+        "unit": "px"
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "range",
+        "id": "heading_size_mobile",
+        "label": "Heading size (mobile)",
+        "min": 14,
+        "max": 48,
+        "step": 1,
+        "default": 24,
+        "unit": "px"
+      },
+      {
+        "type": "range",
+        "id": "text_size_mobile",
+        "label": "Text size (mobile)",
+        "min": 10,
+        "max": 20,
+        "step": 1,
+        "default": 14,
+        "unit": "px"
+      },
+      {
+        "type": "range",
+        "id": "padding_top_mobile",
+        "label": "Top padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "default": 40,
+        "unit": "px"
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_mobile",
+        "label": "Bottom padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "default": 40,
+        "unit": "px"
+      }
+    ]
+  }
 }
 </schema>

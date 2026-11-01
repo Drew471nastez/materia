@@ -85,7 +85,7 @@
       const v = s.separator_line, home = root.getAttribute('data-ft-page') === 'index';
       put(root, '~border-top', v === 'all-page' || (v === 'homepage' && home) || (v === 'inner_page' && !home));
     }
-    if (k('reset_spacing')) { put(root, '~remove_spacing', bool(s.reset_spacing)); put(root, '~remove_spacing-on-home', bool(s.reset_spacing)); const mid = q(':scope > .footer__middle'); if (mid) put(mid, '~remove_spacing', true); }
+    /* reset_spacing writes the wrapper's own margin rules: the redraw draws it. */
     const mid = q(':scope > .footer__middle'), fch = q('[data-ft-fch]');
     if (k('padding_top')) { put(root, '--section-pt', String(num(s.padding_top))); if (mid) put(mid, '~pt-min', num(s.padding_top) < 30); if (fch) put(fch, '--fch-pt', num(s.padding_top, 60) + 'px'); }
     if (k('padding_bottom')) { put(root, '--section-pb', String(num(s.padding_bottom))); if (mid) put(mid, '~pb-min', num(s.padding_bottom) < 30); }

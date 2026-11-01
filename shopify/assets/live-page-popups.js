@@ -118,7 +118,7 @@
     if (!wrap) return;
     const popup = wrap.querySelector('[data-popup-root]');
     const btt = wrap.querySelector('[data-back-to-top]');
-    const ready = () => (popup ? popup.hasAttribute('data-popup-id') || !!popup.__pgRun : true) && (btt ? !!(btt.__bt || btt.hasAttribute('data-bt-ready') || btt.__pgRun) : true);
+    const ready = () => (popup ? popup.hasAttribute('data-popup-id') || !!popup.__pgRun : true) && (btt ? !!(btt.__btt || btt.__pgRun) : true);
     if (!popup && !btt) return;
     setTimeout(() => {
       if (!wrap.isConnected || ready()) return;

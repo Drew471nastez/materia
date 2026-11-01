@@ -86,42 +86,51 @@ function savedMain(tree = repo) {
   return {id, sec};
 }
 
-/* blocks: [{id, type, settings}] or omitted for the saved ones. Settings get the schema defaults first. */
-async function renderMain({tree = repo, settings = {}, blocks, product = R5.PANTS, design = false, id, extraHead = '', script = true} = {}) {
+/* blocks: [{id, type, settings}] or omitted for the saved ones. Settings get the schema defaults first.
+   more: further Main product instances on the same page, [{id, settings, blocks}]. */
+async function renderMain({tree = repo, settings = {}, blocks, product = R5.PANTS, design = false, id, extraHead = '', script = true, more = []} = {}) {
   const sch = mainSchema(tree);
   const saved = savedMain(tree);
   const all = JSON.parse(readIn(tree, 'config/settings.json'));
   const theme = {...all.shopify};
   const schemes = Object.entries(theme.color_schemes).map(([sid, v]) => ({id: sid, settings: v.settings}));
   theme.color_schemes = schemes;
-  const sid = id || saved.id;
-  const sset = {...defaultsOf(sch.settings), ...saved.sec.settings, ...settings};
-  const schemeId = sset.color_scheme && sset.color_scheme.id || sset.color_scheme;
-  sset.color_scheme = {...(schemes.find(s => s.id === schemeId) || schemes[0])};
-  const blockDefaults = type => defaultsOf((sch.blocks.find(b => b.type === type) || {}).settings);
-  const list = (blocks || saved.sec.block_order.filter(k => !saved.sec.blocks[k].disabled).map(k => ({id: k, ...saved.sec.blocks[k]})))
-    .map(b => ({id: b.id, type: b.type, shopify_attributes: `data-block-id="${b.id}"`, settings: {...blockDefaults(b.type), ...(b.settings || {})}}));
   const base = {
     settings: theme, request: {host: 'x.test', locale: {iso_code: 'en'}, page_type: 'product', design_mode: design},
     routes: {account_url: '/account', account_login_url: '/account/login', root_url: '/', cart_url: '/cart', cart_add_url: '/cart/add', search_url: '/search'},
     shop: {name: 'Materia', domain: 'x.test', url: 'https://x.test', currency: 'BRL', money_format: 'R${{amount}}', locale: 'en'}, template: {name: 'product'},
     cart: {item_count: 0, items: [], currency: {iso_code: 'BRL'}}, customer: null, pages: {}, all_products: {}, product,
   };
+  const blockDefaults = type => defaultsOf((sch.blocks.find(b => b.type === type) || {}).settings);
   const e = engine(tree);
-  const ctx = {...base, section: {id: sid, settings: sset, blocks: list, index: 2}};
-  const sectionHtml = await e.parseAndRender(clean(body(readIn(tree, 'sections/main-product.storelib'))), ctx, {globals: ctx});
+  const one = async (sid, settings, blocks) => {
+    const sset = {...defaultsOf(sch.settings), ...saved.sec.settings, ...settings};
+    for (const k of ['heading_font', 'body_font']) if (typeof sset[k] === 'string') sset[k] = {family: sset[k].replace(/_[nib]\d$/, '').split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' '), fallback_families: 'sans-serif'};
+    const schemeId = sset.color_scheme && sset.color_scheme.id || sset.color_scheme;
+    sset.color_scheme = {...(schemes.find(s => s.id === schemeId) || schemes[0])};
+    const list = (blocks || saved.sec.block_order.filter(k => !saved.sec.blocks[k].disabled).map(k => ({id: k, ...saved.sec.blocks[k]})))
+      .map(b => ({id: b.id, type: b.type, shopify_attributes: `data-block-id="${b.id}"`, settings: {...blockDefaults(b.type), ...(b.settings || {})}}));
+    const ctx = {...base, section: {id: sid, settings: sset, blocks: list, index: 2}};
+    const html = await e.parseAndRender(clean(body(readIn(tree, 'sections/main-product.storelib'))), ctx, {globals: ctx});
+    return {html, settings: sset, blocks: list};
+  };
+  const sid = id || saved.id;
+  const first = await one(sid, settings, blocks);
+  const others = [];
+  for (const m of more) others.push({id: m.id, ...(await one(m.id, m.settings || {}, m.blocks || blocks))});
   const header = JSON.parse(readIn(tree, 'sections/header-group.json'));
   const hset = {...header.sections.header.settings, mega_menu: {handle: 'main-menu', links: [{title: 'Home', url: '/', links: []}, {title: 'Shop', url: '/collections/all', links: []}]}};
   hset.color_scheme = {...(schemes.find(s => s.id === hset.color_scheme) || schemes[0])};
   const hctx = {...base, section: {id: 'header', settings: hset, blocks: []}};
   const hdr = await e.parseAndRender(clean(body(readIn(tree, 'sections/theme-header.storelib'))), hctx, {globals: hctx});
   const le = engine(tree, {'header-group': `<div id="shopify-section-header" class="shopify-section section-header">${hdr}</div>`, 'footer-group': ''});
-  const content = `<div id="shopify-section-${sid}" class="shopify-section">${sectionHtml}</div><div style="height:600px"></div>`;
+  const content = [{id: sid, html: first.html}, ...others].map(x => `<div id="shopify-section-${x.id}" class="shopify-section">${x.html}</div>`).join('') + '<div style="height:600px"></div>';
   let html = await le.parseAndRender(clean(body(readIn(tree, 'layout/theme.storelib'))), {...base, content_for_header: '', content_for_layout: content}, {globals: base});
   /* The controller, until the layout loads it. */
   if (script && fs.existsSync(path.join(tree, 'shopify/assets/live-main-product.js')) && !html.includes('live-main-product.js')) html = html.replace('</body>', '<script src="/assets/live-main-product.js" defer></script></body>');
+  if (!script) html = html.replace(/<script[^>]*live-main-product\.js[^>]*><\/script>/g, '');
   if (extraHead) html = html.replace('</head>', extraHead + '</head>');
-  return {html, sectionHtml, id: sid, settings: sset, blocks: list};
+  return {html, sectionHtml: first.html, id: sid, settings: first.settings, blocks: first.blocks, more: others, schemes};
 }
 
 const SVG = {black: '#1d1d1d', beige: '#d8cdb5', poster: '#7a8fa6', red: '#b0302a', blue: '#2a4bb0', tall: '#4a7a4a'};
