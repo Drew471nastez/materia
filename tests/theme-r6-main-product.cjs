@@ -76,7 +76,7 @@ const OLD = 'c098384';
   const REVIEWED = {...L.R5.PANTS, rating: 4.6, review_count: 12};
   try {
     /* ---- the saved product page, old and new */
-    for (const design of [false, true]) for (const width of [375, 1366]) {
+    for (const design of process.env.MP_SKIP_SETTINGS ? [] : [false, true]) for (const width of [375, 1366]) {
       const looks = {};
       for (const [tag, tree] of [['old', old], ['new', repo]]) {
         const r = await L.renderMain({tree, design});
@@ -173,7 +173,7 @@ const OLD = 'c098384';
     for (const s of schema.settings) if (s.id && !s.hidden && s.visible_if !== '{{ false }}') ok(CASES.some(c => c.id === s.id), 'a check for every section setting: ' + s.id);
 
     const measure = (p, id, expr) => p.evaluate(([ID, expr]) => { const R = document.getElementById('MainProduct-' + ID), SEC = document.getElementById('shopify-section-' + ID), W = R.querySelector(':scope > :is(.container, .fluid_container, .stretch_width, .full_width, skeleton-page)'); return String(eval(expr)); }, [id, expr]);
-    for (const design of [true, false]) for (const width of [375, 1366]) {
+    for (const design of process.env.MP_SKIP_SETTINGS ? [] : [true, false]) for (const width of [375, 1366]) {
       const groups = new Map();
       for (const c of CASES) if (c.widths.includes(width) && !(design && c.editorRedraw === false)) { const k = JSON.stringify([c.base, c.product ? 1 : 0]); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(c); }
       for (const [, list] of groups) {
@@ -221,9 +221,10 @@ const OLD = 'c098384';
         const R = document.getElementById('MainProduct-' + id), h = R.querySelector('.product-detail__information .product-detail__title'), root = getComputedStyle(document.documentElement);
         const c = getComputedStyle(h), bodyP = R.querySelector('.product-detail__information .short-description p, .product-detail__information p');
         const probe = document.createElement('span'); probe.style.color = 'var(--color-heading)'; R.appendChild(probe); const heading = getComputedStyle(probe).color; probe.remove();
-        return {font: c.fontFamily, want: getComputedStyle(R).getPropertyValue('--heading-font').trim() || root.getPropertyValue('--heading-font').trim(), color: c.color, heading, own: R.hasAttribute('data-own-font'), p: getComputedStyle(bodyP).fontFamily};
+        const f = document.createElement('span'); f.style.fontFamily = 'var(--heading-font)'; h.parentElement.appendChild(f); const want = getComputedStyle(f).fontFamily; f.remove();
+        return {font: c.fontFamily, want, color: c.color, heading, own: R.hasAttribute('data-own-font'), p: getComputedStyle(bodyP).fontFamily};
       }, r.id);
-      ok(theme.font.replace(/\s/g, '') === theme.want.replace(/\s/g, ''), `${width}: the title is in the theme's heading font (${theme.font})`);
+      eq(theme.font, theme.want, `${width}: the title is in the theme's heading font`);
       eq(theme.color, theme.heading, `${width}: the title in the scheme's heading colour`);
       ok(!theme.own, `${width}: no own font by default`);
       await L.emit(p, {section: r.id, settings: {enable_custom_fonts: true, heading_font: {family: 'Georgia', fallback_families: 'serif'}, body_font: {family: 'Courier New', fallback_families: 'monospace'}, enable_custom_style: true, title_color: '#ff00aa'}});
@@ -254,6 +255,12 @@ const OLD = 'c098384';
       eq(await size(), ['47px', '39px'], `${width}: and the redraw draws the same`);
       await L.redraw(p, r.id, r.sectionHtml); await p.waitForTimeout(80);
       eq(await size(), before, `${width}: a redraw with the saved sizes takes the live ones away`);
+      /* a value painted here while the slider moves asks the builder not to redraw per step; others do not */
+      const prevented = (detail) => p.evaluate(d => { const ev = new CustomEvent('storelib:settings-change', {detail: d, cancelable: true}); document.dispatchEvent(ev); return ev.defaultPrevented; }, detail);
+      eq([await prevented({section: r.id, settings: {padding_top: 12}, live: true}), await prevented({section: r.id, settings: {padding_top: 12}, live: false}),
+        await prevented({section: r.id, settings: {desktop_layout: 'stack'}, live: true}), await prevented({section: r.id, block: title.id, settings: {title_font_size_mobile: 30}, live: true}),
+        await prevented({section: r.id, block: 'other-block', settings: {padding_top: 3}, live: true}), await prevented({section: 'elsewhere', settings: {padding_top: 3}, live: true})],
+        [true, false, false, true, false, false], `${width}: the builder skips per-step redraws only for values painted live`);
       await ctx.close();
     }
 

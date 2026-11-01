@@ -22,6 +22,13 @@
 (() => {
   if (window.MateriaMainProduct) return;
   const roots = new Map();
+  /* Values painted here while a slider or colour moves (section, then title and price blocks). */
+  const SLIDING = {
+    section: new Set(['padding_top', 'padding_bottom', 'desktop_media_width', 'sticky_top_gap', 'content_gap_desktop', 'padding_left_desktop', 'padding_right_desktop',
+      'padding_left_mobile', 'padding_right_mobile', 'sticky_padding_y', 'sticky_button_radius', 'title_color', 'price_color', 'text_color', 'sticky_bar_bg', 'sticky_border_color']),
+    title: new Set(['title_font_size_desktop', 'title_font_size_mobile']),
+    price: new Set(['price_font_size_desktop', 'price_font_size_mobile', 'compare_font_size_desktop', 'compare_font_size_mobile']),
+  };
   const touched = new WeakMap();
   const parse = v => { try { return JSON.parse(v || '{}') || {}; } catch (_) { return {}; } };
   const bool = v => v === true || v === 'true';
@@ -153,6 +160,7 @@
     const d = e.detail || {}, id = sectionId(d.section || d.sectionId || d.section_id);
     if (!id || !d.settings) return;
     const bRaw = d.block || d.blockId || d.block_id, bid = bRaw ? String(bRaw.id || bRaw) : '';
+    let kind = '';
     for (const [root, st] of roots) {
       if (st.id !== id || !root.isConnected) continue;
       if (bid) {
@@ -160,9 +168,13 @@
         const known = st.blocks.get(bid);
         const type = (d.block && d.block.type) || d.blockType || d.block_type || (known && known.type) || (el && el.closest('#price-' + CSS.escape(id)) ? 'price' : el && el.matches('.product-detail__title') ? 'title' : '');
         st.blocks.set(bid, {type, s: {...(known ? known.s : {}), ...d.settings}});
-      } else Object.assign(st.s, d.settings);
+        kind = type;
+      } else { Object.assign(st.s, d.settings); kind = 'section'; }
       st.schedule();
     }
+    /* While a slider or colour moves, a value painted here needs no redraw per step; the builder draws once more on release. */
+    const keys = SLIDING[kind];
+    if (keys && d.live === true && Object.keys(d.settings).every(k => keys.has(k))) e.preventDefault();
   });
   for (const name of ['DOMContentLoaded', 'storelib:section-load', 'shopify:section:load']) document.addEventListener(name, scan);
   const watched = n => n.nodeType === 1 && (n.matches('[data-mp-root]') || n.querySelector('[data-mp-root]'));

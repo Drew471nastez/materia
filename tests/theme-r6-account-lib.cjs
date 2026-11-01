@@ -183,8 +183,8 @@ async function suite(name, cfg = {}) {
       /* every visible input has a label; buttons and fields are 44px */
       const a11y = await t.page.evaluate(() => {
         const W = document.getElementById('shopify-section-test'), bad = [];
-        for (const i of W.querySelectorAll('input:not([type=hidden]), textarea, select')) { if (i.hidden || i.closest('[hidden]') || i.closest('[data-mt-trap]')) continue; const l = i.id && W.querySelector('label[for="' + i.id + '"]'); if (!l || !l.textContent.trim()) bad.push('no label ' + (i.id || i.name)); if (i.getBoundingClientRect().height < 44) bad.push('short ' + i.id); }
-        for (const b of W.querySelectorAll('button, [data-sl-button]')) if (!b.closest('[hidden]') && b.getBoundingClientRect().height < 44) bad.push('small button');
+        for (const i of W.querySelectorAll('input:not([type=hidden]), textarea, select')) { if (i.hidden || i.closest('[hidden]') || i.closest('[data-mt-trap]') || !i.getClientRects().length) continue; const l = i.id && W.querySelector('label[for="' + i.id + '"]'); if (!l || !l.textContent.trim()) bad.push('no label ' + (i.id || i.name)); if (i.getBoundingClientRect().height < 44) bad.push('short ' + i.id); }
+        for (const b of W.querySelectorAll('button, [data-sl-button]')) if (!b.closest('[hidden]') && b.getClientRects().length && b.getBoundingClientRect().height < 44) bad.push('small button');
         return bad;
       });
       eq(a11y, [], tag(width, editing) + ': labelled fields and 44px targets');

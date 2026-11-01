@@ -136,11 +136,23 @@ async function renderMain({tree = repo, settings = {}, blocks, product = R5.PANT
 
 const SVG = {black: '#1d1d1d', beige: '#d8cdb5', poster: '#7a8fa6', red: '#b0302a', blue: '#2a4bb0', tall: '#4a7a4a'};
 const FIXTURE_ERRORS = /Unexpected token|Unexpected end of input|is not valid JSON/;
+const FOREIGN = /\/assets\/(?:media-)?live-(?!main-product)[\w-]+\.js/;
+/* Parse errors of other groups' controllers in this tree (a parse error has no file in its stack). */
+const parseCache = new Map();
+function foreignParse(tree) {
+  if (parseCache.has(tree)) return parseCache.get(tree);
+  const vm = require('node:vm'), dir = path.join(tree, 'shopify/assets'), out = [];
+  for (const f of fs.readdirSync(dir)) if (/^(media-)?live-.*\.js$/.test(f) && f !== 'live-main-product.js') { try { new vm.Script(fs.readFileSync(path.join(dir, f), 'utf8')); } catch (e) { out.push(e.message); } }
+  parseCache.set(tree, out);
+  return out;
+}
 async function open(browser, width, html, {tree = repo, reduced = false, height = 900, wait = 1200} = {}) {
   const ctx = await browser.newContext({viewport: {width, height}, ...(width < 500 ? {isMobile: true, hasTouch: true} : {}), reducedMotion: reduced ? 'reduce' : 'no-preference'});
   const p = await ctx.newPage();
   p.errors = [];
-  p.on('pageerror', err => { if (!FIXTURE_ERRORS.test(err.message)) p.errors.push(err.message); });
+  /* Errors thrown by another group's live controller (being worked on in the same tree) are listed apart. */
+  p.foreign = [];
+  p.on('pageerror', err => { if (FIXTURE_ERRORS.test(err.message)) return; if (FOREIGN.test(err.stack || '') || foreignParse(tree).includes(err.message)) p.foreign.push(err.message); else p.errors.push(err.message); });
   await p.route('**/*', async r => {
     const u = new URL(r.request().url());
     if (u.hostname !== 'fixture.test') return r.fulfill({status: 204, body: ''});

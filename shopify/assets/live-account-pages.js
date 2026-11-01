@@ -94,6 +94,7 @@
     for (const el of own(c, '[data-ap-rich]')) if (out(el)) words(c, el, s[el.dataset.apRich], 'rich');
     for (const el of own(c, '[data-ap-attr-placeholder]')) put(el, '@placeholder', str(s[el.dataset.apAttrPlaceholder]));
     for (const el of own(c, '[data-ap-href]')) if (out(el)) put(el, '@href', url(s[el.dataset.apHref]) || el.dataset.apHrefFallback || el.getAttribute('href'));
+    for (const el of own(c, '[data-ap-aria]')) put(el, '@aria-label', str(s[el.dataset.apAria]) || 'Account');
     for (const el of own(c, '[data-ap-show]')) if (out(el)) put(el, 'hidden', !bool(s[el.dataset.apShow]));
     for (const el of own(c, '[data-ap-hide]')) if (out(el)) put(el, 'hidden', bool(s[el.dataset.apHide]));
   }
@@ -169,7 +170,15 @@
     put(root, '--ap-hfs-d', px(s.heading_size_desktop, 30)); put(root, '--ap-hfs-m', px(s.heading_size_mobile, 24));
     common(c);
   }
-  function popup(c) { frame(c); common(c); }
+  /* the tab names assets/theme.js reads to switch tabs and fill the heading */
+  function popup(c) {
+    const {s, put} = c, li = str(s.login_title), rg = str(s.register_title);
+    frame(c); common(c);
+    const login = c.q('.bls-login'), reg = c.q('.bls-register');
+    if (login) { put(login, '@data-title-default', li); put(login, '@data-login-hidden', li); }
+    if (reg) put(reg, '@data-login-hidden', rg);
+    for (const b of own(c, '[data-login-show]')) put(b, '@data-login-show', b.closest('.bls-register') ? li : rg);
+  }
   function passwordFooter(c) {
     const {root, s, put} = c;
     frame(c); pads(c);

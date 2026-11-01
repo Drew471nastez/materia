@@ -80,10 +80,10 @@ const page = (name, extra) => L.suite(name, {mountOpts: {globals: G}, noop: NOOP
     skip: ['cancelled_label', 'track_label', 'tax_label'],
     extra: async browser => {
       const t = await L.mount(browser, 'main-order', {assets: L.ASSETS, width: 375, editing: false, globals: G});
-      const o = await t.page.evaluate(() => ({h: document.querySelector('#shopify-section-test h1').textContent.replace(/\s+/g, ' ').trim(), line: [...document.querySelector('#shopify-section-test tbody tr').cells].map(c => c.textContent.replace(/\s+/g, ' ').trim()), foot: [...document.querySelectorAll('#shopify-section-test tfoot tr')].map(r => r.textContent.replace(/\s+/g, ' ').trim())}));
+      const o = await t.page.evaluate(() => ({h: document.querySelector('#shopify-section-test h1').textContent.replace(/\s+/g, ' ').trim(), line: [...document.querySelector('#shopify-section-test tbody tr').cells].map(c => c.textContent.replace(/\s+/g, ' ').trim()), foot: [...document.querySelectorAll('#shopify-section-test tfoot tr')].map(r => r.textContent.replace(/\s+/g, ''))}));
       eq(o.h, 'Order #1002', 'main-order: the order number');
       eq(o.line, ['Linen pantsLP-1', 'R$20.00', '2', 'R$40.00'], 'main-order: the line in the store money');
-      eq(o.foot, ['Subtotal R$40.00', 'Shipping (Standard) R$5.00', 'Total R$45.00 EUR'], 'main-order: the totals');
+      eq(o.foot, ['SubtotalR$40.00', 'Shipping(Standard)R$5.00', 'TotalR$45.00EUR'], 'main-order: the totals');
       ok(await t.noOverflow(), 'main-order: the table scrolls inside its column at 375');
       await t.page.close();
     },

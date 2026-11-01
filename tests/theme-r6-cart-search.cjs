@@ -126,16 +126,17 @@ function changed(x, cur) {
 function context(type, id) {
   const b = {enable_custom_style: true, custom_style: true, enable_custom_fonts: true, font: {family: 'Georgia', fallback_families: 'serif'}, show_avatars: true, show_stars: true, show_rating_text: true, show_heading: true, top_show_icon: true, show_badges: true, show_payment_badges: true, show_faq: true, pill_border_style: 'solid', pill_border_width: 2, pill_shadow: false, filled_stars: 3, avatar_count: 4};
   const m = /^pill(\d)_(.+)$/.exec(id);
-  if (m) { b['pill' + m[1] + '_enable'] = true; b['pill' + m[1] + '_text'] = 'Pill ' + m[1]; if (m[2] === 'icon_image') b['pill' + m[1] + '_icon_source'] = 'image'; if (m[2] === 'icon_svg') b['pill' + m[1] + '_icon_source'] = 'svg'; }
+  if (m) { b['pill' + m[1] + '_enable'] = true; b['pill' + m[1] + '_text'] = 'Pill ' + m[1]; if (m[2] !== 'icon_svg') b['pill' + m[1] + '_icon_svg'] = '<svg viewBox="0 0 10 10"><rect width="3" height="10"/></svg>'; if (m[2] !== 'icon_image') b['pill' + m[1] + '_icon_image'] = IMG; if (m[2] === 'icon_image') b['pill' + m[1] + '_icon_source'] = 'image'; if (m[2] === 'icon_svg') b['pill' + m[1] + '_icon_source'] = 'svg'; }
   if (type === 'happy_customers') for (let i = 1; i <= 6; i++) b['avatar_' + i] = IMG;
   if (type === 'social_proof_avatars') for (let i = 1; i <= 2; i++) b['ref_avatar_' + i] = IMG;
   if (id === 'collapse2_body' || id === 'collapse2_open') b.collapse2_title = 'Second row';
   if (id === 'collapse2_title') b.collapse2_body = '<p>Second body</p>';
+  if (id === 'muted_color' || id === 'collapse_body' || id === 'collapse2_body') { b.collapse_open = true; b.collapse2_open = true; }
   return b;
 }
 /* settings that need the server: checked after a redraw only */
-const SERVER = new Set(['render_in_sidebar', 'show_avatars:image', 'collapse_open', 'collapse2_open', 'top_icon']);
-const isServer = (type, x) => SERVER.has(x.id) || x.type === 'image_picker' || x.type === 'font_picker' || /icon_source$/.test(x.id) || (type === 'info_box' && /^(collapse2?_title|badge_|show_badges$)/.test(x.id)) || (type === 'happy_customers' && x.id === 'avatar_count' && false);
+const SERVER = new Set(['render_in_sidebar', 'show_avatars:image', 'collapse_open', 'collapse2_open', 'top_icon', 'top_show_icon']);
+const isServer = (type, x) => SERVER.has(x.id) || x.type === 'image_picker' || x.type === 'font_picker' || /icon_source$|icon_svg$/.test(x.id) || (type === 'info_box' && /^(collapse2?_title|badge_|show_badges$)/.test(x.id)) || (type === 'happy_customers' && x.id === 'avatar_count' && false);
 /* where a control shows: _desktop at 1366 only, _mobile at 375 only */
 const shows = (id, width) => /_desktop$/.test(id) ? width >= 750 : /_mobile$/.test(id) || id === 'mobile_layout' ? width < 750 : true;
 
@@ -168,7 +169,8 @@ async function blockControls(browser, width) {
         const s2 = sel.replace(bid, b2);
         await t.emit({[x.id]: v}, b2); await frames(t.page);
         const live = await sig(t, s2);
-        eq(live, afterRedraw.replace(new RegExp(redrawn.section.blocks.find(b => b.type === type).id, 'g'), b2), `${type}.${x.id} at ${width}: live edit looks like the redraw`);
+        if (afterRedraw.startsWith('missing')) { ok(await t.page.$eval(s2, el => getComputedStyle(el).display === 'none'), `${type}.${x.id} at ${width}: live edit hides what the server leaves out`); }
+        else eq(live, afterRedraw.replace(new RegExp(redrawn.section.blocks.find(b => b.type === type).id, 'g'), b2), `${type}.${x.id} at ${width}: live edit looks like the redraw`);
       }
       eq(t.errors, [], `${type}.${x.id}: no errors`);
       await t.page.close();

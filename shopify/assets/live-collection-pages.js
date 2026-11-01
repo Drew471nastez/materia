@@ -258,6 +258,116 @@
     }
   };
 
+  /* ---------- Featured post banner (featured-blog-header) ---------- */
+  T['featured-blog-header'] = (root, st) => {
+    const s = st.s, c = bool(s.enable_custom_style), hb = root.querySelector('[id^="hero-banner-2-"]');
+    scheme(root, s);
+    width(root, s.section_width || 'container');
+    if (!hb) return;
+    const C = (v, f) => c ? color(v, f) : f;
+    const own = s.use_theme_button === false || s.use_theme_button === 'false';
+    const vars = {
+      '--fbh-bg': C(s.section_bg_color, 'var(--color-background)'),
+      '--fbh-btn-bg': C(s.button_bg_color, 'var(--btn-primary-bg-color)'), '--fbh-btn-bg-hover': C(s.button_bg_hover_color, 'var(--btn-primary-hover-bg-color)'),
+      '--fbh-btn-color': C(s.button_text_color, 'var(--btn-primary-color)'), '--fbh-btn-color-hover': C(s.button_text_color, 'var(--btn-primary-hover-color)'),
+      '--fbh-btn-border': C(s.button_border_color, 'var(--btn-primary-border-color, var(--btn-primary-bg-color))'), '--fbh-btn-border-hover': C(s.button_border_hover_color, 'var(--btn-primary-hover-border-color, var(--btn-primary-hover-bg-color))'),
+      '--fbh-overlay-text': C(s.description_maintext_color, '#ffffff'), '--fbh-overlay-title': C(s.featured_title_text_color, '#ffffff'), '--fbh-card-text': C(s.description_maintext_color, 'var(--color-text)'),
+      '--fbh-btn-radius': own ? num(s.button_border_radius) + 'px' : 'var(--btn-radius, 25px)', '--fbh-btn-bw': own ? num(s.read_more_button_border_weight) + 'px' : 'var(--btn-border-width, 2px)', '--fbh-btn-weight': own ? String(num(s.read_more_font_weight, 600)) : 'var(--btn-font-weight, 600)',
+      '--fbh-pt': num(s.section_top_padding) + 'px', '--fbh-pb': num(s.section_bottom_padding) + 'px',
+      '--fbh-mt-d': num(s.section_margin_top_desktop) + 'px', '--fbh-mb-d': num(s.section_margin_bottom_desktop) + 'px', '--fbh-mt-m': num(s.section_margin_top_mobile) + 'px', '--fbh-mb-m': num(s.section_margin_bottom_mobile) + 'px',
+      '--fbh-read-d': num(s.read_more_font_size_desktop, 16) + 'px', '--fbh-read-m': num(s.read_more_font_size_mobile, 14) + 'px',
+      '--fbh-title-d': num(s.featured_title_font_size_desktop, 30) + 'px', '--fbh-title-m': num(s.featured_title_font_size_mobile, 24) + 'px',
+      '--fbh-img-w-d': num(s.desktop_article_image_width, 100) + '%', '--fbh-img-h-d': num(s.desktop_article_image_height, 400) + 'px', '--fbh-img-w-m': num(s.mobile_article_image_width, 100) + '%', '--fbh-img-h-m': num(s.mobile_article_image_height, 300) + 'px',
+      '--fbh-brightness': String(num(s.article_image_brightness, 1)), '--fbh-img-radius': num(s.article_image_border_radius) + 'px', '--fbh-card-img-radius': num(s.custom_article_image_border_radius) + 'px',
+      '--fbh-img-z-m': String(num(s.article_image_z_index_mobile)), '--fbh-img-y-m': num(s.article_image_y_index_mobile) + 'px', '--fbh-img-y-d': num(s.article_image_y_index_desktop) + 'px',
+      '--fbh-img-ratio-m': String(s.article_image_ratio_mobile || '16-9').split('-').join(' / '),
+    };
+    for (const [k, v] of Object.entries(vars)) setVar(hb, k, v);
+    const fonts = s.use_theme_fonts === false || s.use_theme_fonts === 'false';
+    const fv = v => v && typeof v === 'object' ? v : null;
+    setVar(hb, '--fbh-title-font', fonts ? font(s.title_font) : ''); setVar(hb, '--fbh-title-weight', fonts ? String(fv(s.title_font)?.weight || 600) : '');
+    setVar(hb, '--fbh-desc-font', fonts ? font(s.description_font) : ''); setVar(hb, '--fbh-desc-weight', fonts ? String(fv(s.description_font)?.weight || 400) : '');
+    for (const el of hb.querySelectorAll('.featured_title3, .featured_description3, .featured_item-info3 h3, .featured_item-info3 p')) { attr(el, 'data-own-font', fonts); attr(el, 'data-own-weight', fonts); }
+    for (const a of hb.querySelectorAll('.featured_link3')) {
+      attr(a, 'data-own-shape', own);
+      a.hidden = bool(s.hide_read_more_button);
+      if (st.touched.has('button_text')) text(a, s.button_text);
+    }
+    for (const el of hb.querySelectorAll('.featured_description3, .featured_item-info3 p')) el.hidden = bool(s.remove_description_text);
+    const label = hb.querySelector('.featured_article3');
+    if (label && st.touched.has('featured_article_label')) text(label, String(s.featured_article_label || '').trim() ? s.featured_article_label : label.dataset.lcpFallback || '');
+  };
+
+  /* ---------- Collections list page (main-list-collections) ---------- */
+  /* The collection card's own classes (snippets/collection-item): alignment and name size. */
+  function cards(root, s) {
+    const align = s.text_alignment || 'center', size = num(s.font_size, 16);
+    for (const el of root.querySelectorAll('.collection-item__information')) { swapPrefix(el, 'text-', align); if (el.classList.contains('flex')) swapPrefix(el, 'justify-content-', align); if (el.classList.contains('flex-column')) swapPrefix(el, 'align-item-', align); }
+    for (const el of root.querySelectorAll('.collection-item__name')) {
+      if (el.classList.contains('inline-flex')) swapPrefix(el, 'justify-content-', align);
+      swap(el, ['fs-medium-list', 'fs-custom'], size > 14 ? 'fs-medium-list' : 'fs-custom');
+      setVar(el, '--font-size', String(size));
+    }
+  }
+  T['main-list-collections'] = (root, st) => {
+    const s = st.s, d = num(s.items_per_row, 4), gap = num(s.column_gap, 30);
+    scheme(root, s);
+    width(root.firstElementChild, s.section_width);
+    pads(root, s);
+    setVar(root, '--section-pt', String(num(s.padding_top)));
+    setVar(root, '--section-pb', String(num(s.padding_bottom)));
+    const list = root.querySelector('.collection-list');
+    if (list) for (const c of [...list.classList]) if (/^col-\d+$/.test(c) && c !== 'col-' + d) { list.classList.remove(c); list.classList.add('col-' + d); }
+    for (const g of root.querySelectorAll('.collection-list-grid')) {
+      setVar(g, '--col-desktop', String(d)); setVar(g, '--col-tablet', String(d > 3 ? 3 : d)); setVar(g, '--col-desktop-small', d > 3 ? '3' : '');
+      setVar(g, '--col-gap', (gap < 15 ? gap : 15) + 'px'); setVar(g, '--col-gap-desktop', gap < 15 ? '' : gap + 'px');
+    }
+    cards(root, s);
+    if (st.touched.has('button_show_more')) for (const a of root.querySelectorAll('loadmore-button a')) { const t = a.querySelector('.hidden-on-load'); text(t, s.button_show_more); attr(a, 'aria-label', true, s.button_show_more || ''); }
+  };
+
+  /* ---------- Subcollections (subcollection-list) ---------- */
+  T['subcollection-list'] = (root, st) => {
+    const s = st.s;
+    scheme(root, s);
+    width(root.firstElementChild, s.section_width);
+    pads(root, s);
+    setVar(root, '--section-pt', String(num(s.padding_top)));
+    setVar(root, '--section-pb', String(num(s.padding_bottom)));
+    prop(root, 'background-color', bool(s.enable_custom_style) && color(s.section_bg, '') ? color(s.section_bg, '') : '');
+    swapPrefix(root.querySelector('.section__header'), 'text-', s.header_alignment || 'left');
+    const h = root.querySelector('.section__header-heading');
+    if (h) {
+      swap(h, SIZES, s.header_size === 'small' ? 'h3' : s.header_size === 'large' ? 'h1-size' : '');
+      if (st.touched.has('heading')) text(h, s.heading);
+    }
+    const d = root.querySelector('.section__header-des');
+    if (d && st.touched.has('description')) rich(d, s.description, st.cache);
+    swapPrefix(root.querySelector('.swiper-pagination'), 'justify-content-', s.pagination_position || 'center');
+    cards(root, s);
+    for (const el of root.querySelectorAll('.collection-item__name')) swap(el, ['body_weight', 'subheading_weight', 'heading_weight'], s.font_weight || '');
+  };
+
+  /* ---------- Collection products (main-collection-product) ----------
+     The grid, spacing, scheme and words apply live; filters, sorting,
+     pagination and the toolbar style wait for the redraw, which
+     shopify/assets/collection.js also uses (?section_id=) to filter. */
+  T['main-collection-product'] = (root, st) => {
+    const s = st.s, d = num(s.items_per_row, 4);
+    scheme(root, s);
+    width(root.querySelector(':scope > grid-list > div'), s.section_width);
+    pads(root, s);
+    setVar(root, '--section-pt', String(num(s.padding_top)));
+    setVar(root, '--section-pb', String(num(s.padding_bottom)));
+    const grid = root.querySelector('#product-grid.facets-grid');
+    if (grid) {
+      setVar(grid, '--cols-desktop', String(d)); setVar(grid, '--cols-tablet', String(d > 3 ? 3 : d));
+      setVar(grid, '--cols-mobile', String(num(s.items_per_row_mobile, 2))); setVar(grid, '--grid-gap', num(s.column_gap) + 'px');
+      attr(grid, 'data-view-mode', true, d);
+    }
+    for (const a of root.querySelectorAll('.facets-empty__action:not([data-facets-link])')) { if (st.touched.has('empty_link_label')) text(a, s.empty_link_label); if (st.touched.has('empty_link_url')) link(a, s.empty_link_url, '/collections/all'); }
+  };
+
   /* ---------- Shared wiring ---------- */
   const S = new Map();
   function init(root) {
