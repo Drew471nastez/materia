@@ -22,6 +22,7 @@
 const assert = require('assert/strict'), {execSync} = require('child_process');
 const {launch, mount, schemaOf, schemaProblems} = require('./media-fixture.cjs');
 const ASSET = 'live-features-a.js';
+const BASE = '4b0142b'; /* the sections before round 4: every id they had is kept */
 const IMG = {url: 'https://theme.test/pic.png', src: 'https://theme.test/pic.png', width: 800, height: 600, alt: 'Saved alt'};
 const SVG = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><path d="M2 2h4"/></svg>';
 const FONT = {family: 'Verdana', fallback_families: 'sans-serif'}, MONO = {family: 'Courier New', fallback_families: 'monospace'};
@@ -101,7 +102,7 @@ async function prep(t, cfg) { await t.page.evaluate(FP); await t.page.addStyleTa
 /* Every non-hidden control at one width, in the editor (live and redraw) or on the storefront (redraw). */
 async function everyControl(browser, cfg, width, editing, seen) {
   const {name} = cfg, {schema} = schemaOf(name);
-  const t = await mount(browser, name, {width, editing, settings: cfg.settings || {}, blocks: cfg.blocks ? cfg.blocks() : undefined, assets: [ASSET]});
+  const t = await mount(browser, name, {width, editing, settings: cfg.settings || {}, blocks: cfg.blocks ? cfg.blocks() : undefined, assets: [...(cfg.assets || []), ASSET]});
   await prep(t, cfg);
   const base = clone(t.section.settings);
   for (const x of schema.settings) if (x.id && !(x.id in base)) base[x.id] = '';
@@ -164,8 +165,8 @@ async function basics(browser, cfg, width, editing) {
   const {name} = cfg;
   const opts = {width, editing, settings: cfg.settings || {}, blocks: cfg.blocks ? cfg.blocks() : undefined};
   /* first paint = hydrated, markup = derived, no overflow, no errors */
-  const a = await mount(browser, name, {...opts, assets: []}); await prep(a, cfg);
-  const b = await mount(browser, name, {...opts, assets: [ASSET]}); await prep(b, cfg);
+  const a = await mount(browser, name, {...opts, assets: cfg.assets || []}); await prep(a, cfg);
+  const b = await mount(browser, name, {...opts, assets: [...(cfg.assets || []), ASSET]}); await prep(b, cfg);
   await b.page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
   const fa = await fp(a), fb = await fp(b);
   ok(!diff(fa, fb).length, `${name} ${width} ${editing ? 'editor' : 'storefront'}: first paint equals hydrated paint: ${diffDetail(fa, fb)}`);
@@ -189,7 +190,7 @@ async function basics(browser, cfg, width, editing) {
   for (const [sel, kind] of T.probes || []) if (!(T.colorFree || []).includes(sel)) ok(await b.css(sel, 'color') === (kind === 'h' ? 'rgb(16, 16, 16)' : 'rgb(51, 51, 51)'), `${name} ${width}: ${sel} follows the alt scheme`);
   await a.page.close(); await b.page.close();
   /* priority off: the theme still decides */
-  const c = await mount(browser, name, {...opts, assets: [ASSET], priority: 'off'}); await prep(c, cfg);
+  const c = await mount(browser, name, {...opts, assets: [...(cfg.assets || []), ASSET], priority: 'off'}); await prep(c, cfg);
   for (const [sel, kind] of T.probes || []) ok(kind === 'h' ? /Georgia/.test(await c.css(sel, 'fontFamily')) : /Arial/.test(await c.css(sel, 'fontFamily')), `${name} ${width} priority off: ${sel} theme font`);
   eq(c.errors, [], name + ' priority off: no errors');
   await c.page.close();
@@ -198,7 +199,7 @@ async function basics(browser, cfg, width, editing) {
 async function lifecycle(browser, cfg) {
   const {name} = cfg, {schema} = schemaOf(name), blocks = cfg.blocks ? cfg.blocks() : clone(schema.presets[0].blocks || []);
   /* two instances */
-  const t = await mount(browser, name, {width: 1366, instances: [{uid: 'a', settings: cfg.settings || {}, blocks}, {uid: 'b', settings: cfg.settings || {}, blocks}], assets: [ASSET]});
+  const t = await mount(browser, name, {width: 1366, instances: [{uid: 'a', settings: cfg.settings || {}, blocks}, {uid: 'b', settings: cfg.settings || {}, blocks}], assets: [...(cfg.assets || []), ASSET]});
   await prep(t, cfg);
   const fb = await fp(t, 'b');
   const twoKey = cfg.twoKey || ['padding_top_desktop', 'padding_top'].find(k => schema.settings.some(x => x.id === k));
@@ -238,7 +239,7 @@ async function lifecycle(browser, cfg) {
   eq(t.errors, [], name + ' lifecycle: no errors');
   await t.page.close();
   /* reduced motion */
-  const r = await mount(browser, name, {width: 375, blocks, settings: cfg.settings || {}, assets: [ASSET], reducedMotion: 'reduce'}); await prep(r, cfg);
+  const r = await mount(browser, name, {width: 375, blocks, settings: cfg.settings || {}, assets: [...(cfg.assets || []), ASSET], reducedMotion: 'reduce'}); await prep(r, cfg);
   ok(await r.page.evaluate(() => [...document.querySelectorAll('[data-fa] *')].every(e => getComputedStyle(e).transitionDuration.split(',').every(d => parseFloat(d) === 0) || !e.getAnimations().length)), name + ': reduced motion runs no animation');
   eq(r.errors, [], name + ' reduced motion: no errors');
   await r.page.close();
@@ -248,7 +249,7 @@ async function lifecycle(browser, cfg) {
 function statics(cfg) {
   const {name} = cfg, s = schemaOf(name).schema;
   eq(schemaProblems(name), [], name + ': schema problems');
-  let head = null; try { head = JSON.parse(execSync(`git -C ${__dirname}/.. show HEAD:sections/${name}.storelib`).toString().split('<schema>')[1].split('</schema>')[0]).shopify; } catch (_) {}
+  let head = null; try { head = JSON.parse(execSync(`git -C ${__dirname}/.. show ${BASE}:sections/${name}.storelib`).toString().split('<schema>')[1].split('</schema>')[0]).shopify; } catch (_) {}
   if (head) {
     const ids = l => (l || []).filter(x => x.id).map(x => x.id);
     for (const id of ids(head.settings)) ok(ids(s.settings).includes(id), `${name}: keeps section setting ${id}`);

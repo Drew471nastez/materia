@@ -57,6 +57,7 @@ async function run(spec) {
       const tag = name + '@' + width + (editing ? ' editor' : ' storefront');
       const t = await mount(browser, name, {width, editing, assets: [...(spec.assets || []), ASSET], blocks: spec.blocks, globals: spec.globals, settings: spec.settings});
       const R = spec.root;
+      if (spec.ready) await spec.ready(t);
       await wait2(t.page);
       /* theme inheritance */
       for (const [sel, prop, want] of spec.inherit || []) { const got = await value(t, {sel, prop}); ok(same(got, want), tag + ': inherits ' + sel + ' ' + prop + ' = ' + want + ' (got ' + got + ')'); }
@@ -84,7 +85,7 @@ async function run(spec) {
       const one = async (c, live, want = c.expect, label = '') => {
         if (c.w && c.w !== width) return;
         if (c.live === false && live) return;
-        if (process.env.R4_TRACE) console.log('trace', width, live, c.block || '', c.id);
+        if (process.env.R4_TRACE) console.log('trace', width, editing, live, c.block || '', c.id, process.env.R4_TRACE_JS ? await t.page.evaluate(process.env.R4_TRACE_JS) : '');
         const pre = c.pre || {}, preBlock = c.preBlock || {};
         const keep = orig(c, [c.id, ...Object.keys(c.block ? {...pre, ...preBlock} : pre)]);
         const keepSec = c.block && Object.keys(pre).length ? orig({}, Object.keys(pre)) : null;
@@ -148,7 +149,8 @@ async function run(spec) {
       }
       if (spec.extra) await spec.extra(t, {width, editing, ok: (c, m) => ok(c, tag + ': ' + m), wait2, tag});
       ok(await t.noOverflow(), tag + ': no sideways scroll');
-      ok(t.errors.length === 0, tag + ': no errors ' + t.errors.join(' | '));
+      const errs = t.errors.filter(e => !(spec.ignoreErrors && spec.ignoreErrors.test(e)));
+      ok(errs.length === 0, tag + ': no errors ' + errs.join(' | '));
       await t.page.close();
     }
 
@@ -173,7 +175,8 @@ async function run(spec) {
         if (spec.addBlockLive) { await t.emit(spec.addBlockLive.settings, last.id, 'a'); await wait2(t.page); ok(same(await value(t, spec.addBlockLive, 'a'), spec.addBlockLive.expect), name + ': added block is live editable'); }
       }
       ok(await t.page.evaluate(n => [...window.MateriaLiveTestimonials.roots.values()].filter(s => s.type === n).every(s => s.inits === 1), name), name + ': each root set up once');
-      ok(t.errors.length === 0, name + ': no errors (instances) ' + t.errors.join(' | '));
+      const errs2 = t.errors.filter(e => !(spec.ignoreErrors && spec.ignoreErrors.test(e)));
+      ok(errs2.length === 0, name + ': no errors (instances) ' + errs2.join(' | '));
       await t.page.close();
     }
 

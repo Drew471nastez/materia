@@ -124,6 +124,8 @@ const CT3 = {
   /* the floating picture's controls need a picture; svg code is drawn on the builder's redraw */
   pre: {'col_a.image_size_desktop': {image: IMG}, 'col_a.image_size_mobile': {image: IMG}, 'col_a.image_rotate_desktop': {image: IMG}, 'col_a.image_rotate_mobile': {image: IMG}, 'col_a.image_offset_desktop': {image: IMG}, 'col_a.image_offset_mobile': {image: IMG}},
   structural: ['row.svg_a', 'row.svg_b'],
+  /* column A is narrow on a phone, so a smaller picture shows the change */
+  values: {'col_a.image_size_mobile': [40]},
   desk: ['content_align', 'left_col_fr', 'right_col_fr'],
   both: ['section_max_width_desktop'],
   /* column A paints the whole column (the table carries its values) */

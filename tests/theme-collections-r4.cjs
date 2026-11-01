@@ -173,7 +173,7 @@ async function addFp(page) {
         if (!e.children.length || /^(H\d|P|A|BUTTON|SPAN)$/.test(e.tagName)) o.text = e.textContent.trim().slice(0, 80);
         o.tag = e.tagName;
         if (e.tagName === 'IMG' || e.tagName === 'VIDEO') o.src = (e.getAttribute('src') || '').split('?')[0];
-        for (const pe of ['::after', '::before']) { const a = getComputedStyle(e, pe); if (a.content !== 'none') o[pe] = [a.content, a.opacity, a.backgroundColor, a.backgroundImage, a.height, a.bottom, a.width, a.transformOrigin, a.transition].join(); }
+        for (const pe of ['::after', '::before']) { const a = getComputedStyle(e, pe); if (a.content !== 'none') o[pe] = [a.content, a.opacity, a.backgroundColor, a.backgroundImage, a.height, a.bottom, a.width, a.transformOrigin, a.transition, a.transform].join(); }
         o.blk = e.closest('[data-cl-block]')?.dataset.clBlock || e.closest('[data-cl-of]')?.dataset.clOf || '';
         out[k] = o;
       }

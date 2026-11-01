@@ -566,3 +566,57 @@
     refresh: video,
   });
 })();
+
+/* ---------- Benefits Bar (its static rules are benefits-bar.css) ---------- */
+(() => {
+  const A = window.MateriaFeaturesA; if (!A || A.TYPES['benefits-bar']) return;
+  const {bool, num, color, imgSrc, common, custom, has} = A.helpers;
+  const raw = v => (v == null ? '' : String(v)) + 'px';
+  const iconOf = b => {
+    let icon = b.icon, fa = String(b.font_awesome || '').trim(); const ci = imgSrc(b.custom_icon);
+    if (b.icon_type === 'upload' && ci) { icon = 'none'; fa = ''; }
+    if (fa) return JSON.stringify({t: 'svg', code: fa});
+    if (icon && icon !== 'none') return JSON.stringify({t: 'lib', n: icon});
+    if (ci) return JSON.stringify({t: 'img', src: ci, alt: ''});
+    return JSON.stringify({t: 'lib', n: '__placeholder'});
+  };
+  /* "Mobile layout: slider": one benefit at a time on a phone, the arrows step through them (the same as benefits-bar.js, which marks a list it has set up). */
+  function slider(st) {
+    const list = st.root.querySelector('.LoudzValueIconsBarList--mobileLayout-slider');
+    if (!list || list.__bbInit) return;
+    list.__bbInit = true;
+    const slides = [...st.root.querySelectorAll('.LoudzValueIconsBarBlock__Slide')], prev = st.root.querySelector('.LoudzValueIconsBarContainer__Btn--prev'), next = st.root.querySelector('.LoudzValueIconsBarContainer__Btn--next');
+    if (slides.length <= 1) { if (prev) prev.style.display = 'none'; if (next) next.style.display = 'none'; return; }
+    let i = 0;
+    const show = n => { i = (n + slides.length) % slides.length; slides.forEach((s, k) => s.classList.toggle('LoudzValueIconsBarBlock__Slide-IsVisible', k === i)); };
+    if (prev) prev.addEventListener('click', () => show(i - 1), {signal: st.signal});
+    if (next) next.addEventListener('click', () => show(i + 1), {signal: st.signal});
+    show(0);
+  }
+  A.define('benefits-bar', {
+    derive(c) {
+      const {root, s, put, q} = c, own = custom(s), pick = (v, f) => own ? color(v, f) : f;
+      common(c, {bg: false, pad: ['-', '-', '-', '-']});
+      for (const w of ['container', 'fluid_container', 'stretch_width', 'full_width']) put(root, '.' + w, s.section_width === w);
+      put(root, '.remove_spacing', bool(s.reset_spacing));
+      put(root, '.LoudzValueIconsBar--fullWidth', num(s.bar_width) === 100);
+      const style = own && s.section_background_style === 'gradient' ? 'gradient' : 'color', box = q('.LoudzValueIconsBarContainer');
+      put(box, '.LoudzValueIconsBarContainer--backgroundStyle-color', style === 'color'); put(box, '.LoudzValueIconsBarContainer--backgroundStyle-gradient', style === 'gradient');
+      const v = {'--section-left-margin': raw(s.left_margin_desktop), '--section-right-margin': raw(s.right_margin_desktop), '--section-top-padding': raw(s.top_padding_desktop), '--section-bottom-padding': raw(s.bottom_padding_desktop),
+        '--section-left-padding': raw(s.left_padding_desktop), '--section-right-padding': raw(s.right_padding_desktop), '--section-left-margin-mobile': raw(s.left_margin_mobile), '--section-right-margin-mobile': raw(s.right_margin_mobile),
+        '--section-top-padding-mobile': raw(s.top_padding_mobile), '--section-bottom-padding-mobile': raw(s.bottom_padding_mobile), '--section-left-padding-mobile': raw(s.left_padding_mobile), '--section-right-padding-mobile': raw(s.right_padding_mobile),
+        '--section-width': (s.bar_width ?? '') + '%', '--horizontal-gap-desktop': raw(s.horizontal_gap_desktop), '--horizontal-gap-mobile': raw(s.horizontal_gap_mobile), '--vertical-gap-mobile': raw(s.vertical_gap_mobile),
+        '--section-background-color': pick(s.section_background, 'var(--color-background)'), '--section-background-gradient': own ? String(s.section_gradient || 'none') : 'none',
+        '--section-icon-color': pick(s.icon_color, 'var(--color-heading)'), '--section-icon-title-color': pick(s.icon_title_color, 'var(--color-heading)'),
+        '--section-icon-title-weight': !s.icon_title_style || s.icon_title_style === 'theme' ? 'var(--subheading-weight, 500)' : String(s.icon_title_style),
+        '--section-icon-size': raw(s.icon_size), '--section-icon-title-size': raw(s.icon_title_size), '--icon-border-radius': bool(s.enable_circle_icons) ? '50%' : '0', '--section-icons-per-row-desktop': String(s.icons_per_row_desktop ?? '')};
+      for (const k in v) put(root, k, v[k]);
+      for (const {el, type, b} of c.blocks) {
+        if (type !== 'icon') continue;
+        put(q('.LoudzValueIconsBarBlock__Icon', el), 'icon', iconOf(b));
+        const t = q('.LoudzValueIconsBarBlock__Heading', el); put(t, 'rich', b.icon_title || ''); put(t, 'hidden', !has(b.icon_title));
+      }
+    },
+    setup: slider,
+  });
+})();
