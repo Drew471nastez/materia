@@ -176,6 +176,62 @@
     const keys = SLIDING[kind];
     if (keys && d.live === true && Object.keys(d.settings).every(k => keys.has(k))) e.preventDefault();
   });
+  /* ---------- every product information block (Main product, Featured product, theme blocks) ----------
+     snippets/product-info-blocks draws each block in <div class="pib-own" data-pib-block data-pib-own>,
+     display: contents. Its custom colours and fonts are painted here live, per block, into one
+     style[data-pib-live] per section; the block's printed style[data-pib-style] goes quiet. A redraw
+     brings new wrappers and drops what was written here. */
+  const blockStates = new WeakMap();
+  const OWN_KEYS = ['enable_custom_style', 'custom_style', 'own_text_color', 'own_heading_color', 'enable_custom_fonts', 'heading_font', 'body_font'];
+  function blockRules(scope, s) {
+    const out = [], gate = bool(s.enable_custom_style) || bool(s.custom_style);
+    const text = gate ? color(s.own_text_color) : '', heading = gate ? color(s.own_heading_color) : '';
+    if (text) out.push(`${scope} { --color-text: ${text}; color: ${text}; } ${scope} :is(p, li, .rte, .rte *) { color: ${text} !important; }`);
+    if (heading) out.push(`${scope} { --color-heading: ${heading}; } ${scope} :is(h1, h2, h3, h4, h5, h6, .heading, .heading-color, .product-detail__title) { color: ${heading} !important; }`);
+    if (bool(s.enable_custom_fonts)) {
+      const hf = font(s.heading_font), bf = font(s.body_font);
+      if (hf) out.push(`${scope} { --heading-font: ${hf}; }`);
+      if (bf) out.push(`${scope} { --body-font: ${bf}; --btn-font: ${bf}; --mb-font: ${bf}; font-family: var(--body-font); }`);
+    }
+    return out.join('\n');
+  }
+  function paintBlocks(sec) {
+    const sid = sec.id.replace(/^shopify-section-/, '');
+    let live = sec.querySelector(':scope > style[data-pib-live]');
+    const css = [];
+    for (const el of sec.querySelectorAll('[data-pib-block]')) {
+      const st = blockStates.get(el); if (!st) continue;
+      const bid = el.getAttribute('data-pib-block'), s = st.s;
+      const fonts = bool(s.enable_custom_fonts);
+      for (const a of ['data-own-font', 'data-own-weight', 'data-own-size']) if (el.hasAttribute(a) !== fonts) el.toggleAttribute(a, fonts);
+      for (const printed of sec.querySelectorAll('style[data-pib-style="' + CSS.escape(bid) + '"]')) if (printed.media !== 'not all') printed.media = 'not all';
+      css.push(blockRules('#shopify-section-' + CSS.escape(sid) + ' [data-pib-block="' + CSS.escape(bid) + '"]', s));
+    }
+    const text = css.filter(Boolean).join('\n');
+    if (!live) { live = document.createElement('style'); live.setAttribute('data-pib-live', sid); sec.prepend(live); }
+    if (live.textContent !== text) live.textContent = text;
+  }
+  const pendingSections = new Set();
+  let blockFrame = 0;
+  document.addEventListener('storelib:settings-change', e => {
+    const d = e.detail || {}, id = sectionId(d.section || d.sectionId || d.section_id);
+    const bRaw = d.block || d.blockId || d.block_id, bid = bRaw ? String(bRaw.id || bRaw) : '';
+    if (!id || !bid || !d.settings) return;
+    const sec = document.getElementById('shopify-section-' + id);
+    const el = sec && sec.querySelector('[data-pib-block="' + CSS.escape(bid) + '"]');
+    if (!el || !Object.keys(d.settings).some(k => OWN_KEYS.includes(k))) return;
+    let st = blockStates.get(el);
+    if (!st) { st = {s: parse(el.getAttribute('data-pib-own'))}; blockStates.set(el, st); }
+    Object.assign(st.s, d.settings);
+    pendingSections.add(sec);
+    if (!blockFrame) blockFrame = requestAnimationFrame(() => { blockFrame = 0; for (const x of pendingSections) if (x.isConnected) paintBlocks(x); pendingSections.clear(); });
+    if (d.live === true && Object.keys(d.settings).every(k => k === 'own_text_color' || k === 'own_heading_color')) e.preventDefault();
+  });
+  /* A redraw brings its own values: the live block rules of that section go. */
+  const clearBlocks = e => { const sec = e.target && e.target.closest && e.target.closest('.shopify-section'); const live = sec && sec.querySelector(':scope > style[data-pib-live]'); if (live && !sec.querySelector('style[data-pib-style][media="not all"]')) live.textContent = ''; };
+  document.addEventListener('storelib:section-load', clearBlocks);
+  document.addEventListener('shopify:section:load', clearBlocks);
+
   for (const name of ['DOMContentLoaded', 'storelib:section-load', 'shopify:section:load']) document.addEventListener(name, scan);
   const watched = n => n.nodeType === 1 && (n.matches('[data-mp-root]') || n.querySelector('[data-mp-root]'));
   new MutationObserver(records => {

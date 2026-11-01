@@ -93,6 +93,8 @@ function shown(x, s, b) {
    backdrop in the builder) must change something in another */
 const NOCHANGE = new Map();
 /* settings whose look depends on something the fixture leaves off */
+/* a setting that shows only with another one set a certain way (beyond visible_if) */
+const CASE_PRE = {'promotional-popup': {placeholder_url: {image: null}}};
 const EXEMPT = {reveal: 'the theme scroll reveal (Theme settings > Animation), off in the fixture'};
 
 async function fingerprint(t) {
@@ -120,6 +122,7 @@ async function fingerprint(t) {
         return a.name + '=' + v;
       }).sort().join(' ');
       o.hidden = !!e.hidden;
+      if (e.tagName === 'SELECT') o.value = e.value;
       /* the element's own CSS variables: what only shows on hover, after a copy or when the countdown ends */
       o.vars = e.style ? [...e.style].filter(q => q.startsWith('--')).map(q => q + ':' + e.style.getPropertyValue(q).trim()).sort().join(';') : '';
       out[k] = o;
@@ -151,8 +154,10 @@ async function run(browser, type, width, editing) {
   const baseFp = await fingerprint(t);
   const cases = [];
   for (const x of schema.settings) if (x.id && !x.hidden && x.type !== 'header') {
-    const pre = shown(x, cur.settings, cur.settings) ? null : needs(x);
+    let pre = shown(x, cur.settings, cur.settings) ? null : needs(x);
     if (!pre && !shown(x, cur.settings, cur.settings)) continue;
+    const extra = (CASE_PRE[type] || {})[x.id];
+    if (extra) { const [k, val] = Object.entries(extra)[0]; pre = ['section', k, val]; }
     for (const v of values(x, cur.settings[x.id])) cases.push({id: x.id, v, x, pre});
   }
   for (const bdef of schema.blocks || []) {

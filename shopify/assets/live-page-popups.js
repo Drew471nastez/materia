@@ -184,7 +184,7 @@
     st.mq = matchMedia('(min-width: 750px)');
     /* a wrapper kept across a redraw drops what an earlier live edit wrote on it */
     const wrap = root.closest('.shopify-section');
-    if (wrap && root.getAttribute('data-pg-root') === 'promobanner') { wrap.style.removeProperty('margin-top'); wrap.style.removeProperty('margin-bottom'); }
+    if (wrap && /^(promobanner|promonewsletterpopup-2|promotional-popup)$/.test(root.getAttribute('data-pg-root'))) for (const k of ['margin-top', 'margin-bottom', 'z-index']) wrap.style.removeProperty(k);
     roots.set(root, st);
     derive(root, st, true);
   }
@@ -487,6 +487,177 @@
         put(el.querySelector('.pbp-nl-success'), 'html', b.success_text || i18n.success || '');
       } else if (x.type === 'image') {
         put(el, 'img', JSON.stringify({src: imgSrc(b.image), alt: b.alt || '', lazy: true, cls: 'pbp-img-el'}));
+      }
+    }
+  }};
+  /* Promotional Newsletter 2 */
+  TYPES['promonewsletterpopup-2'] = {derive(c) {
+    const {root, s, put} = c, cu = c.custom, popup = !off(s.render_as_popup);
+    const get = type => (c.first(type) || {b: {}}).b;
+    const tb = get('top_text'), hb = get('heading'), db = get('description'), ib = get('image'), fb = get('form'), bb = get('button');
+    const wrap = root.closest('.shopify-section');
+    if (wrap) { const d = matchMedia('(min-width: 768px)').matches; put(wrap, 'style:margin-top', px(d ? s.section_margin_top_desktop : s.section_margin_top_mobile)); put(wrap, 'style:margin-bottom', px(d ? s.section_margin_bottom_desktop : s.section_margin_bottom_mobile)); }
+    if (!popup && !c.recording) { const P = window.MateriaPopups, dlg = c.q('dialog[data-pg-dialog]'); if (P && P.current() === c.st.id) P.close(c.st.id); if (dlg && dlg.open) dlg.removeAttribute('open'); }
+    put(root, '@data-pg-inline', !popup); put(root, '@data-pn-reset', bool(s.reset_spacing));
+    put(root, '@aria-hidden', popup ? (c.q('.loudz__popup.active') ? 'false' : 'true') : null);
+    put(root, '@data-popup-config', JSON.stringify({design: c.design, preview: bool(s.enable_edit_mode) || bool(s.enable_customization_mode),
+      trigger: {mode: s.open_mode || 'delay', delay: num(s.popup_delay, 0), idle: num(s.inactivity_s, 10), scroll: num(s.scroll_pct, 50), views: num(s.page_views, 2), exit: bool(s.exit_intent)},
+      frequency: {mode: 'after_days', days: num(s.hide_days, 0) > 0 ? num(s.hide_days) : 1, session: bool(s.once_per_session)}}));
+    const v = (k, val) => put(root, k, val), themeBtn = !off(bb.use_theme_button), themeFields = !off(s.use_theme_fields);
+    v('--pn-pt-m', px(s.mobile_top_padding)); v('--pn-pb-m', px(s.mobile_bottom_padding)); v('--pn-pt-d', px(s.desktop_top_padding)); v('--pn-pb-d', px(s.desktop_bottom_padding));
+    v('--pn-icon-w-m', px(s.mobile_icon_width, 72)); v('--pn-icon-w-d', px(s.desktop_icon_width, 72)); v('--pn-h-top-m', px(s.mobile_heading_top_space)); v('--pn-h-top-d', px(s.desktop_heading_top_space));
+    v('--pn-h-size-m', px(hb.size_mobile, 24)); v('--pn-h-size-d', px(hb.size_desktop, 29)); v('--pn-d-top-m', px(s.mobile_top_space)); v('--pn-d-top-d', px(s.desktop_top_space));
+    v('--pn-d-size-m', px(db.size_mobile, 16)); v('--pn-d-size-d', px(db.size_desktop, 16)); v('--pn-f-top-m', px(s.mobile_form_top_space)); v('--pn-f-top-d', px(s.desktop_form_top_space));
+    v('--pn-in-size-m', px(fb.input_size_mobile, 16)); v('--pn-in-size-d', px(fb.input_size_desktop, 16)); v('--pn-b-top-m', px(s.mobile_button_top_space)); v('--pn-b-top-d', px(s.desktop_button_top_space));
+    v('--pn-b-size-m', themeBtn ? null : px(bb.button_size_mobile, 16)); v('--pn-b-size-d', themeBtn ? null : px(bb.button_size_desktop, 16));
+    v('--loudz-button-border-radius', themeBtn ? null : px(bb.button_border_radius)); v('--btn-anim-duration', themeBtn ? null : num(bb.hover_transition, 250) + 'ms'); v('--loudz-button-text-weight', themeBtn ? null : String(bb.button_weight || 700));
+    v('--pn-gap', px(s.desktop_gap_between_image_form)); v('--pn-img-pos-m', s.mobile_image_position || 'column'); v('--pn-img-pos-d', s.desktop_image_position || 'row');
+    v('--pn-t-size-m', px(tb.size_mobile, 18)); v('--pn-t-size-d', px(tb.size_desktop, 18));
+    v('--loudz-section-width', px(s.inner_width, 790));
+    v('--loudz-section-background', cu && !blank(s.background_gradient) ? s.background_gradient : color(cu ? s.background_color : '', 'var(--color-background)'));
+    v('--loudz-overlay-color', color(cu ? s.overlay_color : '', '#000000')); v('--loudz-overlay-opacity', String(num(s.overlay_opacity) / 100));
+    v('--loudz-heading-text-weight', String(hb.weight || 700)); v('--loudz-heading-color', color(ownColor(hb, 'color'), 'var(--color-heading)'));
+    v('--loudz-description-text-weight', String(db.weight || 400)); v('--loudz-description-color', color(ownColor(db, 'color'), 'var(--color-text)'));
+    v('--loudz-input-color', color(cu ? s.input_color : '', 'var(--input-color)')); v('--loudz-input-background-color', color(cu ? s.input_background_color : '', 'var(--input-bg)'));
+    v('--loudz-input-text-weight', String(fb.input_weight || 400)); v('--loudz-input-border-color', color(cu ? s.input_border_color : '', 'var(--color-border)')); v('--loudz-input-placeholder-color', color(cu ? s.input_placeholder_color : '', 'var(--input-placeholder-color)'));
+    v('--loudz-input-border-radius', themeFields ? 'var(--input-border-radius, 6px)' : px(s.input_border_radius)); v('--loudz-input-border-thickness', themeFields ? 'var(--inputs-border-width, 1px)' : px(s.input_border_thickness));
+    v('--loudz-input-height', themeFields ? 'var(--input-height, 0px)' : null); v('--loudz-input-padding', themeFields ? 'var(--input-padding, 16px 12px)' : null);
+    v('--loudz-button-width', num(s.button_width, 100) + '%');
+    v('--loudz-button-text-color', color(ownColor(bb, 'button_text_color'), 'var(--btn-primary-color)')); v('--loudz-button-background-color', color(ownColor(bb, 'button_background'), 'var(--btn-primary-bg-color)'));
+    v('--loudz-button-text-color-hover', color(ownColor(bb, 'button_text_hover'), 'var(--btn-primary-hover-color)')); v('--loudz-button-background-color-hover', color(ownColor(bb, 'button_background_hover'), 'var(--btn-primary-hover-bg-color)'));
+    v('--loudz-popup-link-color', color(cu ? s.popup_link_color : '', 'var(--color-text)')); v('--loudz-popup-border-radius', px(s.popup_border_radius));
+    v('--loudz-top-text-weight', String(tb.weight || 400)); v('--loudz-top-text-to-heading-gap', px(s.top_text_to_heading_gap));
+    const pic = c.q('[data-pn-image]'), src = imgSrc(s.image);
+    put(pic, 'img', JSON.stringify({src, alt: (s.image && s.image.alt) || root.dataset.pgShop || '', lazy: true, cls: 'loudz__img'}));
+    for (const x of c.blocks) {
+      const b = x.b, el = x.el;
+      if (x.type === 'top_text') { put(el, 'hidden', !bool(b.enabled)); put(el, 'html', b.text || ''); }
+      else if (x.type === 'heading' || x.type === 'description') put(el, 'html', b.text || '');
+      else if (x.type === 'dismiss') { put(el, 'hidden', blank(b.text)); put(el, 'html', b.text || ''); }
+      else if (x.type === 'image') {
+        const src2 = b.icon_source || 'default_svg', preset = b.preset_icon || 'envelope';
+        put(el, 'hidden', bool(b.disable_icon)); put(el, '?loudz-svg-custom', !blank(b.custom_svg_code) && src2 === 'custom_svg');
+        put(el, '--pn-icon-size', px(b.icon_size, 72)); put(el, '--pn-icon-color', color(ownColor(b, 'icon_color'), 'var(--color-heading)'));
+        const art = el.querySelector('[data-pn-icon-art]'), tpl = n => { const q = el.querySelector('template[data-pn-icon="' + n + '"]'); return q ? q.innerHTML : ''; };
+        let html;
+        if (src2 === 'theme_logo') html = 'logo:' + tpl('theme_logo');
+        else if (src2 === 'upload') html = imgSrc(b.icon) ? 'img:' + imgSrc(b.icon) : 'preset:' + preset;
+        else if (src2 === 'custom_svg') html = blank(b.custom_svg_code) ? 'preset:' + preset : 'svg:' + b.custom_svg_code;
+        else if (src2 === 'preset') html = 'preset:' + preset;
+        else html = 'default';
+        if (art && c.recording) art.dataset.pnShown = html;
+        else if (art && art.dataset.pnShown !== html) {
+          art.dataset.pnShown = html;
+          if (html.startsWith('img:')) { const im = document.createElement('img'); im.src = html.slice(4); im.alt = root.dataset.pgShop || ''; im.loading = 'lazy'; art.replaceChildren(im); }
+          else if (html.startsWith('svg:')) art.innerHTML = html.slice(4);
+          else if (html.startsWith('preset:')) art.innerHTML = tpl(html.slice(7));
+          else if (html.startsWith('logo:')) art.innerHTML = html.slice(5);
+          else art.innerHTML = tpl('default_svg');
+        }
+      } else if (x.type === 'form') {
+        const ph = b.placeholder_text || 'Email address', input = el.querySelector('input[type="email"]');
+        put(input, '@placeholder', ph); put(input, '@aria-label', ph || 'Email');
+        phone(put, el.querySelector('[data-cpnb-phone]'), b);
+      } else if (x.type === 'button') {
+        put(el, 'html', b.button_text || 'Subscribe Now!'); put(el, '@data-own-shape', off(b.use_theme_button));
+      }
+    }
+  }};
+  /* Spin Wheel Popup */
+  TYPES['spin-wheel-popup'] = {derive(c) {
+    const {root, s, put} = c, cu = c.custom;
+    put(root, '@data-sw-side', s.wheel_side || 'wheel-left'); put(root, '@data-sw-align', s.text_align || 'left');
+    const v = (k, val) => put(root, k, val);
+    v('--sw-overlay-o', String(num(s.overlay_opacity, 60) * 0.01)); v('--sw-gutter', px(s.mobile_gutter, 32)); v('--sw-w', px(s.popup_width, 920)); v('--sw-radius', px(s.popup_radius, 16));
+    v('--sw-spin-dur', num(s.spin_duration_s, 5) + 's'); v('--sw-hub-text', JSON.stringify(s.hub_text || '%')); v('--sw-dismiss-align', s.dismiss_align || 'center');
+    v('--sw-overlay', cu ? color(s.overlay_color, '#000000') : null); v('--sw-bg', cu ? color(s.card_bg, 'var(--color-background)') : null);
+    v('--sw-text', cu ? color(s.text_color, 'var(--color-text)') : null); v('--sw-close', cu ? color(s.close_color, 'var(--color-heading)') : null);
+    v('--sw-panel', cu ? color(s.wheel_panel_bg, 'color-mix(in srgb, var(--color-primary) 6%, var(--color-background))') : null);
+    v('--sw-hub', cu ? color(s.hub_color, 'var(--color-background)') : null); v('--sw-pointer', cu ? color(s.pointer_color, 'var(--color-heading)') : null);
+    put(root, '@data-popup-config', JSON.stringify({design: c.design, preview: bool(s.editor_mode),
+      trigger: {mode: s.open_mode || 'delay', delay: num(s.delay_s, 5), scroll: num(s.scroll_pct, 50), views: num(s.page_views, 2)},
+      frequency: {mode: s.after_dismiss || 'after_days', days: num(s.hide_days, 1)},
+      spin: {seconds: num(s.spin_duration_s, 5), turns: num(s.spin_full_turns, 5), respins: num(s.max_respins, 2), closeAfterCopy: bool(s.close_after_copy), closeDelay: num(s.close_after_copy_delay_s, 10),
+        noWin: s.no_win_label || 'Better luck next time', copied: s.copy_done_label || 'Copied!', spinning: s.spinning_label || 'Spinning'}}));
+    const btnVars = el => buttonVars(put, el, {bg: cu ? s.spin_btn_bg : '', text: cu ? s.spin_btn_text : '', hover_bg: cu ? s.spin_btn_bg_hover : '', hover_text: cu ? s.spin_btn_text_hover : ''});
+    const win = c.q('[data-sw-win-label-text]'); put(win, 'html', s.win_label || (win && win.dataset.pgI18n) || '');
+    const re = c.q('[data-sw-respin]'); if (re) { put(re, 'html', s.respin_label || re.dataset.pgI18n || ''); btnVars(re); }
+    const prizes = c.blocks.filter(x => x.type === 'prize'), n = prizes.length;
+    const r3 = x => Math.round(x * 1000) / 1000;
+    if (n) {
+      const wheel = c.q('[data-sw-wheel]');
+      put(wheel, 'style:background', 'conic-gradient(from 0deg, ' + prizes.map((x, i) => (x.b.color || '#ffffff') + ' ' + r3(i * 360 / n) + 'deg ' + r3((i + 1) * 360 / n) + 'deg').join(', ') + ')');
+      const y = 100 - num(s.label_radius, 68);
+      let size = num(s.label_font_size, 10); const cap = Math.floor(60 / n); if (size > cap) size = cap;
+      prizes.forEach((x, i) => {
+        const b = x.b, el = x.el, mid = r3((i + 0.5) * 360 / n);
+        put(el, '@data-sw-code', b.code || ''); put(el, '@data-sw-label', b.label || '?'); put(el, '@data-sw-weight', String(b.weight == null || b.weight === '' ? 1 : b.weight));
+        put(el, '@y', String(y)); put(el, '@fill', b.text_color || '#111111');
+        put(el, '@transform', 'rotate(' + mid + ' 100 100) rotate(' + (-mid) + ' 100 ' + y + ')');
+        put(el, 'text', b.label || '?');
+        if (!c.recording) el.setAttribute('font-size', String(size));
+      });
+      if (!c.recording && root.__swFit) requestAnimationFrame(() => root.__swFit());
+    }
+    for (const x of c.blocks) {
+      const b = x.b, el = x.el;
+      if (x.type === 'heading' || x.type === 'description') {
+        put(el, 'hidden', blank(b.text)); put(el, 'html', b.text || '');
+        put(el, 'style:color', color(ownColor(b, 'color'), x.type === 'heading' ? 'var(--color-heading)' : 'var(--color-text)'));
+      } else if (x.type === 'form') {
+        const ph = b.email_placeholder || 'Email address', input = el.querySelector('input[type="email"]');
+        put(input, '@placeholder', ph); put(input, '@aria-label', ph);
+        phone(put, el.querySelector('[data-cpnb-phone]'), b);
+        const btn = el.querySelector('button[type="submit"]'); put(btn, 'html', b.spin_label || el.dataset.pgI18n || ''); btnVars(btn);
+      } else if (x.type === 'dismiss') { put(el, 'hidden', blank(b.text)); put(el.querySelector('button'), 'html', b.text || ''); }
+    }
+  }};
+  /* Signup Discount Popup */
+  TYPES['promotional-popup'] = {derive(c) {
+    const {root, s, put} = c, cu = c.custom;
+    const modes = {scroll: 'scroll', exit: 'exit', click: 'manual', pageviews: 'pageviews'};
+    const wrap = root.closest('.shopify-section'); if (wrap) put(wrap, 'style:z-index', String(num(s.z_index, 1000)));
+    put(root, '@data-ppd-image', s.image_position || 'left');
+    const v = (k, val) => put(root, k, val), iw = num(s.image_width_pct, 50);
+    v('--ppd-z', String(num(s.z_index, 1000))); v('--ppd-backdrop-pad', px(s.backdrop_padding, 16)); v('--ppd-max-w', px(s.modal_max_width, 760)); v('--ppd-radius', px(s.modal_radius, 18));
+    v('--ppd-img-fr', iw + 'fr'); v('--ppd-text-fr', (100 - iw) + 'fr'); v('--ppd-pad-m', px(s.content_padding_mobile, 28)); v('--ppd-pad-d', px(s.content_padding_desktop, 36)); v('--ppd-gap', px(s.content_gap, 12));
+    v('--ppd-align', s.content_align || 'center'); v('--ppd-align-items', s.content_align === 'left' ? 'flex-start' : s.content_align === 'right' ? 'flex-end' : 'center');
+    v('--ppd-close-off', px(s.close_offset, 12)); v('--ppd-close-size', px(s.close_size, 36));
+    v('--ppd-backdrop', cu ? color(s.backdrop_color, 'rgba(0,0,0,0.55)') : null); v('--ppd-preview-bg', cu ? color(s.editor_preview_bg, 'transparent') : null);
+    v('--ppd-bg', cu ? color(s.modal_bg, 'var(--color-background)') : null); v('--ppd-text', cu ? color(s.modal_text_color, 'var(--color-text)') : null);
+    v('--ppd-image-bg', cu ? color(s.image_bg, 'color-mix(in srgb, var(--color-heading) 10%, var(--color-background))') : null);
+    v('--ppd-close', cu ? color(s.close_color, 'var(--color-heading)') : null); v('--ppd-close-bg', cu ? color(s.close_bg, 'color-mix(in srgb, currentColor 10%, transparent)') : null);
+    v('--ppd-close-bg-hover', cu ? color(s.close_bg_hover, 'color-mix(in srgb, currentColor 20%, transparent)') : null);
+    put(c.q('[data-popup-root]'), '@data-popup-config', JSON.stringify({design: c.design, preview: bool(s.show_in_builder),
+      trigger: {mode: modes[s.trigger] || 'delay', delay: num(s.delay, 3), scroll: num(s.scroll_pct, 40), views: num(s.page_views, 2)}, frequency: {mode: s.frequency || 'session'}}));
+    put(c.q('[data-ppd-media]'), 'img', JSON.stringify({src: imgSrc(s.image) || (typeof s.placeholder_url === 'string' ? s.placeholder_url : ''), alt: '', lazy: true}));
+    for (const x of c.blocks) {
+      const b = x.b, el = x.el;
+      if (x.type === 'eyebrow') {
+        put(el, 'hidden', blank(b.text)); put(el, 'text', b.text || '');
+        put(el, 'style:color', color(ownColor(b, 'color'), 'color-mix(in srgb, var(--color-text) 70%, transparent)')); put(el, 'style:font-size', px(b.size, 12)); put(el, 'style:letter-spacing', num(b.letter_spacing, 0.18) + 'em');
+      } else if (x.type === 'heading') {
+        put(el, 'hidden', blank(b.text)); put(el, 'text', b.text || '');
+        put(el, 'style:color', color(ownColor(b, 'color'), 'var(--color-heading)')); put(el, '--ppd-h-m', px(b.size_mobile, 26)); put(el, '--ppd-h-d', px(b.size_desktop, 32));
+      } else if (x.type === 'subheading') {
+        put(el, 'hidden', blank(strip(b.text))); put(el, 'html', b.text || '');
+        put(el, 'style:color', color(ownColor(b, 'color'), 'color-mix(in srgb, var(--color-text) 85%, transparent)')); put(el, 'style:font-size', px(b.size, 14));
+      } else if (x.type === 'form') {
+        const i18n = parse(el.dataset.pgI18n), themeF = !off(b.use_theme_fields), custom = off(b.use_theme_button);
+        put(el, '--ppd-input-bg', color(ownColor(b, 'input_bg'), 'var(--input-bg)')); put(el, '--ppd-input-color', color(ownColor(b, 'input_color'), 'var(--input-color)'));
+        put(el, '--ppd-input-placeholder', color(ownColor(b, 'input_placeholder_color'), 'var(--input-placeholder-color)'));
+        put(el, '--ppd-input-radius', themeF ? 'var(--input-border-radius, 10px)' : px(b.input_radius, 10)); put(el, '--ppd-input-height', themeF ? 'var(--input-height, 50px)' : null);
+        put(el, '--ppd-input-padding', themeF ? 'var(--input-padding, 14px 16px)' : px(b.input_pad_y, 14) + ' 16px'); put(el, '--ppd-input-size', themeF ? 'var(--input-font-size, 15px)' : px(b.input_size, 15));
+        put(el, '--ppd-input-border-width', themeF ? 'var(--inputs-border-width, 1px)' : null);
+        put(el, '--ppd-success-color', color(ownColor(b, 'success_color'), 'color-mix(in srgb, #2e9e57 70%, var(--color-text))')); put(el, '--ppd-error-color', color(ownColor(b, 'error_color'), 'color-mix(in srgb, #e04848 70%, var(--color-text))'));
+        put(el.querySelector('input[type="email"]'), '@placeholder', b.email_placeholder || i18n.email || '');
+        const tel = el.querySelector('[data-ppd-phone]'); put(tel, '@placeholder', b.phone_placeholder || i18n.phone || ''); put(tel, 'hidden', !bool(b.show_phone)); put(tel, '@disabled', !bool(b.show_phone));
+        const btn = el.querySelector('.ppd__btn'); put(btn, 'text', b.button_label || i18n.submit || ''); put(btn, '@data-own-shape', custom);
+        buttonVars(put, btn, {bg: ownColor(b, 'btn_bg'), text: ownColor(b, 'btn_color'), hover_bg: ownColor(b, 'btn_bg_hover'), custom, radius: b.btn_radius, padding_y: b.btn_pad_y, font_size: b.btn_size, border_width: 0, transform: custom ? 'uppercase' : ''});
+        put(el.querySelector('.ppd__success'), 'text', b.success_text || 'Check your inbox. Your code is on the way.');
+      } else if (x.type === 'dismiss') {
+        put(el, 'hidden', blank(b.label)); put(el, 'text', b.label || '');
+        put(el, '--ppd-dismiss-color', color(ownColor(b, 'color'), 'color-mix(in srgb, var(--color-text) 70%, transparent)')); put(el, '--ppd-dismiss-hover', color(ownColor(b, 'hover_color'), 'var(--color-text)')); put(el, 'style:font-size', px(b.size, 13));
       }
     }
   }};

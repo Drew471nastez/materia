@@ -7,7 +7,52 @@
   the loop's block, block_st, product, section, product_form_id,
   enable_skeleton_loading, products_group, user_variants_image_group and
   type ('single' in Featured product).
+
+  Every block is drawn inside <div class="pib-own" data-pib-block> with
+  display: contents, so it lays out as before. Its own switches (custom
+  colours, custom fonts) are opt-in: off, nothing is set and the block
+  follows the colour scheme and Theme settings > Typography; on, the
+  colours and fonts are set on the wrapper (and the Theme settings priority
+  is skipped with data-own-font/-weight/-size), in the first paint and live
+  from shopify/assets/live-main-product.js, which reads data-pib-own.
 {%- endcomment -%}
+{%- liquid
+  assign pib_gate = false
+  if block_st.enable_custom_style or block_st.custom_style
+    assign pib_gate = true
+  endif
+  assign pib_text = 'none'
+  assign pib_heading = 'none'
+  if pib_gate
+    capture pib_text
+      render 'scheme-color', color: block_st.own_text_color, fallback: 'none'
+    endcapture
+    capture pib_heading
+      render 'scheme-color', color: block_st.own_heading_color, fallback: 'none'
+    endcapture
+  endif
+  assign pib_hf = ''
+  assign pib_bf = ''
+  if block_st.enable_custom_fonts
+    if block_st.heading_font.family != blank
+      assign pib_hf = block_st.heading_font.family | append: ', ' | append: block_st.heading_font.fallback_families
+    endif
+    if block_st.body_font.family != blank
+      assign pib_bf = block_st.body_font.family | append: ', ' | append: block_st.body_font.fallback_families
+    endif
+  endif
+  assign pib_scope = '#shopify-section-' | append: section.id | append: ' [data-pib-block="' | append: block.id | append: '"]'
+-%}
+{%- if pib_hf != blank or pib_bf != blank or pib_text != 'none' or pib_heading != 'none' -%}
+  <style data-pib-style="{{ block.id }}">
+    {%- if block_st.enable_custom_fonts -%}{{ block_st.heading_font | font_face: font_display: 'swap' }}{{ block_st.body_font | font_face: font_display: 'swap' }}{%- endif -%}
+    {%- if pib_text != 'none' %} {{ pib_scope }} { --color-text: {{ pib_text }}; color: {{ pib_text }}; } {{ pib_scope }} :is(p, li, .rte, .rte *) { color: {{ pib_text }} !important; }{% endif -%}
+    {%- if pib_heading != 'none' %} {{ pib_scope }} { --color-heading: {{ pib_heading }}; } {{ pib_scope }} :is(h1, h2, h3, h4, h5, h6, .heading, .heading-color, .product-detail__title) { color: {{ pib_heading }} !important; }{% endif -%}
+    {%- if pib_hf != blank %} {{ pib_scope }} { --heading-font: {{ pib_hf }}; }{% endif -%}
+    {%- if pib_bf != blank %} {{ pib_scope }} { --body-font: {{ pib_bf }}; --btn-font: {{ pib_bf }}; --mb-font: {{ pib_bf }}; font-family: var(--body-font); }{% endif %}
+  {% comment %}{% endcomment %}</style>
+{%- endif -%}
+<div class="pib-own" data-pib-block="{{ block.id }}" data-pib-type="{{ block.type }}"{% if block_st.enable_custom_fonts %} data-own-font data-own-weight data-own-size{% endif %} data-pib-own="{&quot;enable_custom_style&quot;:{% if block_st.enable_custom_style %}true{% else %}false{% endif %},&quot;custom_style&quot;:{% if block_st.custom_style %}true{% else %}false{% endif %},&quot;own_text_color&quot;:{{ block_st.own_text_color | append: '' | json | escape }},&quot;own_heading_color&quot;:{{ block_st.own_heading_color | append: '' | json | escape }},&quot;enable_custom_fonts&quot;:{% if block_st.enable_custom_fonts %}true{% else %}false{% endif %},&quot;heading_font&quot;:{{ pib_hf | json | escape }},&quot;body_font&quot;:{{ pib_bf | json | escape }}}" style="display: contents">
           {%- case block.type -%}
             {%- when 'title' -%}
               {% comment %} Title {% endcomment %}
@@ -147,6 +192,7 @@
                     data-atc-appearance="{{ block_st.atc_appearance | default: 'theme' }}" data-buy-appearance="{{ block_st.buy_appearance | default: 'theme' }}"
                     data-bb-width="{% if block_st.buttons_full_width == false %}auto{% else %}full{% endif %}"
                     data-bb-quantity="{% if block_st.quantity_right_of_atc %}right{% else %}left{% endif %}"
+                    {%- if block_st.enable_custom_fonts and block_st.body_font.family != blank %} data-bb-font="{{ block_st.body_font.family | escape }}"{% endif %}
                     {{ block.shopify_attributes }}
                     {% if block_st.atc_redirect_checkout %}data-atc-redirect-checkout="true"{% endif %}
                     {% if block_st.show_price_in_atc %}data-price-in-atc="true"{% endif %}
@@ -3589,4 +3635,5 @@ Pick the source:
 </details>
 
 {%- endcase -%}
+</div>
 </template>

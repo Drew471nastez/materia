@@ -180,6 +180,37 @@ const redraw = (p, id, html) => p.evaluate(([id, html]) => {
 }, [id, html]);
 const emit = (p, detail) => p.evaluate(d => { document.dispatchEvent(new CustomEvent('storelib:settings-change', {detail: d})); return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); }, detail);
 
+
+/* The home page's saved Featured product (templates/home.json), drawn alone in the layout. */
+async function renderFeatured({tree = repo, design = false, product = R5.PANTS, blocks, settings = {}} = {}) {
+  const sch = schemaText(readIn(tree, 'sections/featured-product.storelib')).shopify;
+  const home = JSON.parse(readIn(tree, 'templates/home.json'));
+  const [fid, sec] = Object.entries(home.sections).find(([, s]) => s.type === 'featured-product');
+  const all = JSON.parse(readIn(tree, 'config/settings.json'));
+  const theme = {...all.shopify};
+  const schemes = Object.entries(theme.color_schemes).map(([sid, v]) => ({id: sid, settings: v.settings}));
+  theme.color_schemes = schemes;
+  const base = {
+    settings: theme, request: {host: 'x.test', locale: {iso_code: 'en'}, page_type: 'index', design_mode: design},
+    routes: {account_url: '/account', account_login_url: '/account/login', root_url: '/', cart_url: '/cart', cart_add_url: '/cart/add', search_url: '/search'},
+    shop: {name: 'Materia', domain: 'x.test', url: 'https://x.test', currency: 'BRL', money_format: 'R${{amount}}', locale: 'en'}, template: {name: 'index'},
+    cart: {item_count: 0, items: [], currency: {iso_code: 'BRL'}}, customer: null, pages: {}, all_products: {},
+  };
+  const blockDefaults = type => defaultsOf((sch.blocks.find(b => b.type === type) || {}).settings);
+  const sset = {...defaultsOf(sch.settings), ...sec.settings, ...settings, product};
+  sset.color_scheme = {...(schemes.find(s => s.id === sset.color_scheme) || schemes[0])};
+  const list = (blocks || sec.block_order.filter(k => !sec.blocks[k].disabled).map(k => ({id: k, ...sec.blocks[k]})))
+    .map(b => ({id: b.id, type: b.type, shopify_attributes: `data-block-id="${b.id}"`, settings: {...blockDefaults(b.type), ...(b.settings || {})}}));
+  const e = engine(tree);
+  const ctx = {...base, section: {id: fid, settings: sset, blocks: list, index: 3}};
+  const html = await e.parseAndRender(clean(body(readIn(tree, 'sections/featured-product.storelib'))), ctx, {globals: ctx});
+  const le = engine(tree, {'header-group': '', 'footer-group': ''});
+  const content = `<div id="shopify-section-${fid}" class="shopify-section">${html}</div><div style="height:600px"></div>`;
+  let page = await le.parseAndRender(clean(body(readIn(tree, 'layout/theme.storelib'))), {...base, content_for_header: '', content_for_layout: content}, {globals: base});
+  if (fs.existsSync(path.join(tree, 'shopify/assets/live-main-product.js')) && !page.includes('live-main-product.js')) page = page.replace('</body>', '<script src="/assets/live-main-product.js" defer></script></body>');
+  return {html: page, sectionHtml: html, id: fid, blocks: list};
+}
+
 /* What a visitor sees of the section: every drawn element in order, with its box and paint. */
 const look = (p, id) => p.evaluate(id => {
   const root = document.getElementById('shopify-section-' + id), out = [], top = root.getBoundingClientRect().top;
@@ -190,7 +221,7 @@ const look = (p, id) => p.evaluate(id => {
     const c = getComputedStyle(el);
     if (c.visibility === 'hidden') continue;
     const own = [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent.trim()).join(' ').trim();
-    out.push([el.tagName, Math.round(r.left), Math.round(r.top - top), Math.round(r.width), Math.round(r.height), c.color, c.backgroundColor, c.fontFamily, c.fontSize, c.fontWeight, c.borderRadius, c.opacity, own.slice(0, 40)].join('|'));
+    out.push([el.tagName, Math.round(r.left), Math.round(r.top - top), Math.round(r.width), Math.round(r.height), c.color, c.backgroundColor, c.fontFamily, c.fontSize, c.fontWeight, c.borderRadius, c.opacity, c.borderTop, c.borderBottom, c.borderLeft, c.boxShadow, c.textDecorationLine, own.slice(0, 40)].join('|'));
   }
   return out;
 }, id);
@@ -200,4 +231,4 @@ const lookDiff = (a, b, max = 8) => {
   return d;
 };
 
-module.exports = {look, lookDiff, repo, engine, treeAt, renderMain, open, redraw, emit, mainSchema, savedMain, defaultsOf, schemaText, R5};
+module.exports = {renderFeatured, look, lookDiff, repo, engine, treeAt, renderMain, open, redraw, emit, mainSchema, savedMain, defaultsOf, schemaText, R5};

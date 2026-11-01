@@ -117,7 +117,7 @@ const page = (name, extra) => L.suite(name, {mountOpts: {globals: G}, noop: NOOP
   results.push(['main-password-header', await L.suite('main-password-header', {
     mountOpts: {globals: G},
     twoInstances: {padding_top: 90},
-    noop: {375: ['padding_top', 'padding_bottom', 'logo_width', 'show_logo'], 1366: ['show_logo']},
+    noop: {375: ['padding_top', 'padding_bottom', 'logo_width', 'logo_width_mobile', 'show_logo'], 1366: ['show_logo', 'logo_width', 'logo_width_mobile']},
     theme: async (t, {ok, css, tag}) => { ok(/Georgia/.test(await css('.ap__h', 'fontFamily')) && await css('.ap__h', 'color') === 'rgb(255, 255, 255)', tag + ': the store name in the theme heading'); },
     priority: [{name: 'name color', section: {enable_custom_style: true, heading_color: '#00ff00'}, checks: [['.ap__h', 'color', 'rgb(0, 255, 0)']], off: {section: {enable_custom_style: false}}}, fonts('.ap__h')].map(p => p.name === 'section fonts' ? {...p, checks: [p.checks[0]]} : p),
     extra: async browser => {
