@@ -29,6 +29,7 @@ const name = 'contact-form-simple';
     same: {375: [['all', 'mobile'], ['container', 'fluid_container'], ['stretch_width', 'full_width'], ['container', 'stretch_width'], ['fluid_container', 'stretch_width'], ['container', 'full_width'], ['fluid_container', 'full_width']],
       1366: [['all', 'desktop']]},
     bctx: {'side_image.alt': {image: IMG}},
+    sweepBlocks: [{type: 'side_image', settings: {}}],
     twoInstances: {padding_top_desktop: 20},
     blockEdit: ['field', {label: 'Only in a'}],
     extraBlock: ['field', {field_type: 'tel', label: 'Phone', name: 'Phone', placeholder: '+1'}, {field_type: 'select', options: 'One, Two', label: 'Pick'}],

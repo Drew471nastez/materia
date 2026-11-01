@@ -203,7 +203,7 @@ async function suite(name, cfg = {}) {
     for (const b of s.blocks || []) for (const x of b.settings) if (x.id && !x.hidden && !skip.has(b.type + '.' + x.id)) items.push({x, list: s.settings, block: b});
     const widths = [[375, true], [1366, true], [1366, false]];
     for (const [width, editing] of widths) {
-      const t = await mount(browser, name, opts({width, editing, blocks: blocksOf()}));
+      const t = await mount(browser, name, opts({width, editing, blocks: blocksOf().concat(cfg.sweepBlocks || [])}));
       await quiet(t);
       /* every id spelled out, so a redraw (which keeps the settings it is not given) starts clean */
       const base = {settings: {...Object.fromEntries(s.settings.filter(x => x.id).map(x => [x.id, null])), ...clone(t.rendered[0].section.settings)}, blocks: t.rendered[0].section.blocks.map(b => ({type: b.type, settings: clone(b.settings)}))};

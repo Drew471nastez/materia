@@ -37,18 +37,18 @@ run({
       const where = 'shop grid ' + width + (editing ? ' editor' : ' storefront');
       const t = await mount(browser, 'social-shop-grid', {width, editing, assets: A, settings: {heading_font: VERDANA, body_font: VERDANA}, blocks: [{type: 'heading', settings: {text: 'Shop <strong>the feed</strong>'}}, {type: 'subheading', settings: {}}, {type: 'button', settings: {link: '/pages/follow'}}, ...TILES]});
       const sty = (sel, k) => t.page.locator('#shopify-section-test ' + sel).first().evaluate((el, k) => getComputedStyle(el)[k], k);
-      eq(await t.page.locator('#shopify-section-test .ssg-tile').evaluateAll(els => els.map(e => [e.tagName, e.getAttribute('href')])), [['A', null], ['A', PANTS.url], ['A', '/pages/three'], ['DIV', null]].map((x, i) => i === 0 ? ['DIV', null] : x), where + ' tiles link to the product, else their own link');
-      eq((await t.page.locator('#shopify-section-test .ssg-product').filter({visible: true}).allTextContents()).map(s => s.trim()), [PANTS.title + 'R$' + (PANTS.price / 100).toFixed(2)], where + ' product chip from the product picker');
+      eq(await t.page.locator('#shopify-section-test .ssg-tile').evaluateAll(els => els.map(e => [e.tagName, e.getAttribute('href')])), [['DIV', null], ['A', PANTS.url], ['A', '/pages/three'], ['DIV', null]], where + ' tiles link to the product, else their own link, else nowhere');
+      eq((await t.page.locator('#shopify-section-test .ssg-product').filter({visible: true}).allTextContents()).map(s => s.replace(/\s+/g, ' ').trim()), [PANTS.title + ' R$' + (PANTS.price / 100).toFixed(2)], where + ' product chip from the product picker');
       eq(await t.page.locator('#shopify-section-test .ssg-handle').filter({visible: true}).count(), 0, where + ' handle hidden while Show creator handle is off');
       eq(await t.page.locator('#shopify-section-test .ssg-platform-badge').count(), 1, where + ' platform badge');
       ok((await t.root('.ssg-follow').boundingBox()).height >= 44, where + ' follow link target 44px');
       if (editing) {
         const img = await t.page.locator('#shopify-section-test .ssg-tile img[data-sd-img]').first().elementHandle();
         await t.emit({show_handle: true, tile_radius: 20, column_gap: 20, overlay_strength: 60});
-        eq(await t.page.locator('#shopify-section-test .ssg-handle').filter({visible: true}).allTextContents(), ['A@ana'], where + ' handle pill live');
+        eq((await t.page.locator('#shopify-section-test .ssg-handle').filter({visible: true}).allTextContents()).map(s => s.replace(/\s+/g, '')), ['A@ana'], where + ' handle pill live');
         const tid = t.blockId('tile', 3);
         await t.emit({username: '@bo', platform: 'tiktok', headline: 'Fresh', image: IMG}, tid);
-        eq(await t.page.locator('[data-sd-block="' + tid + '"] .ssg-handle').innerText(), 'B@bo', where + ' new handle live');
+        eq((await t.page.locator('[data-sd-block="' + tid + '"] .ssg-handle').textContent()).replace(/\s+/g, ''), 'B@bo', where + ' new handle live');
         eq(await t.page.locator('[data-sd-block="' + tid + '"] .ssg-platform-badge').getAttribute('aria-label'), 'TikTok', where + ' badge live');
         eq(await t.page.locator('[data-sd-block="' + tid + '"] .ssg-headline').textContent(), 'Fresh', where + ' headline live');
         eq(await t.page.locator('[data-sd-block="' + tid + '"] img[data-sd-img]').count(), 1, where + ' picture live');
@@ -104,11 +104,18 @@ run({
     /* tile videos: on screen only, never under reduced motion */
     for (const reducedMotion of ['no-preference', 'reduce']) {
       const t = await mount(browser, 'social-shop-grid', {width: 1366, editing: false, reducedMotion, assets: A, blocks: [{type: 'tile', settings: {video: VIDEO}}]});
-      await t.page.evaluate(() => { for (const v of document.querySelectorAll('video')) { v.play = function () { this.__played = (this.__played || 0) + 1; return Promise.resolve(); }; v.pause = function () { this.__paused = (this.__paused || 0) + 1; }; } });
+      await t.page.evaluate(() => { for (const v of document.querySelectorAll('video')) { Object.defineProperty(v, 'paused', {get() { return !this.__on; }}); v.play = function () { this.__on = true; this.__played = (this.__played || 0) + 1; return Promise.resolve(); }; v.pause = function () { this.__on = false; this.__paused = (this.__paused || 0) + 1; }; } });
       await t.page.evaluate(() => { const st = [...window.MateriaSocialDividers.roots.values()][0]; st.videos(); });
       const v = () => t.page.locator('#shopify-section-test video').evaluate(el => [el.hasAttribute('autoplay'), el.__played || 0]);
       eq((await v())[0], false, 'shop grid video has no autoplay attribute (' + reducedMotion + ')');
       eq((await v())[1] > 0, reducedMotion !== 'reduce', 'shop grid video plays on screen only without reduced motion (' + reducedMotion + ')');
+      if (reducedMotion !== 'reduce') {
+        await t.page.evaluate(() => { const s = document.createElement('div'); s.style.height = '3000px'; document.body.prepend(s); });
+        await t.page.waitForTimeout(250);
+        eq(await t.page.locator('#shopify-section-test video').evaluate(el => el.paused), true, 'shop grid video pauses off screen');
+        await t.page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); await t.page.waitForTimeout(250);
+        eq(await t.page.locator('#shopify-section-test video').evaluate(el => el.paused), false, 'shop grid video plays again on screen');
+      }
       eq(t.errors, [], 'shop grid video errors');
       await t.page.close();
     }

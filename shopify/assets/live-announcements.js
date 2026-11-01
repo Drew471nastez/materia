@@ -402,7 +402,7 @@
     const restart = () => {
       if (st.slideTimer) { clearInterval(st.slideTimer); st.slideTimer = 0; }
       if (root.dataset.mode !== 'slide' || !multi() || design() || reduced.matches || !st.visible || document.hidden) return;
-      st.slideTimer = setInterval(() => { if (!hold && !st.editorHold && root.isConnected) show(index() + 1); }, Math.max(2, num(st.s.change_every, 3)) * 1000);
+      st.slideTimer = setInterval(() => { if (!hold && !st.editorHold && root.isConnected) show(index() + 1); }, Math.max(2, num(root.dataset.interval, 3)) * 1000);
     };
     st.rotator = {show, restart, sync: () => { const l = list(); if (!l.includes(st.slide)) st.slide = l[0]; paint(st.slide); }};
     restart();
@@ -423,7 +423,7 @@
       const shown = c.blocks.filter(x => x.type === 'announcement' && plain(x.b.text)).length;
       put(root, '@data-mode', s.announcement_actions === 'marquee' ? 'marquee' : 'slide'); put(root, '@data-multi', shown > 1 ? 'true' : 'false');
       put(root, '@data-home-only', bool(s.homepage_only) ? 'true' : 'false'); put(root, '@data-show-mobile', off(s.show_mobile) ? 'false' : 'true');
-      put(root, '@data-close', bool(s.show_close) ? 'true' : 'false'); put(root, '@data-icon', s.icon_between_item || 'none');
+      put(root, '@data-close', bool(s.show_close) ? 'true' : 'false'); put(root, '@data-icon', s.icon_between_item || 'none'); put(root, '@data-interval', String(num(s.change_every, 3)));
       put(root, '@data-own-font', fonts || null); put(root, '@data-own-weight', fonts || null);
       for (const l of c.qa('[data-l]')) put(l, 'text', s[l.dataset.l] || '');
       for (const i of c.qa('.ab2__icon')) put(i, 'icon', s.icon_between_item === 'star' ? 'fa-star' : 'fa-circle');

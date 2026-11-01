@@ -335,7 +335,7 @@
           else if (k === 'label') text(el.querySelector('.menu-mobile-banner__label'), v);
           else if (k === 'heading') text(el.querySelector('.menu-mobile-banner__heading'), v);
           else if (k === 'button_label') text(el.querySelector('.menu-mobile-banner__button'), v);
-          else if (k === 'body') { const p = el.querySelector('.menu-mobile-banner__text'); if (p) { const parts = String(v || '').split('\n'); const nodes = []; parts.forEach((t, i) => { if (i) nodes.push(document.createElement('br')); nodes.push(document.createTextNode(t)); }); if (p.textContent !== parts.join('') || p.querySelectorAll('br').length !== parts.length - 1) p.replaceChildren(...nodes); } }
+          else if (k === 'body') { const p = el.querySelector('.menu-mobile-banner__text'); if (p) { const parts = String(v || '').split('\n'); const nodes = []; parts.forEach((t, i) => { if (i) nodes.push(document.createElement('br')); nodes.push(document.createTextNode((i ? '\n' : '') + t)); }); if (p.textContent !== parts.join('\n') || p.querySelectorAll('br').length !== parts.length - 1) p.replaceChildren(...nodes); } }
           else if (k === 'button_link') { const a = el.querySelector('.menu-mobile-banner__button'); if (a) { if (v) { attr(a, 'href', String(v).replace('#_blank', '')); attr(a, 'role', null); attr(a, 'aria-disabled', null); } else { attr(a, 'href', null); attr(a, 'role', 'link'); attr(a, 'aria-disabled', 'true'); } } }
         }
       }
@@ -370,7 +370,7 @@
       const v = s[k];
       switch (k) {
         case 'color_scheme': if (scheme(v)) swapPrefix(T, 'color-', scheme(v)); break;
-        case 'section_width': if (WIDTHS.includes(v)) swap(T.firstElementChild, WIDTHS, v); break;
+        case 'section_width': if (WIDTHS.includes(v)) { swap(T.firstElementChild, WIDTHS, v); attr(T, 'data-tb-width', v); } break;
         case 'sticky_top':
           attr(T, 'data-sticky-announcement', String(bool(v)));
           if (bool(v)) { prop(S, 'position', 'sticky', true); prop(S, 'top', 'var(--storelib-announcement-top, 0px)', true); prop(S, 'z-index', '12'); }
