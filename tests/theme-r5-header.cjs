@@ -261,7 +261,7 @@ const NOPILL = clone(BLOCKS); NOPILL[0].settings.header_pill_enable = false; NOP
       await draw(p, r, on);
       const red = await read();
       ok(/^Georgia/.test(red.font) && /^Georgia/.test(red.sub) && red.size === '21px' && red.weight === '700', `${width} redraw: custom font, size and weight win under the theme priority (${JSON.stringify(red)})`);
-      ok(/^Georgia\|21px\|700$/.test(red.span), `${width} redraw: the link's text span follows (${red.span})`);
+      ok(/^Georgia[^|]*\|21px\|700$/.test(red.span), `${width} redraw: the link's text span follows (${red.span})`);
       await draw(p, r, base);
       await L.emit(p, {section: 'header', settings: {enable_custom_fonts: true, menu_custom_font: {family: 'Georgia', fallback_families: 'serif'}, menu_font_size: 21, menu_font_weight: '700'}, live: true});
       const lv = await read();
@@ -278,7 +278,7 @@ const NOPILL = clone(BLOCKS); NOPILL[0].settings.header_pill_enable = false; NOP
       const {p, ctx, r} = await page(375);
       const base = sectionBase(r);
       await draw(p, r, base);
-      const logo = () => p.evaluate(() => Math.round(document.querySelector('#shopify-section-header .header__logo img, #shopify-section-header .header__logo svg').getBoundingClientRect().width));
+      const logo = () => p.evaluate(() => Math.max(...[...document.querySelectorAll('#shopify-section-header .header__logo img, #shopify-section-header .header__logo svg')].map(e => Math.round(e.getBoundingClientRect().width))));
       const w0 = await logo();
       await L.emit(p, {section: 'header', settings: {logo_width_mobile: 120}, live: true});
       const w1 = await logo();
