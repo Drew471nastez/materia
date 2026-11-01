@@ -24,7 +24,7 @@ const name = 'contact-form-simple';
     messages: ['success_message', 'error_message', '.cfs__success', '.cfs__errors'],
     mountOpts: {globals: {shop: {name: 'Materia Themes', email: 'shop@store.test', phone: '+1 (555) 010-0100', address: {summary: '1 Main St'}}}},
     structural: ['side_image.image'],
-    vals: {form_col_ratio: ['1fr'], side_col_ratio: ['1fr'], 'field.options': ['Red, Green'], options: ['Red, Green'], name: ['Order'], link: ['/pages/contact']},
+    vals: {required: [false], half_width: [false], form_col_ratio: ['1fr'], side_col_ratio: ['1fr'], 'field.options': ['Red, Green'], options: ['Red, Green'], name: ['Order'], link: ['/pages/contact']},
     noop: {375: ['side_column_position', 'form_col_ratio', 'side_col_ratio', 'field.half_width', 'section_max_width_tablet', 'gap_subheading_content', 'subheading.max_width'], 1366: ['section_max_width_tablet']},
     same: {375: [['all', 'mobile'], ['container', 'fluid_container'], ['stretch_width', 'full_width'], ['container', 'stretch_width'], ['fluid_container', 'stretch_width'], ['container', 'full_width'], ['fluid_container', 'full_width']],
       1366: [['all', 'desktop']]},
@@ -43,7 +43,7 @@ const name = 'contact-form-simple';
       await t.page.mouse.move(0, 0);
     },
     priority: [
-      {name: 'heading font, weight and size', blocks: {heading: {enable_custom_fonts: true, font: FONT, weight: '500', size_enable: true, size_desktop: 60, size_mobile: 28, line_height: 1.5, tracking: 1, text: 'Get <em>in</em> touch'}},
+      {name: 'heading font, weight and size', base: {blocks: {heading: {text: 'Get <em>in</em> touch'}}}, blocks: {heading: {enable_custom_fonts: true, font: FONT, weight: '500', size_enable: true, size_desktop: 60, size_mobile: 28, line_height: 1.5, tracking: 1}},
         checks: [['h2', 'fontFamily', /Verdana/], ['h2 em', 'fontFamily', /Verdana/], ['h2', 'fontWeight', '500'], ['h2', 'fontSize', w => w < 768 ? '28px' : '60px'], ['h2', 'letterSpacing', '1px'], ['h2', 'lineHeight', w => w < 768 ? '42px' : '90px']],
         off: {blocks: {heading: {enable_custom_fonts: false, weight: 'theme', size_enable: false}}}},
       {name: 'subheading font, weight and size', base: {blocks: {subheading: {text: '<p>Write <strong>to us</strong></p>'}}}, blocks: {subheading: {enable_custom_fonts: true, font: FONT, weight_enable: true, weight: '300', size_enable: true, size: 21, line_height: 1.8}},

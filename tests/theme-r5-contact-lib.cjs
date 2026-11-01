@@ -47,18 +47,20 @@ const frames = page => page.evaluate(() => new Promise(r => requestAnimationFram
 function snapshot(page, uid) {
   return page.evaluate(uid => {
     const W = document.getElementById('shopify-section-' + uid); if (!W) return null;
-    const P = ['color', 'backgroundColor', 'backgroundImage', 'fontFamily', 'fontWeight', 'fontSize', 'lineHeight', 'letterSpacing', 'textAlign', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight', 'rowGap', 'columnGap', 'width', 'height', 'maxWidth', 'minHeight', 'borderTopLeftRadius', 'borderTopWidth', 'borderBottomWidth', 'borderTopColor', 'display', 'justifyContent', 'alignItems', 'alignSelf', 'flexDirection', 'flexWrap', 'gridTemplateColumns', 'opacity', 'boxShadow', 'order', 'visibility', 'filter', 'overflow'];
+    const P = ['color', 'backgroundColor', 'backgroundImage', 'fontFamily', 'fontWeight', 'fontSize', 'lineHeight', 'letterSpacing', 'textAlign', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'marginTop', 'marginBottom', 'rowGap', 'columnGap', 'width', 'height', 'maxWidth', 'minHeight', 'borderTopLeftRadius', 'borderTopWidth', 'borderBottomWidth', 'borderTopColor', 'display', 'justifyContent', 'alignItems', 'alignSelf', 'flexDirection', 'flexWrap', 'gridTemplateColumns', 'opacity', 'boxShadow', 'order', 'visibility', 'filter', 'overflow'];
     const V = ['--mb-hover-bg', '--mb-hover-text', '--mb-hover-border', '--input-focus-color', '--cp-accent', '--cfs-focus', '--cfs-sub-hover', '--cfs-ph'];
     const A = /^(placeholder|hidden|disabled|required|type|name|href|for|class|data-theme-button|data-own-[\w-]+|data-(?!ct-settings|ct-ready|ct-default)[\w-]+|aria-[\w-]+|role|alt|src|width|height)$/;
     const out = [];
     const all = [W, ...W.querySelectorAll('*')].filter(e => !e.closest('style, script, template') && !e.closest('svg') || e.tagName === 'svg');
     for (const el of all) {
       if (el.tagName === 'STYLE' || el.tagName === 'SCRIPT' || el.tagName === 'TEMPLATE') continue;
-      const cs = getComputedStyle(el), r = [el.tagName];
+      const cs = getComputedStyle(el), r = [el.tagName], box = el.getBoundingClientRect();
+      r.push('x' + Math.round(box.left));
       for (const p of P) r.push(cs[p]);
       for (const v of V) r.push(cs.getPropertyValue(v).trim());
       r.push(...[...el.attributes].filter(a => A.test(a.name)).map(a => a.name + '=' + (a.name === 'class' ? a.value.split(/\s+/).filter(c => c && !/^(is-|scroll-trigger|animate)/.test(c)).sort().join(' ') : a.value)).sort());
       if (el.tagName === 'svg') r.push(el.innerHTML.replace(/\s+/g, ' '));
+      { const b = getComputedStyle(el, '::before'); if (b.content !== 'none') r.push('before:' + b.opacity + ' ' + b.backgroundColor); }
       if (el.matches('input, textarea')) { r.push(getComputedStyle(el, '::placeholder').color); r.push(el.value); }
       r.push([...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').replace(/\s+/g, ' ').trim());
       out.push(r.join('|'));

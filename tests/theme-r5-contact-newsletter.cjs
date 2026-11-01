@@ -32,7 +32,7 @@ const name = 'newsletter';
       await t.page.mouse.move(0, 0);
     },
     priority: [
-      {name: 'heading font, weight and size', blocks: {heading: {enable_custom_fonts: true, font: FONT, weight_enable: true, weight: '300', size_enable: true, size_desktop: 58, size_mobile: 30, line_height: 1.5, tracking: 1, text: 'Join <em>the</em> list'}},
+      {name: 'heading font, weight and size', base: {blocks: {heading: {text: 'Join <em>the</em> list'}}}, blocks: {heading: {enable_custom_fonts: true, font: FONT, weight_enable: true, weight: '300', size_enable: true, size_desktop: 58, size_mobile: 30, line_height: 1.5, tracking: 1}},
         checks: [['h2', 'fontFamily', /Verdana/], ['h2 em', 'fontFamily', /Verdana/], ['h2', 'fontWeight', '300'], ['h2', 'fontSize', w => w < 768 ? '30px' : '58px'], ['h2', 'letterSpacing', '1px']],
         off: {blocks: {heading: {enable_custom_fonts: false, weight_enable: false, size_enable: false}}}},
       {name: 'subheading font, weight and size', base: {blocks: {subheading: {text: '<p>News <strong>now and then</strong></p>'}}}, blocks: {subheading: {enable_custom_fonts: true, font: FONT, weight_enable: true, weight: '600', size_enable: true, size: 20, line_height: 2}},
