@@ -49,9 +49,9 @@ const CFG = {
     root: '.ihb', blocks: () => [...presetBlocks('ingredients-highlight-bar'), ...Array.from({length: 4}, (_, i) => ({type: 'item', settings: {icon: 'leaf', top_label: 'Label ' + i, bottom_label: 'Bottom ' + i}}))],
     pre: {...FONTS},
     preBlock: {custom_image: {icon_source: 'image'}, icon_source: {custom_image: IMG}},
-    selectWidth: {mobile_per_view: 700, mobile_align: 375},
+    selectWidth: {mobile_per_view: 749, mobile_align: 375},
     mobileOnly: ['mobile_layout', 'mobile_per_view', 'mobile_align'], deskOnly: ['center_items', 'icon_size'],
-    /* a phone item is never narrower than 170px, so at 375 the larger counts look alike; they are compared at 700 */
+    /* a phone item is never narrower than 170px, so at 375 the larger counts look alike; they are compared at 749 */
     narrow: ['mobile_per_view'],
   },
   'number-stats': {
@@ -190,7 +190,8 @@ async function everyControl(browser, name, width) {
       const tablet = (cfg.tablet || []).includes(x.id) && width < 1024 && width >= 768;
       if (novisual) { eq(diff(before, server), [], tag + ' has no look of its own here'); continue; }
       if ((cfg.equal || []).includes(x.id + '=' + v)) { eq(deep(liveFp || server, server), [], tag + ': the live edit differs from the redraw'); continue; }
-      if (applies && !((cfg.narrow || []).includes(x.id) && width < 400)) ok(diff(before, server).length > 0, tag + ': the redraw changes nothing');
+      if ((cfg.narrow || []).includes(x.id) && width < 400) { eq(deep(liveFp, server), [], tag + ': the live edit differs from the redraw'); continue; }
+      if (applies) ok(diff(before, server).length > 0, tag + ': the redraw changes nothing');
       else if (!(x.id === 'image_size_desktop' || x.id === 'cards_desktop')) eq(deep(before, server), [], tag + ': changes the other width');
       if (live && !tablet) eq(deep(liveFp, server), [], tag + ': the live edit differs from the redraw');
     }

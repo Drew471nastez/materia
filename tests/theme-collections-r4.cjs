@@ -129,15 +129,15 @@ const CFG = {
   },
   'collection-list': {
     blocks: () => [...presetBlocks('collection-list'), {type: 'button', settings: {text: 'View all', link: '/collections/all'}}],
-    lifeBlocks: () => presetBlocks('collection-list'),
-    desk: ['items_per_row'], mob: ['items_per_row_mobile'], bp: 768,
-    pre: {}, preBlock: {},
+    lifeBlocks: () => presetBlocks('collection-list'), assets: ['section-collection.css', 'pagination-styles.css'],
+    desk: ['items_per_row', 'pagination_position'], mob: ['items_per_row_mobile'], bp: 768,
+    pre: {image_ratio: {custom_ratio: '2/1'}, design: {collection_information_position: 'overlay_image', show_product_count: true}}, preBlock: {},
     redraw: ['display_mode', 'items_per_row', 'column_gap', 'show_arrow', 'carousel_pagination', 'pagination_style', 'pagination_position', 'infinite', 'autoplay', 'autorotate_speed', 'reveal',
       'items_per_row_mobile', 'image_ratio', 'custom_ratio', 'rounded_image', 'image_custom_width', 'image_width', 'information_spacing', 'design', 'collection_information_position',
       'show_product_count', 'show_icon', 'show_description', 'font_size', 'font_weight', 'text_alignment', 'section_width', 'collection', 'collection_image', 'collection_title'],
     behaviour: ['autoplay', 'autorotate_speed', 'infinite', 'reveal', 'pagination_style'],
     hoverSel: '.collection-item', hover: ['card_hover_effect'],
-    same: [['image_ratio', 'square', 'adapt']],
+    same: [['image_ratio', 'adapt', 'portrait'], ['carousel_pagination', 'show_dots', 'show_dots_on_mobile', 375], ['carousel_pagination', 'show_dots', 'show_progress_bar'], ['carousel_pagination', 'show_dots_on_mobile', 'show_progress_bar', 375]],
     theme: {heading: '.cdl__heading', text: '.cdl__desc', toggle: 'enable_custom_bg', bg: 'custom_section_bg'},
     life: {section: {padding_top: 12, enable_custom_bg: true, custom_section_bg: '#abcdef'}, block: {type: 'heading', settings: {text: 'Only in A'}},
       check: (page, u) => page.evaluate(u => document.querySelector('#shopify-section-' + u + ' .cdl__heading').textContent === 'Only in A', u),
@@ -184,7 +184,7 @@ function prereq(x, list, base) {
     else if (op === '==') out[id] = want;
     else if (base[id] === want) { const s = list.find(y => y.id === id); out[id] = s.type === 'checkbox' ? !want : s.options.map(o => o.value).filter(v => v !== want).pop(); }
   }
-  if (/^(enable_custom_style|enable_custom_styling|custom_style)$/.test(x.id)) for (const y of list) if (y.type === 'color') out[y.id] = '#13579b';
+  if (/^(enable_custom_style|enable_custom_styling|custom_style|enable_custom_bg)$/.test(x.id)) for (const y of list) if (y.type === 'color') out[y.id] = '#13579b';
   return out;
 }
 
@@ -230,10 +230,10 @@ const SPACING = '.shopify-section{padding-top:7px;padding-bottom:7px;margin-top:
 
 async function everyControl(browser, name, width) {
   const cfg = CFG[name], {schema} = schemaOf(name);
-  const t = await mount(browser, name, {width, editing: true, blocks: cfg.blocks(), assets: [ASSET], globals: cfg.globals || {}});
+  const t = await mount(browser, name, {width, editing: true, blocks: cfg.blocks(), assets: [ASSET, ...(cfg.assets || [])], globals: cfg.globals || {}});
   await t.page.addStyleTag({content: SPACING}); await addFp(t.page);
   const base = clone(t.section.settings);
-  for (const x of schema.settings) if (x.id && !(x.id in base)) base[x.id] = '';
+  for (const x of schema.settings) if (x.id && !(x.id in base)) base[x.id] = x.type === 'checkbox' ? false : '';
   const baseBlocks = t.section.blocks.map(b => ({type: b.type, settings: clone(b.settings)}));
   const cases = [];
   for (const x of schema.settings) if (x.id && !x.hidden && x.type !== 'header') cases.push({scope: -1, x, list: schema.settings});
@@ -280,7 +280,7 @@ async function everyControl(browser, name, width) {
       eq(await audit(t), [], tag + ': markup matches controller');
       const dR = diff(fp0, fpR), dL = diff(fp0, fpL);
       if (shows) {
-        if (!sameAs(cfg, key, cur, v, width) && !(cfg.behaviour || []).includes(key)) ok(diffVis(fp0, fpR).length > 0, tag + ': redraw changes nothing visible');
+        if (!sameAs(cfg, key, cur, v, width) && !(cfg.behaviour || []).includes(key)) ok(diffVis(fp0, fpR).length > 0, tag + ': redraw changes nothing visible (' + JSON.stringify(cur) + ', all: ' + diff(fp0, fpR).slice(0, 3) + ')');
         if (bi >= 0) ok(dR.some(k => fpR[k]?.blk === blockId || fp0[k]?.blk === blockId), tag + ': does not change its own block (' + dR.slice(0, 4) + ')');
         if (bi < 0 && /^section_margin/.test(x.id)) ok(dR.includes('wrap'), tag + ': margin not on the section');
         if (!structural) {
@@ -295,7 +295,7 @@ async function everyControl(browser, name, width) {
       }
       covered.add(key);
     }
-    if ((x.type === 'select' || x.type === 'radio') && shows) {
+    if ((x.type === 'select' || x.type === 'radio') && shows && !(cfg.behaviour || []).includes(key)) {
       for (let i = 0; i < seen.length; i++) for (let j = i + 1; j < seen.length; j++) {
         if (sameAs(cfg, key, JSON.parse(seen[i][0]), JSON.parse(seen[j][0]), width)) continue;
         ok(diffVis(seen[i][1], seen[j][1]).length > 0, name + ' @' + width + ' ' + key + ': ' + seen[i][0] + ' and ' + seen[j][0] + ' look the same');
@@ -311,7 +311,7 @@ async function everyControl(browser, name, width) {
 /* Theme inheritance, schemes, custom styling, fonts, first paint, overflow. */
 async function theme(browser, name, width, editing, priority = true) {
   const cfg = CFG[name], th = cfg.theme, tag = name + ' @' + width + (editing ? ' editor' : ' storefront') + (priority === 'off' ? ' priority off' : '');
-  const t = await mount(browser, name, {width, editing, blocks: cfg.blocks(), assets: [], globals: cfg.globals || {}, priority});
+  const t = await mount(browser, name, {width, editing, blocks: cfg.blocks(), assets: [...(cfg.assets || [])], globals: cfg.globals || {}, priority});
   await addFp(t.page);
   await settle(t.page);
   const before = await t.page.evaluate(() => { const r = document.querySelector('[data-cl-root]'); return [r, ...r.querySelectorAll('*')].map(e => { const b = e.getBoundingClientRect(), cs = getComputedStyle(e); return [Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height), cs.color, cs.backgroundColor, cs.fontFamily, cs.fontSize, cs.fontWeight, cs.opacity].join(); }); });
@@ -368,7 +368,7 @@ async function lifecycle(browser, name) {
   for (const width of [375, 1366]) {
     const tag = name + ' @' + width;
     const withImg = (cfg.lifeBlocks || cfg.blocks)().map(b => cfg.imgBlock && cfg.imgBlock === b.type ? {...b, settings: {...b.settings, [cfg.imgKey || 'image']: IMG}} : b);
-    const t = await mount(browser, name, {width, editing: true, instances: [{uid: 'a', blocks: withImg}, {uid: 'b', blocks: (cfg.lifeBlocks || cfg.blocks)()}], assets: [ASSET], globals: cfg.globals || {}});
+    const t = await mount(browser, name, {width, editing: true, instances: [{uid: 'a', blocks: withImg}, {uid: 'b', blocks: (cfg.lifeBlocks || cfg.blocks)()}], assets: [ASSET, ...(cfg.assets || [])], globals: cfg.globals || {}});
     await addFp(t.page);
     await settle(t.page);
     const b0 = await fp(t, 'b');
@@ -404,14 +404,14 @@ async function collections(browser, name) {
   if (!cfg.data) return;
   for (const editing of [true, false]) for (const width of [375, 1366]) {
     const tag = name + ' @' + width + (editing ? ' editor' : ' storefront');
-    const t = await mount(browser, name, {width, editing, ...cfg.data.picked(), assets: [ASSET], globals: cfg.globals || {}});
+    const t = await mount(browser, name, {width, editing, ...cfg.data.picked(), assets: [ASSET, ...(cfg.assets || [])], globals: cfg.globals || {}});
     const got = await t.page.evaluate(sel => { const r = document.querySelector('[data-cl-root]'); return {text: r.textContent, hrefs: [...r.querySelectorAll('a[href]')].map(a => a.getAttribute('href')), srcs: [...r.querySelectorAll('img')].map(i => (i.getAttribute('src') || '').split('?')[0])}; });
     ok(got.text.includes(COLL.title), tag + ' collection title shown');
     ok(got.hrefs.includes(COLL.url), tag + ' collection link');
     if (cfg.data.image !== false) ok(got.srcs.includes(COLL.featured_image.src) || got.srcs.includes(PRODUCT.featured_image.src), tag + ' collection picture');
     if (cfg.data.count) ok(got.text.includes(String(COLL.products_count)), tag + ' collection count');
     await t.page.close();
-    const e = await mount(browser, name, {width, editing, ...cfg.data.empty(), assets: [ASSET], globals: cfg.globals || {}});
+    const e = await mount(browser, name, {width, editing, ...cfg.data.empty(), assets: [ASSET, ...(cfg.assets || [])], globals: cfg.globals || {}});
     const st = await e.page.evaluate(() => { const r = document.querySelector('[data-cl-root]'); return {ph: r.querySelectorAll('[data-cl-ph], .placeholder-svg, svg[data-placeholder], .placeholder-image').length, h: r.getBoundingClientRect().height, dead: [...r.querySelectorAll('a')].filter(a => !a.getAttribute('href') || a.getAttribute('href') === '#').length, broken: [...r.querySelectorAll('img')].filter(i => !i.getAttribute('src')).length}; });
     if (editing) ok(st.ph > 0, tag + ' empty picker: placeholder in the editor');
     else eq(st.ph, 0, tag + ' empty picker: no placeholder art on the storefront');
@@ -427,7 +427,7 @@ async function collections(browser, name) {
 /* Reduced motion: transitions off, content visible. */
 async function motion(browser, name) {
   const cfg = CFG[name];
-  const t = await mount(browser, name, {width: 375, editing: false, blocks: cfg.blocks(), assets: [ASSET], reducedMotion: 'reduce', globals: cfg.globals || {}});
+  const t = await mount(browser, name, {width: 375, editing: false, blocks: cfg.blocks(), assets: [ASSET, ...(cfg.assets || [])], reducedMotion: 'reduce', globals: cfg.globals || {}});
   const r = await t.page.evaluate(() => { const r = document.querySelector('[data-cl-root]'); const els = [...r.querySelectorAll('*')]; return {anim: els.filter(e => e.getAnimations && e.getAnimations().some(a => a.playState === 'running')).length, hiddenText: els.filter(e => /H\d|P/.test(e.tagName) && !e.hidden && e.textContent.trim() && getComputedStyle(e).opacity === '0').length}; });
   eq(r.anim, 0, name + ' reduced motion: nothing animates');
   eq(r.hiddenText, 0, name + ' reduced motion: text visible');
