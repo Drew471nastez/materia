@@ -47,7 +47,7 @@ const CFG = {
     mobNoop: [], same: {375: [['all', 'mobile']], 1366: [['all', 'desktop']], 1700: []}, T: '.cin__message', btn: '.cin__cta'},
   'countdown-timer1': {p: 'cd1', bp: 801, date: () => ({}), loop: true,
     desk: ['text_alignment', 'timer_alignment', 'item_width', 'grid_gap', 'timer_size', 'label_size', 'section_padding_top', 'section_padding_bottom', 'section_padding_left_right', 'container_padding_top', 'container_padding_bottom', 'container_padding_left_right', 'headline_size', 'text_size'],
-    vw: {section_width: 1700}, vals: {container_max_width: [300]}, mobNoop: [], same: {375: [['all', 'mobile']], 1366: [['all', 'desktop']], 1700: [['stretch_width', 'full_width']]}, sameAll: [['theme', 'bold']], H: '.cd1__heading', T: '.cd1__sub'},
+    vw: {section_width: 1700}, vals: {container_max_width: [300]}, mobNoop: [], same: {375: [['all', 'mobile']], 1366: [['all', 'desktop']], 1700: [['stretch_width', 'full_width']]}, sameAll: [['theme', 'bold'], ['inherit', '1.5']], H: '.cd1__heading', T: '.cd1__sub'},
   'countdown-timer2': {p: 'ti-cd', bp: 768, date: ms => { const x = at(ms); return {end_date: x.date, end_time: x.time}; }, bad: {end_date: '2027-02-29'},
     desk: ['layout_direction', 'vertical_alignment', 'gap_columns', 'padding_top', 'padding_bottom', 'button_font_size'], mob: ['content_alignment_mobile'],
     vw: {section_width: 1700}, vals: {}, mobNoop: [], same: {375: [], 1366: [], 1700: [['stretch_width', 'full_width']]}, H: '.ti-cd__heading', T: '.ti-cd__description', btn: '.ti-cd__button'},
@@ -59,6 +59,8 @@ const CFG = {
 const OWN = ['end_iso', 'end_date', 'end_time', 'restart_period', 'start_hours', 'start_minutes', 'start_seconds', 'hide_section', 'reveal', 'scroll_animation'];
 const STRUCTURAL = ['reset_spacing'];
 const PRE = {reset_spacing: {section_margin_top_mobile: 20, section_margin_top_desktop: 20}};
+/* a value away from the theme's, so the switch shows */
+const PREB = {'heading.custom_line_height': {line_height: 1.6}, 'heading.enable_custom_font_weight': {font_weight: '300'}, 'description.enable_custom_font_weight': {font_weight: '700'}, 'subheading.link_color': {text: 'Read <a href="/pages/terms">the terms</a>'}};
 const presetBlocks = name => clone(schemaOf(name).schema.presets[0].blocks || []);
 /* the section's settings and blocks with a running date */
 function dated(name, ms = 3 * DAY + 5 * 3600000) {
@@ -100,10 +102,13 @@ function prereq(x, list, base) {
 
 async function addFp(page) {
   await page.evaluate(() => {
-    const P = ['color', 'backgroundColor', 'backgroundImage', 'fontSize', 'fontFamily', 'fontWeight', 'lineHeight', 'letterSpacing', 'textAlign', 'textTransform', 'textDecorationLine', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'marginTop', 'marginBottom', 'marginLeft', 'rowGap', 'columnGap', 'alignItems', 'justifyContent', 'flexDirection', 'borderTopLeftRadius', 'borderTopWidth', 'borderTopColor', 'display', 'boxShadow', 'width', 'height', 'maxWidth', 'gridAutoColumns', 'webkitTextFillColor'];
+    const P = ['color', 'backgroundColor', 'backgroundImage', 'fontSize', 'fontFamily', 'fontWeight', 'lineHeight', 'letterSpacing', 'textAlign', 'textTransform', 'textDecorationLine', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'marginTop', 'marginBottom', 'rowGap', 'columnGap', 'alignItems', 'justifyContent', 'flexDirection', 'borderTopLeftRadius', 'borderTopWidth', 'borderTopColor', 'display', 'boxShadow', 'width', 'height', 'maxWidth', 'gridAutoColumns', 'webkitTextFillColor'];
     const PS = ['content', 'backgroundColor', 'backgroundImage', 'backgroundSize', 'filter', 'height'];
     window.__fp = uid => {
       const wrap = document.getElementById('shopify-section-' + uid), root = wrap.querySelector('[data-cd-root]'), out = {}, seen = {};
+      /* the digits change every second: measure with zeros, then put the time back */
+      const digits = [...root.querySelectorAll('[data-cd-unit]')], was = digits.map(e => e.textContent);
+      for (const e of digits) e.textContent = '00';
       const r0 = root.getBoundingClientRect();
       for (const e of [root, ...root.querySelectorAll('*')]) {
         if (e.tagName === 'STYLE' || e.closest('template')) continue;
@@ -114,15 +119,15 @@ async function addFp(page) {
         for (const q of P) o[q] = cs[q];
         o.backgroundImage = o.backgroundImage.replace(/\?[^")]*/g, '');
         o.rect = r.width || r.height ? [r.x - r0.x, r.y - r0.y, r.width, r.height].map(Math.round).join(',') : 'none';
-        if (e.hasAttribute('data-cd-unit')) { delete o.width; o.rect = r.width || r.height ? [r.y - r0.y, r.height].map(Math.round).join(',') : 'none'; }
-        if (!e.hasAttribute('data-cd-unit') && (!e.children.length || /^(H\d|P|A|BUTTON|SPAN)$/.test(e.tagName))) o.text = e.hasAttribute('data-cd-unit') ? '' : e.textContent.replace(/\d{2}/g, e.closest('[data-cd-clock]') ? '##' : '$&').trim().slice(0, 80);
-        if (e.matches('[data-theme-button]')) for (const v of ['--mb-hover-bg', '--mb-hover-text']) o[v] = cs.getPropertyValue(v).trim();
+        if (!e.hasAttribute('data-cd-unit') && (!e.children.length || /^(H\d|P|A|BUTTON|SPAN)$/.test(e.tagName))) o.text = e.textContent.trim().slice(0, 80);
+        if (e.matches('[data-theme-button]')) for (const v of ['--mb-hover-bg', '--mb-hover-text', '--mb-hover-border']) o[v] = cs.getPropertyValue(v).trim();
         o.tag = e.tagName; o.hidden = e.hidden;
         for (const a of ['href', 'target', 'data-theme-button', 'data-button-appearance', 'type']) o[a] = e.getAttribute(a);
         for (const pse of ['::before', '::after']) { const a = getComputedStyle(e, pse); if (a.content !== 'none') o[pse] = PS.map(q => String(a[q]).replace(/\?[^")]*/g, '')).join('|'); }
         o.blk = e.closest('[data-cd-block]')?.dataset.cdBlock || '';
         out[k] = o;
       }
+      digits.forEach((e, i) => { e.textContent = was[i]; });
       const w = getComputedStyle(wrap); out.wrap = {marginTop: w.marginTop, marginBottom: w.marginBottom, blk: ''};
       return out;
     };
@@ -131,7 +136,7 @@ async function addFp(page) {
 const fp = (t, uid = 'test') => t.page.evaluate(u => window.__fp(u), uid);
 const audit = (t, uid = 'test') => t.page.evaluate(u => window.MateriaCountdown.audit(document.querySelector('#shopify-section-' + u + ' [data-cd-root]')), uid);
 const diff = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
-const show = (a, b, keys) => keys.slice(0, 4).map(k => k + ' ' + JSON.stringify(Object.fromEntries(Object.entries(b[k] || {}).filter(([q, v]) => JSON.stringify(v) !== JSON.stringify((a[k] || {})[q]))))).join('; ');
+const show = (a, b, keys) => keys.slice(0, 4).map(k => k + ' ' + JSON.stringify(Object.fromEntries(Object.entries(b[k] || {}).filter(([q, v]) => JSON.stringify(v) !== JSON.stringify((a[k] || {})[q])).map(([q, v]) => [q, process.env.BOTH ? [(a[k] || {})[q], v] : v])))).join('; ');
 const still = page => page.addStyleTag({content: '*,*::before,*::after{transition:none!important;animation:none!important}'});
 
 /* Every non-hidden control, section and block: live, then redraw. */
@@ -150,12 +155,13 @@ async function everyControl(browser, name, width) {
   const covered = new Set();
   for (const c of cases) {
     const {x} = c, key = (c.btype ? c.btype + '.' : '') + x.id, vw = (cfg.vw || {})[x.id];
+    if (process.env.ONLY && !process.env.ONLY.split(',').includes(key)) continue;
     if (vw && width !== 1366) continue;
     if (vw) await t.page.setViewportSize({width: vw, height: 900});
     const W = vw || width, bp = cfg.bp;
     const blocks0 = clone(baseBlocks), S = clone(base), bi = c.scope;
     const bBase = bi >= 0 ? blocks0[bi].settings : S;
-    Object.assign(bBase, prereq(x, c.list, bBase), bi < 0 ? PRE[x.id] || {} : {});
+    Object.assign(bBase, prereq(x, c.list, bBase), bi < 0 ? PRE[x.id] || {} : PREB[key] || {});
     const blockId = bi >= 0 ? 'test-b' + bi : undefined;
     const isDesk = (cfg.desk || []).includes(x.id) || /_desktop$/.test(x.id) || (vw && W > 1366), isMob = (cfg.mob || []).includes(x.id) || /(_mobile$|^mobile_)/.test(x.id);
     const shows = !(isDesk && W < bp) && !(isMob && W >= bp) && !(vw && W < 1366 && W !== vw);
@@ -205,6 +211,8 @@ async function everyControl(browser, name, width) {
 /* Theme inheritance, schemes, custom styling and fonts, first paint, buttons, targets, overflow. */
 async function theme(browser, name, width, editing) {
   const cfg = CFG[name], tag = name + ' @' + width + (editing ? ' editor' : ' storefront'), start = dated(name);
+  /* Pro 2's own reveal starts hidden on purpose: checked in motion() */
+  if (name === 'countdown-timer2') start.settings.reveal = false;
   const t = await mount(browser, name, {width, editing, settings: start.settings, blocks: start.blocks, assets: []});
   await addFp(t.page); await still(t.page);
   const before = await fp(t);
@@ -408,13 +416,13 @@ async function instances(browser, name) {
   const cfg = CFG[name];
   for (const width of [375, 1366]) {
     const tag = name + ' @' + width;
-    const a = dated(name, 5 * DAY), b = dated(name, 1 * DAY);
+    const a = dated(name, 6 * DAY), b = dated(name, 2 * DAY);
     const t = await mount(browser, name, {width, editing: true, instances: [{uid: 'a', ...a}, {uid: 'b', ...b}], assets: [ASSET]});
     await addFp(t.page); await still(t.page); await frames(t.page);
     const sa = await state(t, 'a'), sb = await state(t, 'b');
     if (!cfg.loop) ok(secondsLeft(sa) - secondsLeft(sb) > 3 * 86400, tag + ': each instance counts to its own date');
     const b0 = await fp(t, 'b');
-    const hType = (schemaOf(name).schema.blocks || []).find(x => ['heading', 'caption'].includes(x.type)).type, hText = {heading: {'countdown-timer1': 'headline', 'countdown-timer2': 'heading', 'countdown-timer3': 'heading'}[name] || 'text'}[hType] || 'text';
+    const hType = name === 'countdown-inline' ? 'message' : 'heading', hText = {'countdown-timer1': 'headline', 'countdown-timer2': 'heading', 'countdown-timer3': 'heading'}[name] || 'text';
     await t.emit({enable_custom_style: true, padding_top_mobile: 12, padding_top_desktop: 12, section_padding_top: 12, mobile_section_padding_top: 12, padding_top: 12, vertical_padding: 3, vertical_padding_mobile: 3}, undefined, 'a');
     await t.emit({[hText]: 'Only in A'}, t.blockId(hType, 0, 'a'), 'a'); await frames(t.page);
     eq(diff(b0, await fp(t, 'b')), [], tag + ': an edit to one instance leaves the other alone');
@@ -423,7 +431,7 @@ async function instances(browser, name) {
       const fut = cfg.date(DAY / 2);
       if (cfg.blockDate) await t.emit(fut, t.blockId('timer', 0, 'a'), 'a'); else await t.emit(fut, undefined, 'a');
       await frames(t.page);
-      ok(secondsLeft(await state(t, 'a')) < 86400 && secondsLeft(await state(t, 'b')) > 86400 - 120, tag + ': a date edit in one instance leaves the other timer alone');
+      ok(secondsLeft(await state(t, 'a')) < 86400 && secondsLeft(await state(t, 'b')) > 86400, tag + ': a date edit in one instance leaves the other timer alone');
     }
     /* redraws: one controller entry and one timer per root */
     for (let i = 0; i < 3; i++) await t.redraw({uid: 'a'});

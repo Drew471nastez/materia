@@ -193,7 +193,7 @@
     v('bg', pick(o, s.section_bg, 'var(--color-background)'));
     v('pt-m', px(s.padding_top_mobile)); v('pb-m', px(s.padding_bottom_mobile)); v('pt-d', px(s.padding_top_desktop)); v('pb-d', px(s.padding_bottom_desktop));
     v('w-m', px(s.section_max_width_mobile, 560)); v('w-t', px(s.section_max_width_tablet, 900)); v('w-d', px(s.section_max_width_desktop, 1200));
-    v('flex', align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center');
+    v('flex', align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center'); v('align', align);
     v('gap-m', px(s.gap_inline_mobile, 13)); v('gap-d', px(s.gap_inline, 16)); v('timer-gap', px(s.timer_gap, 10));
     v('bar-bg', pick(o, s.bar_bg, 'var(--color-heading)')); v('bar-text', pick(o, s.bar_text, 'var(--color-background)')); v('bar-border', pick(o, s.bar_border_color, 'var(--color-heading)'));
     v('bar-bw', px(s.bar_border_width)); v('r-m', px(s.bar_radius_mobile)); v('r-d', px(s.bar_radius));
@@ -283,8 +283,10 @@
     v('ns-d', px(s.timer_size, 41)); v('ns-m', px(s.timer_size_mobile, 41)); v('nw', s.countdown_font_weight === 'light' ? '300' : s.countdown_font_weight === 'bold' ? '700' : '400');
     v('ls-d', px(s.label_size, 16)); v('ls-m', px(s.mobile_label_size, 16));
     v('hf', f ? font(s.heading_font) || null : subFont || null); v('bf', f ? font(s.body_font) || null : subFont || null);
-    const img = bool(s.enable_background_image_url) && s.section_background_image_url && s.section_background_image_url !== '/' ? s.section_background_image_url : s.section_background_image ? url(s.section_background_image) || (typeof s.section_background_image === 'object' ? s.section_background_image.src || s.section_background_image.url : '') : '';
-    v('img', img ? 'url("' + img + '")' : null);
+    /* the picture as the Liquid prints it (image_url: width: 2400); the older pasted address as it is */
+    const pic = s.section_background_image, picSrc = pic && typeof pic === 'object' ? pic.src || pic.url || '' : str(pic);
+    const img = bool(s.enable_background_image_url) && s.section_background_image_url && s.section_background_image_url !== '/' ? str(s.section_background_image_url) : picSrc ? picSrc + (picSrc.includes('?') ? '&' : '?') + 'width=2400' : '';
+    v('img', img && !/['"()\\]/.test(img) ? "url('" + img + "')" : null);
     put(root, '@data-cd1-width', str(s.section_width)); put(root, '@data-cd1-show', str(s.show_on_device, 'all'));
     const sec = c.q('.cd1'); put(sec, '@data-cd1-boxed', bool(s.enable_countdown_background) || null); put(sec, '@data-cd1-gradient', bool(s.enable_timer_gradient) || null);
     put(c.q('[data-cd-show="s"]'), 'hidden', s.show_seconds === false || s.show_seconds === 'false');
@@ -397,7 +399,7 @@
   function tick(st) {
     clearTimeout(st.timer); st.timer = 0;
     const root = st.root; if (!root.isConnected) return;
-    if (st.clockDirty || !st.clock) { st.clock = st.type.clock(st.s, st); st.clockDirty = false; st.loopTarget = 0; }
+    if (st.clockDirty || !st.clock) { st.clock = st.type.clock(st.s, st); st.clockDirty = false; }
     const c = st.clock, now = Date.now();
     let state, left = 0, end = c.end;
     if (c.none) state = 'static';
@@ -423,7 +425,7 @@
         if (el.dataset.cdUnit === 's' && el.hasAttribute('data-cd-pulse') && !reduced.matches) { el.classList.remove('is-tick'); void el.offsetWidth; el.classList.add('is-tick'); }
       }
     }
-    if (root.dataset.cdState !== state) { root.dataset.cdState = state; if (st.type.state) st.type.state(st, state); }
+    if (root.dataset.cdState !== state) root.dataset.cdState = state;
     st.ticks++;
     if (state === 'running' && st.visible && !document.hidden) st.timer = setTimeout(() => tick(st), 1000 - (Date.now() % 1000) + 8);
   }
@@ -433,7 +435,7 @@
   function reveal(st) {
     const el = st.root.matches('[data-cd-reveal]') ? st.root : st.root.querySelector('[data-cd-reveal]');
     if (!el || el.classList.contains('is-revealed')) return;
-    if (reduced.matches || design()) { el.classList.add('is-revealed'); return; }
+    if (reduced.matches || design() || st.root.hasAttribute('data-cd-editor')) { el.classList.add('is-revealed'); return; }
     if (st.visible) el.classList.add('is-revealed');
   }
 
@@ -481,7 +483,8 @@
     derive(root, st, true);
     st.clockDirty = false;
     st.digits = [...root.querySelectorAll('[data-cd-unit]')];
-    if (design()) root.setAttribute('data-cd-editor', ''); else root.removeAttribute('data-cd-editor');
+    /* the Liquid marks the builder (request.design_mode); the theme editor's own flag counts too */
+    if (design()) root.setAttribute('data-cd-editor', '');
     if ('IntersectionObserver' in window) {
       st.io = new IntersectionObserver(es => { for (const e of es) st.visible = e.isIntersecting; root.toggleAttribute('data-cd-paused', !st.visible); reveal(st); running(st); });
       st.io.observe(root);

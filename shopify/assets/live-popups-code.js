@@ -253,6 +253,7 @@
     put(c.q('[data-scs-title]'), 'text', s.modal_title || i18n.title || 'Size Guide');
     const table = c.q('[data-scs-table]');
     if (table) {
+      put(table, '@aria-label', s.modal_title || i18n.title || 'Size Guide');
       const rows = c.blocks.filter(x => x.type === 'row');
       put(c.q('[data-scs-headers]'), 'hidden', blank(s.headers));
       put(c.q('[data-scs-headers]'), 'head', s.headers || '');
@@ -398,8 +399,8 @@
     const items = st.items || [], users = st.users || [];
     if (!items.length) return;
     let i = Math.floor(Math.random() * items.length);
-    if (items.length > 1 && i === st.last) i = (i + 1) % items.length;
-    st.last = i; st.running = true;
+    if (items.length > 1 && i === st.lastItem) i = (i + 1) % items.length;
+    st.lastItem = i; st.running = true;
     const it = items[i] || {}, title = root.querySelector('[data-title-fake]'), img = root.querySelector('[data-img]'), user = root.querySelector('[data-user]'), time = root.querySelector('[data-time]');
     if (title) title.textContent = it.title || '';
     for (const a of root.querySelectorAll('[data-url]')) if (it.url) a.href = it.url;

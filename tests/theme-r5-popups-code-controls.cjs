@@ -109,7 +109,7 @@ async function themeChecks(browser, name, width, editing, priority = true) {
   const t = await mount(browser, name, {...o, width, editing, assets: [], priority});
   await addFp(t.page);
   /* a storefront notification waits for its timer: show it to measure it */
-  const reveal = async () => { if (name === 'fake-order' && !editing) await t.page.evaluate(() => { for (const r of document.querySelectorAll('[data-pc-root="fake-order"]')) r.dataset.foState = 'shown'; }); await prep(t, name); };
+  const reveal = async () => { if (name === 'fake-order' && !editing) await t.page.evaluate(() => { for (const r of document.querySelectorAll('[data-pc-root="fake-order"]')) r.dataset.foState = 'shown'; }); if (name === 'promotion-popup' && !editing) await t.page.evaluate(() => { const d = document.querySelector('[data-pp-dialog]'); if (!d.open) d.show(); }); await prep(t, name); };
   await t.page.addStyleTag({content: '*,*::before,*::after{transition:none!important;animation:none!important}'});
   await reveal();
   const before = await fp(t);

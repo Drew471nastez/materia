@@ -21,6 +21,8 @@ const count = () => checks;
 function presetBlocks(name) {
   const list = clone(schemaOf(name).schema.presets[0].blocks || []);
   if (name === 'fake-order') for (const b of list) if (b.type === 'products') b.settings = {...(b.settings || {}), fake_product: [PANTS, OTHER]};
+  if (name === 'size-chart-popup') list.push({type: 'html', settings: {html: '<p class="own">Measured flat</p>'}});
+  if (name === 'promotion-popup') for (const b of list) if (b.type === 'coupon') b.settings = {...(b.settings || {}), code: 'WELCOME10'};
   return list;
 }
 const BASE = {
@@ -37,6 +39,8 @@ async function prep(t, name, uid = 'test') {
 }
 
 async function addFp(page) {
+  /* measure end states: no colour fades, no dialog entrance */
+  await page.addStyleTag({content: '*,*::before,*::after{transition:none!important}.pp__dialog,.scs__dialog{animation:none!important}'});
   await page.evaluate(() => {
     const P = ['color', 'backgroundColor', 'backgroundImage', 'fontSize', 'fontFamily', 'fontWeight', 'lineHeight', 'letterSpacing', 'textAlign', 'textDecorationLine', 'textTransform', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'marginTop', 'marginBottom', 'display', 'width', 'height', 'maxWidth', 'borderTopLeftRadius', 'borderTopWidth', 'borderTopColor', 'columnGap', 'animationName', 'filter', 'backdropFilter', 'left', 'right', 'bottom', 'justifyContent', 'alignItems', 'flexBasis', 'opacity', 'visibility'];
     const SKIP_ATTR = ['style', 'class', 'data-pc-settings', 'data-pc-ready'];
@@ -53,7 +57,7 @@ async function addFp(page) {
         for (const q of P) o[q] = cs[q];
         o.rect = r.width || r.height ? (e === root ? (cs.position === 'fixed' ? [r.x, r.y, r.width, r.height] : [r.x, r.width, r.height]) : [r.x - r0.x, r.y - r0.y, r.width, r.height]).map(Math.round).join(',') : 'none';
         if (!e.children.length || /^(H\d|P|A|BUTTON|LABEL|TH|TD)$/.test(e.tagName)) o.text = e.textContent.trim().replace(/\s+/g, ' ').slice(0, 80);
-        o.attrs = [...e.attributes].filter(a => !SKIP_ATTR.includes(a.name)).map(a => a.name + '=' + a.value).sort().join(' ');
+        o.attrs = [...e.attributes].filter(a => !SKIP_ATTR.includes(a.name)).map(a => a.name + '=' + (a.name === 'src' ? a.value.split('?')[0] : a.value)).sort().join(' ');
         o.cls = cls.split(/\s+/).filter(Boolean).sort().join(' ');
         o.vars = e.style ? [...e.style].map(p => p + ':' + e.style.getPropertyValue(p).trim()).sort().join(';') : '';
         o.hidden = !!e.hidden; o.open = !!e.open;
