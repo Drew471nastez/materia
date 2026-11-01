@@ -182,6 +182,9 @@
     const st = {root, id: root.getAttribute('data-pg-section'), type, live: {}, liveBlocks: new Map(), raw: root.dataset.pgSettings, s: parse(root.dataset.pgSettings), blocks: new Map(), rawBlocks: new Map(), last: new Map(), frame: 0, audit: []};
     st.schedule = () => { if (!st.frame) st.frame = requestAnimationFrame(() => { st.frame = 0; if (root.isConnected) paint(root, st); }); };
     st.mq = matchMedia('(min-width: 750px)');
+    /* a wrapper kept across a redraw drops what an earlier live edit wrote on it */
+    const wrap = root.closest('.shopify-section');
+    if (wrap && root.getAttribute('data-pg-root') === 'promobanner') { wrap.style.removeProperty('margin-top'); wrap.style.removeProperty('margin-bottom'); }
     roots.set(root, st);
     derive(root, st, true);
   }
@@ -198,6 +201,7 @@
       if (!root.contains(el)) continue;
       let have, want;
       if (key.startsWith('--')) { have = el.style.getPropertyValue(key).trim(); want = v == null ? '' : String(v).trim(); }
+      else if (key === '@data-popup-config') { have = JSON.stringify(parse(el.getAttribute('data-popup-config'))); want = JSON.stringify(parse(v)); }
       else if (key[0] === '@') { have = el.getAttribute(key.slice(1)); if (v === true || v === false || v == null) { have = have !== null; want = !!v; } else want = String(v); }
       else if (key[0] === '?') { have = el.classList.contains(key.slice(1)); want = !!v; }
       else if (key === 'hidden') { have = el.hidden; want = !!v; }
@@ -415,7 +419,9 @@
     const get = type => (c.first(type) || {b: {}}).b;
     const eb = get('eyebrow'), hb = get('headline'), bb = get('body'), cb = get('coupon'), btb = get('button'), ib = get('image');
     const wrap = root.closest('.shopify-section');
-    if (wrap) { put(wrap, '--pbp-mt-m', px(s.section_margin_top_mobile)); put(wrap, '--pbp-mb-m', px(s.section_margin_bottom_mobile)); put(wrap, '--pbp-mt-d', px(s.section_margin_top_desktop)); put(wrap, '--pbp-mb-d', px(s.section_margin_bottom_desktop)); }
+    if (wrap) { const d = matchMedia('(min-width: 768px)').matches; put(wrap, 'style:margin-top', px(d ? s.section_margin_top_desktop : s.section_margin_top_mobile)); put(wrap, 'style:margin-bottom', px(d ? s.section_margin_bottom_desktop : s.section_margin_bottom_mobile)); }
+    /* drawn in the page: no popup is open */
+    if (!popup && !c.recording) { const P = window.MateriaPopups, dlg = c.q('dialog[data-pg-dialog]'); if (P && P.current() === c.st.id) P.close(c.st.id); if (dlg && dlg.open) dlg.removeAttribute('open'); }
     put(root, '@data-pg-inline', !popup); put(root, '@data-pbp-reset', bool(s.reset_spacing));
     put(root, '@data-pbp-mobile-image', ib.mobile_position || 'above'); put(root, '@data-pbp-cimg-d', bool(ib.enable_custom_desktop)); put(root, '@data-pbp-cimg-m', bool(ib.enable_custom_mobile));
     put(root, '?promo-banner-pro--as-popup', popup);

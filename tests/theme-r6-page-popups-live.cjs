@@ -69,7 +69,7 @@ function values(x, cur) {
     case 'image_picker': return [IMG];
     case 'font_picker': return [{family: 'Verdana', fallback_families: 'sans-serif'}];
     case 'color_scheme': return ['alt-scheme'];
-    default: return TEXT[x.type] ? [TEXT[x.type]] : [];
+    default: if (/country/.test(x.id)) return ['GB']; return TEXT[x.type] ? [TEXT[x.type]] : [];
   }
 }
 const num = v => Number.isFinite(+v) ? +v : 0;
@@ -92,6 +92,8 @@ function shown(x, s, b) {
 /* a setting that changed nothing in one run (a phone setting at 1366, the
    backdrop in the builder) must change something in another */
 const NOCHANGE = new Map();
+/* settings whose look depends on something the fixture leaves off */
+const EXEMPT = {reveal: 'the theme scroll reveal (Theme settings > Animation), off in the fixture'};
 
 async function fingerprint(t) {
   return t.page.evaluate(() => {
@@ -105,7 +107,7 @@ async function fingerprint(t) {
       let k = e.tagName + '.' + (cls.split(' ')[0] || '') + '.' + (e.dataset && (e.dataset.pgBlock || '') || '');
       seen[k] = (seen[k] || 0) + 1; k += '#' + seen[k];
       const cs = getComputedStyle(e), r = e.getBoundingClientRect(), o = {};
-      if (!e.getClientRects().length && cs.display !== 'contents') { o.nobox = true; out[k] = o; continue; }
+      if (!e.getClientRects().length && cs.display !== 'contents') { o.nobox = true; o.hidden = !!e.hidden; if (!e.children.length && !e.hasAttribute('data-cdp-num')) o.text = e.textContent.trim().replace(/\s+/g, ' ').slice(0, 120); out[k] = o; continue; }
       for (const p of P) o[p] = cs[p];
       for (const pe of ['::before', '::after']) { const c2 = getComputedStyle(e, pe); if (c2.content && c2.content !== 'none') o[pe] = [c2.content, c2.backgroundColor, c2.color, c2.borderTopColor, c2.width, c2.height].join('|'); }
       o.rect = [r.x, r.y, r.width, r.height].map(Math.round).join(',');
@@ -197,6 +199,7 @@ async function run(browser, type, width, editing) {
   const only = args.filter(a => !a.startsWith('--'));
   const widths = (args.find(a => a.startsWith('--width=')) || '--width=375,1366').slice(8).split(',').map(Number);
   const modes = (args.find(a => a.startsWith('--mode=')) || '--mode=editor,storefront').slice(7).split(',');
+  try { new Function(fs.readFileSync(path.join(ROOT, 'shopify/assets/live-page-popups.js'), 'utf8')); checks++; } catch (e) { failures.push('live-page-popups.js does not parse: ' + e.message); console.log('FAIL controller does not parse: ' + e.message); }
   const browser = await launch();
   try {
     for (const type of NAMES) {
@@ -205,7 +208,7 @@ async function run(browser, type, width, editing) {
       NOCHANGE.clear();
       let runs = 0;
       for (const width of widths) for (const mode of modes) { n = await run(browser, type, width, mode === 'editor'); runs++; }
-      const never = [...NOCHANGE].filter(([, k]) => k === runs).map(([u]) => u);
+      const never = [...NOCHANGE].filter(([u, k]) => k === runs && !EXEMPT[u.split('=')[0]]).map(([u]) => u);
       ok(!never.length, type + ' every setting changes something at some width or mode; these never did: ' + never.join(', '));
       console.log('ok', type, n + ' cases', checks);
     }
