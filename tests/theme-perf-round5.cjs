@@ -64,7 +64,9 @@ const animationCss = read('shopify/assets/animation.css');
   const blocking = [...head.matchAll(/\{\{\s*'([^']+\.css)'\s*\|\s*asset_url\s*\|\s*stylesheet_tag([^}]*)\}\}/g)].map(m => m[1]);
   const allowed = ['critical.css', 'section-isolation.css', 'animation.css', 'rtl.css', 'product-card.css', 'swiper-bundle.min.css', 'design-mode.css', 'theme.css', 'theme-button-contract.css',
     // A few hiding rules (an invalid countdown never flashes); the product blocks that use it link it too.
-    'product-block-runtime.css'];
+    'product-block-runtime.css',
+    // Section runtimes the layout keeps ready for the builder; the sections no longer link their own copies, so these must block to avoid an unstyled flash.
+    'announcement-pro-4.css', 'before-after-controls.css', 'drift-basic.min.css', 'hero-image-one.css', 'hero-pro-scrolling.css', 'hero-product-three.css', 'hero-product-two.css', 'marketing-sections.css', 'testimonial-quote.css', 'text-section-controls.css'];
   for (const f of blocking) ok(allowed.includes(f), `head: ${f} is a blocking stylesheet; only first-paint styles may hold the page`);
   for (const f of ['popup.css', 'judgeme-reviews.css']) {
     ok(new RegExp(`<link rel="stylesheet" href="\\{\\{ '${f.replace('.', '\\.')}' \\| asset_url \\}\\}" media="print" onload="this\\.media='all'">`).test(layout), `head: ${f} loads without blocking (print swap)`);
