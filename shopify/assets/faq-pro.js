@@ -1,7 +1,10 @@
 /* Materia Themes. FAQ (sections/faq-pro.storelib).
    Opens and closes the questions (one at a time unless the list allows
    several) and plays the section's own reveal. Sets up every FAQ on the
-   page, once each, and again for a section the builder draws again. */
+   page, once each, and again for a section the builder draws again.
+   live-faq.js (loaded on every page by the layout) runs the questions when
+   it is there, with live settings and the builder's block selection; this
+   file then only plays the reveal. */
 (function () {
   if (window.MateriaFaqPro) return;
 
@@ -11,6 +14,7 @@
     list.__faq7Init = true;
     var multiple = list.dataset.multiple === 'true';
     list.addEventListener('click', function (e) {
+      if (window.MateriaFaq) return;
       var trig = e.target.closest('[data-faq7-trigger]');
       if (!trig) return;
       var item = trig.closest('[data-faq7-item]');
