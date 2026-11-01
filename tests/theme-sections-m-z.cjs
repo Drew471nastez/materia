@@ -134,7 +134,7 @@ function readKind(id, src, aliases) {
     const assign = before.match(/\bassign\s+(\w+)\s*=\s*[\w.[\]]*$/);
     if (!assign) return 'direct';
     // Uses of the variable, not counting the assign itself or a .property of the same name.
-    const uses = src.match(new RegExp(`(?<![\\w.\\-])${esc(assign[1])}(?![\\w\\-])`, 'g')) || [];
+    const uses = src.replace(/\.\.(?=\w)/g, ".. ").match(new RegExp(`(?<![\\w.\\-])${esc(assign[1])}(?![\\w\\-])`, 'g')) || []; // a range (1..repeats) uses it too
     if (uses.length > 1) return 'direct';
   }
   const bracket = /\w\[\s*[\w.]+\s*\]/.test(src);
