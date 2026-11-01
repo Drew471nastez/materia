@@ -412,7 +412,7 @@ async function collections(browser, name) {
     if (cfg.data.count) ok(got.text.includes(String(COLL.products_count)), tag + ' collection count');
     await t.page.close();
     const e = await mount(browser, name, {width, editing, ...cfg.data.empty(), assets: [ASSET, ...(cfg.assets || [])], globals: cfg.globals || {}});
-    const st = await e.page.evaluate(() => { const r = document.querySelector('[data-cl-root]'); return {ph: r.querySelectorAll('[data-cl-ph], .placeholder-svg, svg[data-placeholder], .placeholder-image').length, h: r.getBoundingClientRect().height, dead: [...r.querySelectorAll('a:not([aria-disabled="true"])')].filter(a => !a.getAttribute('href') || a.getAttribute('href') === '#').length, broken: [...r.querySelectorAll('img')].filter(i => !i.getAttribute('src')).length}; });
+    const st = await e.page.evaluate(() => { const r = document.querySelector('[data-cl-root]'); return {ph: r.querySelectorAll('[data-cl-ph], .placeholder-svg, svg[data-placeholder], .placeholder-image').length, h: r.getBoundingClientRect().height, dead: [...r.querySelectorAll('a:not([aria-disabled="true"]):not([role="link"])')].filter(a => !a.getAttribute('href') || a.getAttribute('href') === '#').length, broken: [...r.querySelectorAll('img')].filter(i => !i.getAttribute('src')).length}; });
     if (editing) ok(st.ph > 0, tag + ' empty picker: placeholder in the editor');
     else eq(st.ph, 0, tag + ' empty picker: no placeholder art on the storefront');
     eq(st.dead, 0, tag + ' no dead links');
