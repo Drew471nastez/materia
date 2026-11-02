@@ -94,6 +94,10 @@ function shown(x, s, b) {
 /* a setting that changed nothing in one run (a phone setting at 1366, the
    backdrop in the builder) must change something in another */
 const NOCHANGE = new Map();
+/* field size and weight settings must change the field itself (its computed font), not only a variable */
+const FIELD = {'promonewsletterpopup-2': ['input_size_desktop', 'input_size_mobile', 'input_weight'], 'promotionalpopup2': ['input_size_desktop', 'input_size_mobile', 'input_weight'], 'promotional-popup': ['input_size']};
+const FIELD_SEEN = new Map();
+const fieldFont = fp => Object.entries(fp).filter(([k]) => /^INPUT\./.test(k)).map(([k, o]) => k + ':' + o.fontSize + '/' + o.fontWeight).join('|');
 /* settings whose look depends on something the fixture leaves off */
 /* the saved popups switch some parts off; they are switched on here so their settings show */
 const BASE_BLOCKS = {'promonewsletterpopup-2': {image: {disable_icon: false, custom_svg_code: '<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>'}, top_text: {enabled: true}}};
@@ -195,6 +199,7 @@ async function run(browser, type, width, editing) {
     const drawn = await fingerprint(t);
     const d = diff(live, drawn);
     ok(!d.length, label + ': live is the same as the redraw\n   ' + explain(live, drawn, d));
+    if ((FIELD[type] || []).includes(c.id)) { const k = c.id + '=' + JSON.stringify(c.v); FIELD_SEEN.set(k, (FIELD_SEEN.get(k) || false) || fieldFont(before) !== fieldFont(drawn)); }
     if (!diff(before, drawn).length) unchanged.push(c.id + (c.block ? '@' + c.btype : '') + '=' + JSON.stringify(c.v).slice(0, 30));
     else checks++;
     /* back to the base, live (the next case starts from a live state) */
@@ -251,11 +256,15 @@ async function independence(browser, type) {
     for (const type of NAMES) {
       if (only.length && !only.includes(type)) continue;
       let n = 0;
-      NOCHANGE.clear();
+      NOCHANGE.clear(); FIELD_SEEN.clear();
       let runs = 0;
       if (!args.includes('--two')) for (const width of widths) for (const mode of modes) { n = await run(browser, type, width, mode === 'editor'); runs++; }
       const never = !runs ? [] : [...NOCHANGE].filter(([u, k]) => k === runs && !EXEMPT[u.split('=')[0]]).map(([u]) => u);
       ok(!never.length, type + ' every setting changes something at some width or mode; these never did: ' + never.join(', '));
+      if (runs && FIELD[type]) {
+        const flat = [...FIELD_SEEN].filter(([, seen]) => !seen).map(([k]) => k);
+        ok(FIELD_SEEN.size > 0 && !flat.length, type + ' the field size and weight settings change the field\'s own font; these did not: ' + flat.join(', '));
+      }
       if (args.includes('--two') || !args.some(a => a.startsWith('--width=') || a.startsWith('--mode='))) await independence(browser, type);
       console.log('ok', type, n + ' cases', checks);
     }

@@ -535,6 +535,7 @@
     v('--loudz-input-border-radius', themeFields ? 'var(--input-border-radius, 6px)' : px(s.input_border_radius)); v('--loudz-input-border-thickness', themeFields ? 'var(--inputs-border-width, 1px)' : px(s.input_border_thickness));
     v('--loudz-input-height', themeFields ? 'var(--input-height, 0px)' : null); v('--loudz-input-padding', themeFields ? 'var(--input-padding, 16px 12px)' : null);
     v('--mt-select-radius', themeFields ? null : px(s.input_border_radius)); v('--field-border-widths', themeFields ? null : px(s.input_border_thickness));
+    v('--mt-field-font-size', themeFields || blank(fb.input_size_mobile) || blank(fb.input_size_desktop) ? null : 'var(--loudz-input-text-size)'); v('--mt-field-weight', themeFields || blank(fb.input_weight) ? null : String(fb.input_weight));
     v('--mt-select-bg', cu ? color(s.input_background_color, 'var(--input-bg)') : null); v('--mt-select-text', cu ? color(s.input_color, 'var(--input-color)') : null); v('--mt-select-border', cu ? color(s.input_border_color, 'var(--color-border)') : null);
     v('--loudz-button-width', num(s.button_width, 100) + '%');
     v('--loudz-button-text-color', color(ownColor(bb, 'button_text_color'), 'var(--btn-primary-color)')); v('--loudz-button-background-color', color(ownColor(bb, 'button_background'), 'var(--btn-primary-bg-color)'));
@@ -662,7 +663,7 @@
         put(el, '--ppd-input-placeholder', color(ownColor(b, 'input_placeholder_color'), 'var(--input-placeholder-color)'));
         put(el, '--ppd-input-radius', themeF ? 'var(--input-border-radius, 10px)' : px(b.input_radius, 10)); put(el, '--ppd-input-height', themeF ? 'var(--input-height, 50px)' : null);
         put(el, '--ppd-input-padding', themeF ? 'var(--input-padding, 14px 16px)' : px(b.input_pad_y, 14) + ' 16px'); put(el, '--ppd-input-size', themeF ? 'var(--input-font-size, 15px)' : px(b.input_size, 15));
-        put(el, '--ppd-input-border-width', themeF ? 'var(--inputs-border-width, 1px)' : null); put(el, '--mt-select-radius', themeF ? null : px(b.input_radius, 10));
+        put(el, '--ppd-input-border-width', themeF ? 'var(--inputs-border-width, 1px)' : null); put(el, '--mt-select-radius', themeF ? null : px(b.input_radius, 10)); put(el, '--mt-field-font-size', themeF || blank(b.input_size) ? null : px(b.input_size));
         put(el, '--mt-select-bg', bool(b.enable_custom_style) ? color(b.input_bg, 'var(--input-bg)') : null); put(el, '--mt-select-text', bool(b.enable_custom_style) ? color(b.input_color, 'var(--input-color)') : null);
         put(el, '--ppd-success-color', color(ownColor(b, 'success_color'), 'color-mix(in srgb, #2e9e57 70%, var(--color-text))')); put(el, '--ppd-error-color', color(ownColor(b, 'error_color'), 'color-mix(in srgb, #e04848 70%, var(--color-text))'));
         put(el.querySelector('input[type="email"]'), '@placeholder', b.email_placeholder || i18n.email || '');
@@ -708,6 +709,7 @@
     v('--loudz-input-placeholder-color', fc('input_placeholder', 'var(--input-placeholder-color)')); v('--loudz-input-border-color', fc('input_border', 'var(--color-border)'));
     v('--loudz-input-border-radius', themeF ? 'var(--input-border-radius, ' + num(fb.input_border_radius, 6) + 'px)' : px(fb.input_border_radius));
     v('--loudz-input-border-width', themeF ? 'var(--inputs-border-width, 1px)' : null); v('--loudz-input-height', themeF ? 'var(--input-height, 0px)' : null); v('--loudz-input-padding', themeF ? 'var(--input-padding, 16px 18px)' : null);
+    v('--mt-field-font-size', themeF || blank(fb.input_size_mobile) || blank(fb.input_size_desktop) ? null : 'var(--loudz-input-font-size)'); v('--mt-field-weight', themeF || blank(fb.input_weight) ? null : String(fb.input_weight));
     v('--mt-select-radius', themeF ? null : px(fb.input_border_radius)); const fown = bool(fb.enable_custom_style);
     v('--mt-select-bg', fown ? fc('input_background', 'var(--input-bg)') : null); v('--mt-select-text', fown ? fc('input_color', 'var(--input-color)') : null); v('--mt-select-border', fown ? fc('input_border', 'var(--color-border)') : null);
     v('--pp2-b-m', bS(num(fb.button_size_mobile, 14))); v('--pp2-b-d', bS(num(fb.button_size_desktop, 16))); v('--loudz-button-padding-top', px(fb.button_padding_top));

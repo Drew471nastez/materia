@@ -79,7 +79,7 @@ const declared = (type, s) => Object.fromEntries(Object.entries(s).filter(([k]) 
       for (const tree of [oldTree, L.repo]) {
         const r = await L.renderFeatured({tree, design});
         const o = await L.open(browser, width, r.html, {tree, wait: 1500});
-        looks.push(await L.look(o.p, r.id));
+        looks.push((await L.look(o.p, r.id)).map(x => x.replace(/\|\d{1,2}$/, '|<digits>'))); /* a running countdown's digits */
         eq(o.p.errors, [], `saved Featured product ${width}: no page errors`);
         await o.ctx.close();
       }
