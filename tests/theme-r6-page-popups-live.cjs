@@ -95,7 +95,8 @@ function shown(x, s, b) {
    backdrop in the builder) must change something in another */
 const NOCHANGE = new Map();
 /* field size and weight settings must change the field itself (its computed font), not only a variable */
-const FIELD = {'promonewsletterpopup-2': ['input_size_desktop', 'input_size_mobile', 'input_weight'], 'promotionalpopup2': ['input_size_desktop', 'input_size_mobile', 'input_weight'], 'promotional-popup': ['input_size']};
+/* phone sizes are left out: on phones the theme keeps every field at 16px or more (no zoom on focus), see the report */
+const FIELD = {'promonewsletterpopup-2': ['input_size_desktop', 'input_weight'], 'promotionalpopup2': ['input_size_desktop', 'input_weight'], 'promotional-popup': ['input_size']};
 const FIELD_SEEN = new Map();
 const fieldFont = fp => Object.entries(fp).filter(([k]) => /^INPUT\./.test(k)).map(([k, o]) => k + ':' + o.fontSize + '/' + o.fontWeight).join('|');
 /* settings whose look depends on something the fixture leaves off */
@@ -104,7 +105,7 @@ const BASE_BLOCKS = {'promonewsletterpopup-2': {image: {disable_icon: false, cus
 /* values a setting is tried with where the general pick would be capped (six prizes cap the label size at 10) */
 const VALUES = {'spin-wheel-popup': {label_font_size: [7]}};
 /* a setting that shows only with another one set a certain way (beyond visible_if) */
-const CASE_PRE = {'promotional-popup': {placeholder_url: {image: null}}};
+const CASE_PRE = {'promotional-popup': {placeholder_url: {image: null}}, 'promonewsletterpopup-2': {input_size_desktop: {use_theme_fields: false}, input_size_mobile: {use_theme_fields: false}, input_weight: {use_theme_fields: false}}};
 const EXEMPT = {reveal: 'the theme scroll reveal (Theme settings > Animation), off in the fixture'};
 
 async function fingerprint(t, uid = 'test') {
@@ -179,8 +180,10 @@ async function run(browser, type, width, editing) {
     const inst = cur.blocks.find(b => b.type === bdef.type);
     if (!inst) continue;
     for (const x of bdef.settings) if (x.id && !x.hidden && x.type !== 'header') {
-      const pre = shown(x, cur.settings, inst.settings) ? null : needs(x);
+      let pre = shown(x, cur.settings, inst.settings) ? null : needs(x);
       if (!pre && !shown(x, cur.settings, inst.settings)) continue;
+      const extra = (CASE_PRE[type] || {})[x.id];
+      if (extra) { const [k, val] = Object.entries(extra)[0]; pre = ['section', k, val]; }
       for (const v of values(x, inst.settings[x.id])) cases.push({id: x.id, v, x, block: inst.id, btype: bdef.type, pre});
     }
   }
