@@ -113,7 +113,7 @@ async function storefront(browser, type, width) {
   const sa2 = await state(t, 'a'), sb2 = await state(t, 'b');
   ok(sa2.open !== sb2.open && sa2.open === !sa.open, tag + ' the second opens once the first is closed');
   await t.emit({color_scheme: 'alt-scheme'}, undefined, 'a'); await wait(t, 60);
-  ok(await t.page.evaluate(() => document.querySelector('#shopify-section-a [data-pg-root]').classList.contains('color-alt-scheme') && !document.querySelector('#shopify-section-b [data-pg-root]').classList.contains('color-alt-scheme')), tag + ' a live edit to one popup leaves the other');
+  ok(await t.page.evaluate(() => { const s = id => { const r = document.querySelector('#shopify-section-' + id + ' [data-pg-root]'); return [...r.classList].some(c => /^color-/.test(c)) ? r : r.querySelector('[data-pg-scheme]'); }; return s('a').classList.contains('color-alt-scheme') && !s('b').classList.contains('color-alt-scheme'); }), tag + ' a live edit to one popup leaves the other');
   ok(await t.page.evaluate(() => !!localStorage.getItem('materia:popup:a') !== !!localStorage.getItem('materia:popup:b') || (!!localStorage.getItem('materia:popup:a') && !!localStorage.getItem('materia:popup:b'))), tag + ' remembered per section');
   await t.page.close();
 
@@ -147,7 +147,7 @@ async function builder(browser, type, width) {
   eq(await t.page.evaluate(() => document.querySelectorAll('[data-popup-id="test"]').length), 1, tag + ' registered once after a redraw');
   /* live colour scheme */
   await t.emit({color_scheme: 'alt-scheme'}); await wait(t, 60);
-  ok(await t.page.evaluate(() => document.querySelector('[data-pg-root]').classList.contains('color-alt-scheme') && !document.querySelector('[data-pg-root]').classList.contains('color-default-color-scheme')), tag + ' colour scheme swaps live');
+  ok(await t.page.evaluate(() => { const r = document.querySelector('[data-pg-root]'); const e = [...r.classList].some(c => /^color-/.test(c)) ? r : r.querySelector('[data-pg-scheme]'); return e.classList.contains('color-alt-scheme') && !e.classList.contains('color-default-color-scheme'); }), tag + ' colour scheme swaps live');
   /* Escape closes the preview */
   await t.page.keyboard.press('Escape'); await wait(t, 120);
   ok(!(await state(t)).open, tag + ' Escape closes the preview');
@@ -168,7 +168,9 @@ async function builder(browser, type, width) {
 async function styling(browser, type, width) {
   const tag = type + ' style @' + width;
   const p = P[type], base = saved(type);
-  const settings = {...base.settings, ...p.open};
+  /* the saved popups carry the custom colours switch (set by the lead); off is tested here */
+  const settings = {...base.settings, ...p.open, enable_custom_style: false, enable_custom_fonts: false};
+  base.blocks = base.blocks.map(b => ({...b, settings: {...b.settings, enable_custom_style: false}}));
   const cardBg = t => t.page.evaluate(([sel]) => { let el = document.querySelector(sel); while (el) { const b = getComputedStyle(el).backgroundColor; if (b !== 'rgba(0, 0, 0, 0)') return b; el = el.parentElement; } return ''; }, [q(p.card, 'test')]);
   let t = await mount(browser, type, {width, editing: false, settings, blocks: base.blocks, assets: ASSETS});
   await wait(t, 300);
@@ -201,7 +203,10 @@ async function styling(browser, type, width) {
 const OLD_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'r6-old-'));
 function oldName(type) {
   const f = path.join(OLD_DIR, type + '.storelib');
-  if (!fs.existsSync(f)) fs.writeFileSync(f, execSync('git -C ' + JSON.stringify(ROOT) + ' show c098384:sections/' + type + '.storelib', {encoding: 'utf8'}));
+  /* the old files set a missing block to blank; the test renderer (liquidjs)
+     reads blank != blank as true and would draw blocks the saved popup does
+     not have (the real engine does not), so it is read as an unset name here */
+  if (!fs.existsSync(f)) fs.writeFileSync(f, execSync('git -C ' + JSON.stringify(ROOT) + ' show c098384:sections/' + type + '.storelib', {encoding: 'utf8'}).replace(/assign (\w+)\s*=\s*blank\s*-%\}/g, 'assign $1 = __none -%}'));
   return path.relative(path.join(ROOT, 'sections'), f).replace(/\.storelib$/, '');
 }
 async function fingerprint(t, sel) {
@@ -212,11 +217,15 @@ async function fingerprint(t, sel) {
     out.card = [r0.x, r0.y, r0.width, r0.height].map(Math.round).join(',');
     for (const e of [card, ...card.querySelectorAll('*')]) {
       if (e.ownerSVGElement || e.closest('style,script,template')) continue;
+      /* what is not drawn (a part kept hidden for a live edit) is not part of the look */
+      if (!e.getClientRects().length) continue;
       const cls = typeof e.className === 'string' ? e.className.split(' ')[0] : '';
       let k = e.tagName + '.' + cls; seen[k] = (seen[k] || 0) + 1; k += '#' + seen[k];
       const cs = getComputedStyle(e), r = e.getBoundingClientRect();
       const o = {};
       for (const p of ['color', 'backgroundColor', 'fontFamily', 'fontSize', 'fontWeight', 'borderTopLeftRadius', 'borderTopColor', 'textAlign', 'display', 'visibility', 'opacity']) o[p] = cs[p];
+      /* start reads as left on a left-to-right page (logical values for right-to-left pages) */
+      if (o.textAlign === 'start' && cs.direction === 'ltr') o.textAlign = 'left';
       o.rect = [r.x - r0.x, r.y - r0.y, r.width, r.height].map(Math.round).join(',');
       if (!e.children.length && !e.closest('[data-cdp-num]')) o.text = e.textContent.trim().slice(0, 60);
       out[k] = o;
@@ -234,6 +243,15 @@ async function savedLook(browser, type, width) {
   const a = await fingerprint(old, q(p.card, 'test'));
   await old.page.close();
   const on = toggled(type, base);
+  /* the saved Coupon Promo Popup headline says weight 800, which the theme's
+     heading weight used to override; the weight now applies, so the saved
+     look is kept with "Theme" (the lead's template value, see the report) */
+  if (type === 'coupon-promotion-newsletter-popup') on.blocks = on.blocks.map(b => b.type === 'headline' ? {...b, settings: {...b.settings, weight: 'theme'}} : b);
+  /* the saved field colours of these two never showed: Theme settings > Fields
+     drew every field over them. Fields now take a popup's own colours, so the
+     old look is kept by clearing them (the lead's template value, see the report) */
+  if (type === 'promonewsletterpopup-2') on.settings = {...on.settings, input_color: '', input_background_color: '', input_border_color: '', input_placeholder_color: ''};
+  if (type === 'promotionalpopup2') on.blocks = on.blocks.map(b => b.type === 'form' ? {...b, settings: {...b.settings, input_color: '', input_background: '', input_placeholder: '', input_border: ''}} : b);
   const now = await mount(browser, type, {width, editing: false, settings: {...on.settings, ...trig}, blocks: on.blocks, assets: ASSETS});
   await wait(now, 400);
   const b = await fingerprint(now, q(p.card, 'test'));

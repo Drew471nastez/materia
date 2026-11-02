@@ -18,11 +18,16 @@
    - closing is the manager's: its close button, Escape, a click on the
      backdrop, "no thanks".
 
-   Live edits: a section's colour scheme is swapped on its root the moment
-   it changes (storelib:settings-change). Every other setting is drawn by the
-   builder again (storelib:section-load); a popup that was open in the
-   builder opens again in its new markup without a flash, and its own script
-   sets it up once (a redraw whose inline script did not run is set up from
+   Live edits: every section and block setting is applied in place on
+   storelib:settings-change, per section, once per frame, and only what
+   changed is written: each root carries its settings (data-pg-settings),
+   each block element its own, and a type's derive() turns them into the
+   same CSS variables, attributes, classes and texts its Liquid prints (the
+   page tests compare a live edit with a redraw for every setting). A
+   picture is swapped only when its address changes; an open popup stays
+   open. On a redraw (storelib:section-load) the new markup is read again;
+   a popup that was open in the builder opens again, and its own script sets
+   it up once (a redraw whose inline script did not run is set up from
    here, from that same script). Under reduced motion nothing animates. */
 (() => {
   if (window.MateriaPagePopups) return;
@@ -106,6 +111,7 @@
   const color = (v, f) => colorOk(v) || f;
   const font = v => v && typeof v === 'object' && v.family ? v.family + ', ' + (v.fallback_families || 'sans-serif') : '';
   const imgSrc = v => { v = v && typeof v === 'object' ? v.src || v.url || '' : v; return typeof v === 'string' ? v : ''; };
+  const imgSize = v => v && typeof v === 'object' && v.width && v.height ? {w: v.width, h: v.height} : {};
   const strip = v => String(v == null ? '' : v).replace(/<[^>]*>/g, '');
   const blank = v => v == null || v === '' || (typeof v === 'string' && !v.trim()) || (typeof v === 'object' && !Object.keys(v).length);
   const esc = v => String(v == null ? '' : v);
@@ -120,7 +126,11 @@
     else if (key === 'scheme') { for (const c of [...el.classList]) if (/^color-/.test(c)) el.classList.remove(c); if (v) el.classList.add('color-' + v); }
     else if (key === 'img') {
       const d = parse(v), cur = el.querySelector(':scope > img, :scope > svg, :scope > a > img, :scope > a > svg');
-      if (d.src && cur && cur.tagName === 'IMG' && (cur.getAttribute('src') || '').split('?')[0] === d.src.split('?')[0]) { cur.alt = d.alt || ''; return; }
+      if (d.src && cur && cur.tagName === 'IMG') {
+        /* the same picture element takes the new address: no reload when it is the same one */
+        if ((cur.getAttribute('src') || '').split('?')[0] !== d.src.split('?')[0]) { cur.removeAttribute('srcset'); cur.removeAttribute('sizes'); cur.src = d.src; }
+        cur.alt = d.alt || ''; return;
+      }
       let n;
       if (d.src) { n = document.createElement('img'); n.src = d.src; n.alt = d.alt || ''; if (d.cls) n.className = d.cls; if (d.lazy) n.loading = 'lazy'; if (d.w && d.h) { n.width = d.w; n.height = d.h; } }
       else { const tp = el.querySelector('template[data-pg-ph]'); if (!tp) return; n = tp.content.firstElementChild.cloneNode(true); }
@@ -291,7 +301,7 @@
       frequency: {mode: days > 0 ? 'after_days' : 'always', days}}));
     for (const view of c.qa('[data-ib-view]')) {
       const desk = view.dataset.ibView === 'desktop', src = imgSrc(desk ? im.image_desktop : (im.image_mobile || im.image_desktop));
-      put(view, 'img', JSON.stringify({src, alt, lazy: bool(im.lazy)}));
+      put(view, 'img', JSON.stringify({...imgSize(desk ? im.image_desktop : (im.image_mobile || im.image_desktop)), src, alt, lazy: bool(im.lazy)}));
       const a = view.querySelector('[data-ib-link]'); put(a, '@href', blank(im.image_link) ? null : im.image_link);
       const img = view.querySelector('img'); if (img) put(img, '@loading', bool(im.lazy) ? 'lazy' : null);
     }
@@ -518,7 +528,7 @@
     v('--loudz-section-width', px(s.inner_width, 790));
     v('--loudz-section-background', cu && !blank(s.background_gradient) ? s.background_gradient : color(cu ? s.background_color : '', 'var(--color-background)'));
     v('--loudz-overlay-color', color(cu ? s.overlay_color : '', '#000000')); v('--loudz-overlay-opacity', String(num(s.overlay_opacity) / 100));
-    v('--loudz-heading-text-weight', String(hb.weight || 700)); v('--loudz-heading-color', color(ownColor(hb, 'color'), 'var(--color-heading)'));
+    v('--loudz-heading-text-weight', hb.weight === 'theme' ? 'var(--heading-weight, 700)' : String(hb.weight || 700)); v('--loudz-heading-color', color(ownColor(hb, 'color'), 'var(--color-heading)'));
     v('--loudz-description-text-weight', String(db.weight || 400)); v('--loudz-description-color', color(ownColor(db, 'color'), 'var(--color-text)'));
     v('--loudz-input-color', color(cu ? s.input_color : '', 'var(--input-color)')); v('--loudz-input-background-color', color(cu ? s.input_background_color : '', 'var(--input-bg)'));
     v('--loudz-input-text-weight', String(fb.input_weight || 400)); v('--loudz-input-border-color', color(cu ? s.input_border_color : '', 'var(--color-border)')); v('--loudz-input-placeholder-color', color(cu ? s.input_placeholder_color : '', 'var(--input-placeholder-color)'));
@@ -536,7 +546,7 @@
     for (const x of c.blocks) {
       const b = x.b, el = x.el;
       if (x.type === 'top_text') { put(el, 'hidden', !bool(b.enabled)); put(el, 'html', b.text || ''); }
-      else if (x.type === 'heading' || x.type === 'description') put(el, 'html', b.text || '');
+      else if (x.type === 'heading' || x.type === 'description') { put(el, 'html', b.text || ''); if (x.type === 'heading') put(el, '@data-own-weight', b.weight !== 'theme'); }
       else if (x.type === 'dismiss') { put(el, 'hidden', blank(b.text)); put(el, 'html', b.text || ''); }
       else if (x.type === 'image') {
         const src2 = b.icon_source || 'default_svg', preset = b.preset_icon || 'envelope';
@@ -634,7 +644,7 @@
     v('--ppd-close-bg-hover', cu ? color(s.close_bg_hover, 'color-mix(in srgb, currentColor 20%, transparent)') : null);
     put(c.q('[data-popup-root]'), '@data-popup-config', JSON.stringify({design: c.design, preview: bool(s.show_in_builder),
       trigger: {mode: modes[s.trigger] || 'delay', delay: num(s.delay, 3), scroll: num(s.scroll_pct, 40), views: num(s.page_views, 2)}, frequency: {mode: s.frequency || 'session'}}));
-    put(c.q('[data-ppd-media]'), 'img', JSON.stringify({src: imgSrc(s.image) || (typeof s.placeholder_url === 'string' ? s.placeholder_url : ''), alt: '', lazy: true}));
+    put(c.q('[data-ppd-media]'), 'img', JSON.stringify({...(imgSrc(s.image) ? {} : {w: 800, h: 1000}), src: imgSrc(s.image) || (typeof s.placeholder_url === 'string' ? s.placeholder_url : ''), alt: '', lazy: true}));
     for (const x of c.blocks) {
       const b = x.b, el = x.el;
       if (x.type === 'eyebrow') {
@@ -687,7 +697,7 @@
     v('--loudz-background-color', cu && !blank(s.background_gradient) ? s.background_gradient : color(cu ? s.background_color : '', 'var(--color-background)'));
     v('--loudz-overlay-color', color(cu ? s.overlay_color : '', '#000000')); v('--loudz-overlay-opacity', String(num(s.overlay_opacity, 0)));
     v('--loudz-border-radius', px(s.border_radius)); v('--loudz-section-width', px(s.inner_width_px, 400)); v('--loudz-content-alignment', ca || 'left');
-    v('--pp2-h-m', px(hb.size_mobile, 22)); v('--pp2-h-d', px(hb.size_desktop, 28)); v('--loudz-heading-weight', String(hb.weight || 700)); v('--loudz-heading-padding-top', px(hb.padding_top));
+    v('--pp2-h-m', px(hb.size_mobile, 22)); v('--pp2-h-d', px(hb.size_desktop, 28)); v('--loudz-heading-weight', hb.weight === 'theme' ? 'var(--heading-weight, 700)' : String(hb.weight || 700)); v('--loudz-heading-padding-top', px(hb.padding_top));
     v('--loudz-heading-color', color(ownColor(hb, 'color'), 'var(--color-heading)'));
     v('--pp2-d-m', px(db.size_mobile, 14)); v('--pp2-d-d', px(db.size_desktop, 16)); v('--loudz-description-font-weight', String(db.weight || 400)); v('--loudz-description-padding-top', px(db.padding_top));
     v('--loudz-description-color', color(ownColor(db, 'color'), 'var(--color-text)'));
@@ -711,9 +721,9 @@
     const close = c.q('.loudz__close'); for (const p2 of ['left', 'right']) put(close, '?loudz__close--' + p2, (s.close_button_position || 'right') === p2);
     for (const x of c.blocks) {
       const b = x.b, el = x.el;
-      if (x.type === 'heading' || x.type === 'description') { put(el, 'hidden', blank(b.text)); put(el, 'html', b.text || ''); }
+      if (x.type === 'heading' || x.type === 'description') { put(el, 'hidden', blank(b.text)); put(el, 'html', b.text || ''); if (x.type === 'heading') put(el, '@data-own-weight', b.weight !== 'theme'); }
       else if (x.type === 'image') {
-        put(el, 'img', JSON.stringify({src: imgSrc(b.image), alt: '', lazy: true, cls: !blank(b.filter) && b.filter !== 'none' ? 'loudz__filter--' + b.filter : ''}));
+        put(el, 'img', JSON.stringify({src: imgSrc(b.image), alt: (b.image && b.image.alt) || '', lazy: true, cls: !blank(b.filter) && b.filter !== 'none' ? 'loudz__filter--' + b.filter : ''}));
         const im = el.querySelector('img'); if (im) for (const f of ['grayscale', 'sepia', 'invert']) put(im, '?loudz__filter--' + f, b.filter === f);
       } else if (x.type === 'form') {
         const input = el.querySelector('input[type="email"]'); put(input, '@placeholder', b.email_placeholder || ''); put(input, '@aria-label', b.email_placeholder || 'Email');

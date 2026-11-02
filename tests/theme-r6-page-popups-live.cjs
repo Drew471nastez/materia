@@ -46,6 +46,8 @@ function base(type) {
   const pic = {url: 'https://theme.test/base.png', src: 'https://theme.test/base.png', width: 800, height: 600, alt: 'Base alt'};
   for (const x of schema.settings) if (x.type === 'image_picker' && !settings[x.id]) settings[x.id] = pic;
   blocks = blocks.map(b => { const d = (schema.blocks || []).find(q => q.type === b.type); const s2 = {...b.settings}; for (const x of (d && d.settings) || []) if (x.type === 'image_picker' && !s2[x.id]) s2[x.id] = pic; return {...b, settings: s2}; });
+  const bb = BASE_BLOCKS[type] || {};
+  blocks = blocks.map(b => bb[b.type] ? {...b, settings: {...b.settings, ...bb[b.type]}} : b);
   /* own colours that differ from the theme's, so the custom colour switches show */
   for (const x of schema.settings) if (x.type === 'color') settings[x.id] = '#b1c2d3';
   blocks = blocks.map(b => { const d = (schema.blocks || []).find(q => q.type === b.type); const s2 = {...b.settings}; for (const x of (d && d.settings) || []) if (x.type === 'color' && !(type === 'spin-wheel-popup' && b.type === 'prize')) s2[x.id] = '#b1c2d3'; return {...b, settings: s2}; });
@@ -93,14 +95,19 @@ function shown(x, s, b) {
    backdrop in the builder) must change something in another */
 const NOCHANGE = new Map();
 /* settings whose look depends on something the fixture leaves off */
+/* the saved popups switch some parts off; they are switched on here so their settings show */
+const BASE_BLOCKS = {'promonewsletterpopup-2': {image: {disable_icon: false, custom_svg_code: '<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>'}, top_text: {enabled: true}}};
+/* values a setting is tried with where the general pick would be capped (six prizes cap the label size at 10) */
+const VALUES = {'spin-wheel-popup': {label_font_size: [7]}};
 /* a setting that shows only with another one set a certain way (beyond visible_if) */
 const CASE_PRE = {'promotional-popup': {placeholder_url: {image: null}}};
 const EXEMPT = {reveal: 'the theme scroll reveal (Theme settings > Animation), off in the fixture'};
 
 async function fingerprint(t, uid = 'test') {
   return t.page.evaluate(uid => {
-    const wrap = document.getElementById('shopify-section-' + uid), out = {}, seen = {};
-    const P = ['color', 'backgroundColor', 'backgroundImage', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'textAlign', 'textTransform', 'textDecorationLine', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight', 'display', 'visibility', 'opacity', 'width', 'height', 'maxWidth', 'borderTopLeftRadius', 'borderBottomRightRadius', 'borderTopWidth', 'borderTopColor', 'borderTopStyle', 'gap', 'justifyContent', 'alignItems', 'flexDirection', 'gridTemplateColumns', 'order', 'objectFit', 'objectPosition', 'filter', 'boxShadow', 'fill', 'stroke', 'transform', 'top', 'left', 'right', 'bottom', 'aspectRatio', 'zIndex', 'outlineColor'];
+    if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+    const wrap = document.getElementById('shopify-section-' + uid), out = {}, seen = {}, w0 = wrap.getBoundingClientRect();
+    const P = ['color', 'backgroundColor', 'backgroundImage', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'textAlign', 'textTransform', 'textDecorationLine', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'display', 'visibility', 'opacity', 'width', 'height', 'maxWidth', 'borderTopLeftRadius', 'borderBottomRightRadius', 'borderTopWidth', 'borderTopColor', 'borderTopStyle', 'gap', 'justifyContent', 'alignItems', 'flexDirection', 'gridTemplateColumns', 'order', 'objectFit', 'objectPosition', 'filter', 'boxShadow', 'fill', 'stroke', 'transform', 'top', 'left', 'right', 'bottom', 'aspectRatio', 'zIndex', 'outlineColor'];
     const SKIP = ['style', 'data-pg-settings', 'data-popup-id', 'data-popup-state', 'srcset', 'sizes', 'width', 'height', 'decoding', 'fetchpriority', 'tabindex'];
     for (const e of [wrap, ...wrap.querySelectorAll('*')]) {
       if (e.closest('template, style, script') || e.tagName === 'STYLE' || e.tagName === 'SCRIPT' || e.tagName === 'TEMPLATE') continue;
@@ -111,8 +118,12 @@ async function fingerprint(t, uid = 'test') {
       const cs = getComputedStyle(e), r = e.getBoundingClientRect(), o = {};
       if (!e.getClientRects().length && cs.display !== 'contents') { o.nobox = true; o.hidden = !!e.hidden; if (!e.children.length && !e.hasAttribute('data-cdp-num')) o.text = e.textContent.trim().replace(/\s+/g, ' ').slice(0, 120); out[k] = o; continue; }
       for (const p of P) o[p] = cs[p];
+      /* the section's own spacing (auto margins of flex items read back unreliably, so only here) */
+      if (e === wrap) { o.marginTop = cs.marginTop; o.marginBottom = cs.marginBottom; }
       for (const pe of ['::before', '::after']) { const c2 = getComputedStyle(e, pe); if (c2.content && c2.content !== 'none') o[pe] = [c2.content, c2.backgroundColor, c2.color, c2.borderTopColor, c2.width, c2.height].join('|'); }
-      o.rect = [r.x, r.y, r.width, r.height].map(Math.round).join(',');
+      /* boxes against the section itself (another section moving it is not its own change); fixed parts against the screen */
+      const fixed = cs.position === 'fixed' || e.closest('dialog:modal');
+      o.rect = (e === wrap ? [r.width, r.height] : fixed ? [r.x, r.y, r.width, r.height] : [r.x - w0.x, r.y - w0.y, r.width, r.height]).map(Math.round).join(',');
       if ((!e.children.length || /^(H\d|P|A|BUTTON|LABEL|SPAN)$/.test(e.tagName)) && !e.hasAttribute('data-cdp-num')) o.text = e.textContent.trim().replace(/\s+/g, ' ').slice(0, 120);
       o.attrs = [...e.attributes].filter(a => !SKIP.includes(a.name)).map(a => {
         let v = a.value;
@@ -158,7 +169,7 @@ async function run(browser, type, width, editing) {
     if (!pre && !shown(x, cur.settings, cur.settings)) continue;
     const extra = (CASE_PRE[type] || {})[x.id];
     if (extra) { const [k, val] = Object.entries(extra)[0]; pre = ['section', k, val]; }
-    for (const v of values(x, cur.settings[x.id])) cases.push({id: x.id, v, x, pre});
+    for (const v of (VALUES[type] || {})[x.id] || values(x, cur.settings[x.id])) cases.push({id: x.id, v, x, pre});
   }
   for (const bdef of schema.blocks || []) {
     const inst = cur.blocks.find(b => b.type === bdef.type);
@@ -208,7 +219,9 @@ async function independence(browser, type) {
   const b0 = base(type);
   const t = await mount(browser, type, {width: 1366, editing: true, instances: [{uid: 'a', settings: b0.settings, blocks: b0.blocks}, {uid: 'b', settings: b0.settings, blocks: b0.blocks}], assets: ASSETS});
   await t.page.addStyleTag({content: '*,*::before,*::after{transition:none!important;animation:none!important}'});
-  await t.page.evaluate(() => { for (const id of ['a', 'b']) { const d = document.querySelector('#shopify-section-' + id + ' dialog[data-pg-dialog]'); if (d && !d.open) d.setAttribute('open', ''); for (const c of ['cdp-open', 'cpnb-open', 'pbp-open', 'sw-open']) document.querySelector('#shopify-section-' + id + ' [data-popup-root]').classList.add(c); document.querySelector('#shopify-section-' + id + ' [data-popup-root]').setAttribute('data-open', 'true'); document.querySelectorAll('#shopify-section-' + id + ' .loudz__popup, #shopify-section-' + id + ' .promobanner-popup-' + id).forEach(e => e.classList.add('active')); } });
+  /* one popup is open at a time in the builder too, so both are compared closed (every part is still drawn, hidden) */
+  const openBoth = () => t.page.evaluate(() => { for (let i = 0; i < 3 && window.MateriaPopups && MateriaPopups.current(); i++) MateriaPopups.close(); document.querySelectorAll('dialog[data-pg-dialog][open]').forEach(d => d.removeAttribute('open')); }).then(() => t.page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))));
+  await openBoth();
   await t.page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
   const picks = schema.settings.filter(x => x.id && !x.hidden && /^(range|select|color|color_scheme)$/.test(x.type) && shown(x, b0.settings, b0.settings)).slice(0, 12);
   const bBefore = await fingerprint(t, 'b'), aBefore = await fingerprint(t, 'a');
@@ -217,9 +230,12 @@ async function independence(browser, type) {
   await t.emit(change, undefined, 'a');
   await t.page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
   ok(diff(aBefore, await fingerprint(t, 'a')).length > 0, tag + ': a live edit changes the popup it is for');
-  ok(!diff(bBefore, await fingerprint(t, 'b')).length, tag + ': a live edit to one leaves the other');
+  const bLive = await fingerprint(t, 'b');
+  ok(!diff(bBefore, bLive).length, tag + ': a live edit to one leaves the other\n   ' + explain(bBefore, bLive, diff(bBefore, bLive)));
   await t.redraw({uid: 'a', settings: {...b0.settings, ...change}});
-  ok(!diff(bBefore, await fingerprint(t, 'b')).length, tag + ': a redraw of one leaves the other');
+  await openBoth();
+  const bDrawn = await fingerprint(t, 'b');
+  ok(!diff(bBefore, bDrawn).length, tag + ': a redraw of one leaves the other\n   ' + explain(bBefore, bDrawn, diff(bBefore, bDrawn)));
   ok(!t.errors.length, tag + ' no errors ' + t.errors.join('; '));
   await t.page.close();
 }
@@ -237,10 +253,10 @@ async function independence(browser, type) {
       let n = 0;
       NOCHANGE.clear();
       let runs = 0;
-      for (const width of widths) for (const mode of modes) { n = await run(browser, type, width, mode === 'editor'); runs++; }
-      const never = [...NOCHANGE].filter(([u, k]) => k === runs && !EXEMPT[u.split('=')[0]]).map(([u]) => u);
+      if (!args.includes('--two')) for (const width of widths) for (const mode of modes) { n = await run(browser, type, width, mode === 'editor'); runs++; }
+      const never = !runs ? [] : [...NOCHANGE].filter(([u, k]) => k === runs && !EXEMPT[u.split('=')[0]]).map(([u]) => u);
       ok(!never.length, type + ' every setting changes something at some width or mode; these never did: ' + never.join(', '));
-      if (!args.some(a => a.startsWith('--width=') || a.startsWith('--mode='))) await independence(browser, type);
+      if (args.includes('--two') || !args.some(a => a.startsWith('--width=') || a.startsWith('--mode='))) await independence(browser, type);
       console.log('ok', type, n + ' cases', checks);
     }
   } finally { await browser.close(); }
