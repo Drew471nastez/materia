@@ -285,19 +285,34 @@ async function openPage(browser, width) {
       for (const s of sheets) { try { walk(s.cssRules, t => t); } catch (_) {} }
       return out.join('\n');
     };
-    const snap = () => {
+    const snap = ref => {
       const w = W(), out = [];
       const els = [...w.querySelectorAll('*')].filter(e => !/^(STYLE|SCRIPT|TEMPLATE|LINK|META)$/.test(e.tagName)).slice(0, 4000);
+      if (ref && ref.length !== els.length) return {len: els.length};
       for (const el of els) {
         const cs = getComputedStyle(el), row = [el.tagName];
         for (const p of PROPS) row.push(cs[p]);
         for (const ps of ['::before', '::after']) { const b = getComputedStyle(el, ps); if (b.content && b.content !== 'none' && b.content !== 'normal') { row.push(ps); for (const p of PSEUDO) row.push(b[p]); } }
         if (el.matches('input,textarea')) row.push(getComputedStyle(el, '::placeholder').color);
-        out.push(row.join('|'));
+        const line = row.join('|');
+        if (ref && ref[out.length] !== line) return {at: out.length, line};
+        out.push(line);
       }
       return out;
     };
-    window.__snap = (html, forced) => {
+    const kept = new Map();
+    /* Draws a, then b, and says where b's computed styles first differ from a's ('' when nothing does). a's styles are kept by key. */
+    window.__cmp = (ka, a, b, forced) => {
+      const k = ka + (forced ? 'f' : 'n');
+      let A = kept.get(k);
+      if (!A) { A = window.__snap(a, forced); if (kept.size > 30) kept.clear(); kept.set(k, A); }
+      const B = window.__snap(b, forced, A);
+      if (Array.isArray(B)) return '';
+      if (B.len !== undefined) return 'elements ' + A.length + ' / ' + B.len;
+      const x = A[B.at].split('|'), y = B.line.split('|'), j = x.findIndex((v, n) => v !== y[n]);
+      return x[0] + ' ' + (PROPS[j - 1] || 'pseudo') + ': ' + x[j] + ' / ' + y[j];
+    };
+    window.__snap = (html, forced, ref) => {
       const w = W();
       w.innerHTML = html;
       const f = document.getElementById('sw-force');
@@ -306,10 +321,15 @@ async function openPage(browser, width) {
         f.textContent = themeForced + '\n' + forcedOf([...document.styleSheets].filter(s => s.ownerNode && w.contains(s.ownerNode)));
         for (const el of w.querySelectorAll('*')) el.setAttribute('data-sw-force', '');
       } else f.textContent = '';
-      return snap();
+      return snap(ref);
     };
   }, {PROPS, PSEUDO});
   return page;
+}
+async function compare(page, A, B, forced) {
+  await page.evaluate(list => window.__css(list), [...new Set([...A.css, ...B.css])].map(c => '/assets/' + c));
+  const body = h => h.split('\n<!--scripts-->\n')[0];
+  return page.evaluate(({ka, a, b, forced}) => window.__cmp(ka, a, b, forced), {ka: hash(A.html), a: body(A.html), b: body(B.html), forced});
 }
 const snapCache = new Map();
 async function snapshot(page, width, html, forced, css) {
@@ -359,12 +379,10 @@ async function sweepSection(name, pages) {
       if (strip(ua) !== strip(ub)) { res.push({v: label, r: 'markup'}); continue; }
       if (A.html.split('\n<!--scripts-->\n')[1] !== B.html.split('\n<!--scripts-->\n')[1]) { res.push({v: label, r: 'markup'}); continue; }
       let r = 'nostyle', d = '';
-      const css = [...new Set([...A.css, ...B.css])];
       for (const w of widthsOf(x.id)) {
-        const p = pages[w];
-        d = firstDiff(await snapshot(p, w, A.html, false, css), await snapshot(p, w, B.html, false, css));
+        d = await compare(pages[w], A, B, false);
         if (d) { r = 'style'; break; }
-        d = firstDiff(await snapshot(p, w, A.html, true, css), await snapshot(p, w, B.html, true, css));
+        d = await compare(pages[w], A, B, true);
         if (d) { r = 'state'; break; }
       }
       res.push({v: label, r, d});
@@ -387,7 +405,7 @@ async function sweepSection(name, pages) {
           if (P.html.error || Q.html.error) continue;
           const up = undump(P.html), uq = undump(Q.html);
           let r = up === uq ? 'same' : strip(up) !== strip(uq) ? 'gate' : '';
-          if (!r) { const css = [...new Set([...P.css, ...Q.css])]; r = 'same'; for (const w of widthsOf(x.id)) { if (firstDiff(await snapshot(pages[w], w, P.html, false, css), await snapshot(pages[w], w, Q.html, false, css)) || firstDiff(await snapshot(pages[w], w, P.html, true, css), await snapshot(pages[w], w, Q.html, true, css))) { r = 'gate'; break; } } }
+          if (!r) { r = 'same'; for (const w of widthsOf(x.id)) { if (await compare(pages[w], P, Q, false) || await compare(pages[w], P, Q, true)) { r = 'gate'; break; } } }
           if (r === 'gate') { res.push({v: 'with ' + deps.length + ' dependent settings changed', r}); break; }
         }
       }

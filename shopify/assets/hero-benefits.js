@@ -43,7 +43,11 @@
   }
   /* The native font picker, unless it is still on its default (Assistant) while the hidden legacy list holds another font (snippets/hero-benefits-font). */
   const pickDefault = v => v == null || v === '' || v === 'assistant_n4' || (typeof v === 'object' && v.family === 'Assistant');
-  const chosen = (picker, legacy) => pickDefault(picker) && legacy != null && legacy !== '' && legacy !== 'assistant_n4' ? legacy : picker;
+  const chosen = (picker, legacy) => {
+    const hasLegacy = legacy != null && legacy !== '';
+    if (picker == null || picker === '') return hasLegacy ? legacy : 'assistant_n4';
+    return pickDefault(picker) && hasLegacy && legacy !== 'assistant_n4' ? legacy : picker;
+  };
   function apply(root, state) {
     const s = state.settings, custom = bool(s.enable_custom_style);
     const headBlock=root.querySelector('[data-hb-heading-block]'),imageBlock=root.querySelector('[data-hb-image-block]');

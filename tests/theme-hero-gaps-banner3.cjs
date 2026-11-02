@@ -244,6 +244,7 @@ async function saved(browser) {
       const opts = Object.entries(e.opts);
       if (opts.length > 2) for (let i = 0; i < opts.length; i++) for (let j = i + 1; j < opts.length; j++) {
         const [vi, a] = opts[i], [vj, b] = opts[j];
+        if (key === 'mobile_text_align' && [vi, vj].includes('"inherit"') && [vi, vj].includes('"left"')) continue; /* inherit is the desktop value (left here) by design */
         ok(Object.keys(a).some(k => b[k] && a[k] !== b[k]), `${key}: ${vi} and ${vj} look different`);
       }
     }
