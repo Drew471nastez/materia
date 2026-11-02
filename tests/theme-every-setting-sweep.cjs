@@ -82,6 +82,10 @@ const PAGE = {id: 'pg1', handle: 'about', title: 'About us', url: '/pages/about'
 const PAGE2 = {...PAGE, id: 'pg2', handle: 'care', title: 'Care', url: '/pages/care', content: '<p>Wash cold.</p>'};
 const link = (title, url, links = []) => ({title, url, links, active: false, current: false, child_active: false, levels: links.length ? 1 : 0, type: 'http_link', handle: title.toLowerCase()});
 const MENU = {handle: 'main-menu', title: 'Main menu', links: [link('Home', '/'), link('Shop', '/collections/all', [link('Pants', '/collections/pants'), link('Tees', '/collections/tees')]), link('About', '/pages/about')]};
+/* The header reads a badge from a tag in a link's title ([hot], [new] ...): one link for each. */
+const MENU_TAGGED = {...MENU, links: [...MENU.links, ...['hot', 'new', 'sale', 'popular', 'custom_1', 'custom_2'].map(k => link('Tagged ' + k + ' [' + k + ']', '/collections/' + k))]};
+/* Per section data the base drawing needs beyond the defaults. */
+const DATA = {'theme-header': {settings: {mega_menu: MENU_TAGGED}}};
 const MENU2 = {handle: 'footer', title: 'Footer', links: [link('Contact', '/pages/contact'), link('Shipping', '/pages/shipping')]};
 const LINE = {id: 1, key: 'k1', quantity: 1, title: 'Pants Down - S / Black', product: PANTS, variant: PANTS.variants[0], variant_id: PANTS.variants[0].id, price: 13777, final_price: 13777, original_price: 13777, line_price: 13777, final_line_price: 13777, original_line_price: 13777, url: PANTS.variants[0].url, image: IMG, options_with_values: [{name: 'Size', value: 'S'}], properties: {}, discounts: [], line_level_discount_allocations: [], selling_plan_allocation: null, unit_price_measurement: null};
 const CART = {item_count: 1, items: [LINE], total_price: 13777, original_total_price: 13777, items_subtotal_price: 13777, total_discount: 0, cart_level_discount_applications: [], note: '', currency: {iso_code: 'USD'}, requires_shipping: true, attributes: {}};
@@ -141,7 +145,8 @@ function fill(x, cur) {
     case 'link_list': return MENU;
     case 'product_list': return [PANTS, OTHER];
     case 'collection_list': return [COLL, COLL2];
-    case 'text': case 'textarea': case 'inline_richtext': return 'Sample words';
+    case 'text': return /top-level (menu )?link/i.test(x.info || '') ? 'Shop' : 'Sample words';
+    case 'textarea': case 'inline_richtext': return 'Sample words';
     case 'richtext': return '<p>Sample text</p>';
     case 'url': return '/collections/all';
     default: return cur;
@@ -180,6 +185,7 @@ function baseState(schema) {
   const settings = {...def(schema.settings), ...(preset.settings || {})};
   const fillAll = (list, s) => { for (const x of list || []) if (x.id) { const v = x.type === 'link_list' && typeof s[x.id] === 'string' ? (GLOBALS.linklists[s[x.id]] || MENU) : fill(x, s[x.id]); if (v !== undefined) s[x.id] = v; } };
   fillAll(schema.settings, settings);
+  Object.assign(settings, (DATA[schema.__name] || {}).settings || {});
   for (const b of blocks) fillAll(types.find(t => t.type === b.type).settings, b.settings);
   return {settings, blocks};
 }
@@ -389,6 +395,7 @@ async function sweepSection(name, pages) {
   const {schema} = schemaOf(name);
   const out = [];
   IDS = new Set([...(schema.settings || []), ...(schema.blocks || []).flatMap(b => b.settings || [])].filter(x => x.id).map(x => x.id));
+  schema.__name = name;
   const full = baseState(schema);
   const presetCount = presetBlocks((schema.presets || [])[0] || {}).filter(b => (schema.blocks || []).some(t => t.type === b.type)).length;
   const types = (schema.blocks || []).filter(b => b.type && !b.type.startsWith('@'));

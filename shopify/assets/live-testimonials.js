@@ -67,11 +67,11 @@
     el.classList.add('color-' + id);
   };
   const frame = (root, s) => { const f = root.closest('.lt-frame'); if (f) attr(f, 'data-width', s.section_width || 'full_width'); };
-  /* Five stars filled to a rating, the same fills snippets/live-testimonials-stars prints. */
+  /* Five stars filled to a rating, the same fills snippets/live-testimonials-stars prints; no rating (0) draws none. */
   function stars(row, rating) {
     if (!row) return;
     const r = Math.max(0, Math.min(5, num(rating)));
-    attr(row, 'aria-label', r + ' / 5');
+    attr(row, 'aria-label', r + ' / 5'); hide(row, r <= 0);
     [...row.querySelectorAll('.lt-star')].forEach((s, i) => set(s, '--lt-fill', Math.round(Math.max(0, Math.min(1, r - i)) * 100) + '%'));
   }
   /* An image inside a holder: same src keeps the element (no reload). */
@@ -389,7 +389,7 @@
         hide(legacy, !bool(s.show_header));
         const ls = legacy.querySelector('[data-lt-score]'), noScore = !String(s.overall_score ?? '').trim();
         text(ls, s.overall_score); hide(ls, noScore);
-        stars(legacy.querySelector('[data-lt-stars]'), s.overall_score_int); hide(legacy.querySelector('[data-lt-stars]'), noScore);
+        stars(legacy.querySelector('[data-lt-stars]'), s.overall_score_int); hide(legacy.querySelector('[data-lt-stars]'), noScore || !(num(s.overall_score_int) > 0));
         const n = legacy.querySelector('[data-lt-count]'), o = legacy.querySelector('[data-lt-note]');
         text(n, s.review_count); hide(n, !s.review_count); text(o, s.source_note); hide(o, !s.source_note);
       }
@@ -402,7 +402,7 @@
           /* No score typed: no number and no stars; nothing typed: no header. */
           const blankv = v => !String(v ?? '').trim();
           const sc = el.querySelector('[data-lt-score]'); text(sc, b.score); hide(sc, blankv(b.score));
-          stars(el.querySelector('[data-lt-stars]'), parseFloat(String(b.score || '0').replace(',', '.')) || 0); hide(el.querySelector('[data-lt-stars]'), blankv(b.score));
+          stars(el.querySelector('[data-lt-stars]'), parseFloat(String(b.score || '0').replace(',', '.')) || 0); hide(el.querySelector('[data-lt-stars]'), blankv(b.score) || !(parseFloat(String(b.score || '0').replace(',', '.')) > 0));
           const n = el.querySelector('[data-lt-count]'), o = el.querySelector('[data-lt-note]');
           text(n, b.count); hide(n, blankv(b.count)); text(o, b.note); hide(o, blankv(b.note));
           hide(el, blankv(b.score) && blankv(b.count) && blankv(b.note));
@@ -470,7 +470,7 @@
       for (const [a, k] of [['data-arrows-d', 'arrow_show_desktop'], ['data-arrows-m', 'arrow_show_mobile'], ['data-dots-d', 'dots_show_desktop'], ['data-dots-m', 'dots_show_mobile']]) attr(root, a, bool(s[k]) ? 'true' : 'false');
       const h = root.querySelector('[data-lt-heading]'); text(h, s.heading); hide(h, !s.heading); own(h, 'size', hf); own(h, 'weight', hf);
       const rt = root.querySelector('[data-lt-rating-text]'), sc = root.querySelector('[data-lt-score]');
-      text(rt, s.rating_text); hide(rt, bool(s.rating_text_hide)); text(sc && sc.querySelector('b'), s.rating); hide(sc, bool(s.rating_hide));
+      text(rt, s.rating_text); hide(rt, bool(s.rating_text_hide)); text(sc && sc.querySelector('b'), s.rating); hide(sc, bool(s.rating_hide) || !(num(s.rating) > 0));
       hide(root.querySelector('[data-lt-rating]'), bool(s.rating_text_hide) && bool(s.rating_hide));
       hide(root.querySelector('[data-lt-profiles]'), !bool(s.enable_profile_images));
       for (const p of root.querySelectorAll('[data-lt-profile]')) image(p, s[p.dataset.ltProfile], '', PH_AVATAR);
@@ -532,7 +532,7 @@
   function glyphStars(row, rating) {
     if (!row) return;
     const r = Math.max(0, Math.min(5, num(rating)));
-    attr(row, 'aria-label', r + ' / 5');
+    attr(row, 'aria-label', r + ' / 5'); hide(row, r <= 0);
     [...row.children].forEach((sp, i) => {
       const part = Math.round(Math.max(0, Math.min(1, r - i)) * 100);
       const cls = part >= 100 ? 'star filled' : part > 0 ? 'star is-part' : 'star';
