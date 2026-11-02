@@ -64,11 +64,12 @@ const {render, schemaOf, THEME_VARS, themeControls, PANTS, OTHER} = require('./m
 
 const RETIRED = ['hero-product4', 'page-sale-banner', 'promo-banner-1'];
 /* Bump when the sweep's checks change, so CACHE results are drawn again. */
-const SWEEP_VERSION = '12';
+const SWEEP_VERSION = '13';
 
 /* ------------------------------------------------------------ sample data */
 const IMG = {id: 'img1', src: 'https://theme.test/pic-a.png', url: 'https://theme.test/pic-a.png', width: 1600, height: 1000, aspect_ratio: 1.6, alt: 'Sample picture', presentation: {focal_point: '50% 50%'}};
 const IMG2 = {id: 'img2', src: 'https://theme.test/pic-b.png', url: 'https://theme.test/pic-b.png', width: 900, height: 1200, aspect_ratio: 0.75, alt: 'Other picture', presentation: {focal_point: '50% 50%'}};
+const IMG3 = {id: 'img3', src: 'https://theme.test/pic-c.png', url: 'https://theme.test/pic-c.png', width: 1200, height: 800, aspect_ratio: 1.5, alt: 'Collection picture', presentation: {focal_point: '50% 50%'}};
 const VIDEO = {id: 'vid1', media_type: 'video', alt: 'Clip', aspect_ratio: 1.78, sources: [{format: 'mp4', url: 'https://theme.test/clip.mp4', mime_type: 'video/mp4', width: 1280, height: 720}], preview_image: IMG};
 const VIDEO2 = {...VIDEO, id: 'vid2', sources: [{format: 'mp4', url: 'https://theme.test/clip-b.mp4', mime_type: 'video/mp4', width: 720, height: 1280}], preview_image: IMG2, aspect_ratio: 0.56};
 class VideoUrl { constructor(type, id) { this.type = type; this.id = id; } toString() { return this.type === 'youtube' ? 'https://www.youtube.com/watch?v=' + this.id : 'https://vimeo.com/' + this.id; } }
@@ -77,7 +78,7 @@ const FILTERS = [
   {label: 'Price', type: 'price_range', param_name: 'filter.v.price', range_max: 21193, min_value: {param_name: 'filter.v.price.gte', value: null}, max_value: {param_name: 'filter.v.price.lte', value: null}, active_values: [], values: [], url_to_remove: '?'},
 ];
 const SORTS = ['relevance', 'manual', 'best-selling', 'price-ascending', 'price-descending', 'title-ascending', 'title-descending', 'created-ascending', 'created-descending'].map(value => ({value, name: value.replace(/-/g, ' ')}));
-const coll = (handle, title, products) => ({id: 'c-' + handle, handle, title, url: '/collections/' + handle, description: '<p>Cut and sewn in small runs.</p>', image: IMG, featured_image: IMG, products, products_count: products.length, all_products_count: products.length, filters: FILTERS, sort_options: SORTS, sort_by: 'manual', default_sort_by: 'manual', all_tags: ['Cotton'], tags: [], all_types: ['Bottoms'], all_vendors: ['Materia'], metafields: {}});
+const coll = (handle, title, products) => ({id: 'c-' + handle, handle, title, url: '/collections/' + handle, description: '<p>Cut and sewn in small runs.</p>', image: IMG3, featured_image: IMG3, products, products_count: products.length, all_products_count: products.length, filters: FILTERS, sort_options: SORTS, sort_by: 'manual', default_sort_by: 'manual', all_tags: ['Cotton'], tags: [], all_types: ['Bottoms'], all_vendors: ['Materia'], metafields: {}});
 /* Ten products, so a grid with a "load more" or a second page has more to show than its first rows. */
 const MANY = [PANTS, OTHER, ...Array.from({length: 8}, (_, i) => { const b = i % 2 ? OTHER : PANTS; return {...b, id: b.id + '-' + i, handle: b.handle + '-' + i, title: b.title + ' ' + (i + 2), url: '/products/' + b.handle + '-' + i}; })];
 const COLL = coll('pants', 'Pants', MANY);
@@ -86,16 +87,23 @@ COLL.metafields = {custom: {subcollection: {value: [coll('jeans', 'Jeans', MANY.
 const COLL2 = coll('tees', 'Tees', [OTHER]);
 const article = (handle, title) => ({id: 'a-' + handle, handle, title, url: '/blogs/news/' + handle, author: 'Ana Lima', published_at: '2026-03-02', created_at: '2026-03-02', excerpt: '<p>How the new fabric is woven.</p>', excerpt_or_content: '<p>How the new fabric is woven.</p>', content: '<p>How the new fabric is woven, and why it lasts.</p>', image: IMG, tags: ['News'], comments_count: 1, comments: [{author: 'Joe', content: 'Nice', created_at: '2026-03-03'}], comments_enabled: true, blog: {title: 'News', handle: 'news', url: '/blogs/news'}, user: {first_name: 'Ana', last_name: 'Lima', bio: 'Editor', image: IMG}, metafields: {}});
 const ARTICLE = article('fabric', 'The new fabric'), ARTICLE2 = article('care', 'Care guide');
-const BLOG = {id: 'b-news', handle: 'news', title: 'News', url: '/blogs/news', articles: [ARTICLE, ARTICLE2], articles_count: 2, all_tags: ['News', 'Care'], tags: [], comments_enabled: true};
+const ARTICLES = [ARTICLE, ARTICLE2, ...['dye', 'fit', 'wash', 'repair'].map(h => article(h, 'On ' + h))];
+const BLOG = {id: 'b-news', handle: 'news', title: 'News', url: '/blogs/news', articles: ARTICLES, articles_count: ARTICLES.length, all_tags: ['News', 'Care'], tags: [], comments_enabled: true};
 const BLOG2 = {...BLOG, id: 'b-journal', handle: 'journal', title: 'Journal', url: '/blogs/journal', articles: [ARTICLE2]};
 const PAGE = {id: 'pg1', handle: 'about', title: 'About us', url: '/pages/about', content: '<p>We make clothes in Porto.</p>'};
 const PAGE2 = {...PAGE, id: 'pg2', handle: 'care', title: 'Care', url: '/pages/care', content: '<p>Wash cold.</p>'};
 const link = (title, url, links = []) => ({title, url, links, active: false, current: false, child_active: false, levels: links.length ? 1 : 0, type: 'http_link', handle: title.toLowerCase()});
 const MENU = {handle: 'main-menu', title: 'Main menu', links: [link('Home', '/'), link('Shop', '/collections/all', [link('Pants', '/collections/pants'), link('Tees', '/collections/tees')]), link('About', '/pages/about')]};
 /* The header reads a badge from a tag in a link's title ([hot], [new] ...): one link for each. */
-const MENU_TAGGED = {...MENU, links: [...MENU.links, link('Help', '/pages/help', [link('Shipping', '/pages/shipping'), link('Returns', '/pages/returns')]), ...['hot', 'new', 'sale', 'popular', 'custom_1', 'custom_2'].map(k => link('Tagged ' + k + ' [' + k + ']', '/collections/' + k))]};
+const MENU_TAGGED = {...MENU, links: [...MENU.links.map(l => l.title === 'Home' || l.links.length ? l : {...l, links: [link('Our story', '/pages/story'), link('Stores', '/pages/stores')]}), link('Help', '/pages/help', [link('Shipping', '/pages/shipping'), link('Returns', '/pages/returns')]), ...['hot', 'new', 'sale', 'popular', 'custom_1', 'custom_2'].map(k => link('Tagged ' + k + ' [' + k + ']', '/collections/' + k, [link('First ' + k, '/collections/' + k + '-1'), link('Second ' + k, '/collections/' + k + '-2')]))]};
 /* Per section data the base drawing needs beyond the defaults. */
-const DATA = {'theme-header': {settings: {mega_menu: MENU_TAGGED}, withBlocks: ['menu_badges']}};
+const DATA = {
+  'theme-header': {settings: {mega_menu: MENU_TAGGED}, withBlocks: ['menu_badges']},
+  /* how many pictures fit a row only shows with more pictures than one */
+  'image-with-text-benefits': {repeat: {media: 3}},
+  /* a column's 6th to 8th values fill the 6th to 8th rows */
+  'comparison-table-2': {repeat: {row: 8}},
+};
 /* A block that names the top-level link it belongs to gets a link of its own, one after the other. */
 const TOP_TITLES = MENU_TAGGED.links.map(l => l.title.replace(/\s*\[.*\]$/, '')).filter(t => t !== 'Home' && t !== 'Help');
 let topN = 0;
@@ -134,7 +142,7 @@ function values(x, cur) {
     case 'color_background': return ['linear-gradient(90deg, #ab12cd, #12cdab)'];
     case 'color_scheme': { const ids = Object.keys((JSON.parse(read('config/settings.json')).shopify || {}).color_schemes || {}); return [ids.find(i => i !== cur && i !== 'default') || ids[0]]; }
     case 'text': case 'textarea': {
-      if (/(^|_)css$/.test(x.id)) return ['#shopify-section-test .sweep-none, #shopify-section-test > * { outline: 3px solid #ab12cd; }'];
+      if (/(^|_)css$/.test(x.id)) return ['#shopify-section-test .sweep-none, #shopify-section-test > * { outline: 3px solid #ab12cd; }', 'outline: 3px solid #ab12cd; background: #ab12cd;'];
       const w = [cur === 'Edited words' ? 'Other words' : 'Edited words'];
       /* a length, a ratio or a shadow typed as words */
       if (/width|height|size|gap|radius|ratio|shadow|spacing|offset/.test(x.id)) w.push('640', '640px', '2/1', '2:1', '0 6px 18px #ab12cd');
@@ -177,8 +185,8 @@ function fill(x, cur) {
     case 'product_list': return [PANTS, OTHER];
     case 'collection_list': return [COLL, COLL2];
     case 'text': return /top-level (menu )?link/i.test(x.info || '') ? TOP_TITLES[topN++ % TOP_TITLES.length] : 'Sample words';
-    case 'textarea': case 'inline_richtext': return 'Sample words';
-    case 'richtext': return '<p>Sample text</p>';
+    case 'textarea': case 'inline_richtext': return /iframe|embed/.test(x.id) ? '<iframe src="https://www.google.com/maps?q=Lisbon&output=embed" width="600" height="450" title="Map"></iframe>' : 'Sample words';
+    case 'richtext': return '<p>Sample text with <a href="/pages/about">a link</a></p>';
     case 'url': return '/collections/all';
     default: return cur;
   }
@@ -186,7 +194,7 @@ function fill(x, cur) {
 
 /* ------------------------------------------------------------ the sweep */
 /* The saved Theme settings, with the body, heading and subheading weights made different so a "use the heading weight" choice can show. */
-const THEME = (() => { const t = {...(JSON.parse(read('config/settings.json')).shopify || {})}; Object.assign(t, {body_font_weight: 400, heading_font_weight: 700, subheading_font_weight: 600}); if (!t.store_address) t.store_address = '12 Market Street, Lisbon'; return t; })();
+const THEME = (() => { const t = {...(JSON.parse(read('config/settings.json')).shopify || {})}; Object.assign(t, {body_font_weight: 400, heading_font_weight: 700, subheading_font_weight: 600}); if (!t.store_address) t.store_address = '12 Market Street, Lisbon'; if (!t.menu_hover_style || t.menu_hover_style === 'none') t.menu_hover_style = 'underline'; return t; })();
 const SCHEME_IDS = Object.keys(THEME.color_schemes || {});
 const def = a => Object.fromEntries((a || []).filter(x => x.id && x.default !== undefined).map(x => [x.id, x.default]));
 const visible = x => x.id && !x.hidden && !/\{\{\s*false\s*\}\}/.test(x.visible_if || '');
@@ -217,6 +225,7 @@ function baseState(schema) {
   const types = (schema.blocks || []).filter(b => b.type && !b.type.startsWith('@'));
   const blocks = presetBlocks(preset).filter(b => types.some(t => t.type === b.type)).map(b => ({type: b.type, settings: {...def(types.find(t => t.type === b.type).settings), ...(b.settings || {})}}));
   for (const t of types) if (!blocks.some(b => b.type === t.type)) blocks.push({type: t.type, settings: def(t.settings)});
+  for (const [t, n] of Object.entries((DATA[schema.__name] || {}).repeat || {})) { const one = blocks.find(b => b.type === t); while (one && blocks.filter(b => b.type === t).length < n) blocks.splice(blocks.indexOf(one) + 1, 0, clone(one)); }
   const settings = {...def(schema.settings), ...(preset.settings || {})};
   const fillAll = (list, s) => { for (const x of list || []) if (x.id) {
     /* accent words are words of the heading they colour; a reference names a real article or product */
@@ -482,7 +491,7 @@ async function sweepSection(name, pages) {
   for (const it of items) {
     if (process.env.ONLY && !process.env.ONLY.split(",").includes((it.scope === "section" ? "" : it.scope + ".") + it.x.id)) continue;
     const extra = ((DATA[name] || {}).withBlocks || []).filter(t => t !== it.scope).map(t => full.blocks.find(b => b.type === t)).filter(Boolean);
-    const light = it.scope === 'section' ? {settings: full.settings, blocks: full.blocks.slice(0, presetCount)} : {settings: full.settings, blocks: [full.blocks[it.n], ...extra]};
+    const light = it.scope === 'section' ? {settings: full.settings, blocks: (DATA[name] || {}).repeat ? full.blocks : full.blocks.slice(0, presetCount)} : {settings: full.settings, blocks: [full.blocks[it.n], ...extra]};
     let r = await one({...it, n: it.scope === 'section' ? undefined : 0}, light);
     if (r.status !== 'pass' && (light.blocks.length !== full.blocks.length)) r = await one(it, full);
     out.push(r);
@@ -642,6 +651,23 @@ var ALLOW = [
   [/^custom-colors:/, 'Paints the colour swatches of product cards and filters in other sections, not this one (tests/theme-r6-footer-lib.cjs draws them).'],
   [/^(countdown-promo-popup|coupon-promotion-newsletter-popup|spin-wheel-popup):overlay_opacity$/, 'The overlay is drawn only while the popup is open.'],
   [/^main-search:sort_/, 'Fallback sort labels, read only when the store gives no sort options (snippets/facets-toolbar).'],
+  [/^(main-account:(no_orders_text|shop_link_label)|main-addresses:empty_text|collection-tab:empty_state_(font_size|text_color))$/, 'Empty state: shown only when there is nothing to list (no orders, no addresses, a collection with no products).'],
+  [/^(hotspot-image-product-2:sold_out_label|hotspotsection:sold_out_text|page-compare:sold_out_label|shop-the-look:sold_out_label)$/, 'Shown only for a sold-out product.'],
+  [/^hotspotsection:from_text$/, 'Shown only for a product whose variants have different prices.'],
+  [/^(blog-posts|main-blog|main-collection-product|main-list-collections|main-search):items_to_show$/, 'The page size given to {% paginate %} (or a load more step), which the fixture does not cut into pages.'],
+  [/^main-collection-product:popular_product\./, 'The sidebar looks its collection up as collections[handle] and shows only in the vertical filter layout with products; tests/theme-r6-collection-pages-products.cjs draws it.'],
+  [/^breadcrumb:next_prev$/, 'Previous and next product links, drawn only on a product page reached from a collection.'],
+  [/^(products-listing:(show_vendor|show_rating|show_short_description|show_add_to_cart)|related-products:(show_vendor|show_rating|show_add_to_cart))$/, 'A product card shows these only when Theme settings > Product card turns them on too (off in the saved theme); Storelib products have no vendor today.'],
+  [/^related-products:custom_products$/, 'The cards are fetched by the section script (product recommendations) after the first paint, which the fixture does not serve.'],
+  [/^(products-carousel|social-shop-grid):pagination_position$/, 'Not confirmed by the sweep: positions the slider dots Swiper draws at runtime; the dots row shows no move in its drawing.'],
+  [/^scroll-text-banner:/, 'Scroll-driven reveal: in the builder the banner is drawn unpinned and fully shown (data-tx-editing), so its stage, speed and dimming act on the storefront only.'],
+  [/^scrolling-collection:toggle_active_(bg|color)$/, 'Colours of the pause toggle while it is pressed, a state set by a click.'],
+  [/^(scrolling-text:(edge_fade|separator_color|separator_size)|marquee-bar:marquee\.svg_icon_(color|size_desktop|size_mobile))$/, 'Not confirmed by the sweep: parts of a moving marquee (separators, faded edges, an uploaded SVG icon) show no change in its drawing.'],
+  [/^(promonewsletterpopup-2:input_placeholder_color|promotional-popup:(form\.input_placeholder_color|form\.input_pad_y|form\.error_color|editor_preview_bg)|promotionalpopup2:form\.input_placeholder)$/, 'Not confirmed by the sweep: inside a popup it does not open (the closed form\'s placeholder, error and field padding, the builder preview backdrop).'],
+  [/^promonewsletterpopup-2:form\.(input_size_desktop|input_size_mobile|input_weight)$/, 'Used with the section\'s Theme fields off, as its info says; the popup schemas keep a visible_if inside its own block (tests/theme-popups.cjs), so it cannot read the section.'],
+  [/^theme-footer:store_info\.show_logo$/, 'Draws the store logo only when the block has no image of its own (the sweep\'s block has one); tests/theme-r6-footer.cjs draws it without.'],
+  [/^size-chart-popup:use_product_chart$/, 'Uses the product\'s own size chart (Products > Size charts), which the sweep\'s product does not have.'],
+  [/^theme-header:(menu_dropdown_tinted_bg|menu_badges\.badge_border|pill_glass\.glass_text_color)$/, 'Header parts the layout draws around the section: the tinted dropdown and glass text colour apply with the Pill and glass block on (a section setting cannot read a block), the badge border with an outlined badge style; tests/theme-header-*.cjs check them.'],
 ];
 /* Sections other changes own right now: what the sweep finds there is listed (VERBOSE or SHOW_OWNED=1), not failed. */
 var OWNED = ['banner3', 'hero-benefits', 'featured-blog-header', 'collection-list', 'comparison-table', 'testimonials', 'testimonials3', 'testimonials4', 'testimonial2', 'testimonial-video', 'testimonial-logos', 'testimon4', 'fake-order', 'announcement-bar-pro-4', 'hero-section-pro', 'announcement-bar-basic', 'hero-image1', 'hero-pro-scrolling', 'heroproduct1', 'hero-product3', 'dynamic-pricing', 'promotion-popup', 'promotional-image-popup', 'slideshow', 'number-stats', 'image-with-text-stats', 'progress-benefits', 'progress-circles', 'stat-counter', 'stat-counter-pro', 'main-product', 'featured-product', 'main-cart-items'];
