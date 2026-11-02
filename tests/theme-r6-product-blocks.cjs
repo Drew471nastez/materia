@@ -72,6 +72,20 @@ const declared = (type, s) => Object.fromEntries(Object.entries(s).filter(([k]) 
   }, id);
   const fails = [];
   try {
+    /* the home page's saved Featured product looks as at c098384 */
+    const oldTree = L.treeAt('c098384');
+    for (const design of [false, true]) for (const width of [375, 1366]) {
+      const looks = [];
+      for (const tree of [oldTree, L.repo]) {
+        const r = await L.renderFeatured({tree, design});
+        const o = await L.open(browser, width, r.html, {tree, wait: 1500});
+        looks.push(await L.look(o.p, r.id));
+        eq(o.p.errors, [], `saved Featured product ${width}: no page errors`);
+        await o.ctx.close();
+      }
+      ok(looks[0].length > 50, 'the saved Featured product draws');
+      eq(L.lookDiff(looks[0], looks[1]), [], `saved Featured product at ${width} (${design ? 'builder' : 'storefront'}) looks as at c098384`);
+    }
     for (const [label, render] of [['main', L.renderMain], ['featured', L.renderFeatured]]) for (const design of [true, false]) for (const width of [375, 1366]) {
       const blocks = TYPES.map(t => ({id: 'b_' + t, type: t, settings: {}}));
       /* a second block of the same kind, to check independence */

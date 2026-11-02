@@ -56,7 +56,7 @@ function snapshot(page, uid) {
     const W = document.getElementById('shopify-section-' + uid); if (!W) return null;
     const P = ['color', 'backgroundColor', 'backgroundImage', 'fontFamily', 'fontWeight', 'fontSize', 'lineHeight', 'letterSpacing', 'textAlign', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'marginTop', 'marginBottom', 'rowGap', 'columnGap', 'width', 'height', 'maxWidth', 'minHeight', 'borderTopLeftRadius', 'borderTopWidth', 'borderBottomWidth', 'borderTopColor', 'display', 'justifyContent', 'alignItems', 'alignSelf', 'flexDirection', 'flexWrap', 'gridTemplateColumns', 'opacity', 'boxShadow', 'order', 'visibility', 'filter', 'overflow'];
     const V = ['--mb-hover-bg', '--mb-hover-text', '--mb-hover-border', '--input-focus-color', '--cp-accent', '--cfs-focus', '--cfs-sub-hover', '--cfs-ph'];
-    const A = /^(placeholder|hidden|disabled|required|type|name|href|for|class|data-theme-button|data-own-[\w-]+|data-(?!ap-settings|ap-ready)[\w-]+|aria-[\w-]+|role|alt|src|width|height)$/;
+    const A = /^(placeholder|hidden|disabled|required|type|name|href|target|rel|for|class|data-theme-button|data-own-[\w-]+|data-(?!ap-settings|ap-ready)[\w-]+|aria-[\w-]+|role|alt|src|width|height)$/;
     const out = [];
     const all = [W, ...W.querySelectorAll('*')].filter(e => !e.closest('style, script, template') && !e.closest('svg') || e.tagName === 'svg');
     for (const el of all) {
@@ -183,7 +183,7 @@ async function suite(name, cfg = {}) {
       /* every visible input has a label; buttons and fields are 44px */
       const a11y = await t.page.evaluate(() => {
         const W = document.getElementById('shopify-section-test'), bad = [];
-        for (const i of W.querySelectorAll('input:not([type=hidden]), textarea, select')) { if (i.hidden || i.closest('[hidden]') || i.closest('[data-mt-trap]') || !i.getClientRects().length) continue; const l = i.id && W.querySelector('label[for="' + i.id + '"]'); if (!l || !l.textContent.trim()) bad.push('no label ' + (i.id || i.name)); if (i.getBoundingClientRect().height < 44) bad.push('short ' + i.id); }
+        for (const i of W.querySelectorAll('input:not([type=hidden]), textarea, select')) { if (i.hidden || i.closest('[hidden]') || i.closest('[data-mt-trap]') || !i.getClientRects().length) continue; const l = i.id && W.querySelector('label[for="' + i.id + '"]'); if (!l || !l.textContent.trim()) bad.push('no label ' + (i.id || i.name)); if (i.getBoundingClientRect().height < 44 && !(/checkbox|radio/.test(i.type) && l && l.getBoundingClientRect().height >= 44)) bad.push('short ' + i.id); }
         for (const b of W.querySelectorAll('button, [data-sl-button]')) if (!b.closest('[hidden]') && b.getClientRects().length && b.getBoundingClientRect().height < 44) bad.push('small button');
         return bad;
       });
@@ -348,8 +348,8 @@ async function suite(name, cfg = {}) {
     for (const editing of [true, false]) {
       const t = await mount(browser, name, opts({width: 1366, editing, reducedMotion: 'reduce', theme: {scroll_animation: 'fade_up', animation_duration: 700}}));
       await t.page.waitForTimeout(250);
-      const r = await t.page.evaluate(() => { const W = document.getElementById('shopify-section-test'); return [...W.querySelectorAll('h1, h2, h3, .ap__h, .ap__t, p, a, input, button')].filter(e => !e.closest('[hidden]') && !e.closest('.visually-hidden')).map(e => { let o = 1; for (let n = e; n && n !== W.parentElement; n = n.parentElement) o *= +getComputedStyle(n).opacity; return o; }); });
-      ok(r.length > 0 && r.every(o => o === 1), name + (editing ? ' builder' : ' storefront') + ': reduced motion keeps the content visible ' + JSON.stringify(r));
+      const r = await t.page.evaluate(dimmed => { const W = document.getElementById('shopify-section-test'); return [...W.querySelectorAll('h1, h2, h3, .ap__h, .ap__t, p, a, input, button')].filter(e => !e.closest('[hidden]') && !e.closest('.visually-hidden') && !(dimmed && e.matches(dimmed))).map(e => { let o = 1; for (let n = e; n && n !== W.parentElement; n = n.parentElement) o *= +getComputedStyle(n).opacity; return o; }); }, cfg.dimmed || '');
+      ok((cfg.hiddenContent || r.length > 0) && r.every(o => o === 1), name + (editing ? ' builder' : ' storefront') + ': reduced motion keeps the content visible ' + JSON.stringify(r));
       eq(t.errors, [], name + ': reduced motion, no errors');
       await t.page.close();
     }
@@ -408,7 +408,7 @@ async function look(browser, html, width, {assets = [], js = false} = {}) {
   await page.close();
   return r;
 }
-async function savedLook(browser, {name, template, key, toggles = {}, blockToggles = {}, assets = [], tolerate}) {
+async function savedLook(browser, {name, template, key, toggles = {}, blockToggles = {}, assets = [], tolerate, drop}) {
   let oldRaw; try { oldRaw = execSync('git show ' + BEFORE + ':sections/' + name + '.storelib', {cwd: path.join(__dirname, '..'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']}); } catch (_) { console.log('saved ' + name + ': the commit before this work is not in this clone, comparison skipped'); return 0; }
   const newRaw = fs.readFileSync(path.join(__dirname, '../sections', name + '.storelib'), 'utf8');
   const sec = JSON.parse(fs.readFileSync(path.join(__dirname, '..', template), 'utf8')).sections[key];
@@ -416,7 +416,7 @@ async function savedLook(browser, {name, template, key, toggles = {}, blockToggl
   for (const width of [375, 1366]) {
     const a = await look(browser, await renderRaw(oldRaw, fillSchema(oldRaw, sec)), width, {assets});
     const b = await look(browser, await renderRaw(newRaw, fillSchema(newRaw, sec, toggles, blockToggles)), width, {assets, js: true});
-    const fix = x => tolerate ? x.map(tolerate) : x;
+    const fix = x => (tolerate ? x.map(tolerate) : x).filter(v => !drop || !drop.test(v));
     /* boxes may round a pixel differently; everything else is the same */
     const close = (p, q) => p === q || (p.split('|').length === q.split('|').length && p.split('|').every((v, i) => { const w = q.split('|')[i]; return v === w || (/^-?\d+$/.test(v) && /^-?\d+$/.test(w) && Math.abs(v - w) <= 1); }));
     const A = fix(a.els), B = fix(b.els);

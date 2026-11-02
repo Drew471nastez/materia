@@ -155,6 +155,7 @@ const page = (name, extra) => L.suite(name, {mountOpts: {globals: G}, noop: NOOP
   results.push(['form-message', await L.suite('form-message', {
     mountOpts: {globals: G},
     twoInstances: {color_scheme: 'alt-scheme'},
+    hiddenContent: true,
     noop: {375: ['success_text', 'error_text', 'section_width', 'color_scheme'], 1366: ['success_text', 'error_text', 'section_width', 'color_scheme']},
     vals: {section_width: ['full_width']},
     skip: ['color_scheme'],

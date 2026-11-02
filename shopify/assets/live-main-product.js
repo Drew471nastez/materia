@@ -219,7 +219,12 @@
     if (!id || !bid || !d.settings) return;
     const sec = document.getElementById('shopify-section-' + id);
     const el = sec && sec.querySelector('[data-pib-block="' + CSS.escape(bid) + '"]');
-    if (!el || !Object.keys(d.settings).some(k => OWN_KEYS.includes(k))) return;
+    if (!el) return;
+    const keys = Object.keys(d.settings), type = el.getAttribute('data-pib-type');
+    /* Anything else this block draws: the block is drawn again from the page as the builder has it now. */
+    const painted = k => OWN_KEYS.includes(k) || (SLIDING[type] && SLIDING[type].has(k));
+    if (keys.some(k => !painted(k))) refetch(sec, bid);
+    if (!keys.some(k => OWN_KEYS.includes(k))) return;
     let st = blockStates.get(el);
     if (!st) { st = {s: parse(el.getAttribute('data-pib-own'))}; blockStates.set(el, st); }
     Object.assign(st.s, d.settings);
@@ -227,8 +232,65 @@
     if (!blockFrame) blockFrame = requestAnimationFrame(() => { blockFrame = 0; for (const x of pendingSections) if (x.isConnected) paintBlocks(x); pendingSections.clear(); });
     if (d.live === true && Object.keys(d.settings).every(k => k === 'own_text_color' || k === 'own_heading_color')) e.preventDefault();
   });
-  /* A redraw brings its own values: the live block rules of that section go. */
-  const clearBlocks = e => { const sec = e.target && e.target.closest && e.target.closest('.shopify-section'); const live = sec && sec.querySelector(':scope > style[data-pib-live]'); if (live && !sec.querySelector('style[data-pib-style][media="not all"]')) live.textContent = ''; };
+  /* One block drawn again: ?section_id= answers the section as the builder has it (the same Liquid
+     as a redraw), and only that block's wrapper (and its printed style) is put in place, so the rest
+     of the section (the gallery, the buy buttons, other blocks' live values) is left as it is. At most
+     one request per section at a time; edits that arrive meanwhile are sent together after it. */
+  const fetching = new Map();
+  function refetch(sec, bid) {
+    let job = fetching.get(sec);
+    if (!job) fetching.set(sec, job = {blocks: new Set(), timer: 0, busy: false});
+    job.blocks.add(bid);
+    if (job.busy || job.timer) return;
+    job.timer = setTimeout(() => run(sec, job), 90);
+  }
+  function run(sec, job) {
+    job.timer = 0;
+    if (!sec.isConnected || !job.blocks.size) { fetching.delete(sec); return; }
+    const sid = sec.id.replace(/^shopify-section-/, ''), ids = [...job.blocks];
+    job.blocks.clear(); job.busy = true;
+    const url = new URL(location.href); url.searchParams.set('section_id', sid); url.hash = '';
+    fetch(url.toString(), {credentials: 'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(r => r.ok ? r.text() : '')
+      .then(html => { if (html && sec.isConnected) swapBlocks(sec, sid, ids, html); })
+      .catch(() => {})
+      .then(() => { job.busy = false; if (job.blocks.size) run(sec, job); else fetching.delete(sec); });
+  }
+  function swapBlocks(sec, sid, ids, html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const done = [];
+    for (const bid of ids) {
+      const sel = '[data-pib-block="' + CSS.escape(bid) + '"]', next = doc.querySelector(sel), cur = sec.querySelector(sel);
+      if (!next || !cur || cur.innerHTML === next.innerHTML && cur.getAttribute('data-pib-own') === next.getAttribute('data-pib-own')) continue;
+      const st = blockStates.get(cur);
+      /* its printed style: replaced by the new one (or removed) */
+      const sSel = 'style[data-pib-style="' + CSS.escape(bid) + '"]';
+      const oldStyle = sec.querySelector(sSel), newStyle = doc.querySelector(sSel);
+      const fresh = document.importNode(next, true);
+      for (const old of fresh.querySelectorAll('script')) { const sc = document.createElement('script'); for (const a of old.attributes) sc.setAttribute(a.name, a.value); sc.textContent = old.textContent; old.replaceWith(sc); }
+      /* Another block's element that a script moved into this one (the sale badge beside the price)
+         goes into the new markup at the same place, with the classes its holder was given. */
+      for (const moved of cur.querySelectorAll('[data-block-id]')) {
+        if (moved.getAttribute('data-block-id') === bid || moved.parentElement.closest('[data-block-id]:not([data-block-id="' + CSS.escape(bid) + '"])')) continue;
+        const holder = moved.parentElement, twin = holder.id ? fresh.querySelector('#' + CSS.escape(holder.id)) : null;
+        if (!twin) continue;
+        for (const c of holder.classList) twin.classList.add(c);
+        twin.appendChild(moved);
+      }
+      cur.replaceWith(fresh);
+      if (oldStyle) oldStyle.remove();
+      if (newStyle) fresh.before(document.importNode(newStyle, true));
+      if (st) { st.s = parse(fresh.getAttribute('data-pib-own')); blockStates.set(fresh, st); }
+      done.push(bid);
+    }
+    if (!done.length) return;
+    paintBlocks(sec);
+    sec.dispatchEvent(new CustomEvent('storelib:section-load', {bubbles: true, detail: {sectionId: sid, blocks: done}}));
+  }
+
+  /* A redraw brings its own values: the live block rules of that section go (not after one block was drawn again). */
+  const clearBlocks = e => {
+    if (e.detail && e.detail.blocks) return; const sec = e.target && e.target.closest && e.target.closest('.shopify-section'); const live = sec && sec.querySelector(':scope > style[data-pib-live]'); if (live && !sec.querySelector('style[data-pib-style][media="not all"]')) live.textContent = ''; };
   document.addEventListener('storelib:section-load', clearBlocks);
   document.addEventListener('shopify:section:load', clearBlocks);
 

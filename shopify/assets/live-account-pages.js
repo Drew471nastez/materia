@@ -89,7 +89,8 @@
   }
   /* section level text, attributes, links and switches (outside blocks) */
   function common(c) {
-    const {s, put} = c, out = el => !el.closest('[data-ap-block]');
+    /* data-ap-* always names a section setting, also inside a block (block settings use data-ap-b*) */
+    const {s, put} = c, out = () => true;
     for (const el of own(c, '[data-ap-text]')) if (out(el)) words(c, el, s[el.dataset.apText], 'text');
     for (const el of own(c, '[data-ap-rich]')) if (out(el)) words(c, el, s[el.dataset.apRich], 'rich');
     for (const el of own(c, '[data-ap-attr-placeholder]')) put(el, '@placeholder', str(s[el.dataset.apAttrPlaceholder]));
@@ -141,6 +142,8 @@
     c.put(wrap, '!margin-bottom', reset ? '0px' : px(s['section_margin_bottom_' + (d ? 'desktop' : 'mobile')]));
   }
   const ALIGN = {left: 'flex-start', right: 'flex-end', center: 'center'};
+  /* the gradient stops Liquid prints: the colours set, one colour twice */
+  const stops = (o, k) => { const l = [1, 2, 3].map(i => raw(o[k + i])).filter(Boolean); return l.length === 1 ? l.concat(l) : l; };
 
   /* ---------- the sections ---------- */
   function login(c) {
@@ -232,6 +235,7 @@
     for (const x of c.blocks) {
       blockWords(c, x);
       const b = x.b, tel = x.el.querySelector('[data-ap-tel]'), maps = x.el.querySelector('[data-ap-maps]');
+      const dl = x.el.querySelector('[data-ap-text="directions_label"]'); if (dl) put(dl, 'text', str(s.directions_label));
       if (tel) put(tel, '@href', 'tel:' + str(b.store_phone).replace(/[\s().-]/g, ''));
       if (maps) {
         const q = str(b.store_lat).trim() && str(b.store_lng).trim() ? b.store_lat + ',' + b.store_lng : encodeURIComponent(str(b.store_address).replace(/\r?\n/g, '')).replace(/%20/g, '+');
@@ -246,6 +250,12 @@
     frame(c); sectionPads(c);
     put(root, '--ap-icon', px(dflt(s.icon_size, 120))); put(root, '--ap-icon-gap', px(dflt(s.icon_spacing_bottom, 24)));
     put(root, '--ap-icon-c', on && isColor(s.icon_color) ? color(s.icon_color, 'var(--color-heading)') : null);
+    const size = num(dflt(s.icon_size, 120)), svg = c.q('.page-404__icon-wrap svg'), img = c.q('.page-404__icon-wrap img');
+    if (svg) { put(svg, '@width', str(size)); put(svg, '@height', str(size)); }
+    if (img) {
+      if (!img.dataset.apRatio) img.dataset.apRatio = String((+img.getAttribute('width') || 1) / (+img.getAttribute('height') || 1));
+      put(img, '@width', str(size)); put(img, '@height', str(Math.round(size / +img.dataset.apRatio)));
+    }
     common(c);
     for (const x of c.blocks) {
       const b = x.b, el = x.el;
@@ -287,8 +297,8 @@
     put(root, '--pw-top', p('padding_top_mobile', 32)); put(root, '--pw-bottom', p('padding_bottom_mobile', 32)); put(root, '--pw-left', p('padding_left_mobile', 20)); put(root, '--pw-right', p('padding_right_mobile', 20));
     put(root, '--pw-top-d', p('padding_top_desktop', 64)); put(root, '--pw-bottom-d', p('padding_bottom_desktop', 64)); put(root, '--pw-left-d', p('padding_left_desktop', 24)); put(root, '--pw-right-d', p('padding_right_desktop', 24));
     put(root, '--pw-logo', p('logo_size_mobile', 100)); put(root, '--pw-logo-d', p('logo_size_desktop', 160));
-    const grad = 'linear-gradient(' + dflt(s.bg_gradient_degree, 90) + 'deg,' + str(raw(s.bg_gradient_color1)) + ',' + str(raw(s.bg_gradient_color2)) + ',' + str(raw(s.bg_gradient_color3)) + ')';
-    put(root, '--pw-bg', on && bool(s.enable_bg_gradient) ? grad : on && raw(s.background_color) || null);
+    const bs = stops(s, 'bg_gradient_color'), grad = 'linear-gradient(' + dflt(s.bg_gradient_degree, 90) + 'deg,' + bs.join(',') + ')';
+    put(root, '--pw-bg', on && bool(s.enable_bg_gradient) ? (bs.length ? grad : null) : on && raw(s.background_color) || null);
     for (const m of own(c, '[data-pw-media]')) put(m, '!filter', null);
     common(c);
     const owner = c.q('.pw-launch__owner');
@@ -303,10 +313,10 @@
       if (x.type === 'heading') {
         const h = el.querySelector('.pw-launch__heading'); if (!h) continue;
         put(h, 'rich', b.heading || '');
-        const g = on && bool(b.enable_heading_gradient);
+        const hs = stops(b, 'heading_gradient_color'), g = on && bool(b.enable_heading_gradient) && hs.length > 0;
         put(h, '@data-pw-custom', on); put(h, '@data-pw-grad', g);
         put(h, '--pw-h-size', on ? px(dflt(b.heading_font_size, 48)) : null); put(h, '--pw-h-c', on && raw(b.heading_color) || null);
-        put(h, '--pw-h-grad', g ? 'linear-gradient(' + dflt(b.heading_gradient_degree, 90) + 'deg,' + str(raw(b.heading_gradient_color1)) + ',' + str(raw(b.heading_gradient_color2)) + ',' + str(raw(b.heading_gradient_color3)) + ')' : null);
+        put(h, '--pw-h-grad', g ? 'linear-gradient(' + dflt(b.heading_gradient_degree, 90) + 'deg,' + hs.join(',') + ')' : null);
       } else if (x.type === 'subheading') {
         const d = el.querySelector('.pw-launch__description'); if (!d) continue;
         put(d, 'rich', b.subheading || '');

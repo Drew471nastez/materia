@@ -88,7 +88,7 @@ function savedMain(tree = repo) {
 
 /* blocks: [{id, type, settings}] or omitted for the saved ones. Settings get the schema defaults first.
    more: further Main product instances on the same page, [{id, settings, blocks}]. */
-async function renderMain({tree = repo, settings = {}, blocks, product = R5.PANTS, design = false, id, extraHead = '', script = true, more = [], sectionOnly = false} = {}) {
+async function renderMain({tree = repo, settings = {}, blocks, product = R5.PANTS, design = false, id, extraHead = '', script = true, more = [], sectionOnly = false, globals = {}} = {}) {
   const sch = mainSchema(tree);
   const saved = savedMain(tree);
   const all = JSON.parse(readIn(tree, 'config/settings.json'));
@@ -99,7 +99,7 @@ async function renderMain({tree = repo, settings = {}, blocks, product = R5.PANT
     settings: theme, request: {host: 'x.test', locale: {iso_code: 'en'}, page_type: 'product', design_mode: design},
     routes: {account_url: '/account', account_login_url: '/account/login', root_url: '/', cart_url: '/cart', cart_add_url: '/cart/add', search_url: '/search'},
     shop: {name: 'Materia', domain: 'x.test', url: 'https://x.test', currency: 'BRL', money_format: 'R${{amount}}', locale: 'en'}, template: {name: 'product'},
-    cart: {item_count: 0, items: [], currency: {iso_code: 'BRL'}}, customer: null, pages: {}, all_products: {}, product,
+    cart: {item_count: 0, items: [], currency: {iso_code: 'BRL'}}, customer: null, pages: {}, all_products: {}, product, ...globals,
   };
   const blockDefaults = type => defaultsOf((sch.blocks.find(b => b.type === type) || {}).settings);
   const e = engine(tree);
@@ -146,7 +146,7 @@ function foreignParse(tree) {
   parseCache.set(tree, out);
   return out;
 }
-async function open(browser, width, html, {tree = repo, reduced = false, height = 900, wait = 1200} = {}) {
+async function open(browser, width, html, {tree = repo, reduced = false, height = 900, wait = 1200, onSection} = {}) {
   const ctx = await browser.newContext({viewport: {width, height}, ...(width < 500 ? {isMobile: true, hasTouch: true} : {}), reducedMotion: reduced ? 'reduce' : 'no-preference'});
   const p = await ctx.newPage();
   p.errors = [];
@@ -156,6 +156,8 @@ async function open(browser, width, html, {tree = repo, reduced = false, height 
   await p.route('**/*', async r => {
     const u = new URL(r.request().url());
     if (u.hostname !== 'fixture.test') return r.fulfill({status: 204, body: ''});
+    /* the builder answers ?section_id= with the section as it is being edited */
+    if (u.searchParams.has('section_id') && onSection) { p.sectionRequests = (p.sectionRequests || 0) + 1; return r.fulfill({contentType: 'text/html', body: await onSection(u.searchParams.get('section_id'))}); }
     if (u.pathname === '/') return r.fulfill({contentType: 'text/html', body: html});
     if (u.pathname.startsWith('/assets/')) {
       const f = path.join(tree, 'shopify/assets', u.pathname.slice(8));
