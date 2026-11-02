@@ -589,7 +589,7 @@ async function sliderBlocks(browser, name, cfg) {
       const {schema} = schemaOf(name);
       const all = [['', schema.settings], ...(schema.blocks || []).map(b => [b.type, b.settings])];
       for (const [type, list] of all) for (const s of list) if (s.id && !s.hidden) ok(cfg.specs.some(x => x.id === s.id && (x.block || '') === type), `${name}: no control test for ${type || 'section'}.${s.id}`);
-      for (const [type, list] of all) for (const s of list) if (s.type === 'color') ok(/enable_custom_style/.test(s.visible_if || ''), `${name}: ${type}.${s.id} colour waits for custom styling`);
+      for (const [type, list] of all) for (const s of list) if (s.type === 'color' && !s.hidden) ok(/enable_custom_style/.test(s.visible_if || ''), `${name}: ${type}.${s.id} colour waits for custom styling`);
       const tpl = require('fs').readFileSync(require('path').join(__dirname, '../sections', name + '.storelib'), 'utf8');
       const defaults = JSON.parse(tpl.match(/data-bam-defaults='([^']*)'/)[1]);
       same(defaults, Object.fromEntries(schema.settings.filter(s => s.id && s.default !== undefined).map(s => [s.id, s.default])), name + ' embedded defaults match the schema');

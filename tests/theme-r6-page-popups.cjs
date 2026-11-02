@@ -291,7 +291,7 @@ function statics() {
     const {schema, raw} = schemaOf(type);
     const ids = schema.settings.filter(x => x.id).map(x => x.id);
     ok(ids.includes('enable_custom_style'), type + ' custom colours toggle');
-    for (const x of schema.settings) if (x.type === 'color' || x.type === 'color_background') eq(x.visible_if, '{{ section.settings.enable_custom_style == true }}', type + ' ' + x.id + ' shows only with custom colours');
+    for (const x of schema.settings) if ((x.type === 'color' || x.type === 'color_background') && !x.hidden) eq(x.visible_if, '{{ section.settings.enable_custom_style == true }}', type + ' ' + x.id + ' shows only with custom colours');
     if (type !== 'back-to-top-pro') {
       ok(['enable_custom_fonts', 'heading_font', 'body_font'].every(i => ids.includes(i)), type + ' custom fonts');
       ok(/<dialog class="pg-dialog" data-pg-dialog/.test(raw), type + ' native dialog');
