@@ -95,8 +95,9 @@ function shown(x, s, b) {
    backdrop in the builder) must change something in another */
 const NOCHANGE = new Map();
 /* field size and weight settings must change the field itself (its computed font), not only a variable */
-/* phone sizes are left out: on phones the theme keeps every field at 16px or more (no zoom on focus), see the report */
-const FIELD = {'promonewsletterpopup-2': ['input_size_desktop', 'input_weight'], 'promotionalpopup2': ['input_size_desktop', 'input_weight'], 'promotional-popup': ['input_size']};
+const FIELD = {'promonewsletterpopup-2': ['input_size_desktop', 'input_size_mobile', 'input_weight'], 'promotionalpopup2': ['input_size_desktop', 'input_size_mobile', 'input_weight'], 'promotional-popup': ['input_size']};
+/* on phones a field never goes below 16px (no zoom when tapped): the phone size shows as max(16px, value) */
+const PHONE_SIZE = {'promonewsletterpopup-2': 'input_size_mobile', 'promotionalpopup2': 'input_size_mobile', 'promotional-popup': 'input_size'};
 const FIELD_SEEN = new Map();
 const fieldFont = fp => Object.entries(fp).filter(([k]) => /^INPUT\./.test(k)).map(([k, o]) => k + ':' + o.fontSize + '/' + o.fontWeight).join('|');
 /* settings whose look depends on something the fixture leaves off */
@@ -202,6 +203,10 @@ async function run(browser, type, width, editing) {
     const drawn = await fingerprint(t);
     const d = diff(live, drawn);
     ok(!d.length, label + ': live is the same as the redraw\n   ' + explain(live, drawn, d));
+    if (width < 768 && PHONE_SIZE[type] === c.id && typeof c.v === 'number') {
+      const sizes = await t.page.evaluate(() => [...document.querySelectorAll('#shopify-section-test input[type="email"]')].filter(i => i.getClientRects().length).map(i => getComputedStyle(i).fontSize));
+      ok(sizes.length && sizes.every(sz => sz === Math.max(16, c.v) + 'px'), label + ': the phone field is max(16px, ' + c.v + 'px) (' + sizes.join(',') + ')');
+    }
     if ((FIELD[type] || []).includes(c.id)) { const k = c.id + '=' + JSON.stringify(c.v); FIELD_SEEN.set(k, (FIELD_SEEN.get(k) || false) || fieldFont(before) !== fieldFont(drawn)); }
     if (!diff(before, drawn).length) unchanged.push(c.id + (c.block ? '@' + c.btype : '') + '=' + JSON.stringify(c.v).slice(0, 30));
     else checks++;

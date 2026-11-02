@@ -535,7 +535,7 @@
     v('--loudz-input-border-radius', themeFields ? 'var(--input-border-radius, 6px)' : px(s.input_border_radius)); v('--loudz-input-border-thickness', themeFields ? 'var(--inputs-border-width, 1px)' : px(s.input_border_thickness));
     v('--loudz-input-height', themeFields ? 'var(--input-height, 0px)' : null); v('--loudz-input-padding', themeFields ? 'var(--input-padding, 16px 12px)' : null);
     v('--mt-select-radius', themeFields ? null : px(s.input_border_radius)); v('--field-border-widths', themeFields ? null : px(s.input_border_thickness));
-    v('--mt-field-font-size', themeFields || blank(fb.input_size_mobile) || blank(fb.input_size_desktop) ? null : 'var(--loudz-input-text-size)'); v('--mt-field-weight', themeFields || blank(fb.input_weight) ? null : String(fb.input_weight));
+    v('--mt-field-font-size', themeFields || blank(fb.input_size_mobile) || blank(fb.input_size_desktop) ? null : 'var(--loudz-input-text-size)'); v('--mt-field-font-size-mobile', themeFields || blank(fb.input_size_mobile) ? null : px(fb.input_size_mobile)); v('--mt-field-weight', themeFields || blank(fb.input_weight) ? null : String(fb.input_weight));
     v('--mt-select-bg', cu ? color(s.input_background_color, 'var(--input-bg)') : null); v('--mt-select-text', cu ? color(s.input_color, 'var(--input-color)') : null); v('--mt-select-border', cu ? color(s.input_border_color, 'var(--color-border)') : null);
     v('--loudz-button-width', num(s.button_width, 100) + '%');
     v('--loudz-button-text-color', color(ownColor(bb, 'button_text_color'), 'var(--btn-primary-color)')); v('--loudz-button-background-color', color(ownColor(bb, 'button_background'), 'var(--btn-primary-bg-color)'));
@@ -709,7 +709,7 @@
     v('--loudz-input-placeholder-color', fc('input_placeholder', 'var(--input-placeholder-color)')); v('--loudz-input-border-color', fc('input_border', 'var(--color-border)'));
     v('--loudz-input-border-radius', themeF ? 'var(--input-border-radius, ' + num(fb.input_border_radius, 6) + 'px)' : px(fb.input_border_radius));
     v('--loudz-input-border-width', themeF ? 'var(--inputs-border-width, 1px)' : null); v('--loudz-input-height', themeF ? 'var(--input-height, 0px)' : null); v('--loudz-input-padding', themeF ? 'var(--input-padding, 16px 18px)' : null);
-    v('--mt-field-font-size', themeF || blank(fb.input_size_mobile) || blank(fb.input_size_desktop) ? null : 'var(--loudz-input-font-size)'); v('--mt-field-weight', themeF || blank(fb.input_weight) ? null : String(fb.input_weight));
+    v('--mt-field-font-size', themeF || blank(fb.input_size_mobile) || blank(fb.input_size_desktop) ? null : 'var(--loudz-input-font-size)'); v('--mt-field-font-size-mobile', themeF || blank(fb.input_size_mobile) ? null : px(fb.input_size_mobile)); v('--mt-field-weight', themeF || blank(fb.input_weight) ? null : String(fb.input_weight));
     v('--mt-select-radius', themeF ? null : px(fb.input_border_radius)); const fown = bool(fb.enable_custom_style);
     v('--mt-select-bg', fown ? fc('input_background', 'var(--input-bg)') : null); v('--mt-select-text', fown ? fc('input_color', 'var(--input-color)') : null); v('--mt-select-border', fown ? fc('input_border', 'var(--color-border)') : null);
     v('--pp2-b-m', bS(num(fb.button_size_mobile, 14))); v('--pp2-b-d', bS(num(fb.button_size_desktop, 16))); v('--loudz-button-padding-top', px(fb.button_padding_top));
