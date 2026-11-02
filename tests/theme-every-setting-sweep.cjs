@@ -63,7 +63,7 @@ const {render, schemaOf, THEME_VARS, themeControls, PANTS, OTHER} = require('./m
 
 const RETIRED = ['hero-product4', 'page-sale-banner', 'promo-banner-1'];
 /* Bump when the sweep's checks change, so CACHE results are drawn again. */
-const SWEEP_VERSION = '7';
+const SWEEP_VERSION = '10';
 
 /* ------------------------------------------------------------ sample data */
 const IMG = {id: 'img1', src: 'https://theme.test/pic-a.png', url: 'https://theme.test/pic-a.png', width: 1600, height: 1000, aspect_ratio: 1.6, alt: 'Sample picture', presentation: {focal_point: '50% 50%'}};
@@ -71,8 +71,15 @@ const IMG2 = {id: 'img2', src: 'https://theme.test/pic-b.png', url: 'https://the
 const VIDEO = {id: 'vid1', media_type: 'video', alt: 'Clip', aspect_ratio: 1.78, sources: [{format: 'mp4', url: 'https://theme.test/clip.mp4', mime_type: 'video/mp4', width: 1280, height: 720}], preview_image: IMG};
 const VIDEO2 = {...VIDEO, id: 'vid2', sources: [{format: 'mp4', url: 'https://theme.test/clip-b.mp4', mime_type: 'video/mp4', width: 720, height: 1280}], preview_image: IMG2, aspect_ratio: 0.56};
 class VideoUrl { constructor(type, id) { this.type = type; this.id = id; } toString() { return this.type === 'youtube' ? 'https://www.youtube.com/watch?v=' + this.id : 'https://vimeo.com/' + this.id; } }
-const coll = (handle, title, products) => ({id: 'c-' + handle, handle, title, url: '/collections/' + handle, description: '<p>Cut and sewn in small runs.</p>', image: IMG, featured_image: IMG, products, products_count: products.length, all_products_count: products.length, filters: [], sort_options: [{value: 'manual', name: 'Featured'}, {value: 'price-ascending', name: 'Price, low to high'}], sort_by: 'manual', default_sort_by: 'manual', all_tags: ['Cotton'], tags: [], all_types: ['Bottoms'], all_vendors: ['Materia'], metafields: {}});
-const COLL = coll('pants', 'Pants', [PANTS, OTHER]);
+const FILTERS = [
+  {label: 'Availability', type: 'list', param_name: 'filter.v.availability', active_values: [], inactive_values: [], values: [{label: 'In stock', value: '1', count: 8, active: false, param_name: 'filter.v.availability', url_to_add: '?filter.v.availability=1', url_to_remove: '?'}, {label: 'Out of stock', value: '0', count: 2, active: false, param_name: 'filter.v.availability', url_to_add: '?filter.v.availability=0', url_to_remove: '?'}], url_to_remove: '?'},
+  {label: 'Price', type: 'price_range', param_name: 'filter.v.price', range_max: 21193, min_value: {param_name: 'filter.v.price.gte', value: null}, max_value: {param_name: 'filter.v.price.lte', value: null}, active_values: [], values: [], url_to_remove: '?'},
+];
+const SORTS = ['relevance', 'manual', 'best-selling', 'price-ascending', 'price-descending', 'title-ascending', 'title-descending', 'created-ascending', 'created-descending'].map(value => ({value, name: value.replace(/-/g, ' ')}));
+const coll = (handle, title, products) => ({id: 'c-' + handle, handle, title, url: '/collections/' + handle, description: '<p>Cut and sewn in small runs.</p>', image: IMG, featured_image: IMG, products, products_count: products.length, all_products_count: products.length, filters: FILTERS, sort_options: SORTS, sort_by: 'manual', default_sort_by: 'manual', all_tags: ['Cotton'], tags: [], all_types: ['Bottoms'], all_vendors: ['Materia'], metafields: {}});
+/* Ten products, so a grid with a "load more" or a second page has more to show than its first rows. */
+const MANY = [PANTS, OTHER, ...Array.from({length: 8}, (_, i) => { const b = i % 2 ? OTHER : PANTS; return {...b, id: b.id + '-' + i, handle: b.handle + '-' + i, title: b.title + ' ' + (i + 2), url: '/products/' + b.handle + '-' + i}; })];
+const COLL = coll('pants', 'Pants', MANY);
 const COLL2 = coll('tees', 'Tees', [OTHER]);
 const article = (handle, title) => ({id: 'a-' + handle, handle, title, url: '/blogs/news/' + handle, author: 'Ana Lima', published_at: '2026-03-02', created_at: '2026-03-02', excerpt: '<p>How the new fabric is woven.</p>', excerpt_or_content: '<p>How the new fabric is woven.</p>', content: '<p>How the new fabric is woven, and why it lasts.</p>', image: IMG, tags: ['News'], comments_count: 1, comments: [{author: 'Joe', content: 'Nice', created_at: '2026-03-03'}], comments_enabled: true, blog: {title: 'News', handle: 'news', url: '/blogs/news'}, user: {first_name: 'Ana', last_name: 'Lima', bio: 'Editor', image: IMG}, metafields: {}});
 const ARTICLE = article('fabric', 'The new fabric'), ARTICLE2 = article('care', 'Care guide');
@@ -92,10 +99,11 @@ const CART = {item_count: 1, items: [LINE], total_price: 13777, original_total_p
 const CUSTOMER = {id: 7, first_name: 'Ana', last_name: 'Lima', name: 'Ana Lima', email: 'ana@example.com', orders: [], orders_count: 0, addresses: [], addresses_count: 0, default_address: null, tags: []};
 const GLOBALS = {
   product: PANTS, collection: COLL, collections: {all: COLL, pants: COLL, tees: COLL2}, all_products: {'pants-down': PANTS, 'other-tee': OTHER},
+  paginate: {current_page: 1, current_offset: 0, items: 30, page_size: 10, pages: 3, previous: null, next: {title: 'Next', url: '?page=2', is_link: true}, parts: [{title: '1', url: '?page=1', is_link: false}, {title: '2', url: '?page=2', is_link: true}, {title: '3', url: '?page=3', is_link: true}]},
   cart: CART, blog: BLOG, blogs: {news: BLOG, journal: BLOG2}, article: ARTICLE, page: PAGE, pages: {about: PAGE, care: PAGE2}, customer: CUSTOMER,
   linklists: {'main-menu': MENU, footer: MENU2}, template: {name: 'index', suffix: null}, page_title: 'Materia', content_for_header: '',
   localization: {available_countries: [], available_languages: [], country: {iso_code: 'US', name: 'United States', currency: {iso_code: 'USD', symbol: '$'}}, language: {iso_code: 'en', endonym_name: 'English'}},
-  recommendations: {performed: true, products: [OTHER], products_count: 1}, search: {performed: false, results: [], results_count: 0, terms: ''},
+  recommendations: {performed: true, products: [OTHER], products_count: 1}, search: {performed: true, terms: 'pants', results: MANY, results_count: MANY.length, filters: FILTERS, sort_options: SORTS, sort_by: 'relevance', default_sort_by: 'relevance', types: ['product']},
   routes: {all_products_collection_url: '/collections/all', cart_add_url: '/cart/add', cart_url: '/cart', cart_change_url: '/cart/change', root_url: '/', account_url: '/account', account_login_url: '/account/login', account_logout_url: '/account/logout', account_register_url: '/account/register', account_addresses_url: '/account/addresses', search_url: '/search', predictive_search_url: '/search/suggest', product_recommendations_url: '/recommendations/products', collections_url: '/collections'},
 };
 
@@ -108,7 +116,13 @@ function values(x, cur) {
     case 'checkbox': return [!cur];
     case 'color': case 'color_background': return [cur === '#ab12cd' ? '#12cdab' : '#ab12cd'];
     case 'color_scheme': { const ids = Object.keys((JSON.parse(read('config/settings.json')).shopify || {}).color_schemes || {}); return [ids.find(i => i !== cur && i !== 'default') || ids[0]]; }
-    case 'text': case 'textarea': return [cur === 'Edited words' ? 'Other words' : 'Edited words'];
+    case 'text': case 'textarea': {
+      if (/(^|_)css$/.test(x.id)) return ['#shopify-section-test .sweep-none, #shopify-section-test > * { outline: 3px solid #ab12cd; }'];
+      const w = [cur === 'Edited words' ? 'Other words' : 'Edited words'];
+      /* a length, a ratio or a shadow typed as words */
+      if (/width|height|size|gap|radius|ratio|shadow|spacing|offset/.test(x.id)) w.push('640px', '2/1', '2:1', '0 6px 18px #ab12cd');
+      return w;
+    }
     case 'inline_richtext': return ['Edited <em>words</em>'];
     case 'richtext': return ['<p>Edited <em>text</em></p>'];
     case 'html': case 'liquid': return ['<p class="sweep-edited">Edited</p>'];
@@ -159,7 +173,9 @@ const SCHEME_IDS = Object.keys(THEME.color_schemes || {});
 const def = a => Object.fromEntries((a || []).filter(x => x.id && x.default !== undefined).map(x => [x.id, x.default]));
 const visible = x => x.id && !x.hidden && !/\{\{\s*false\s*\}\}/.test(x.visible_if || '');
 const clone = o => o === undefined ? o : JSON.parse(JSON.stringify(o, (k, v) => v instanceof VideoUrl ? {__video_url: [v.type, v.id]} : v), (k, v) => v && v.__video_url ? new VideoUrl(...v.__video_url) : v);
-const widthsOf = id => /(^|_)mobile($|_)/.test(id) ? [375] : /(^|_)desktop($|_)/.test(id) ? [1366] : [1366, 375];
+const widthsOf = id => /(^|_)mobile($|_)/.test(id) ? [375] : /(^|_)desktop($|_)/.test(id) ? [1366] : /(^|_)tablet($|_)/.test(id) ? [900] : [1366, 375];
+/* a class the creator names for their own CSS: a different class in the markup is what it does */
+const CLASS_ID = /(^|_)(class|classes|css_class|html_class|custom_class)$/;
 
 function sectionList() {
   return fs.readdirSync(path.join(ROOT, 'sections')).filter(f => f.endsWith('.storelib')).map(f => f.slice(0, -9)).filter(n => {
@@ -267,14 +283,14 @@ function readersOf(html) {
 
 /* ------------------------------------------------------------ the browser */
 const PROPS = ['color', 'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition', 'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderTopStyle', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius', 'outlineColor', 'outlineWidth', 'outlineStyle', 'outlineOffset', 'boxShadow', 'textShadow', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'textTransform', 'textAlign', 'textDecorationLine', 'textDecorationColor', 'whiteSpace', 'webkitLineClamp', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'rowGap', 'columnGap', 'gridTemplateColumns', 'gridTemplateRows', 'gridColumn', 'gridRow', 'display', 'flexDirection', 'flexWrap', 'flexBasis', 'flexGrow', 'justifyContent', 'alignItems', 'alignSelf', 'justifySelf', 'order', 'position', 'top', 'right', 'bottom', 'left', 'zIndex', 'transform', 'opacity', 'visibility', 'filter', 'backdropFilter', 'mixBlendMode', 'objectFit', 'objectPosition', 'aspectRatio', 'overflow', 'transitionDuration', 'transitionTimingFunction', 'animationName', 'animationDuration', 'animationDelay', 'animationTimingFunction', 'animationIterationCount', 'fill', 'stroke', 'strokeWidth', 'cursor', 'content', 'clipPath', 'scrollSnapType', 'webkitTextStrokeWidth', 'webkitTextStrokeColor', 'accentColor', 'caretColor', 'columnCount', 'textUnderlineOffset', 'verticalAlign', 'boxSizing', 'pointerEvents', 'wordBreak', 'fontVariantCaps', 'textIndent'];
-const PSEUDO = ['content', 'color', 'backgroundColor', 'backgroundImage', 'width', 'height', 'opacity', 'borderTopColor', 'borderTopWidth', 'transform', 'display', 'boxShadow', 'top', 'left', 'borderTopLeftRadius'];
+const PSEUDO = ['transitionDuration', 'transitionTimingFunction', 'content', 'color', 'backgroundColor', 'backgroundImage', 'width', 'height', 'opacity', 'borderTopColor', 'borderTopWidth', 'transform', 'display', 'boxShadow', 'top', 'left', 'borderTopLeftRadius'];
 let layoutHtml = null, liveHtml = null;
 /* The real layout with an empty page: its <head> styles and links for the still drawings, and with its scripts too for the live ones. */
 async function pageShell(live) {
   if (layoutHtml) return live ? liveHtml : layoutHtml;
   const e = FP.engine({'header-group': '', 'footer-group': '', 'overlay-group': ''});
   const theme = {...THEME, color_schemes: Object.entries(THEME.color_schemes || {}).map(([id, v]) => ({id, settings: v.settings}))};
-  const base = {...GLOBALS, settings: theme, request: {host: 'theme.test', locale: {iso_code: 'en'}, page_type: 'index', design_mode: true, path: '/'}, shop: {name: 'Materia Themes', domain: 'theme.test', url: 'https://theme.test', currency: 'USD', money_format: '${{amount}}'}, content_for_header: '', content_for_layout: '<div id="shopify-section-test" class="shopify-section"></div>'};
+  const base = {...GLOBALS, settings: theme, request: {host: 'theme.test', locale: {iso_code: 'en'}, page_type: 'index', design_mode: true, path: '/'}, shop: {name: 'Materia Themes', domain: 'theme.test', url: 'https://theme.test', currency: 'USD', money_format: '${{amount}}'}, content_for_header: '', content_for_layout: '<div id="shopify-section-prev" class="shopify-section"><section class="section"><div style="height:40px"></div></section></div><div id="shopify-section-test" class="shopify-section"></div><div id="shopify-section-next" class="shopify-section"><section class="section"><div style="height:40px"></div></section></div>'};
   const clean = s => s.replace(/\{\{-\s*-\}\}/g, "{{- '' -}}").replace(/^[ \t]*comment[ \t]*\n[\s\S]*?^[ \t]*endcomment[ \t]*$/gm, '').replace(/^[ \t]*# .*$/gm, '');
   const src = clean(read('layout/theme.storelib').replace(/^<template compat="shopify">\n?/, '').replace(/<\/template>\s*$/, ''));
   let html;
@@ -326,9 +342,14 @@ function probe({PROPS, PSEUDO}) {
       for (const s of sheets) { try { walk(s.cssRules, t => t); } catch (_) {} }
       return out.join('\n');
     };
+    /* transitions run to their end (the button contract's transition is !important in a layer, so it cannot be switched off), animations hold their first frame */
+    const settleAll = () => { if (document.getAnimations) for (const a of document.getAnimations()) { try { if (window.CSSTransition && a instanceof CSSTransition) a.finish(); else { a.pause(); a.currentTime = 0; } } catch (_) {} } };
     const snap = ref => {
+      settleAll();
       const w = W(), out = [];
-      const els = [w, ...w.querySelectorAll('*')].filter(e => !/^(STYLE|SCRIPT|TEMPLATE|LINK|META)$/.test(e.tagName)).slice(0, 4000);
+      /* the section, and the sections before and after it (space between sections) */
+      const nb = [w.previousElementSibling, w.nextElementSibling].filter(Boolean).flatMap(n => [n, ...n.querySelectorAll('*')]);
+      const els = [w, ...w.querySelectorAll('*'), ...nb].filter(e => !/^(STYLE|SCRIPT|TEMPLATE|LINK|META)$/.test(e.tagName)).slice(0, 4000);
       if (ref && ref.length !== els.length) return {len: els.length};
       for (const el of els) {
         const cs = getComputedStyle(el), row = [el.tagName];
@@ -358,7 +379,7 @@ function probe({PROPS, PSEUDO}) {
     window.__snapNow = forced => window.__snap(null, forced);
     /* The builder's redraw: the new markup in place, the section's inline scripts run, storelib:section-load fired; the scripts it needs are loaded the first time. */
     const have = new Set();
-    window.__run = async (html, inline, files, cls) => {
+    window.__run = async (html, inline, files, cls, forced) => {
       const w = W();
       w.innerHTML = html; w.className = 'shopify-section ' + cls;
       for (const f of files) if (!have.has(f)) { have.add(f); await new Promise(res => { const sc = document.createElement('script'); sc.src = '/assets/' + f; sc.onload = sc.onerror = res; document.body.append(sc); }); }
@@ -369,8 +390,7 @@ function probe({PROPS, PSEUDO}) {
       await Promise.race([Promise.all([...w.querySelectorAll('img')].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; }))), new Promise(r => setTimeout(r, 400))]);
       await new Promise(r => setTimeout(r, 80));
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-      document.getAnimations && document.getAnimations().forEach(a => { try { a.pause(); a.currentTime = 0; } catch (_) {} });
-      return window.__snapNow(false);
+      return window.__snapNow(!!forced);
     };
     window.__snap = (html, forced, ref) => {
       const w = W();
@@ -408,14 +428,14 @@ async function sweepSection(name, pages) {
   /* Only the settings JSON the section's scripts read changed: both drawn with the section's scripts running (tests/media-fixture.cjs mount), compared after they ran. null when the first drawing is not stable. */
   const ran = new Map();
   let lastUnstable = '';
-  async function runSnap(D, w, check) {
-    const k = w + hash(D.html);
+  async function runSnap(D, w, check, forced) {
+    const k = w + (forced ? 'f' : 'n') + hash(D.html);
     if (ran.has(k)) return ran.get(k);
     const page = pages['live' + w];
     const [body, scripts] = D.html.split('\n<!--scripts-->\n');
     const once = async () => {
       await page.evaluate(list => window.__css(list), [...new Set([...LAYOUT_CSS, ...D.css])].map(c => '/assets/' + c));
-      return page.evaluate(({body, inline, files, cls}) => window.__run(body, inline, files, cls), {body, inline: scripts ? scripts.split('\n<!--script-->\n') : [], files: [...new Set([...D.js, ...readersOf(D.html)])], cls: WRAP_CLASS});
+      return page.evaluate(({body, inline, files, cls, forced}) => window.__run(body, inline, files, cls, forced), {forced: !!forced, body, inline: scripts ? scripts.split('\n<!--script-->\n') : [], files: [...new Set([...D.js, ...readersOf(D.html)])], cls: WRAP_CLASS});
     };
     let v = await once();
     if (check) { let again = await once(); if (JSON.stringify(again) !== JSON.stringify(v)) { v = again; again = await once(); } const i = again.findIndex((x, n) => x !== v[n]); if (again.length !== v.length || i >= 0) { lastUnstable = again.length !== v.length ? 'elements ' + v.length + ' / ' + again.length : (() => { const x = v[i].split('|'), y = again[i].split('|'), j = x.findIndex((q, n) => q !== y[n]); return x[0] + ' ' + (PROPS[j - 1] || 'more') + ': ' + x[j] + ' / ' + y[j]; })(); v = null; } }
@@ -425,10 +445,10 @@ async function sweepSection(name, pages) {
   }
   async function runtime(A, B, id) {
     let d = '';
-    for (const w of widthsOf(id)) {
-      const a = await runSnap(A, w, true);
+    for (const w of widthsOf(id)) for (const forced of [false, true]) {
+      const a = await runSnap(A, w, true, forced);
       if (a === null) return null;
-      const b = await runSnap(B, w);
+      const b = await runSnap(B, w, false, forced);
       if (b === null) return null;
       if (a.length !== b.length) return 'elements ' + a.length + ' / ' + b.length;
       const i = a.findIndex((x, n) => x !== b[n]);
@@ -466,7 +486,7 @@ async function sweepSection(name, pages) {
       if (process.env.DUMP) { fs.writeFileSync(path.join(process.env.DUMP, 'A.html'), A.html); fs.writeFileSync(path.join(process.env.DUMP, 'B.html'), B.html); }
       if (A.html === B.html) { res.push({v: label, r: 'same'}); continue; }
       const ua = undump(A.html), ub = undump(B.html);
-      if (strip(ua) !== strip(ub)) { res.push({v: label, r: 'markup'}); continue; }
+      if (strip(ua) !== strip(ub) || CLASS_ID.test(x.id)) { res.push({v: label, r: 'markup'}); continue; }
       if (A.html.split('\n<!--scripts-->\n')[1] !== B.html.split('\n<!--scripts-->\n')[1]) { res.push({v: label, r: 'markup'}); continue; }
       /* one value seen working is enough for the costly checks */
       if (res.some(r => /^(style|state|script|behaviour)$/.test(r.r))) { res.push({v: label, r: 'unchecked'}); continue; }
@@ -523,7 +543,7 @@ async function sweepSection(name, pages) {
 async function worker() {
   const {launch} = require('./media-fixture.cjs');
   const browser = await launch();
-  const pages = {1366: await openPage(browser, 1366), 375: await openPage(browser, 375), live1366: await openPage(browser, 1366, true), live375: await openPage(browser, 375, true), browser};
+  const pages = {1366: await openPage(browser, 1366), 375: await openPage(browser, 375), 900: await openPage(browser, 900), live1366: await openPage(browser, 1366, true), live375: await openPage(browser, 375, true), live900: await openPage(browser, 900, true), browser};
   process.on('message', async m => {
     if (m.done) { await browser.close(); process.exit(0); }
     const t = Date.now();

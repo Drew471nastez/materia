@@ -268,7 +268,7 @@
         const href = url(s.link);
         legacy = put(legacy, 'href', href);
         put(legacy, '@target', href && bool(s.open_in_new_tab) ? '_blank' : null); put(legacy, '@rel', href && bool(s.open_in_new_tab) ? 'noopener' : null);
-        put(legacy.querySelector('.ab-msg__d'), 'text', s.message || ''); put(legacy.querySelector('.ab-msg__m'), 'text', plain(s.message_mobile) ? s.message_mobile : s.message || '');
+        put(legacy.querySelector('.ab-msg__d'), 'text', s.message || ''); put(legacy.querySelector('.ab-msg__m'), 'text', plain(s.message_mobile) ? s.message_mobile : s.message || ''); put(legacy, 'hidden', !plain(s.message) && !plain(s.message_mobile));
       }
     },
     block(c, el, b, type) {
