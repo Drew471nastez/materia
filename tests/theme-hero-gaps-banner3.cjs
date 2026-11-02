@@ -1,6 +1,6 @@
 /* Promo Banner 3 (sections/banner3) painted live by shopify/assets/live-hero-gaps.js.
    With the real theme priority rules, at 375 and 1366:
-   - the schema keeps every id it had at HEAD and has no problems;
+   - the schema keeps every id it had before round 7 (5c5d843) and has no problems;
    - first paint equals the hydrated paint and the markup equals what the
      controller derives (audit), in the editor and on the storefront;
    - every non-hidden section and block setting changes what is drawn after
@@ -10,7 +10,7 @@
    - every option of every select looks different from the others;
    - colour scheme live and on redraw, two instances stay apart, a redraw
      sets up once, a block added by a redraw is live, reduced motion;
-   - the saved home page instance looks the same as at HEAD.
+   - the saved home page instance looks the same as before round 7 (5c5d843).
    LIQUIDJS=<path to liquidjs> LIVE=0 node tests/theme-hero-gaps-banner3.cjs */
 const assert = require('assert/strict'), fs = require('fs'), path = require('path'), {execSync} = require('child_process');
 const {launch, mount, schemaOf, schemaProblems} = require('./media-fixture.cjs');
@@ -23,14 +23,14 @@ const frames = t => t.page.evaluate(() => new Promise(r => requestAnimationFrame
 
 const FP = () => {
   const P = ['color', 'backgroundColor', 'backgroundImage', 'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'textTransform', 'textAlign', 'display', 'alignItems', 'rowGap', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight', 'maxWidth', 'width', 'borderTopWidth', 'borderTopStyle', 'borderTopColor', 'borderTopLeftRadius', 'boxShadow', 'opacity', 'transitionDuration', 'animationName', 'animationRangeEnd', 'transform'];
-  window.__fp = uid => {
+  window.__fp = (uid, byTag) => {
     const wrap = document.getElementById('shopify-section-' + uid), out = {}, seen = {};
     const w = getComputedStyle(wrap);
     out.wrap = {marginTop: w.marginTop, marginBottom: w.marginBottom, display: w.display, noReveal: !!wrap.querySelector(':scope > [data-ti-no-reveal]')};
     const root = wrap.querySelector('.rm3'), r0 = wrap.getBoundingClientRect();
     for (const e of [root, ...root.querySelectorAll('*')]) {
       if (e.tagName === 'STYLE' || e.tagName === 'SCRIPT') continue;
-      let k = (e.dataset.hgBlock) || e.tagName + '.' + (e.classList[0] || '');
+      let k = (!byTag && e.dataset.hgBlock) || e.tagName + '.' + (e.classList[0] || '');
       seen[k] = (seen[k] || 0) + 1; k += '#' + seen[k];
       const cs = getComputedStyle(e), r = e.getBoundingClientRect(), o = {};
       for (const p of P) o[p] = cs[p];
@@ -45,7 +45,7 @@ const FP = () => {
     return out;
   };
 };
-const fp = (t, uid = 'test') => t.page.evaluate(u => window.__fp(u), uid);
+const fp = (t, uid = 'test', byTag = false) => t.page.evaluate(([u, b]) => window.__fp(u, b), [uid, byTag]);
 const audit = (t, uid = 'test') => t.page.evaluate(u => window.MateriaHeroGaps.audit(document.querySelector('#shopify-section-' + u + ' [data-hg]')), uid);
 const diff = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
 const diffDetail = (a, b) => diff(a, b).slice(0, 4).map(k => k + ': ' + (a[k] && b[k] ? Object.keys({...a[k], ...b[k]}).filter(p => JSON.stringify(a[k][p]) !== JSON.stringify(b[k][p])).map(p => p + ' ' + JSON.stringify(a[k][p]) + ' -> ' + JSON.stringify(b[k][p])).join('; ') : a[k] ? 'removed' : 'added')).join(' | ');
@@ -191,9 +191,9 @@ async function lifecycle(browser) {
   await t.emit({text: 'Added block copy', enable_custom_style: true, color: '#ff0000'}, id, 'a'); await frames(t);
   ok((await t.page.locator(`[data-hg-block="${id}"]`).textContent()) === 'Added block copy' && await t.css('.rm-hero__sub', 'color', 'a') === 'rgb(255, 0, 0)', 'the added block is live');
   /* text and button visibility follow their content, live */
-  await t.emit({link: ''}, 'a-b3', 'a'); await frames(t);
+  await t.emit({link: ''}, t.blockId('button', 0, 'a'), 'a'); await frames(t);
   ok(await t.page.locator('#shopify-section-a .rm-hero__btn').isHidden(), 'a button without a link is hidden live');
-  await t.emit({link: '/pages/fit'}, 'a-b3', 'a'); await frames(t);
+  await t.emit({link: '/pages/fit'}, t.blockId('button', 0, 'a'), 'a'); await frames(t);
   ok(await t.page.locator('#shopify-section-a .rm-hero__btn').getAttribute('href') === '/pages/fit' && await t.page.locator('#shopify-section-a .rm-hero__btn').isVisible(), 'the link comes back live');
   /* an unrelated edit leaves the heading element in place */
   await t.page.evaluate(() => { window.__h = document.querySelector('#shopify-section-a .rm-hero__heading'); });
@@ -211,7 +211,7 @@ async function lifecycle(browser) {
 async function saved(browser) {
   const tj = JSON.parse(fs.readFileSync(path.join(__dirname, '../templates/home.json'), 'utf8'));
   const nowPath = path.join(__dirname, '../sections/banner3.storelib'), nowRaw = fs.readFileSync(nowPath, 'utf8');
-  const headRaw = execSync('git show HEAD:sections/banner3.storelib', {cwd: path.join(__dirname, '..'), encoding: 'utf8'});
+  const headRaw = execSync('git show 5c5d843:sections/banner3.storelib', {cwd: path.join(__dirname, '..'), encoding: 'utf8'});
   for (const [key, s] of Object.entries(tj.sections).filter(([, s]) => s.type === NAME)) {
     const blocks = s.block_order.map(k => s.blocks[k]).map(b => ({type: b.type, settings: b.settings || {}}));
     for (const width of [375, 1366]) for (const editing of [true, false]) {
@@ -219,10 +219,13 @@ async function saved(browser) {
         const real = fs.readFileSync; fs.readFileSync = (f, ...a) => String(f) === nowPath ? raw : real(f, ...a);
         let t; try { t = await mount(browser, NAME, {width, editing, settings: s.settings, blocks, assets}); } finally { fs.readFileSync = real; }
         await prep(t); await frames(t);
-        const f = await fp(t); await t.page.close(); return f;
+        /* the old file has no block ids on its elements and no reveal variables (its keyframes say the same, compared through animationName) */
+        const f = await fp(t, 'test', true); await t.page.close();
+        for (const o of Object.values(f)) { delete o['--rm-reveal-from-y']; delete o['--rm-reveal-from-scale']; }
+        return f;
       };
       const was = await look(headRaw, []), now = await look(nowRaw, [ASSET]);
-      ok(!diff(was, now).length, `home.json ${key} ${width} ${editing ? 'editor' : 'storefront'}: saved instance looks the same as at HEAD: ${diffDetail(was, now)}`);
+      ok(!diff(was, now).length, `home.json ${key} ${width} ${editing ? 'editor' : 'storefront'}: saved instance looks the same as before round 7 (5c5d843): ${diffDetail(was, now)}`);
     }
   }
 }
@@ -230,7 +233,7 @@ async function saved(browser) {
 (async () => {
   const {schema} = schemaOf(NAME);
   eq(schemaProblems(NAME), [], 'schema problems');
-  const head = JSON.parse(execSync('git show HEAD:sections/banner3.storelib', {cwd: path.join(__dirname, '..'), encoding: 'utf8'}).split('<schema>')[1].split('</schema>')[0]).shopify;
+  const head = JSON.parse(execSync('git show 5c5d843:sections/banner3.storelib', {cwd: path.join(__dirname, '..'), encoding: 'utf8'}).split('<schema>')[1].split('</schema>')[0]).shopify;
   const ids = l => l.filter(x => x.id).map(x => x.id);
   eq(ids(head.settings).filter(id => !ids(schema.settings).includes(id)), [], 'keeps every section setting id');
   for (const hb of head.blocks) eq(ids(hb.settings).filter(id => !ids(schema.blocks.find(b => b.type === hb.type).settings).includes(id)), [], 'keeps every ' + hb.type + ' setting id');
@@ -239,15 +242,19 @@ async function saved(browser) {
     for (const width of [375, 1366]) for (const editing of [true, false]) await basics(browser, width, editing);
     const seen = {};
     for (const width of [375, 1366]) for (const editing of [true, false]) await everyControl(browser, width, editing, seen);
+    const same = [];
     for (const [key, e] of Object.entries(seen)) {
       ok(e.changed, key + ' changes what is drawn');
       const opts = Object.entries(e.opts);
       if (opts.length > 2) for (let i = 0; i < opts.length; i++) for (let j = i + 1; j < opts.length; j++) {
         const [vi, a] = opts[i], [vj, b] = opts[j];
         if (key === 'mobile_text_align' && [vi, vj].includes('"inherit"') && [vi, vj].includes('"left"')) continue; /* inherit is the desktop value (left here) by design */
-        ok(Object.keys(a).some(k => b[k] && a[k] !== b[k]), `${key}: ${vi} and ${vj} look different`);
+        /* "theme" is the fixture's theme weight by design (body 400, heading 700) */
+        if (/\.weight$/.test(key) && [vi, vj].includes('"theme"') && [vi, vj].some(v => v === '"400"' || v === '"700"')) continue;
+        if (!Object.keys(a).some(k => b[k] && a[k] !== b[k])) same.push(`${key}: ${vi} and ${vj}`); else checks++;
       }
     }
+    eq(same, [], 'every option of every select looks different from the others');
     await lifecycle(browser);
     await saved(browser);
     console.log(checks + ' Promo Banner 3 live controller, every-control live-equals-redraw, lifecycle and saved-instance checks passed');

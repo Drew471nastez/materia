@@ -8,7 +8,7 @@
      what is behind it, and sits below the picture;
    - a tall picture still holds the text, and a creator's own text colours
      still apply in the panel;
-   - desktop (1366) and the tall shapes look exactly as at HEAD, the saved
+   - desktop (1366) and the tall shapes look exactly as before round 7 (5c5d843), the saved
      templates/blog.json instance included.
    LIQUIDJS=<path to liquidjs> LIVE=0 node tests/theme-hero-gaps-featured-post.cjs */
 const assert = require('assert/strict'), fs = require('fs'), path = require('path'), {execSync} = require('child_process');
@@ -54,7 +54,7 @@ const shape = page => page.evaluate(() => {
 (async () => {
   const browser = await launch();
   const nowPath = path.join(__dirname, '../sections', NAME + '.storelib'), nowRaw = fs.readFileSync(nowPath, 'utf8');
-  const headRaw = execSync('git show HEAD:sections/' + NAME + '.storelib', {cwd: path.join(__dirname, '..'), encoding: 'utf8'});
+  const headRaw = execSync('git show 5c5d843:sections/' + NAME + '.storelib', {cwd: path.join(__dirname, '..'), encoding: 'utf8'});
   const draw = async (raw, opts) => { const real = fs.readFileSync; fs.readFileSync = (f, ...a) => String(f) === nowPath ? raw : real(f, ...a); try { return await mount(browser, NAME, opts); } finally { fs.readFileSync = real; } };
   try {
     for (const scheme of ['default-color-scheme', 'alt-scheme']) for (const editing of [true, false]) {
@@ -109,7 +109,7 @@ const shape = page => page.evaluate(() => {
     for (const [label, width, settings, blocks] of SAME) for (const editing of [true, false]) {
       const a = await draw(headRaw, {width, editing, settings, blocks, assets: [CTRL]}), b = await draw(nowRaw, {width, editing, settings, blocks, assets: [CTRL]});
       await settle(a.page); await settle(b.page);
-      eq(await shape(b.page), await shape(a.page), `${label} ${width} ${editing ? 'editor' : 'storefront'}: looks the same as at HEAD`);
+      eq(await shape(b.page), await shape(a.page), `${label} ${width} ${editing ? 'editor' : 'storefront'}: looks the same as before round 7 (5c5d843)`);
       await a.page.close(); await b.page.close();
     }
     console.log(checks + ' featured post banner phone panel, contrast, live and unchanged-look checks passed');

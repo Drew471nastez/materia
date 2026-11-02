@@ -10,7 +10,7 @@
      heading block's own font, data-own-font included;
    - live edits paint what a redraw paints, and custom fonts off restores the
      theme fonts and drops data-own-font;
-   - the saved home page instance looks the same as at HEAD.
+   - the saved home page instance looks the same as before round 7 (5c5d843).
    LIQUIDJS=<path to liquidjs> LIVE=0 node tests/theme-hero-gaps-hero-benefits.cjs */
 const assert = require('assert/strict'), fs = require('fs'), path = require('path'), {execSync} = require('child_process');
 const {launch, mount, schemaOf, schemaProblems} = require('./media-fixture.cjs');
@@ -39,7 +39,7 @@ const BLOCKS = (heading = {}) => [
 (async () => {
   const {schema} = schemaOf(NAME);
   eq(schemaProblems(NAME), [], 'schema problems');
-  const head = JSON.parse(execSync('git show HEAD:sections/hero-benefits.storelib', {cwd: path.join(__dirname, '..'), encoding: 'utf8', maxBuffer: 64 << 20}).split('<schema>')[1].split('</schema>')[0]).shopify;
+  const head = JSON.parse(execSync('git show 5c5d843:sections/hero-benefits.storelib', {cwd: path.join(__dirname, '..'), encoding: 'utf8', maxBuffer: 64 << 20}).split('<schema>')[1].split('</schema>')[0]).shopify;
   const ids = l => l.filter(x => x.id).map(x => x.id);
   eq(ids(head.settings).filter(id => !ids(schema.settings).includes(id)), [], 'keeps every section id');
   for (const hb of head.blocks) eq(ids(hb.settings).filter(id => !ids(schema.blocks.find(b => b.type === hb.type).settings).includes(id)), [], 'keeps every ' + hb.type + ' id');
@@ -93,11 +93,11 @@ const BLOCKS = (heading = {}) => [
       const lp = await look(p); ok(fam(lp.heading) === 'Georgia' && fam(lp.desc) === 'Arial', where + ' priority off: theme fonts');
       await p.page.close();
     }
-    /* the saved home instance (custom fonts off) looks the same as at HEAD */
+    /* the saved home instance (custom fonts off) looks the same as before round 7 (5c5d843) */
     const tj = JSON.parse(fs.readFileSync(path.join(__dirname, '../templates/home.json'), 'utf8'));
     const nowPath = path.join(__dirname, '../sections/hero-benefits.storelib'), nowRaw = fs.readFileSync(nowPath, 'utf8');
-    const headRaw = execSync('git show HEAD:sections/hero-benefits.storelib', {cwd: path.join(__dirname, '..'), encoding: 'utf8', maxBuffer: 64 << 20});
-    const headJs = execSync('git show HEAD:shopify/assets/hero-benefits.js', {cwd: path.join(__dirname, '..'), encoding: 'utf8'});
+    const headRaw = execSync('git show 5c5d843:sections/hero-benefits.storelib', {cwd: path.join(__dirname, '..'), encoding: 'utf8', maxBuffer: 64 << 20});
+    const headJs = execSync('git show 5c5d843:shopify/assets/hero-benefits.js', {cwd: path.join(__dirname, '..'), encoding: 'utf8'});
     const jsPath = path.join(__dirname, '../shopify/assets/hero-benefits.js');
     const {fingerprint} = require('./theme-logos-r4-lib.cjs');
     for (const [key, s] of Object.entries(tj.sections).filter(([, s]) => s.type === NAME)) {
@@ -110,7 +110,7 @@ const BLOCKS = (heading = {}) => [
           const f = (await fingerprint(t.page, 'test')).map(x => x.replace(/\|[^|]*\|/, '|')); await t.page.close(); return f;
         };
         const was = await draw(headRaw, headJs), now = await draw(nowRaw, fs.readFileSync(jsPath, 'utf8'));
-        eq(now, was, `home.json ${key} ${width} ${editing ? 'editor' : 'storefront'}: saved instance looks the same as at HEAD`);
+        eq(now, was, `home.json ${key} ${width} ${editing ? 'editor' : 'storefront'}: saved instance looks the same as before round 7 (5c5d843)`);
       }
     }
     console.log(checks + ' Hero Benefits font picker, legacy font, first paint, live, priority and saved-instance checks passed');
