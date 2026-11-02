@@ -44,7 +44,28 @@ const PAGE = {title: 'Sizes', handle: 'sizes', url: '/pages/sizes', content: '<p
 const CTX = [{design: false, product: PROD}, {design: true, product: PROD}, {design: false, product: OPROD}, {design: false, product: WIDE}];
 
 /* What a setting needs to show, beyond its block's defaults (and the switch its visible_if names). */
+/* The shipped defaults of these blocks carry no ratings, counts or promises (an empty block draws
+   nothing on the storefront), so the settings that style their words get test words here. */
+const CONTENT = {
+  delivery_pills: {pill_1_title: 'Zq one', pill_2_title: 'Zq two', pill_3_title: 'Zq three'},
+  specs_badge: {text: 'Zq specs'},
+  happy_customers: {heading: 'Zq heading', rating_text: '4', filled_stars: 4},
+  simple_rating: {text: 'Zq rating', filled_stars: 4},
+  low_stock_badge: {units_count: 3},
+  in_stock: {label_text: 'Zq label', middle_text: 'Zq middle'},
+  money_back_guarantee: {primary_text: 'Zq guarantee'},
+  buy_buttons: {estimated_delivery_text: '<p>Zq delivery</p>'},
+  lod_rating_badge: {label_text: 'Zq rating', rating: 4},
+  lod_donation_badge: {badge_text_d: 'Zq desktop', badge_text_m: 'Zq mobile'},
+  stock_pulse_notice: {text_template: 'Zq stock'},
+  social_proof_inline: {label_text: 'Zq proof', rating: 4},
+  info_box: {top_text: '<p>Zq top</p>', collapse_body: '<p>Zq body</p>'},
+  infotables: {row3_lead: 'Zq lead'},
+  horizontal_benefits: {item1_title: 'Zq one', item1_subtitle: 'Zq sub one', item2_title: 'Zq two', item2_subtitle: 'Zq sub two'},
+  vertical_benefits: {item1_title: 'Zq one', item2_title: 'Zq two', item3_title: 'Zq three'},
+};
 const RULES = [
+  [/^([a-z_]+)\./, m => ({...(CONTENT[m[1]] || {})})],
   [/^benefits_pills\.pill(\d)_icon_(svg|image)$/, (m, id) => ({[`pill${m[1]}_enable`]: true, [`pill${m[1]}_text`]: 'Free returns', [`pill${m[1]}_icon_source`]: m[2]})],
   [/^benefits_pills\.pill(\d)_icon_source$/, m => ({[`pill${m[1]}_enable`]: true, [`pill${m[1]}_text`]: 'Free returns'}), 'none'],
   [/^benefits_pills\.pill(\d)_/, m => ({custom_style: true, [`pill${m[1]}_enable`]: true, [`pill${m[1]}_text`]: 'Free returns'})],

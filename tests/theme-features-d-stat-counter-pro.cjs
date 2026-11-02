@@ -79,7 +79,7 @@ const TABLE = [
   {block: 'stat', id: 'decimals', v: 1, sel: '.scp-number', css: '@data-decimals', exp: '1'},
   {block: 'stat', id: 'icon', v: ICON, sel: '.scp-icon circle', css: '@r', exp: '4'},
 ];
-const FULL = L.schemaOf(NAME).schema.presets[0].blocks;
+const FULL = L.SAMPLE[NAME];
 
 L.suite({
   name: NAME, table: TABLE, extra: ['enable_custom_style', 'enable_custom_fonts'], full: FULL,

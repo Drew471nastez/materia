@@ -7,7 +7,17 @@ const {launch, schemaOf, schemaProblems} = fixture;
 /* The fixture's mount, with emit and redraw also waiting for two frames, so a busy machine
    (the controller paints in requestAnimationFrame) cannot read a value before it is painted. */
 const frames = page => page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+/* The shipped presets carry no numbers (a stat with no number draws nothing on the storefront, so no
+   figure is ever invented for a store). These checks need stats with values to count, ring and lay out,
+   so a section mounted without its own blocks gets these sample stat blocks: test data, never shipped. */
+const SAMPLE = {"progress-benefits": [{"type": "heading", "settings": {"text": "What customers <em>noticed</em>"}}, {"type": "subheading", "settings": {"text": "<p>Add a short line about the product and what these numbers measure.</p>"}}, {"type": "stat", "settings": {"percent": 92, "text": "<p>Say what this first percentage measures.</p>"}}, {"type": "stat", "settings": {"percent": 88, "text": "<p>Say what this second percentage measures.</p>"}}, {"type": "stat", "settings": {"percent": 95, "text": "<p>Say what this third percentage measures.</p>"}}, {"type": "stat", "settings": {"percent": 84, "text": "<p>Say what this fourth percentage measures.</p>"}}, {"type": "footnote", "settings": {"text": "<p>Add where these numbers come from.</p>"}}], "progress-circles": [{"type": "heading", "settings": {"text": "Results you can <em>measure</em>"}}, {"type": "stat", "settings": {"percent": 85, "label": "First result"}}, {"type": "stat", "settings": {"percent": 80, "label": "Second result"}}, {"type": "stat", "settings": {"percent": 60, "label": "Third result"}}, {"type": "stat", "settings": {"percent": 99, "label": "Fourth result"}}, {"type": "footnote", "settings": {"text": "<p>Add where these numbers come from.</p>"}}], "stat-counter": [{"type": "eyebrow", "settings": {"text": "By the numbers"}}, {"type": "heading", "settings": {"text": "What our numbers say"}}, {"type": "subheading", "settings": {"text": "<p>Replace these with your own numbers.</p>"}}, {"type": "stat", "settings": {"value": "12,000", "suffix": "+", "label": "Happy customers"}}, {"type": "stat", "settings": {"value": "98", "suffix": "%", "label": "5-star reviews"}}, {"type": "stat", "settings": {"value": "50", "suffix": "+", "label": "Countries served"}}, {"type": "stat", "settings": {"value": "24", "suffix": "h", "label": "Avg. ship time"}}], "stat-counter-pro": [{"type": "eyebrow", "settings": {"text": "Why shop with us"}}, {"type": "heading", "settings": {"text": "What our numbers say"}}, {"type": "subheading", "settings": {"text": "<p>Replace these with your own numbers.</p>"}}, {"type": "stat", "settings": {"value": "98", "ring_max": "100", "suffix": "%", "label": "Five-star reviews", "trend_direction": "up", "trend_value": "+4% YoY"}}, {"type": "stat", "settings": {"value": "24", "ring_max": "48", "suffix": "h", "label": "Avg. ship time", "trend_direction": "down", "trend_value": "-30%"}}, {"type": "stat", "settings": {"value": "1,200", "ring_max": "1500", "suffix": "+", "label": "Happy customers", "trend_direction": "up", "trend_value": "+18%"}}, {"type": "stat", "settings": {"value": "50", "ring_max": "100", "suffix": "+", "label": "Countries served", "trend_direction": "flat", "trend_value": "Global"}}]};
+function sample(name, opts = {}) {
+  if (!SAMPLE[name]) return opts;
+  if (opts.instances) return {...opts, instances: opts.instances.map(i => i.blocks ? i : {...i, blocks: SAMPLE[name]})};
+  return opts.blocks ? opts : {...opts, blocks: SAMPLE[name]};
+}
 async function mount(browser, name, opts) {
+  opts = sample(name, opts);
   const t = await fixture.mount(browser, name, opts), emit = t.emit, redraw = t.redraw;
   t.emit = async (...a) => { await emit(...a); await frames(t.page); };
   /* A redraw on the storefront draws a fresh pending section, which fills and counts again once:
@@ -244,5 +254,5 @@ async function suite(cfg) {
   return checks;
 }
 
-module.exports = {suite, own, settled, headCopy, launch, mount, schemaOf, schemaProblems, assert, ASSET, WIDTHS, DESK, visibleIds, read, emit, controls, coverage, snapshot, instrument, counts, hoverBg, smallTargets};
+module.exports = {SAMPLE, suite, own, settled, headCopy, launch, mount, schemaOf, schemaProblems, assert, ASSET, WIDTHS, DESK, visibleIds, read, emit, controls, coverage, snapshot, instrument, counts, hoverBg, smallTargets};
 if (require.main === module) console.log('theme-features-d-lib: shared helpers, nothing to run');

@@ -7,7 +7,16 @@ const {launch, schemaOf, schemaProblems} = fixture;
 /* The fixture's mount, with emit and redraw also waiting for two frames, so a busy machine
    (the controller paints in requestAnimationFrame) cannot read a value before it is painted. */
 const frames = page => page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+/* The shipped presets carry no figures (a stat with no number draws nothing on the storefront), so a
+   section mounted without its own blocks gets these sample stat blocks: test data, never shipped. */
+const SAMPLE = {"image-with-text-stats": [{"type": "media", "settings": {"media_type": "image"}}, {"type": "media", "settings": {"media_type": "image"}}, {"type": "heading", "settings": {"text": "Results"}}, {"type": "stats_group"}, {"type": "stat", "settings": {"percent": 94, "text": "<p>Say what this number measures. Replace it with a figure from your own store.</p>"}}, {"type": "stat", "settings": {"percent": 87, "text": "<p>Keep each line short, so the number stays the first thing people read.</p>"}}, {"type": "stat", "settings": {"percent": 98, "text": "<p>Add the source of your figures in the footnote below.</p>"}}, {"type": "footnote", "settings": {"text": "Source: your own order data"}}]};
+function sample(name, opts = {}) {
+  if (!SAMPLE[name]) return opts;
+  if (opts.instances) return {...opts, instances: opts.instances.map(i => i.blocks ? i : {...i, blocks: SAMPLE[name]})};
+  return opts.blocks ? opts : {...opts, blocks: SAMPLE[name]};
+}
 async function mount(browser, name, opts) {
+  opts = sample(name, opts);
   const t = await fixture.mount(browser, name, opts), emit = t.emit, redraw = t.redraw;
   t.emit = async (...a) => { await emit(...a); await frames(t.page); };
   t.redraw = async (...a) => { const r = await redraw(...a); await frames(t.page); return r; };
@@ -132,5 +141,5 @@ const CLIP = 'AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAURbW9vdgAAAGxtdmhkAA
 async function serveVideo(page) { await page.route(/\.mp4(\?|$)/, r => r.fulfill({body: Buffer.from(CLIP, 'base64'), contentType: 'video/mp4'})); }
 const playing = (t, sel) => t.page.evaluate(sel => { const v = document.querySelector(sel); return !!v && !v.paused; }, sel);
 
-module.exports = {serveVideo, playing, launch, mount, schemaOf, schemaProblems, assert, ASSET, WIDTHS, DESK, visibleIds, read, emit, controls, coverage, snapshot, instrument, counts, hoverBg, smallTargets};
+module.exports = {SAMPLE, serveVideo, playing, launch, mount, schemaOf, schemaProblems, assert, ASSET, WIDTHS, DESK, visibleIds, read, emit, controls, coverage, snapshot, instrument, counts, hoverBg, smallTargets};
 if (require.main === module) console.log('theme-media-stats-reels-lib: shared helpers, nothing to run');

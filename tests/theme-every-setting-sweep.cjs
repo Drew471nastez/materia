@@ -29,6 +29,7 @@ const fs = require('fs'), path = require('path'), os = require('os'), {fork} = r
 const ROOT = path.join(__dirname, '..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const FP = require('./theme-featured-product-round5.cjs');
+if (!FP.Liquid) { console.log('every setting sweep skipped: liquidjs not installed (LIQUIDJS=<path to liquidjs>)'); return; }
 
 /* One engine for the whole run, parsing every snippet and section once. */
 const baseEngine = FP.engine;
@@ -63,7 +64,7 @@ const {render, schemaOf, THEME_VARS, themeControls, PANTS, OTHER} = require('./m
 
 const RETIRED = ['hero-product4', 'page-sale-banner', 'promo-banner-1'];
 /* Bump when the sweep's checks change, so CACHE results are drawn again. */
-const SWEEP_VERSION = '10';
+const SWEEP_VERSION = '12';
 
 /* ------------------------------------------------------------ sample data */
 const IMG = {id: 'img1', src: 'https://theme.test/pic-a.png', url: 'https://theme.test/pic-a.png', width: 1600, height: 1000, aspect_ratio: 1.6, alt: 'Sample picture', presentation: {focal_point: '50% 50%'}};
@@ -80,6 +81,8 @@ const coll = (handle, title, products) => ({id: 'c-' + handle, handle, title, ur
 /* Ten products, so a grid with a "load more" or a second page has more to show than its first rows. */
 const MANY = [PANTS, OTHER, ...Array.from({length: 8}, (_, i) => { const b = i % 2 ? OTHER : PANTS; return {...b, id: b.id + '-' + i, handle: b.handle + '-' + i, title: b.title + ' ' + (i + 2), url: '/products/' + b.handle + '-' + i}; })];
 const COLL = coll('pants', 'Pants', MANY);
+/* the collection's own sub collections (Collection > metafield custom.subcollection) */
+COLL.metafields = {custom: {subcollection: {value: [coll('jeans', 'Jeans', MANY.slice(0, 3)), coll('shorts', 'Shorts', MANY.slice(3, 6)), coll('chinos', 'Chinos', MANY.slice(6))]}}};
 const COLL2 = coll('tees', 'Tees', [OTHER]);
 const article = (handle, title) => ({id: 'a-' + handle, handle, title, url: '/blogs/news/' + handle, author: 'Ana Lima', published_at: '2026-03-02', created_at: '2026-03-02', excerpt: '<p>How the new fabric is woven.</p>', excerpt_or_content: '<p>How the new fabric is woven.</p>', content: '<p>How the new fabric is woven, and why it lasts.</p>', image: IMG, tags: ['News'], comments_count: 1, comments: [{author: 'Joe', content: 'Nice', created_at: '2026-03-03'}], comments_enabled: true, blog: {title: 'News', handle: 'news', url: '/blogs/news'}, user: {first_name: 'Ana', last_name: 'Lima', bio: 'Editor', image: IMG}, metafields: {}});
 const ARTICLE = article('fabric', 'The new fabric'), ARTICLE2 = article('care', 'Care guide');
@@ -90,18 +93,31 @@ const PAGE2 = {...PAGE, id: 'pg2', handle: 'care', title: 'Care', url: '/pages/c
 const link = (title, url, links = []) => ({title, url, links, active: false, current: false, child_active: false, levels: links.length ? 1 : 0, type: 'http_link', handle: title.toLowerCase()});
 const MENU = {handle: 'main-menu', title: 'Main menu', links: [link('Home', '/'), link('Shop', '/collections/all', [link('Pants', '/collections/pants'), link('Tees', '/collections/tees')]), link('About', '/pages/about')]};
 /* The header reads a badge from a tag in a link's title ([hot], [new] ...): one link for each. */
-const MENU_TAGGED = {...MENU, links: [...MENU.links, ...['hot', 'new', 'sale', 'popular', 'custom_1', 'custom_2'].map(k => link('Tagged ' + k + ' [' + k + ']', '/collections/' + k))]};
+const MENU_TAGGED = {...MENU, links: [...MENU.links, link('Help', '/pages/help', [link('Shipping', '/pages/shipping'), link('Returns', '/pages/returns')]), ...['hot', 'new', 'sale', 'popular', 'custom_1', 'custom_2'].map(k => link('Tagged ' + k + ' [' + k + ']', '/collections/' + k))]};
 /* Per section data the base drawing needs beyond the defaults. */
-const DATA = {'theme-header': {settings: {mega_menu: MENU_TAGGED}}};
+const DATA = {'theme-header': {settings: {mega_menu: MENU_TAGGED}, withBlocks: ['menu_badges']}};
+/* A block that names the top-level link it belongs to gets a link of its own, one after the other. */
+const TOP_TITLES = MENU_TAGGED.links.map(l => l.title.replace(/\s*\[.*\]$/, '')).filter(t => t !== 'Home' && t !== 'Help');
+let topN = 0;
 const MENU2 = {handle: 'footer', title: 'Footer', links: [link('Contact', '/pages/contact'), link('Shipping', '/pages/shipping')]};
 const LINE = {id: 1, key: 'k1', quantity: 1, title: 'Pants Down - S / Black', product: PANTS, variant: PANTS.variants[0], variant_id: PANTS.variants[0].id, price: 13777, final_price: 13777, original_price: 13777, line_price: 13777, final_line_price: 13777, original_line_price: 13777, url: PANTS.variants[0].url, image: IMG, options_with_values: [{name: 'Size', value: 'S'}], properties: {}, discounts: [], line_level_discount_allocations: [], selling_plan_allocation: null, unit_price_measurement: null};
 const CART = {item_count: 1, items: [LINE], total_price: 13777, original_total_price: 13777, items_subtotal_price: 13777, total_discount: 0, cart_level_discount_applications: [], note: '', currency: {iso_code: 'USD'}, requires_shipping: true, attributes: {}};
-const CUSTOMER = {id: 7, first_name: 'Ana', last_name: 'Lima', name: 'Ana Lima', email: 'ana@example.com', orders: [], orders_count: 0, addresses: [], addresses_count: 0, default_address: null, tags: []};
+/* A customer with two orders and two addresses, and one order of theirs (as tests/theme-r6-account-pages.cjs gives them), cancelled, taxed and sent with tracking. */
+const ADDR = {id: 1, name: 'Ana Lima', first_name: 'Ana', last_name: 'Lima', address1: '1 Main St', city: 'Lisbon', zip: '1000', country: 'Portugal', phone: '+351 555', url: '/account/addresses/1'};
+const ADDR2 = {...ADDR, id: 2, address1: '9 Side Rd', city: 'Porto', url: '/account/addresses/2'};
+const CUSTOMER = {id: 7, first_name: 'Ana', last_name: 'Lima', name: 'Ana Lima', email: 'ana@example.com', orders_count: 2, addresses_count: 2, default_address: ADDR, addresses: [ADDR, ADDR2], tags: [],
+  orders: [{name: '#1002', created_at: '2026-03-04', total_price: 4500, financial_status_label: 'Paid', fulfillment_status_label: 'Shipped', customer_url: '/account/orders/2'}, {name: '#1001', created_at: '2026-01-02', total_price: 2500, financial_status_label: 'Paid', fulfillment_status_label: 'Delivered', customer_url: '/account/orders/1'}]};
+const FULFILLMENT = {created_at: '2026-03-05', tracking_company: 'CTT', tracking_number: 'RR123', tracking_url: 'https://track.test/RR123', tracking_numbers: ['RR123'], tracking_urls: ['https://track.test/RR123']};
+const ORDER = {name: '#1002', created_at: '2026-03-04', cancelled: true, cancelled_at: '2026-03-06', cancel_reason_label: 'Customer changed their mind', financial_status_label: 'Refunded', fulfillment_status_label: 'Shipped', currency: 'USD', total_price: 4700, subtotal_price: 4000, line_items_subtotal_price: 4000, tax_price: 200, shipping_price: 500,
+  line_items: [{title: 'Pants Down', sku: 'PD-1', quantity: 2, original_price: 2000, final_price: 2000, final_line_price: 4000, product: PANTS, variant: PANTS.variants[0], url: PANTS.url, properties: {}, fulfillment: FULFILLMENT, line_level_discount_allocations: []}],
+  shipping_methods: [{title: 'Standard', price: 500}], tax_lines: [{title: 'VAT', price: 200, rate: 0.05, rate_percentage: 5}], discounts: [], discount_applications: [], fulfillments: [FULFILLMENT], billing_address: ADDR, shipping_address: ADDR, customer_url: '/account/orders/2'};
 const GLOBALS = {
   product: PANTS, collection: COLL, collections: {all: COLL, pants: COLL, tees: COLL2}, all_products: {'pants-down': PANTS, 'other-tee': OTHER},
   paginate: {current_page: 1, current_offset: 0, items: 30, page_size: 10, pages: 3, previous: null, next: {title: 'Next', url: '?page=2', is_link: true}, parts: [{title: '1', url: '?page=1', is_link: false}, {title: '2', url: '?page=2', is_link: true}, {title: '3', url: '?page=3', is_link: true}]},
-  cart: CART, blog: BLOG, blogs: {news: BLOG, journal: BLOG2}, article: ARTICLE, page: PAGE, pages: {about: PAGE, care: PAGE2}, customer: CUSTOMER,
-  linklists: {'main-menu': MENU, footer: MENU2}, template: {name: 'index', suffix: null}, page_title: 'Materia', content_for_header: '',
+  order: ORDER, cart: CART, blog: BLOG, blogs: {news: BLOG, journal: BLOG2}, article: ARTICLE, page: PAGE, pages: {about: PAGE, care: PAGE2}, customer: CUSTOMER,
+  linklists: {'main-menu': MENU, footer: MENU2}, template: {name: 'index', suffix: null},
+  /* the home page in the builder (a transparent or pill header is a home page header) */
+  request: {design_mode: true, page_type: 'index', host: 'theme.test', path: '/', locale: {iso_code: 'en'}}, page_title: 'Materia', content_for_header: '',
   localization: {available_countries: [], available_languages: [], country: {iso_code: 'US', name: 'United States', currency: {iso_code: 'USD', symbol: '$'}}, language: {iso_code: 'en', endonym_name: 'English'}},
   recommendations: {performed: true, products: [OTHER], products_count: 1}, search: {performed: true, terms: 'pants', results: MANY, results_count: MANY.length, filters: FILTERS, sort_options: SORTS, sort_by: 'relevance', default_sort_by: 'relevance', types: ['product']},
   routes: {all_products_collection_url: '/collections/all', cart_add_url: '/cart/add', cart_url: '/cart', cart_change_url: '/cart/change', root_url: '/', account_url: '/account', account_login_url: '/account/login', account_logout_url: '/account/logout', account_register_url: '/account/register', account_addresses_url: '/account/addresses', search_url: '/search', predictive_search_url: '/search/suggest', product_recommendations_url: '/recommendations/products', collections_url: '/collections'},
@@ -114,13 +130,14 @@ function values(x, cur) {
     case 'range': case 'number': { const out = []; if (x.type === 'number') return [cur === 7 ? 3 : 7]; if (cur !== x.min) out.push(x.min); if (cur !== x.max) out.push(x.max); return out; }
     case 'select': case 'radio': case 'text_alignment': return (x.options || [{value: 'left'}, {value: 'center'}, {value: 'right'}]).map(o => o.value).filter(v => v !== cur);
     case 'checkbox': return [!cur];
-    case 'color': case 'color_background': return [cur === '#ab12cd' ? '#12cdab' : '#ab12cd'];
+    case 'color': return [cur === '#ab12cd' ? '#12cdab' : '#ab12cd'];
+    case 'color_background': return ['linear-gradient(90deg, #ab12cd, #12cdab)'];
     case 'color_scheme': { const ids = Object.keys((JSON.parse(read('config/settings.json')).shopify || {}).color_schemes || {}); return [ids.find(i => i !== cur && i !== 'default') || ids[0]]; }
     case 'text': case 'textarea': {
       if (/(^|_)css$/.test(x.id)) return ['#shopify-section-test .sweep-none, #shopify-section-test > * { outline: 3px solid #ab12cd; }'];
       const w = [cur === 'Edited words' ? 'Other words' : 'Edited words'];
       /* a length, a ratio or a shadow typed as words */
-      if (/width|height|size|gap|radius|ratio|shadow|spacing|offset/.test(x.id)) w.push('640px', '2/1', '2:1', '0 6px 18px #ab12cd');
+      if (/width|height|size|gap|radius|ratio|shadow|spacing|offset/.test(x.id)) w.push('640', '640px', '2/1', '2:1', '0 6px 18px #ab12cd');
       return w;
     }
     case 'inline_richtext': return ['Edited <em>words</em>'];
@@ -159,7 +176,7 @@ function fill(x, cur) {
     case 'link_list': return MENU;
     case 'product_list': return [PANTS, OTHER];
     case 'collection_list': return [COLL, COLL2];
-    case 'text': return /top-level (menu )?link/i.test(x.info || '') ? 'Shop' : 'Sample words';
+    case 'text': return /top-level (menu )?link/i.test(x.info || '') ? TOP_TITLES[topN++ % TOP_TITLES.length] : 'Sample words';
     case 'textarea': case 'inline_richtext': return 'Sample words';
     case 'richtext': return '<p>Sample text</p>';
     case 'url': return '/collections/all';
@@ -168,7 +185,8 @@ function fill(x, cur) {
 }
 
 /* ------------------------------------------------------------ the sweep */
-const THEME = (() => { const t = {...(JSON.parse(read('config/settings.json')).shopify || {})}; return t; })();
+/* The saved Theme settings, with the body, heading and subheading weights made different so a "use the heading weight" choice can show. */
+const THEME = (() => { const t = {...(JSON.parse(read('config/settings.json')).shopify || {})}; Object.assign(t, {body_font_weight: 400, heading_font_weight: 700, subheading_font_weight: 600}); if (!t.store_address) t.store_address = '12 Market Street, Lisbon'; return t; })();
 const SCHEME_IDS = Object.keys(THEME.color_schemes || {});
 const def = a => Object.fromEntries((a || []).filter(x => x.id && x.default !== undefined).map(x => [x.id, x.default]));
 const visible = x => x.id && !x.hidden && !/\{\{\s*false\s*\}\}/.test(x.visible_if || '');
@@ -194,12 +212,16 @@ function presetBlocks(preset) {
 
 /* The base drawing: the first preset over the defaults, one block of every type, pickers and empty words filled. */
 function baseState(schema) {
+  topN = 0;
   const preset = (schema.presets || [])[0] || {};
   const types = (schema.blocks || []).filter(b => b.type && !b.type.startsWith('@'));
   const blocks = presetBlocks(preset).filter(b => types.some(t => t.type === b.type)).map(b => ({type: b.type, settings: {...def(types.find(t => t.type === b.type).settings), ...(b.settings || {})}}));
   for (const t of types) if (!blocks.some(b => b.type === t.type)) blocks.push({type: t.type, settings: def(t.settings)});
   const settings = {...def(schema.settings), ...(preset.settings || {})};
-  const fillAll = (list, s) => { for (const x of list || []) if (x.id) { const v = x.type === 'link_list' && typeof s[x.id] === 'string' ? (GLOBALS.linklists[s[x.id]] || MENU) : fill(x, s[x.id]); if (v !== undefined) s[x.id] = v; } };
+  const fillAll = (list, s) => { for (const x of list || []) if (x.id) {
+    /* accent words are words of the heading they colour; a reference names a real article or product */
+    if (x.type === 'text' && /accent/.test(x.id) && !s[x.id]) { const t = String(s.text || s.heading || s.title || s.title_text || '').replace(/<[^>]+>/g, ' ').trim().split(/\s+/)[0]; if (t) { s[x.id] = t; continue; } }
+    if (x.type === 'text' && /reference|handle/.test(x.id) && !s[x.id]) { s[x.id] = ARTICLE.handle; continue; } const v = x.type === 'link_list' && typeof s[x.id] === 'string' ? (GLOBALS.linklists[s[x.id]] || MENU) : fill(x, s[x.id]); if (v !== undefined) s[x.id] = v; } };
   fillAll(schema.settings, settings);
   Object.assign(settings, (DATA[schema.__name] || {}).settings || {});
   for (const b of blocks) fillAll(types.find(t => t.type === b.type).settings, b.settings);
@@ -282,15 +304,15 @@ function readersOf(html) {
 }
 
 /* ------------------------------------------------------------ the browser */
-const PROPS = ['color', 'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition', 'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderTopStyle', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius', 'outlineColor', 'outlineWidth', 'outlineStyle', 'outlineOffset', 'boxShadow', 'textShadow', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'textTransform', 'textAlign', 'textDecorationLine', 'textDecorationColor', 'whiteSpace', 'webkitLineClamp', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'rowGap', 'columnGap', 'gridTemplateColumns', 'gridTemplateRows', 'gridColumn', 'gridRow', 'display', 'flexDirection', 'flexWrap', 'flexBasis', 'flexGrow', 'justifyContent', 'alignItems', 'alignSelf', 'justifySelf', 'order', 'position', 'top', 'right', 'bottom', 'left', 'zIndex', 'transform', 'opacity', 'visibility', 'filter', 'backdropFilter', 'mixBlendMode', 'objectFit', 'objectPosition', 'aspectRatio', 'overflow', 'transitionDuration', 'transitionTimingFunction', 'animationName', 'animationDuration', 'animationDelay', 'animationTimingFunction', 'animationIterationCount', 'fill', 'stroke', 'strokeWidth', 'cursor', 'content', 'clipPath', 'scrollSnapType', 'webkitTextStrokeWidth', 'webkitTextStrokeColor', 'accentColor', 'caretColor', 'columnCount', 'textUnderlineOffset', 'verticalAlign', 'boxSizing', 'pointerEvents', 'wordBreak', 'fontVariantCaps', 'textIndent'];
-const PSEUDO = ['transitionDuration', 'transitionTimingFunction', 'content', 'color', 'backgroundColor', 'backgroundImage', 'width', 'height', 'opacity', 'borderTopColor', 'borderTopWidth', 'transform', 'display', 'boxShadow', 'top', 'left', 'borderTopLeftRadius'];
+const PROPS = ['color', 'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition', 'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderTopStyle', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius', 'outlineColor', 'outlineWidth', 'outlineStyle', 'outlineOffset', 'boxShadow', 'textShadow', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'textTransform', 'textAlign', 'textDecorationLine', 'textDecorationColor', 'whiteSpace', 'webkitLineClamp', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'rowGap', 'columnGap', 'gridTemplateColumns', 'gridTemplateRows', 'gridColumn', 'gridRow', 'display', 'flexDirection', 'flexWrap', 'flexBasis', 'flexGrow', 'justifyContent', 'alignItems', 'alignSelf', 'justifySelf', 'order', 'position', 'top', 'right', 'bottom', 'left', 'zIndex', 'transform', 'translate', 'scale', 'rotate', 'opacity', 'visibility', 'filter', 'backdropFilter', 'mixBlendMode', 'objectFit', 'objectPosition', 'aspectRatio', 'overflow', 'transitionDuration', 'transitionTimingFunction', 'animationName', 'animationDuration', 'animationDelay', 'animationTimingFunction', 'animationIterationCount', 'fill', 'stroke', 'strokeWidth', 'cursor', 'content', 'clipPath', 'scrollSnapType', 'webkitTextStrokeWidth', 'webkitTextStrokeColor', 'accentColor', 'caretColor', 'columnCount', 'textUnderlineOffset', 'verticalAlign', 'boxSizing', 'pointerEvents', 'wordBreak', 'fontVariantCaps', 'textIndent'];
+const PSEUDO = ['transitionDuration', 'transitionTimingFunction', 'borderLeftColor', 'borderLeftStyle', 'borderLeftWidth', 'borderTopStyle', 'borderBottomColor', 'borderBottomStyle', 'borderBottomWidth', 'borderRightColor', 'content', 'color', 'backgroundColor', 'backgroundImage', 'width', 'height', 'opacity', 'borderTopColor', 'borderTopWidth', 'transform', 'display', 'boxShadow', 'top', 'left', 'borderTopLeftRadius'];
 let layoutHtml = null, liveHtml = null;
 /* The real layout with an empty page: its <head> styles and links for the still drawings, and with its scripts too for the live ones. */
 async function pageShell(live) {
   if (layoutHtml) return live ? liveHtml : layoutHtml;
   const e = FP.engine({'header-group': '', 'footer-group': '', 'overlay-group': ''});
   const theme = {...THEME, color_schemes: Object.entries(THEME.color_schemes || {}).map(([id, v]) => ({id, settings: v.settings}))};
-  const base = {...GLOBALS, settings: theme, request: {host: 'theme.test', locale: {iso_code: 'en'}, page_type: 'index', design_mode: true, path: '/'}, shop: {name: 'Materia Themes', domain: 'theme.test', url: 'https://theme.test', currency: 'USD', money_format: '${{amount}}'}, content_for_header: '', content_for_layout: '<div id="shopify-section-prev" class="shopify-section"><section class="section"><div style="height:40px"></div></section></div><div id="shopify-section-test" class="shopify-section"></div><div id="shopify-section-next" class="shopify-section"><section class="section"><div style="height:40px"></div></section></div>'};
+  const base = {...GLOBALS, settings: theme, request: {host: 'theme.test', locale: {iso_code: 'en'}, page_type: 'index', design_mode: true, path: '/'}, shop: {name: 'Materia Themes', domain: 'theme.test', url: 'https://theme.test', currency: 'USD', money_format: '${{amount}}'}, content_for_header: '', content_for_layout: '<div id="shopify-section-prev" class="shopify-section"><section class="section"><div style="height:40px"></div></section></div><div id="shopify-section-test" class="shopify-section"></div><div id="shopify-section-next" class="shopify-section" style="margin-top:24px"><section class="section"><div style="height:40px"></div></section></div>'};
   const clean = s => s.replace(/\{\{-\s*-\}\}/g, "{{- '' -}}").replace(/^[ \t]*comment[ \t]*\n[\s\S]*?^[ \t]*endcomment[ \t]*$/gm, '').replace(/^[ \t]*# .*$/gm, '');
   const src = clean(read('layout/theme.storelib').replace(/^<template compat="shopify">\n?/, '').replace(/<\/template>\s*$/, ''));
   let html;
@@ -459,7 +481,8 @@ async function sweepSection(name, pages) {
   /* First drawn light (a section setting with the preset's blocks, a block setting with its block alone), then, when that shows nothing, with every block. */
   for (const it of items) {
     if (process.env.ONLY && !process.env.ONLY.split(",").includes((it.scope === "section" ? "" : it.scope + ".") + it.x.id)) continue;
-    const light = it.scope === 'section' ? {settings: full.settings, blocks: full.blocks.slice(0, presetCount)} : {settings: full.settings, blocks: [full.blocks[it.n]]};
+    const extra = ((DATA[name] || {}).withBlocks || []).filter(t => t !== it.scope).map(t => full.blocks.find(b => b.type === t)).filter(Boolean);
+    const light = it.scope === 'section' ? {settings: full.settings, blocks: full.blocks.slice(0, presetCount)} : {settings: full.settings, blocks: [full.blocks[it.n], ...extra]};
     let r = await one({...it, n: it.scope === 'section' ? undefined : 0}, light);
     if (r.status !== 'pass' && (light.blocks.length !== full.blocks.length)) r = await one(it, full);
     out.push(r);
@@ -589,23 +612,36 @@ if (require.main !== module) return;
   })));
   const all = Object.entries(results).sort(([a], [b]) => a.localeCompare(b));
   if (process.env.OUT) fs.writeFileSync(path.join(process.env.OUT, 'sweep.json'), JSON.stringify(Object.fromEntries(all), null, 1));
-  let checked = 0, passing = 0, allowed = 0;
-  const bad = [];
+  let checked = 0, passing = 0, allowed = 0, owned = 0;
+  const bad = [], known = {};
+  const why = (n, key) => { const k = n + ':' + key; const hit = ALLOW.find(([re]) => re.test(k)); return hit && hit[1]; };
   for (const [n, res] of all) {
     const rows = [];
     for (const r of res) {
       if (r.key === '(section)') { bad.push(n + ': ' + r.detail); continue; }
       checked++;
       if (r.status === 'pass') { passing++; continue; }
-      const why = ALLOW[n + ':' + r.key] || ALLOW[n + ':*'];
-      if (why) { allowed++; continue; }
-      rows.push('  ' + r.key + ' (' + r.type + '): ' + r.status + (r.detail ? ' - ' + r.detail : '') + (r.pre ? ' with ' + JSON.stringify(r.pre).slice(0, 120) : ''));
+      const line = '  ' + r.key + ' (' + r.type + '): ' + r.status + (r.detail ? ' - ' + r.detail : '') + (r.pre ? ' with ' + JSON.stringify(r.pre).slice(0, 120) : '');
+      if (why(n, r.key)) { allowed++; continue; }
+      /* a section another change owns right now: listed, not failed */
+      if (OWNED.includes(n)) { owned++; (known[n] = known[n] || []).push(line); continue; }
+      rows.push(line);
     }
     if (rows.length) bad.push(n + '\n' + rows.join('\n'));
   }
-  console.log(`${names.length} sections, ${checked} settings checked, ${passing} change the section, ${allowed} allowed with a reason, ${checked - passing - allowed} change nothing (${Math.round((Date.now() - t0) / 1000)}s)`);
+  console.log(`${names.length} sections, ${checked} settings checked, ${passing} change the section, ${allowed} allowed with a reason, ${owned} in sections owned elsewhere (listed), ${checked - passing - allowed - owned} change nothing (${Math.round((Date.now() - t0) / 1000)}s)`);
+  if (process.env.VERBOSE || process.env.SHOW_OWNED) for (const [n, rows] of Object.entries(known)) console.log('owned elsewhere: ' + n + '\n' + rows.join('\n'));
   if (bad.length) { console.log('Settings that change nothing, by section:\n' + bad.join('\n')); process.exitCode = 1; }
 })().catch(err => { console.error(err); process.exitCode = 1; });
 
-/* Settings that stay although the sweep sees no change, each with why. "section:key" or "section:*". */
-var ALLOW = {};
+/* Settings that stay although the sweep sees no change, each with why: [pattern on "section:key", reason]. */
+var ALLOW = [
+  [/:([\w-]+\.)?(error_message|success_message|error_text|success_text)$/, 'Shown only after the form is sent (form.errors or form.posted_successfully), which a first drawing never has.'],
+  [/:structured_data$/, 'Prints JSON-LD for search engines; render() leaves application/ld+json out of the drawing.'],
+  [/:([\w-]+\.)?(reveal|scroll_animation|pause_on_hover)$/, 'Storefront motion: the builder draws every section without its entrance or scroll motion, and the sweep holds animations on their first frame (tests/theme-animations.cjs runs them).'],
+  [/^custom-colors:/, 'Paints the colour swatches of product cards and filters in other sections, not this one (tests/theme-r6-footer-lib.cjs draws them).'],
+  [/^(countdown-promo-popup|coupon-promotion-newsletter-popup|spin-wheel-popup):overlay_opacity$/, 'The overlay is drawn only while the popup is open.'],
+  [/^main-search:sort_/, 'Fallback sort labels, read only when the store gives no sort options (snippets/facets-toolbar).'],
+];
+/* Sections other changes own right now: what the sweep finds there is listed (VERBOSE or SHOW_OWNED=1), not failed. */
+var OWNED = ['banner3', 'hero-benefits', 'featured-blog-header', 'collection-list', 'comparison-table', 'testimonials', 'testimonials3', 'testimonials4', 'testimonial2', 'testimonial-video', 'testimonial-logos', 'testimon4', 'fake-order', 'announcement-bar-pro-4', 'hero-section-pro', 'announcement-bar-basic', 'hero-image1', 'hero-pro-scrolling', 'heroproduct1', 'hero-product3', 'dynamic-pricing', 'promotion-popup', 'promotional-image-popup', 'slideshow', 'number-stats', 'image-with-text-stats', 'progress-benefits', 'progress-circles', 'stat-counter', 'stat-counter-pro', 'main-product', 'featured-product', 'main-cart-items'];

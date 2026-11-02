@@ -124,7 +124,7 @@ L.suite({
     h.eq(await read(t, '.pgc__heading p', 'text'), '<missing .pgc__heading p>', 'no paragraph inside the heading');
     h.eq(await read(t, '.pgc__heading', 'text'), 'Old saved heading', 'saved heading text kept');
     /* Unrelated edits do not replay the rings or the numbers */
-    await t.redraw({blocks: L.schemaOf(NAME).schema.presets[0].blocks});
+    await t.redraw({blocks: L.SAMPLE[NAME]});
     await L.settled(t.page);
     await t.page.evaluate(() => { window.__fdText = document.querySelector('#shopify-section-test .pgc__stat-percent').firstChild; });
     for (const patch of [{ring_size: 40}, {label_size: 15}, {percent_size_desktop: 50}]) await t.emit(patch);

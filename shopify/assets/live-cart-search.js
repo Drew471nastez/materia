@@ -143,8 +143,9 @@
       put(el, '--lcs-star-off', on ? color(b.unfilled_color, 'color-mix(in srgb, var(--color-text) 22%, transparent)') : null);
       put(el, '--lcs-text', on ? color(b.text_color, 'var(--color-text)') : null);
       blockFont(c, x);
-      const s = el.querySelector('[data-lcs-stars]'); if (s) put(s, 'stars', num(b.total_stars, 5) + '/' + num(b.filled_stars));
+      const s = el.querySelector('[data-lcs-stars]'); if (s) { put(s, 'stars', num(b.total_stars, 5) + '/' + num(b.filled_stars)); put(s, 'hidden', !(num(b.filled_stars) > 0)); }
       const t = el.querySelector('[data-lcs-text]'); if (t) { put(t, 'text', str(b.text)); put(t, 'hidden', blank(b.text)); }
+      put(el, 'hidden', blank(b.text) && !(num(b.filled_stars) > 0) && !c.design);
     },
     happy_customers(c, x) {
       const {put} = c, b = x.b, el = x.el, on = custom(b);
@@ -158,9 +159,11 @@
       const av = el.querySelector('[data-lcs-avatars]'); if (av) put(av, 'hidden', !bool(b.show_avatars));
       for (const a of el.querySelectorAll('[data-lcs-avatar]')) put(a, 'hidden', num(a.dataset.lcsAvatar) > num(b.avatar_count, 4));
       const h = el.querySelector('[data-lcs-text]'); if (h) { put(h, 'text', str(b.heading)); put(h, 'hidden', blank(b.heading)); }
-      const row = el.querySelector('[data-lcs-stars-row]'); if (row) put(row, 'hidden', !bool(b.show_stars));
+      const row = el.querySelector('[data-lcs-stars-row]'); if (row) put(row, 'hidden', !bool(b.show_stars) || !(num(b.filled_stars) > 0));
       const s = el.querySelector('[data-lcs-stars]'); if (s) put(s, 'stars', num(b.total_stars, 5) + '/' + num(b.filled_stars));
       const r = el.querySelector('[data-lcs-rating-text]'); if (r) { put(r, 'text', str(b.rating_text)); put(r, 'hidden', !bool(b.show_rating_text) || blank(b.rating_text)); }
+      const pics = bool(b.show_avatars) && [...el.querySelectorAll('[data-lcs-avatar] img')].some(i => !i.closest('[hidden]'));
+      put(el, 'hidden', !c.design && blank(b.heading) && !(bool(b.show_stars) && num(b.filled_stars) > 0) && !(bool(b.show_rating_text) && !blank(b.rating_text)) && !pics);
     },
     benefits_pills(c, x) {
       const {put} = c, b = x.b, el = x.el, on = bool(b.custom_style);

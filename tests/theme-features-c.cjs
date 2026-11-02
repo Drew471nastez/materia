@@ -55,7 +55,8 @@ const CFG = {
     narrow: ['mobile_per_view'],
   },
   'number-stats': {
-    root: '.ns', blocks: () => presetBlocks('number-stats'),
+    /* the preset ships no figures (an empty count box draws nothing on the storefront); test numbers here */
+    root: '.ns', blocks: () => { const n = [5000, 500, 100]; let i = 0; return presetBlocks('number-stats').map(b => b.type === 'count_box' ? {...b, settings: {...(b.settings || {}), number: n[i++ % 3]}} : b); },
     pre: {headline_font: {override_fonts: true, text_font: MONO}, text_font: {override_fonts: true, headline_font: FONT}, override_fonts: {headline_font: FONT, text_font: MONO}, section_bg_image_brightness: {section_background_image: IMG}, section_background_size: {section_background_image: IMG}, container_border_color: {container_border_size: 4}},
     novisual: ['reveal'],
     mobileOnly: ['mobile_text_alignment'], deskOnly: ['text_alignment', 'heading_subheading_gap', 'vertical_gap', 'count_size', 'description_size', 'section_padding_top', 'section_padding_bottom', 'section_padding_left_right', 'container_padding_top_bottom', 'container_padding_left_right', 'size'],

@@ -140,11 +140,11 @@ const TABLE = [
       eq(await read(t, '.iws', '@data-iws-reveal'), editing ? null : 'done', 'reveal state kept');
       eq(await t.page.evaluate(() => document.querySelector('#shopify-section-test .iws__stat-ring-fill').getAnimations().length), 0, 'no ring replay');
       /* 5/6. Every control, live and after redraw */
-      const full = L.schemaOf(NAME).schema.presets[0].blocks.flatMap(x => x.type === 'heading' ? [x, {type: 'subheading'}] : [x]);
+      const full = L.SAMPLE[NAME].flatMap(x => x.type === 'heading' ? [x, {type: 'subheading'}] : [x]);
       await t.redraw({blocks: full});
       checks += await controls(t, width, TABLE);
       /* text max width applies without media */
-      await t.redraw({settings: {text_max_width: 600}, blocks: L.schemaOf(NAME).schema.presets[0].blocks.filter(x => x.type !== 'media')});
+      await t.redraw({settings: {text_max_width: 600}, blocks: L.SAMPLE[NAME].filter(x => x.type !== 'media')});
       eq(await read(t, '.iws__text', 'maxWidth'), DESK(width) ? '600px' : 'none', 'text width without media');
       await t.emit({text_max_width: 500}); eq(await read(t, '.iws__text', 'maxWidth'), DESK(width) ? '500px' : 'none', 'text width live');
       /* video playback settings live */
