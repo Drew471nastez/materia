@@ -49,12 +49,13 @@ FP.engine = (...a) => {
   e.parser.cache = e.options.cache;
   e.parser.parseFile = e.parser._parseFileCached;
   const tpls = new Map(), par = e.parseAndRender.bind(e);
-  e.parseAndRender = (src, ctx, opts) => { if (!tpls.has(src)) tpls.set(src, e.parse(src)); return e.render(tpls.get(src), ctx, opts); };
+  const clean = t => t.replace(/\{\{-\s*-\}\}/g, "{{- '' -}}").replace(/^[ \t]*comment[ \t]*\n[\s\S]*?^[ \t]*endcomment[ \t]*$/gm, '').replace(/^[ \t]*# .*$/gm, '');
+  e.parseAndRender = (src, ctx, opts) => { if (!tpls.has(src)) tpls.set(src, e.parse(clean(src))); return e.render(tpls.get(src), ctx, opts); };
   void par;
   shared = e;
   return e;
 };
-const {render, schemaOf, THEME_VARS, themeControls, PANTS, OTHER} = require('./media-fixture.cjs');
+const {render, mount, schemaOf, THEME_VARS, themeControls, PANTS, OTHER} = require('./media-fixture.cjs');
 
 const RETIRED = ['hero-product4', 'page-sale-banner', 'promo-banner-1'];
 
@@ -90,7 +91,7 @@ const GLOBALS = {
 
 /* A value to change a setting to, given what it holds now. */
 function values(x, cur) {
-  const other = (a, b) => cur && (cur === a || cur.id === a.id) ? b : a;
+  const idOf = o => o && (o.id || o.handle || o.src); const other = (a, b) => cur && (cur === a || idOf(cur) === idOf(a)) ? b : a;
   switch (x.type) {
     case 'range': case 'number': { const out = []; if (x.type === 'number') return [cur === 7 ? 3 : 7]; if (cur !== x.min) out.push(x.min); if (cur !== x.max) out.push(x.max); return out; }
     case 'select': case 'radio': case 'text_alignment': return (x.options || [{value: 'left'}, {value: 'center'}, {value: 'right'}]).map(o => o.value).filter(v => v !== cur);
@@ -197,6 +198,9 @@ function candidates(x) {
     case 'image_picker': return [IMG, ''];
     case 'product': return [PANTS, ''];
     case 'collection': return [COLL, ''];
+    case 'video': return [VIDEO, ''];
+    case 'video_url': return [new VideoUrl('youtube', 'dQw4w9WgXcQ'), ''];
+    case 'link_list': return [MENU, ''];
     default: return [x.default];
   }
 }
@@ -220,10 +224,11 @@ async function satisfy(x, scope, state, list, blockList) {
 }
 
 /* Which css files a drawing asks for (render() takes the link tags out). */
-const cssSeen = new Set();
+const cssSeen = new Set(), jsSeen = new Set();
+let WRAP_CLASS = '';
 {
   const e = FP.engine();
-  e.registerFilter('asset_url', k => { if (/\.css$/.test(k)) cssSeen.add(k); return '/assets/' + k; });
+  e.registerFilter('asset_url', k => { if (/\.css$/.test(k)) cssSeen.add(k); if (/\.js$/.test(k)) jsSeen.add(k); return '/assets/' + k; });
 }
 async function draw(name, state) {
   const r = await render(name, {uid: 'test', settings: state.settings, blocks: state.blocks, theme: THEME, globals: GLOBALS, editing: true});
@@ -236,6 +241,17 @@ const isDump = v => { if (!/^\s*\{/.test(v)) return false; try { const o = JSON.
 const undump = h => h.replace(/\s(data-[\w-]+)=("([^"]*)"|'([^']*)')/g, (m, n, q, a, b) => isDump(a !== undefined ? a : b) ? ' ' + n + '=""' : m).replace(/(<script type="application\/json"[^>]*>)([\s\S]*?)(<\/script>)/g, (m, o, body, c) => isDump(body) ? o + c : m);
 const strip = h => h.replace(/<style\b[^>]*>[\s\S]*?<\/style>/g, '<style></style>').replace(/\s(style|class)="[^"]*"/g, '').replace(/\s(style|class)='[^']*'/g, '');
 const hash = s => crypto.createHash('sha1').update(s).digest('hex');
+
+/* The scripts that read a settings JSON attribute of this drawing (by its name or its dataset name), from shopify/assets. */
+const JS = Object.fromEntries(fs.readdirSync(path.join(ROOT, 'shopify/assets')).filter(f => f.endsWith('.js') && !/\.min\.js$/.test(f)).map(f => [f, read('shopify/assets/' + f)]));
+const LAYOUT_CSS = [...new Set([...read('layout/theme.storelib').matchAll(/'([\w.-]+\.css)' \| asset_url/g)].map(m => m[1]))].filter(f => fs.existsSync(path.join(ROOT, 'shopify/assets', f)) && !/^(rtl|design-mode)\.css$/.test(f));
+function readersOf(html) {
+  const names = new Set();
+  html.replace(/\s(data-[\w-]+)=("([^"]*)"|'([^']*)')/g, (m, n, q, a, b) => { if (isDump(a !== undefined ? a : b)) names.add(n); return m; });
+  const out = new Set();
+  for (const n of names) { const bare = n.slice(5), camel = bare.replace(/-(\w)/g, (m, c) => c.toUpperCase()); for (const [f, src] of Object.entries(JS)) if (src.includes(n) || src.includes(bare) || src.includes('.' + camel) || src.includes("'" + camel + "'")) out.add(f); }
+  return [...out];
+}
 
 /* ------------------------------------------------------------ the browser */
 const PROPS = ['color', 'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition', 'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderTopStyle', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius', 'outlineColor', 'outlineWidth', 'outlineStyle', 'outlineOffset', 'boxShadow', 'textShadow', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'textTransform', 'textAlign', 'textDecorationLine', 'textDecorationColor', 'whiteSpace', 'webkitLineClamp', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'rowGap', 'columnGap', 'gridTemplateColumns', 'gridTemplateRows', 'gridColumn', 'gridRow', 'display', 'flexDirection', 'flexWrap', 'flexBasis', 'flexGrow', 'justifyContent', 'alignItems', 'alignSelf', 'justifySelf', 'order', 'position', 'top', 'right', 'bottom', 'left', 'zIndex', 'transform', 'opacity', 'visibility', 'filter', 'backdropFilter', 'mixBlendMode', 'objectFit', 'objectPosition', 'aspectRatio', 'overflow', 'transitionDuration', 'transitionTimingFunction', 'animationName', 'animationDuration', 'animationDelay', 'animationTimingFunction', 'animationIterationCount', 'fill', 'stroke', 'strokeWidth', 'cursor', 'content', 'clipPath', 'scrollSnapType', 'webkitTextStrokeWidth', 'webkitTextStrokeColor', 'accentColor', 'caretColor', 'columnCount', 'textUnderlineOffset', 'verticalAlign', 'boxSizing', 'pointerEvents', 'wordBreak', 'fontVariantCaps', 'textIndent'];
@@ -269,8 +285,14 @@ async function openPage(browser, width) {
     return r.fulfill({status: 204, body: ''});
   });
   await page.goto('http://theme.test/');
-  await page.evaluate(({PROPS, PSEUDO}) => {
+  await page.evaluate(probe, {PROPS, PSEUDO});
+  return page;
+}
+/* Runs in the page: the computed-style probe. */
+function probe({PROPS, PSEUDO}) {
     const W = () => document.getElementById('shopify-section-test');
+    if (!document.getElementById('sw-force')) { const st = document.createElement('style'); st.textContent = '*,*::before,*::after{animation-play-state:paused!important;transition-property:none!important}'; document.head.append(st); const f = document.createElement('style'); f.id = 'sw-force'; document.head.append(f); }
+    window.__wrapCls = '';
     const loaded = new Set([...document.querySelectorAll('link[rel=stylesheet]')].map(l => l.getAttribute('href')));
     window.__css = async list => { const add = list.filter(h => !loaded.has(h)); await Promise.all(add.map(h => new Promise(res => { loaded.add(h); const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = h; l.onload = l.onerror = res; document.head.append(l); }))); if (add.length) themeForced = null; };
     let themeForced = null;
@@ -278,22 +300,27 @@ async function openPage(browser, width) {
     const forcedOf = sheets => {
       const out = [];
       const walk = (rules, wrap) => { for (const r of rules) {
-        if (r instanceof CSSStyleRule) { if (STATE.test(r.selectorText)) { STATE.lastIndex = 0; out.push(wrap(r.selectorText.replace(STATE, '[data-sw-force]') + '{' + r.style.cssText + '}')); } STATE.lastIndex = 0; }
+        if (r instanceof CSSStyleRule) { if (STATE.test(r.selectorText)) { STATE.lastIndex = 0; out.push(wrap(r.selectorText.replace(STATE, '[data-sw-force]') + '{' + r.style.cssText + '}')); } STATE.lastIndex = 0; if (r.cssRules && r.cssRules.length) walk(r.cssRules, t => wrap(r.selectorText.replace(STATE, '[data-sw-force]') + '{' + t + '}')); }
         else if (r instanceof CSSMediaRule) walk(r.cssRules, t => wrap('@media ' + r.conditionText + '{' + t + '}'));
-        else if (r.cssRules && (r instanceof CSSSupportsRule || (window.CSSContainerRule && r instanceof CSSContainerRule) || (window.CSSLayerBlockRule && r instanceof CSSLayerBlockRule))) walk(r.cssRules, t => wrap(t));
+        else if (window.CSSLayerBlockRule && r instanceof CSSLayerBlockRule) walk(r.cssRules, t => wrap('@layer ' + r.name + '{' + t + '}'));
+        else if (window.CSSContainerRule && r instanceof CSSContainerRule) walk(r.cssRules, t => wrap('@container ' + r.conditionText + '{' + t + '}'));
+        else if (r instanceof CSSSupportsRule) walk(r.cssRules, t => wrap('@supports ' + r.conditionText + '{' + t + '}'));
+        else if (r instanceof CSSStyleRule === false && r.cssRules) walk(r.cssRules, wrap);
       } };
       for (const s of sheets) { try { walk(s.cssRules, t => t); } catch (_) {} }
       return out.join('\n');
     };
     const snap = ref => {
       const w = W(), out = [];
-      const els = [...w.querySelectorAll('*')].filter(e => !/^(STYLE|SCRIPT|TEMPLATE|LINK|META)$/.test(e.tagName)).slice(0, 4000);
+      const els = [w, ...w.querySelectorAll('*')].filter(e => !/^(STYLE|SCRIPT|TEMPLATE|LINK|META)$/.test(e.tagName)).slice(0, 4000);
       if (ref && ref.length !== els.length) return {len: els.length};
       for (const el of els) {
         const cs = getComputedStyle(el), row = [el.tagName];
         for (const p of PROPS) row.push(cs[p]);
         for (const ps of ['::before', '::after']) { const b = getComputedStyle(el, ps); if (b.content && b.content !== 'none' && b.content !== 'normal') { row.push(ps); for (const p of PSEUDO) row.push(b[p]); } }
-        if (el.matches('input,textarea')) row.push(getComputedStyle(el, '::placeholder').color);
+        if (el.matches('input,textarea')) row.push(getComputedStyle(el, '::placeholder').color, el.value || '');
+        for (const a of ['href', 'src', 'alt', 'hidden', 'target', 'aria-label', 'aria-hidden', 'placeholder', 'srcset']) if (el.hasAttribute(a)) row.push(a + '=' + el.getAttribute(a));
+        let own = ''; for (const n of el.childNodes) if (n.nodeType === 3) own += n.textContent; own = own.replace(/\s+/g, ' ').trim(); if (own) row.push('"' + own.slice(0, 200));
         const line = row.join('|');
         if (ref && ref[out.length] !== line) return {at: out.length, line};
         out.push(line);
@@ -312,9 +339,10 @@ async function openPage(browser, width) {
       const x = A[B.at].split('|'), y = B.line.split('|'), j = x.findIndex((v, n) => v !== y[n]);
       return x[0] + ' ' + (PROPS[j - 1] || 'pseudo') + ': ' + x[j] + ' / ' + y[j];
     };
+    window.__snapNow = forced => window.__snap(null, forced);
     window.__snap = (html, forced, ref) => {
       const w = W();
-      w.innerHTML = html;
+      if (html !== null) { w.innerHTML = html; w.className = 'shopify-section ' + window.__wrapCls; }
       const f = document.getElementById('sw-force');
       if (forced) {
         if (themeForced === null) themeForced = forcedOf([...document.styleSheets].filter(s => !(s.ownerNode && w.contains(s.ownerNode)) && s.ownerNode !== f));
@@ -323,50 +351,78 @@ async function openPage(browser, width) {
       } else f.textContent = '';
       return snap(ref);
     };
-  }, {PROPS, PSEUDO});
-  return page;
 }
 async function compare(page, A, B, forced) {
-  await page.evaluate(list => window.__css(list), [...new Set([...A.css, ...B.css])].map(c => '/assets/' + c));
+  await page.evaluate(({list, cls}) => { window.__wrapCls = cls; return window.__css(list); }, {list: [...new Set([...A.css, ...B.css])].map(c => '/assets/' + c), cls: WRAP_CLASS});
   const body = h => h.split('\n<!--scripts-->\n')[0];
   return page.evaluate(({ka, a, b, forced}) => window.__cmp(ka, a, b, forced), {ka: hash(A.html), a: body(A.html), b: body(B.html), forced});
 }
-const snapCache = new Map();
-async function snapshot(page, width, html, forced, css) {
-  const key = width + (forced ? 'f' : 'n') + hash(html);
-  if (snapCache.has(key)) return snapCache.get(key);
-  await page.evaluate(list => window.__css(list), css.map(c => '/assets/' + c));
-  const s = await page.evaluate(({html, forced}) => window.__snap(html, forced), {html: html.split('\n<!--scripts-->\n')[0], forced});
-  if (snapCache.size > 400) snapCache.clear();
-  snapCache.set(key, s);
-  return s;
-}
-const firstDiff = (a, b) => { if (a.length !== b.length) return 'elements ' + a.length + ' / ' + b.length; const i = a.findIndex((x, k) => x !== b[k]); if (i < 0) return ''; const x = a[i].split('|'), y = b[i].split('|'); const j = x.findIndex((v, k) => v !== y[k]); return x[0] + ' ' + (PROPS[j - 1] || 'pseudo') + ': ' + x[j] + ' / ' + y[j]; };
 
 /* ------------------------------------------------------------ one section */
 async function sweepSection(name, pages) {
   const {schema} = schemaOf(name);
   const out = [];
   IDS = new Set([...(schema.settings || []), ...(schema.blocks || []).flatMap(b => b.settings || [])].filter(x => x.id).map(x => x.id));
-  const base = baseState(schema);
+  const full = baseState(schema);
+  const presetCount = presetBlocks((schema.presets || [])[0] || {}).filter(b => (schema.blocks || []).some(t => t.type === b.type)).length;
   const types = (schema.blocks || []).filter(b => b.type && !b.type.startsWith('@'));
   const items = [];
   for (const x of schema.settings || []) if (visible(x)) items.push({scope: 'section', x});
-  for (const t of types) { const n = base.blocks.findIndex(b => b.type === t.type); for (const x of t.settings || []) if (visible(x)) items.push({scope: t.type, n, x, list: t.settings}); }
+  for (const t of types) { const n = full.blocks.findIndex(b => b.type === t.type); for (const x of t.settings || []) if (visible(x)) items.push({scope: t.type, n, x, list: t.settings}); }
   const drawn = new Map();
-  const drawState = async st => { const k = hash(JSON.stringify(st)); if (!drawn.has(k)) { cssSeen.clear(); let h; try { h = await draw(name, st); } catch (err) { h = {error: String(err.message || err).split('\n')[0].slice(0, 200)}; } drawn.set(k, {html: h, css: [...cssSeen]}); if (drawn.size > 60) drawn.delete(drawn.keys().next().value); } return drawn.get(k); };
+  const drawState = async st => { const k = hash(JSON.stringify(st)); if (!drawn.has(k)) { cssSeen.clear(); jsSeen.clear(); let h; try { h = await draw(name, st); } catch (err) { h = {error: String(err.message || err).split('\n')[0].slice(0, 200)}; } drawn.set(k, {html: h, css: [...cssSeen], js: [...jsSeen], st: clone(st)}); if (drawn.size > 60) drawn.delete(drawn.keys().next().value); } return drawn.get(k); };
+  WRAP_CLASS = schema.class || '';
+  /* Only the settings JSON the section's scripts read changed: both drawn with the section's scripts running (tests/media-fixture.cjs mount), compared after they ran. null when the first drawing is not stable. */
+  const ran = new Map();
+  async function runSnap(D, w, check) {
+    const k = w + hash(D.html);
+    if (ran.has(k)) return ran.get(k);
+    const once = async () => {
+      const t = await mount(pages.browser, name, {width: w, settings: D.st.settings, blocks: D.st.blocks, globals: GLOBALS, theme: THEME, assets: [...new Set([...LAYOUT_CSS, ...D.css, ...D.js, ...readersOf(D.html)])]});
+      await t.page.evaluate(probe, {PROPS, PSEUDO});
+      const snap = await t.page.evaluate(cls => { document.getElementById('shopify-section-test').className += ' ' + cls; return window.__snapNow(false); }, WRAP_CLASS);
+      await t.page.close();
+      return snap;
+    };
+    let v = await once();
+    if (check) { const again = await once(); if (JSON.stringify(again) !== JSON.stringify(v)) v = null; }
+    if (ran.size > 40) ran.clear();
+    ran.set(k, v);
+    return v;
+  }
+  async function runtime(A, B, id) {
+    let d = '';
+    for (const w of widthsOf(id)) {
+      const a = await runSnap(A, w, true);
+      if (a === null) return null;
+      const b = await runSnap(B, w);
+      if (b === null) return null;
+      if (a.length !== b.length) return 'elements ' + a.length + ' / ' + b.length;
+      const i = a.findIndex((x, n) => x !== b[n]);
+      if (i >= 0) { const x = a[i].split('|'), y = b[i].split('|'), j = x.findIndex((v, n) => v !== y[n]); return x[0] + ' ' + (PROPS[j - 1] || 'more') + ': ' + x[j] + ' / ' + y[j]; }
+    }
+    return d;
+  }
+  /* First drawn light (a section setting with the preset's blocks, a block setting with its block alone), then, when that shows nothing, with every block. */
   for (const it of items) {
+    const light = it.scope === 'section' ? {settings: full.settings, blocks: full.blocks.slice(0, presetCount)} : {settings: full.settings, blocks: [full.blocks[it.n]]};
+    let r = await one({...it, n: it.scope === 'section' ? undefined : 0}, light);
+    if (r.status !== 'pass' && (light.blocks.length !== full.blocks.length)) r = await one(it, full);
+    out.push(r);
+  }
+  return out;
+  async function one(it, base) {
     const {x} = it, key = (it.scope === 'section' ? '' : it.scope + '.') + x.id;
     const st0 = clone(base);
     const blockS = it.scope === 'section' ? null : st0.blocks[it.n].settings;
     const pre = await satisfy(x, it.scope, {settings: st0.settings, block: blockS}, schema.settings, it.list);
-    if (pre === null) { out.push({key, type: x.type, status: 'hidden', detail: 'its visible_if is never true: ' + x.visible_if}); continue; }
+    if (pre === null) return {key, type: x.type, status: 'hidden', detail: 'its visible_if is never true: ' + x.visible_if};
     for (const [k, v] of Object.entries(pre)) { const [sc, id] = k.split('.'); (sc === 'section' ? st0.settings : blockS)[id] = v; }
     const target = it.scope === 'section' ? st0.settings : blockS;
     const vals = values(x, target[x.id]);
-    if (!vals.length) { out.push({key, type: x.type, status: 'skip', detail: 'no value to try for type ' + x.type}); continue; }
+    if (!vals.length) return {key, type: x.type, status: 'skip', detail: 'no value to try for type ' + x.type};
     const A = await drawState(st0);
-    if (A.html.error) { out.push({key, type: x.type, status: 'error', detail: 'base: ' + A.html.error, pre}); continue; }
+    if (A.html.error) return {key, type: x.type, status: 'error', detail: 'base: ' + A.html.error, pre};
     const res = [];
     for (const v of vals) {
       const st = clone(st0); (it.scope === 'section' ? st.settings : st.blocks[it.n].settings)[x.id] = v;
@@ -375,9 +431,19 @@ async function sweepSection(name, pages) {
       if (B.html.error) { res.push({v: label, r: 'error', d: B.html.error}); continue; }
       if (A.html === B.html) { res.push({v: label, r: 'same'}); continue; }
       const ua = undump(A.html), ub = undump(B.html);
-      if (ua === ub) { res.push({v: label, r: 'dump'}); continue; }
       if (strip(ua) !== strip(ub)) { res.push({v: label, r: 'markup'}); continue; }
       if (A.html.split('\n<!--scripts-->\n')[1] !== B.html.split('\n<!--scripts-->\n')[1]) { res.push({v: label, r: 'markup'}); continue; }
+      /* one value seen working is enough for the costly checks */
+      if (res.some(r => /^(style|state|script|behaviour)$/.test(r.r))) { res.push({v: label, r: 'unchecked'}); continue; }
+      if (ua === ub) {
+        const d = await runtime(A, B, x.id);
+        if (d === null) { res.push({v: label, r: 'unstable'}); continue; }
+        if (d) { res.push({v: label, r: 'script', d}); continue; }
+        /* a timer, a loop, a pause: behaviour the section's script reads from that JSON and no still picture shows */
+        const reads = readersOf(A.html).filter(f => new RegExp('[.\'"\\[]' + x.id + '\\b|\\b' + x.id.replace(/_(\w)/g, (m, c) => c.toUpperCase()) + '\\b').test(JS[f]));
+        res.push({v: label, r: reads.length ? 'behaviour' : 'dump', d: reads.join(' ')});
+        continue;
+      }
       let r = 'nostyle', d = '';
       for (const w of widthsOf(x.id)) {
         d = await compare(pages[w], A, B, false);
@@ -388,7 +454,7 @@ async function sweepSection(name, pages) {
       res.push({v: label, r, d});
       if (r !== 'nostyle') continue;
     }
-    const GOOD = /^(markup|style|state|gate)$/;
+    const GOOD = /^(markup|style|state|gate|script|behaviour)$/;
     if (!res.some(r => GOOD.test(r.r) || r.r === 'error')) {
       /* A switch other settings hang on (their visible_if reads it): flipped with those settings changed too. */
       const list = it.scope === 'section' ? schema.settings : it.list;
@@ -404,39 +470,39 @@ async function sweepSection(name, pages) {
           const P = await drawState(on), Q = await drawState(off);
           if (P.html.error || Q.html.error) continue;
           const up = undump(P.html), uq = undump(Q.html);
-          let r = up === uq ? 'same' : strip(up) !== strip(uq) ? 'gate' : '';
+          let r = P.html === Q.html ? 'same' : up === uq ? ((await runtime(P, Q, x.id)) ? 'gate' : 'same') : strip(up) !== strip(uq) ? 'gate' : '';
           if (!r) { r = 'same'; for (const w of widthsOf(x.id)) { if (await compare(pages[w], P, Q, false) || await compare(pages[w], P, Q, true)) { r = 'gate'; break; } } }
           if (r === 'gate') { res.push({v: 'with ' + deps.length + ' dependent settings changed', r}); break; }
         }
       }
     }
     const good = res.filter(r => GOOD.test(r.r));
-    const status = res.some(r => r.r === 'error') ? 'error' : good.length ? 'pass' : 'dead';
-    const deadOptions = (x.type === 'select' || x.type === 'radio') && good.length ? res.filter(r => !GOOD.test(r.r)).map(r => r.v) : [];
-    out.push({key, type: x.type, status, pre: Object.keys(pre).length ? pre : undefined, how: [...new Set(good.map(r => r.r))].join(','), deadOptions: deadOptions.length ? deadOptions : undefined, detail: res.filter(r => r.r === 'error').map(r => r.v + ': ' + r.d).join('; ') || undefined, tried: res.map(r => r.v + '=' + r.r).join(' ')});
+    const status = res.some(r => r.r === 'error') ? 'error' : good.length ? 'pass' : res.some(r => r.r === 'unstable') ? 'unstable' : 'dead';
+    const deadOptions = (x.type === 'select' || x.type === 'radio') && good.length ? res.filter(r => !GOOD.test(r.r) && r.r !== 'unchecked').map(r => r.v) : [];
+    return {key, type: x.type, status, pre: Object.keys(pre).length ? pre : undefined, how: [...new Set(good.map(r => r.r))].join(','), deadOptions: deadOptions.length ? deadOptions : undefined, detail: res.filter(r => r.r === 'error').map(r => r.v + ': ' + r.d).join('; ') || undefined, tried: res.map(r => r.v + '=' + r.r).join(' ')};
   }
-  return out;
 }
 
 /* ------------------------------------------------------------ workers */
-async function worker(names) {
+async function worker() {
   const {launch} = require('./media-fixture.cjs');
   const browser = await launch();
-  const pages = {1366: await openPage(browser, 1366), 375: await openPage(browser, 375)};
-  for (const n of names) {
+  const pages = {1366: await openPage(browser, 1366), 375: await openPage(browser, 375), browser};
+  process.on('message', async m => {
+    if (m.done) { await browser.close(); process.exit(0); }
     const t = Date.now();
     let res;
-    try { res = await sweepSection(n, pages); } catch (err) { res = [{key: '(section)', status: 'error', detail: String(err.stack || err).slice(0, 300)}]; }
-    process.send({name: n, res, ms: Date.now() - t});
-  }
-  await browser.close();
+    try { res = await sweepSection(m.name, pages); } catch (err) { res = [{key: '(section)', status: 'error', detail: String(err.stack || err).slice(0, 300)}]; }
+    process.send({name: m.name, res, ms: Date.now() - t});
+  });
+  process.send({ready: true});
 }
 
 if (process.env.SWEEP_WORKER) {
-  worker(JSON.parse(process.env.SWEEP_WORKER)).then(() => process.exit(0), err => { console.error(err); process.exit(1); });
+  worker().catch(err => { console.error(err); process.exit(1); });
   return;
 }
-module.exports = {values, fill, GLOBALS, sweepSection, sectionList};
+module.exports = {values, fill, GLOBALS, sweepSection, sectionList, baseState};
 if (require.main !== module) return;
 
 (async () => {
@@ -444,13 +510,25 @@ if (require.main !== module) return;
   const names = sectionList().filter(n => !only.length || only.includes(n));
   const size = n => fs.statSync(path.join(ROOT, 'sections', n + '.storelib')).size;
   const jobs = Math.max(1, Math.min(+(process.env.JOBS || 4), names.length));
-  const buckets = Array.from({length: jobs}, () => ({list: [], w: 0}));
-  for (const n of names.sort((a, b) => size(b) - size(a))) { const b = buckets.reduce((m, x) => x.w < m.w ? x : m); b.list.push(n); b.w += size(n); }
   const results = {};
+  /* CACHE=<dir> keeps each section's result there and reuses it while the section file and this test are unchanged (snippets are not part of the key: leave CACHE out for a clean run). */
+  const cache = process.env.CACHE, me = hash(fs.readFileSync(__filename, 'utf8').split('\n/* Settings that stay')[0]);
+  const keyOf = n => hash(me + read('sections/' + n + '.storelib'));
+  const queue = [];
+  for (const n of names.sort((a, b) => size(b) - size(a))) {
+    const f = cache && path.join(cache, n + '.json');
+    if (f && fs.existsSync(f)) { const c = JSON.parse(fs.readFileSync(f, 'utf8')); if (c.key === keyOf(n)) { results[n] = c.res; continue; } }
+    queue.push(n);
+  }
+  if (cache) fs.mkdirSync(cache, {recursive: true});
   const t0 = Date.now();
-  await Promise.all(buckets.map(b => new Promise((res, rej) => {
-    const c = fork(__filename, [], {env: {...process.env, SWEEP_WORKER: JSON.stringify(b.list)}});
-    c.on('message', m => { results[m.name] = m.res; if (process.env.VERBOSE) console.error(m.name, m.res.length, m.ms + 'ms'); });
+  await Promise.all(Array.from({length: Math.min(jobs, queue.length)}, () => new Promise((res, rej) => {
+    const c = fork(__filename, [], {env: {...process.env, SWEEP_WORKER: '1'}});
+    const next = () => { const n = queue.shift(); if (n) c.send({name: n}); else c.send({done: true}); };
+    c.on('message', m => {
+      if (m.name) { results[m.name] = m.res; if (cache) fs.writeFileSync(path.join(cache, m.name + '.json'), JSON.stringify({key: keyOf(m.name), res: m.res})); if (process.env.VERBOSE) console.error(m.name, m.res.length, m.ms + 'ms', queue.length + ' left'); }
+      next();
+    });
     c.on('exit', code => code ? rej(new Error('worker exited ' + code)) : res());
   })));
   const all = Object.entries(results).sort(([a], [b]) => a.localeCompare(b));
