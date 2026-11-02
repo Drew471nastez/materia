@@ -44,6 +44,10 @@ FP.engine = (...a) => {
   e.registerFilter('link_to', (v, u) => `<a href="${u}">${v}</a>`);
   e.registerFilter('payment_button', () => '');
   e.registerFilter('time_tag', v => `<time>${v}</time>`);
+  /* a picked video draws its own source and poster, so a different video is a different drawing */
+  const vtag = v => { if (!v || typeof v !== 'object') return ''; const src = (v.sources && v.sources[0] && v.sources[0].url) || v.url || ''; const poster = v.preview_image && (v.preview_image.src || v.preview_image.url) || ''; return `<video playsinline muted src="${src}" poster="${poster}"></video>`; };
+  e.registerFilter('video_tag', vtag);
+  e.registerFilter('media_tag', vtag);
   const m = new Map();
   e.options.cache = {read: k => m.get(k), write: (k, v) => m.set(k, v), remove: k => m.delete(k), clear: () => m.clear()};
   e.parser.cache = e.options.cache;
@@ -55,9 +59,11 @@ FP.engine = (...a) => {
   shared = e;
   return e;
 };
-const {render, mount, schemaOf, THEME_VARS, themeControls, PANTS, OTHER} = require('./media-fixture.cjs');
+const {render, schemaOf, THEME_VARS, themeControls, PANTS, OTHER} = require('./media-fixture.cjs');
 
 const RETIRED = ['hero-product4', 'page-sale-banner', 'promo-banner-1'];
+/* Bump when the sweep's checks change, so CACHE results are drawn again. */
+const SWEEP_VERSION = '7';
 
 /* ------------------------------------------------------------ sample data */
 const IMG = {id: 'img1', src: 'https://theme.test/pic-a.png', url: 'https://theme.test/pic-a.png', width: 1600, height: 1000, aspect_ratio: 1.6, alt: 'Sample picture', presentation: {focal_point: '50% 50%'}};
@@ -256,35 +262,39 @@ function readersOf(html) {
 /* ------------------------------------------------------------ the browser */
 const PROPS = ['color', 'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition', 'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderTopStyle', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius', 'outlineColor', 'outlineWidth', 'outlineStyle', 'outlineOffset', 'boxShadow', 'textShadow', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'textTransform', 'textAlign', 'textDecorationLine', 'textDecorationColor', 'whiteSpace', 'webkitLineClamp', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'rowGap', 'columnGap', 'gridTemplateColumns', 'gridTemplateRows', 'gridColumn', 'gridRow', 'display', 'flexDirection', 'flexWrap', 'flexBasis', 'flexGrow', 'justifyContent', 'alignItems', 'alignSelf', 'justifySelf', 'order', 'position', 'top', 'right', 'bottom', 'left', 'zIndex', 'transform', 'opacity', 'visibility', 'filter', 'backdropFilter', 'mixBlendMode', 'objectFit', 'objectPosition', 'aspectRatio', 'overflow', 'transitionDuration', 'transitionTimingFunction', 'animationName', 'animationDuration', 'animationDelay', 'animationTimingFunction', 'animationIterationCount', 'fill', 'stroke', 'strokeWidth', 'cursor', 'content', 'clipPath', 'scrollSnapType', 'webkitTextStrokeWidth', 'webkitTextStrokeColor', 'accentColor', 'caretColor', 'columnCount', 'textUnderlineOffset', 'verticalAlign', 'boxSizing', 'pointerEvents', 'wordBreak', 'fontVariantCaps', 'textIndent'];
 const PSEUDO = ['content', 'color', 'backgroundColor', 'backgroundImage', 'width', 'height', 'opacity', 'borderTopColor', 'borderTopWidth', 'transform', 'display', 'boxShadow', 'top', 'left', 'borderTopLeftRadius'];
-let layoutHtml = null;
-async function pageShell() {
-  if (layoutHtml) return layoutHtml;
+let layoutHtml = null, liveHtml = null;
+/* The real layout with an empty page: its <head> styles and links for the still drawings, and with its scripts too for the live ones. */
+async function pageShell(live) {
+  if (layoutHtml) return live ? liveHtml : layoutHtml;
   const e = FP.engine({'header-group': '', 'footer-group': '', 'overlay-group': ''});
   const theme = {...THEME, color_schemes: Object.entries(THEME.color_schemes || {}).map(([id, v]) => ({id, settings: v.settings}))};
   const base = {...GLOBALS, settings: theme, request: {host: 'theme.test', locale: {iso_code: 'en'}, page_type: 'index', design_mode: true, path: '/'}, shop: {name: 'Materia Themes', domain: 'theme.test', url: 'https://theme.test', currency: 'USD', money_format: '${{amount}}'}, content_for_header: '', content_for_layout: '<div id="shopify-section-test" class="shopify-section"></div>'};
   const clean = s => s.replace(/\{\{-\s*-\}\}/g, "{{- '' -}}").replace(/^[ \t]*comment[ \t]*\n[\s\S]*?^[ \t]*endcomment[ \t]*$/gm, '').replace(/^[ \t]*# .*$/gm, '');
   const src = clean(read('layout/theme.storelib').replace(/^<template compat="shopify">\n?/, '').replace(/<\/template>\s*$/, ''));
   let html;
-  try { html = await e.parseAndRender(src, base, {globals: base}); } catch (err) { html = `<!doctype html><html><head><style>${THEME_VARS}</style><style>${await themeControls()}</style>${['critical.css', 'theme.css', 'theme-button-contract.css', 'animation.css'].map(f => `<link rel="stylesheet" href="/assets/${f}">`).join('')}</head><body><div id="shopify-section-test" class="shopify-section"></div></body></html>`; }
-  html = html.replace(/<script\b[\s\S]*?<\/script>/g, '').replace(/media="print"\s*onload="[^"]*"/g, '');
+  try { html = await e.parseAndRender(src, base, {globals: base}); } catch (err) { if (process.env.VERBOSE) console.error('layout: ' + err.message); html = `<!doctype html><html><head><style>${THEME_VARS}</style><style>${await themeControls()}</style>${['critical.css', 'theme.css', 'theme-button-contract.css', 'animation.css'].map(f => `<link rel="stylesheet" href="/assets/${f}">`).join('')}</head><body><div id="shopify-section-test" class="shopify-section"></div></body></html>`; }
+  html = html.replace(/media="print"\s*onload="[^"]*"/g, '');
+  liveHtml = html.replace('<html', '<html class="shopify-design-mode"').replace('</head>', '<script>window.Shopify = window.Shopify || {}; window.Shopify.designMode = true;</script></head>');
+  html = html.replace(/<script\b[\s\S]*?<\/script>/g, '');
   html = html.replace('</head>', '<style>*,*::before,*::after{animation-play-state:paused!important;transition-property:none!important}</style><style id="sw-force"></style></head>');
   html = html.replace('<html', '<html class="shopify-design-mode"');
   layoutHtml = html;
-  return html;
+  return live ? liveHtml : html;
 }
-async function openPage(browser, width) {
+async function openPage(browser, width, live) {
   const ctx = await browser.newContext({viewport: {width, height: 900}, javaScriptEnabled: true});
   const page = await ctx.newPage();
-  const shell = await pageShell();
+  const shell = await pageShell(live);
   await page.route('**/*', r => {
     const u = new URL(r.request().url());
     if (u.hostname !== 'theme.test') return r.fulfill({status: 204, body: ''});
     if (u.pathname === '/') return r.fulfill({contentType: 'text/html', body: shell});
-    if (u.pathname.startsWith('/assets/')) { const f = path.join(ROOT, 'shopify/assets', path.basename(u.pathname)); if (f.endsWith('.css') && fs.existsSync(f)) return r.fulfill({path: f, contentType: 'text/css'}); return r.fulfill({status: 204, body: ''}); }
+    if (u.pathname.startsWith('/assets/')) { const f = path.join(ROOT, 'shopify/assets', path.basename(u.pathname)); if (/\.(css|js)$/.test(f) && fs.existsSync(f)) return r.fulfill({path: f, contentType: f.endsWith('.css') ? 'text/css' : 'text/javascript'}); return r.fulfill({status: 204, body: ''}); }
     if (/\.(png|jpe?g|webp|gif|svg)/.test(u.pathname)) return r.fulfill({contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')});
     return r.fulfill({status: 204, body: ''});
   });
   await page.goto('http://theme.test/');
+  if (live) await page.evaluate(() => { window.Shopify = {designMode: true}; document.body.classList.add('shopify-design-mode'); });
   await page.evaluate(probe, {PROPS, PSEUDO});
   return page;
 }
@@ -340,6 +350,22 @@ function probe({PROPS, PSEUDO}) {
       return x[0] + ' ' + (PROPS[j - 1] || 'pseudo') + ': ' + x[j] + ' / ' + y[j];
     };
     window.__snapNow = forced => window.__snap(null, forced);
+    /* The builder's redraw: the new markup in place, the section's inline scripts run, storelib:section-load fired; the scripts it needs are loaded the first time. */
+    const have = new Set();
+    window.__run = async (html, inline, files, cls) => {
+      const w = W();
+      w.innerHTML = html; w.className = 'shopify-section ' + cls;
+      for (const f of files) if (!have.has(f)) { have.add(f); await new Promise(res => { const sc = document.createElement('script'); sc.src = '/assets/' + f; sc.onload = sc.onerror = res; document.body.append(sc); }); }
+      for (const body of inline) { const sc = document.createElement('script'); sc.textContent = body; try { document.body.append(sc); } catch (_) {} sc.remove(); }
+      w.dispatchEvent(new CustomEvent('storelib:section-load', {bubbles: true, detail: {sectionId: 'test'}}));
+      document.dispatchEvent(new CustomEvent('shopify:section:load', {detail: {sectionId: 'test'}}));
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await Promise.race([Promise.all([...w.querySelectorAll('img')].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; }))), new Promise(r => setTimeout(r, 400))]);
+      await new Promise(r => setTimeout(r, 80));
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      document.getAnimations && document.getAnimations().forEach(a => { try { a.pause(); a.currentTime = 0; } catch (_) {} });
+      return window.__snapNow(false);
+    };
     window.__snap = (html, forced, ref) => {
       const w = W();
       if (html !== null) { w.innerHTML = html; w.className = 'shopify-section ' + window.__wrapCls; }
@@ -353,7 +379,7 @@ function probe({PROPS, PSEUDO}) {
     };
 }
 async function compare(page, A, B, forced) {
-  await page.evaluate(({list, cls}) => { window.__wrapCls = cls; return window.__css(list); }, {list: [...new Set([...A.css, ...B.css])].map(c => '/assets/' + c), cls: WRAP_CLASS});
+  await page.evaluate(({list, cls}) => { window.__wrapCls = cls; return window.__css(list); }, {list: [...new Set([...LAYOUT_CSS, ...A.css, ...B.css])].map(c => '/assets/' + c), cls: WRAP_CLASS});
   const body = h => h.split('\n<!--scripts-->\n')[0];
   return page.evaluate(({ka, a, b, forced}) => window.__cmp(ka, a, b, forced), {ka: hash(A.html), a: body(A.html), b: body(B.html), forced});
 }
@@ -374,18 +400,18 @@ async function sweepSection(name, pages) {
   WRAP_CLASS = schema.class || '';
   /* Only the settings JSON the section's scripts read changed: both drawn with the section's scripts running (tests/media-fixture.cjs mount), compared after they ran. null when the first drawing is not stable. */
   const ran = new Map();
+  let lastUnstable = '';
   async function runSnap(D, w, check) {
     const k = w + hash(D.html);
     if (ran.has(k)) return ran.get(k);
+    const page = pages['live' + w];
+    const [body, scripts] = D.html.split('\n<!--scripts-->\n');
     const once = async () => {
-      const t = await mount(pages.browser, name, {width: w, settings: D.st.settings, blocks: D.st.blocks, globals: GLOBALS, theme: THEME, assets: [...new Set([...LAYOUT_CSS, ...D.css, ...D.js, ...readersOf(D.html)])]});
-      await t.page.evaluate(probe, {PROPS, PSEUDO});
-      const snap = await t.page.evaluate(cls => { document.getElementById('shopify-section-test').className += ' ' + cls; return window.__snapNow(false); }, WRAP_CLASS);
-      await t.page.close();
-      return snap;
+      await page.evaluate(list => window.__css(list), [...new Set([...LAYOUT_CSS, ...D.css])].map(c => '/assets/' + c));
+      return page.evaluate(({body, inline, files, cls}) => window.__run(body, inline, files, cls), {body, inline: scripts ? scripts.split('\n<!--script-->\n') : [], files: [...new Set([...D.js, ...readersOf(D.html)])], cls: WRAP_CLASS});
     };
     let v = await once();
-    if (check) { const again = await once(); if (JSON.stringify(again) !== JSON.stringify(v)) v = null; }
+    if (check) { let again = await once(); if (JSON.stringify(again) !== JSON.stringify(v)) { v = again; again = await once(); } const i = again.findIndex((x, n) => x !== v[n]); if (again.length !== v.length || i >= 0) { lastUnstable = again.length !== v.length ? 'elements ' + v.length + ' / ' + again.length : (() => { const x = v[i].split('|'), y = again[i].split('|'), j = x.findIndex((q, n) => q !== y[n]); return x[0] + ' ' + (PROPS[j - 1] || 'more') + ': ' + x[j] + ' / ' + y[j]; })(); v = null; } }
     if (ran.size > 40) ran.clear();
     ran.set(k, v);
     return v;
@@ -405,6 +431,7 @@ async function sweepSection(name, pages) {
   }
   /* First drawn light (a section setting with the preset's blocks, a block setting with its block alone), then, when that shows nothing, with every block. */
   for (const it of items) {
+    if (process.env.ONLY && !process.env.ONLY.split(",").includes((it.scope === "section" ? "" : it.scope + ".") + it.x.id)) continue;
     const light = it.scope === 'section' ? {settings: full.settings, blocks: full.blocks.slice(0, presetCount)} : {settings: full.settings, blocks: [full.blocks[it.n]]};
     let r = await one({...it, n: it.scope === 'section' ? undefined : 0}, light);
     if (r.status !== 'pass' && (light.blocks.length !== full.blocks.length)) r = await one(it, full);
@@ -429,6 +456,7 @@ async function sweepSection(name, pages) {
       const B = await drawState(st);
       const label = typeof v === 'object' && v ? (v.handle || v.id || v.family || (Array.isArray(v) ? 'list' : 'object')) : JSON.stringify(v);
       if (B.html.error) { res.push({v: label, r: 'error', d: B.html.error}); continue; }
+      if (process.env.DUMP) { fs.writeFileSync(path.join(process.env.DUMP, 'A.html'), A.html); fs.writeFileSync(path.join(process.env.DUMP, 'B.html'), B.html); }
       if (A.html === B.html) { res.push({v: label, r: 'same'}); continue; }
       const ua = undump(A.html), ub = undump(B.html);
       if (strip(ua) !== strip(ub)) { res.push({v: label, r: 'markup'}); continue; }
@@ -437,7 +465,7 @@ async function sweepSection(name, pages) {
       if (res.some(r => /^(style|state|script|behaviour)$/.test(r.r))) { res.push({v: label, r: 'unchecked'}); continue; }
       if (ua === ub) {
         const d = await runtime(A, B, x.id);
-        if (d === null) { res.push({v: label, r: 'unstable'}); continue; }
+        if (d === null) { res.push({v: label, r: 'unstable', d: lastUnstable}); continue; }
         if (d) { res.push({v: label, r: 'script', d}); continue; }
         /* a timer, a loop, a pause: behaviour the section's script reads from that JSON and no still picture shows */
         const reads = readersOf(A.html).filter(f => new RegExp('[.\'"\\[]' + x.id + '\\b|\\b' + x.id.replace(/_(\w)/g, (m, c) => c.toUpperCase()) + '\\b').test(JS[f]));
@@ -451,8 +479,9 @@ async function sweepSection(name, pages) {
         d = await compare(pages[w], A, B, true);
         if (d) { r = 'state'; break; }
       }
+      /* the theme's scripts may paint what the markup only declares */
+      if (r === 'nostyle') { const e2 = await runtime(A, B, x.id); if (e2) { r = 'script'; d = e2; } }
       res.push({v: label, r, d});
-      if (r !== 'nostyle') continue;
     }
     const GOOD = /^(markup|style|state|gate|script|behaviour)$/;
     if (!res.some(r => GOOD.test(r.r) || r.r === 'error')) {
@@ -479,7 +508,7 @@ async function sweepSection(name, pages) {
     const good = res.filter(r => GOOD.test(r.r));
     const status = res.some(r => r.r === 'error') ? 'error' : good.length ? 'pass' : res.some(r => r.r === 'unstable') ? 'unstable' : 'dead';
     const deadOptions = (x.type === 'select' || x.type === 'radio') && good.length ? res.filter(r => !GOOD.test(r.r) && r.r !== 'unchecked').map(r => r.v) : [];
-    return {key, type: x.type, status, pre: Object.keys(pre).length ? pre : undefined, how: [...new Set(good.map(r => r.r))].join(','), deadOptions: deadOptions.length ? deadOptions : undefined, detail: res.filter(r => r.r === 'error').map(r => r.v + ': ' + r.d).join('; ') || undefined, tried: res.map(r => r.v + '=' + r.r).join(' ')};
+    return {key, type: x.type, status, pre: Object.keys(pre).length ? pre : undefined, how: [...new Set(good.map(r => r.r))].join(','), deadOptions: deadOptions.length ? deadOptions : undefined, detail: res.filter(r => r.r === 'error' || (r.r === 'unstable' && !good.length)).map(r => r.v + ': ' + r.d).join('; ') || undefined, tried: res.map(r => r.v + '=' + r.r).join(' ')};
   }
 }
 
@@ -487,7 +516,7 @@ async function sweepSection(name, pages) {
 async function worker() {
   const {launch} = require('./media-fixture.cjs');
   const browser = await launch();
-  const pages = {1366: await openPage(browser, 1366), 375: await openPage(browser, 375), browser};
+  const pages = {1366: await openPage(browser, 1366), 375: await openPage(browser, 375), live1366: await openPage(browser, 1366, true), live375: await openPage(browser, 375, true), browser};
   process.on('message', async m => {
     if (m.done) { await browser.close(); process.exit(0); }
     const t = Date.now();
@@ -502,7 +531,7 @@ if (process.env.SWEEP_WORKER) {
   worker().catch(err => { console.error(err); process.exit(1); });
   return;
 }
-module.exports = {values, fill, GLOBALS, sweepSection, sectionList, baseState};
+module.exports = {values, fill, GLOBALS, sweepSection, sectionList, baseState, openPage};
 if (require.main !== module) return;
 
 (async () => {
@@ -512,7 +541,7 @@ if (require.main !== module) return;
   const jobs = Math.max(1, Math.min(+(process.env.JOBS || 4), names.length));
   const results = {};
   /* CACHE=<dir> keeps each section's result there and reuses it while the section file and this test are unchanged (snippets are not part of the key: leave CACHE out for a clean run). */
-  const cache = process.env.CACHE, me = hash(fs.readFileSync(__filename, 'utf8').split('\n/* Settings that stay')[0]);
+  const cache = process.env.CACHE, me = SWEEP_VERSION;
   const keyOf = n => hash(me + read('sections/' + n + '.storelib'));
   const queue = [];
   for (const n of names.sort((a, b) => size(b) - size(a))) {
