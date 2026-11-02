@@ -1,38 +1,59 @@
 <template compat="shopify">
 {% render 'theme-type' %}
+{%- comment -%}
+  Promo Banner 3. Every setting is printed as a CSS variable or an attribute
+  on the element it styles (inline), with the rules below reading them, so
+  shopify/assets/live-hero-gaps.js can apply a builder edit in place with the
+  same values a redraw prints. The section and block settings ride on
+  data-hg-settings for it.
+{%- endcomment -%}
 {%- liquid
-  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+  assign ss = section.settings
+  assign color_scheme = ss.color_scheme.id | default: ss.color_scheme | default: 'default-color-scheme'
   assign theme_anim = false
   if settings.scroll_animation != blank and settings.scroll_animation != 'none'
     assign theme_anim = true
   endif
-  assign htag = section.settings.heading_tag | default: 'h2'
-  assign surface = section.settings.banner_surface | default: 'soft'
-  assign tint = section.settings.banner_tint | default: 6
+  assign htag = ss.heading_tag | default: 'h2'
+  assign surface = ss.banner_surface | default: 'soft'
+  assign tint = ss.banner_tint | default: 6
   assign grad = ''
   assign grad_solid = ''
-  if section.settings.use_custom_bg and section.settings.enable_bg_gradient and section.settings.bg_gradient != blank
-    if section.settings.bg_gradient contains 'gradient'
-      assign grad = section.settings.bg_gradient
+  if ss.use_custom_bg and ss.enable_bg_gradient and ss.bg_gradient != blank
+    if ss.bg_gradient contains 'gradient'
+      assign grad = ss.bg_gradient
     else
-      assign grad_solid = section.settings.bg_gradient
+      assign grad_solid = ss.bg_gradient
     endif
   endif
   assign flex_align = 'center'
-  if section.settings.text_align == 'left'
+  if ss.text_align == 'left'
     assign flex_align = 'flex-start'
-  elsif section.settings.text_align == 'right'
+  elsif ss.text_align == 'right'
     assign flex_align = 'flex-end'
   endif
-  assign m_align = section.settings.text_align
-  if section.settings.mobile_text_align != blank and section.settings.mobile_text_align != 'inherit'
-    assign m_align = section.settings.mobile_text_align
+  assign m_align = ss.text_align
+  if ss.mobile_text_align != blank and ss.mobile_text_align != 'inherit'
+    assign m_align = ss.mobile_text_align
   endif
   assign m_flex_align = 'center'
   if m_align == 'left'
     assign m_flex_align = 'flex-start'
   elsif m_align == 'right'
     assign m_flex_align = 'flex-end'
+  endif
+  assign shadow = 'none'
+  case ss.banner_shadow
+    when 'sm'
+      assign shadow = '0 1px 3px rgba(0,0,0,0.08)'
+    when 'md'
+      assign shadow = '0 6px 20px rgba(0,0,0,0.08)'
+    when 'lg'
+      assign shadow = '0 16px 40px rgba(0,0,0,0.12)'
+  endcase
+  assign reveal_style = ''
+  if ss.reveal and theme_anim == false
+    assign reveal_style = ss.reveal_style | default: 'fade'
   endif
 -%}
 {%- if section.settings.reveal == false -%}<span data-ti-no-reveal hidden></span>{%- endif -%}
@@ -53,31 +74,26 @@
 {%- endif -%}
 <style>
   #shopify-section-{{ section.id }} {
+    --rm3-mt-m: {{ ss.section_margin_top_mobile | default: 0 }}px;
+    --rm3-mb-m: {{ ss.section_margin_bottom_mobile | default: 0 }}px;
+    --rm3-mt-d: {{ ss.section_margin_top_desktop | default: 0 }}px;
+    --rm3-mb-d: {{ ss.section_margin_bottom_desktop | default: 0 }}px;
     isolation: isolate;
     position: relative;
     font-weight: var(--body-weight, inherit);
     font-family: var(--body-font, var(--theme-font-body, inherit));
-    margin-top: {{ section.settings.section_margin_top_mobile | default: 0 }}px !important;
-    margin-bottom: {{ section.settings.section_margin_bottom_mobile | default: 0 }}px !important;
+    margin-top: var(--rm3-mt-m) !important;
+    margin-bottom: var(--rm3-mb-m) !important;
   }
   @media (min-width: 750px) {
     #shopify-section-{{ section.id }} {
-      margin-top: {{ section.settings.section_margin_top_desktop | default: 0 }}px !important;
-      margin-bottom: {{ section.settings.section_margin_bottom_desktop | default: 0 }}px !important;
+      margin-top: var(--rm3-mt-d) !important;
+      margin-bottom: var(--rm3-mb-d) !important;
     }
   }
-  {%- if section.settings.reset_spacing -%}
-  #shopify-section-{{ section.id }} > .section,
-  #shopify-section-{{ section.id }} > section,
-  #shopify-section-{{ section.id }} > div { margin-top: 0 !important; margin-bottom: 0 !important; }
-
-  {%- endif -%}
-  {%- if section.settings.show_mobile == false -%}
-  @media (max-width: 749px) { #shopify-section-{{ section.id }} { display: none !important; } }
-  {%- endif -%}
-  {%- if section.settings.show_desktop == false -%}
-  @media (min-width: 750px) { #shopify-section-{{ section.id }} { display: none !important; } }
-  {%- endif -%}
+  #shopify-section-{{ section.id }}:has(#rm3-{{ section.id }}[data-reset-spacing]) > :is(.section, section, div) { margin-top: 0 !important; margin-bottom: 0 !important; }
+  @media (max-width: 749px) { #shopify-section-{{ section.id }}:has(#rm3-{{ section.id }}[data-hide-mobile]) { display: none !important; } }
+  @media (min-width: 750px) { #shopify-section-{{ section.id }}:has(#rm3-{{ section.id }}[data-hide-desktop]) { display: none !important; } }
   :where(#shopify-section-{{ section.id }}) :where(button, input, textarea, select, optgroup) { font-family: inherit; }
 {% comment %}{% endcomment %}</style>
 <!-- ti-theme:start -->
@@ -86,12 +102,18 @@
   class="rm3 color-{{ color_scheme }} gradient"
   id="rm3-{{ section.id }}"
   data-section-id="{{ section.id }}"
+  data-hg="banner3"
+  data-hg-section="{{ section.id }}"
+  data-hg-settings="{{ section.settings | json | escape }}"
+  {% if theme_anim %}data-theme-anim{% endif %}
+  {% if ss.reset_spacing %}data-reset-spacing{% endif %}
+  {% if ss.show_mobile == false %}data-hide-mobile{% endif %}
+  {% if ss.show_desktop == false %}data-hide-desktop{% endif %}
+  style="--rm-heading-c: {% if ss.use_custom_text %}{% render 'scheme-color', color: ss.heading_color, fallback: 'var(--color-heading, currentColor)' %}{% else %}var(--color-heading, currentColor){% endif %}; --rm-text-c: {% if ss.use_custom_text %}{% render 'scheme-color', color: ss.text_color, fallback: 'var(--color-text, currentColor)' %}{% else %}var(--color-text, currentColor){% endif %}; --rm3-bg: {% if ss.use_custom_bg %}{% render 'scheme-color', color: ss.section_bg_color, fallback: 'var(--color-background, transparent)' %}{% else %}var(--color-background, transparent){% endif %}; --rm3-pt-m: {{ ss.section_padding_top_mobile | default: 40 }}px; --rm3-pb-m: {{ ss.section_padding_bottom_mobile | default: 40 }}px; --rm3-pt-d: {{ ss.section_padding_top | default: 60 }}px; --rm3-pb-d: {{ ss.section_padding_bottom | default: 60 }}px;"
 >
   <style>
     /* Outer wrapper: carries this section's own colour scheme, background and section padding */
     #rm3-{{ section.id }} {
-      --rm-heading-c: {% if section.settings.use_custom_text and section.settings.heading_color != blank %}{{ section.settings.heading_color }}{% else %}var(--color-heading, currentColor){% endif %};
-      --rm-text-c: {% if section.settings.use_custom_text and section.settings.text_color != blank %}{{ section.settings.text_color }}{% else %}var(--color-text, currentColor){% endif %};
       --rm-font-heading: var(--heading-font, var(--theme-font-heading, inherit));
       --rm-font-body: var(--body-font, var(--theme-font-body, inherit));
       --rm-weight-heading: var(--heading-weight, 700);
@@ -99,15 +121,15 @@
       position: relative;
       box-sizing: border-box;
       color: var(--rm-text-c);
-      background-color: {% if section.settings.use_custom_bg and section.settings.section_bg_color != blank %}{{ section.settings.section_bg_color }}{% else %}var(--color-background, transparent){% endif %};
-      padding-top: {{ section.settings.section_padding_top_mobile | default: 40 }}px;
-      padding-bottom: {{ section.settings.section_padding_bottom_mobile | default: 40 }}px;
+      background-color: var(--rm3-bg);
+      padding-top: var(--rm3-pt-m);
+      padding-bottom: var(--rm3-pb-m);
       overflow-x: clip;
     }
     @media (min-width: 750px) {
       #rm3-{{ section.id }} {
-        padding-top: {{ section.settings.section_padding_top | default: 60 }}px;
-        padding-bottom: {{ section.settings.section_padding_bottom | default: 60 }}px;
+        padding-top: var(--rm3-pt-d);
+        padding-bottom: var(--rm3-pb-d);
       }
     }
 
@@ -119,123 +141,19 @@
     @media (min-width: 1200px) { #rm3-{{ section.id }} .rm3__container--stretch_width { padding-inline: 3rem; } }
     #rm3-{{ section.id }} .rm3__container--full_width { max-width: none; padding-inline: 0; }
 
-    /* Banner card variables */
-    #rm-hero-{{ section.id }} {
-      --rm-bg: {% if grad_solid != blank %}{{ grad_solid }}{% elsif section.settings.use_custom_bg and section.settings.bg_color != blank %}{% render 'scheme-color', color: section.settings.bg_color, fallback: 'var(--color-background)' %}{% elsif surface == 'soft' %}color-mix(in srgb, var(--rm-text-c) {{ tint }}%, var(--color-background, #ffffff)){% else %}var(--color-background, transparent){% endif %};
-      --rm-gradient: {% if grad != blank %}{{ grad }}{% else %}none{% endif %};
-      --rm-overlay: {% render 'scheme-color', color: section.settings.overlay_color, fallback: '#000000' %};
-      --rm-overlay-opacity: {% if section.settings.use_custom_bg %}{{ section.settings.overlay_opacity | divided_by: 100.0 }}{% else %}0{% endif %};
-      --rm-content-max: {{ section.settings.max_width }}px;
-      --rm-align: {{ section.settings.text_align }};
-      --rm-flex: {{ flex_align }};
-      --rm-align-m: {{ m_align }};
-      --rm-flex-m: {{ m_flex_align }};
-      --rm-gap: {{ section.settings.stack_gap }}px;
-      --rm-pt: {{ section.settings.pad_top_desktop }}px;
-      --rm-pb: {{ section.settings.pad_bottom_desktop }}px;
-      --rm-pt-m: {{ section.settings.pad_top_mobile }}px;
-      --rm-pb-m: {{ section.settings.pad_bottom_mobile }}px;
-      --rm-section-pad-left: {{ section.settings.section_pad_left }}px;
-      --rm-section-pad-right: {{ section.settings.section_pad_right }}px;
-      --rm-section-pad-left-m: {{ section.settings.section_pad_left_mobile }}px;
-      --rm-section-pad-right-m: {{ section.settings.section_pad_right_mobile }}px;
-      --rm-section-radius: {% if section.settings.use_theme_radius %}var(--rounded-radius, var(--card-corner-radius, var(--theme-card-radius, var(--border-radius, 8px)))){% else %}{{ section.settings.section_border_radius }}px{% endif %};
-      --rm-border-w: {{ section.settings.banner_border_width | default: 0 }}px;
-      --rm-border-c: {% if section.settings.banner_border_color != blank %}{{ section.settings.banner_border_color }}{% else %}var(--color-border, rgba(0,0,0,0.12)){% endif %};
-      {%- case section.settings.banner_shadow -%}
-        {%- when 'sm' -%}--rm-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        {%- when 'md' -%}--rm-shadow: 0 6px 20px rgba(0,0,0,0.08);
-        {%- when 'lg' -%}--rm-shadow: 0 16px 40px rgba(0,0,0,0.12);
-        {%- else -%}--rm-shadow: none;
-      {%- endcase -%}
-      --rm-sub-btn-gap: {{ section.settings.sub_btn_gap }}px;
-      --rm-inner-pad: {{ section.settings.side_padding }}px;
+    /* Blocks with custom styling off follow the theme */
+    #rm-hero-{{ section.id }} .rm-hero__eyebrow:not([data-custom]) { --rm-eyebrow-color:var(--rm-heading-c);--rm-eyebrow-font:var(--rm-font-body);--rm-eyebrow-weight:var(--rm-weight-body);--rm-eyebrow-transform:none;--rm-eyebrow-letterspace:normal;--rm-eyebrow-lineheight:var(--body-line-height,1.6);--rm-eyebrow-opacity:1;--rm-eyebrow-size-d:var(--body-font-size,16px);--rm-eyebrow-size-m:var(--body-font-size,16px); }
+    #rm-hero-{{ section.id }} .rm-hero__heading:not([data-custom]) { --rm-heading-color:var(--rm-heading-c);--rm-heading-font:var(--rm-font-heading);--rm-heading-weight:var(--rm-weight-heading);--rm-heading-transform:var(--heading-text-transform,none);--rm-heading-lineheight:var(--heading-line-height,1.15);--rm-heading-letterspace:var(--heading-letter-spacing,normal);--rm-heading-size-d:var(--h2-size,2.4rem);--rm-heading-size-m:var(--h2-size,2.4rem); }
+    #rm-hero-{{ section.id }} .rm-hero__sub:not([data-custom]) { --rm-sub-color:var(--rm-text-c);--rm-sub-font:var(--rm-font-body);--rm-sub-weight:var(--rm-weight-body);--rm-sub-transform:none;--rm-sub-letterspace:normal;--rm-sub-lineheight:var(--body-line-height,1.6);--rm-sub-opacity:1;--rm-sub-size-d:var(--body-font-size,16px);--rm-sub-size-m:var(--body-font-size,16px); }
+    /* Explicit block choices override the theme priority, only while custom styling is on */
+    #rm-hero-{{ section.id }} .rm-hero__eyebrow[data-custom] { font-family:var(--rm-eyebrow-font)!important;font-weight:var(--rm-eyebrow-weight)!important;line-height:var(--rm-eyebrow-lineheight)!important;letter-spacing:var(--rm-eyebrow-letterspace)!important;text-transform:var(--rm-eyebrow-transform)!important; }
+    #rm-hero-{{ section.id }} .rm-hero__heading[data-custom] { font-family:var(--rm-heading-font)!important;font-weight:var(--rm-heading-weight)!important;line-height:var(--rm-heading-lineheight)!important;letter-spacing:var(--rm-heading-letterspace)!important;text-transform:var(--rm-heading-transform)!important; }
+    #rm-hero-{{ section.id }} .rm-hero__sub[data-custom] { font-family:var(--rm-sub-font)!important;font-weight:var(--rm-sub-weight)!important;line-height:var(--rm-sub-lineheight)!important;letter-spacing:var(--rm-sub-letterspace)!important;text-transform:var(--rm-sub-transform)!important; }
+    #rm-hero-{{ section.id }} .rm-hero__btn[data-custom] { font-weight:var(--mb-weight,var(--btn-font-weight,500))!important;font-size:var(--mb-font-size,var(--btn-font-size,14px))!important;border-radius:var(--mb-radius,var(--theme-button-radius,var(--btn-radius,8px)))!important;padding:var(--mb-padding-y,var(--theme-button-padding-y,14px)) var(--mb-padding-x,var(--theme-button-padding-x,26px))!important; }
+    #rm-hero-{{ section.id }} .rm-hero__btn[data-custom][data-own-shape] { --mb-font-size: var(--rm-btn-size-d); border-style: solid; border-width: var(--btn-border-width); }
+    @media (max-width: 749px) {
+      #rm-hero-{{ section.id }} .rm-hero__btn[data-custom][data-own-shape] { --mb-font-size: var(--rm-btn-size-m); }
     }
-
-    {% for block in section.blocks %}
-      {% if block.settings.enable_custom_style %}
-      {% if block.type == 'eyebrow' %}
-        #rm-hero-{{ section.id }} [data-promo-block="{{ block.id }}"] {
-          --rm-eyebrow-color: {% render 'scheme-color', color: block.settings.color, fallback: 'var(--rm-heading-c)' %};
-          --rm-eyebrow-font: {% if block.settings.font == 'heading' %}var(--rm-font-heading){% else %}var(--rm-font-body){% endif %};
-          --rm-eyebrow-weight: {% if block.settings.weight == 'theme' %}{% if block.settings.font == 'heading' %}var(--rm-weight-heading){% else %}var(--rm-weight-body){% endif %}{% else %}{{ block.settings.weight }}{% endif %};
-          --rm-eyebrow-transform: {{ block.settings.transform | default: 'none' }};
-          --rm-eyebrow-letterspace: {{ block.settings.letterspace }}em;
-          --rm-eyebrow-lineheight: {{ block.settings.lineheight | default: '1.4' }};
-          --rm-eyebrow-opacity: {{ block.settings.opacity | divided_by: 100.0 }};
-          --rm-eyebrow-size-d: {{ block.settings.size_d }}px;
-          --rm-eyebrow-size-m: {{ block.settings.size_m }}px;
-        }
-      {% elsif block.type == 'heading' %}
-        #rm-hero-{{ section.id }} [data-promo-block="{{ block.id }}"] {
-          --rm-heading-color: {% render 'scheme-color', color: block.settings.color, fallback: 'var(--rm-heading-c)' %};
-          --rm-heading-font: {% if block.settings.font == 'body' %}var(--rm-font-body){% else %}var(--rm-font-heading){% endif %};
-          --rm-heading-weight: {% if block.settings.weight == 'theme' %}{% if block.settings.font == 'body' %}var(--rm-weight-body){% else %}var(--rm-weight-heading){% endif %}{% else %}{{ block.settings.weight }}{% endif %};
-          --rm-heading-transform: {{ block.settings.transform | default: 'none' }};
-          --rm-heading-lineheight: {{ block.settings.lineheight | default: '1.15' }};
-          --rm-heading-letterspace: {{ block.settings.letterspace }}em;
-          --rm-heading-size-d: {{ block.settings.size_d }}px;
-          --rm-heading-size-m: {{ block.settings.size_m }}px;
-        }
-      {% elsif block.type == 'subheading' %}
-        #rm-hero-{{ section.id }} [data-promo-block="{{ block.id }}"] {
-          --rm-sub-color: {% render 'scheme-color', color: block.settings.color, fallback: 'var(--rm-text-c)' %};
-          --rm-sub-font: {% if block.settings.font == 'heading' %}var(--rm-font-heading){% else %}var(--rm-font-body){% endif %};
-          --rm-sub-weight: {% if block.settings.weight == 'theme' or block.settings.weight == blank %}{% if block.settings.font == 'heading' %}var(--rm-weight-heading){% else %}var(--rm-weight-body){% endif %}{% else %}{{ block.settings.weight }}{% endif %};
-          --rm-sub-transform: {{ block.settings.transform | default: 'none' }};
-          --rm-sub-letterspace: {{ block.settings.letterspace | default: 0 }}em;
-          --rm-sub-lineheight: {{ block.settings.lineheight | default: '1.5' }};
-          --rm-sub-opacity: {{ block.settings.opacity | divided_by: 100.0 }};
-          --rm-sub-size-d: {{ block.settings.size_d }}px;
-          --rm-sub-size-m: {{ block.settings.size_m }}px;
-        }
-      {% elsif block.type == 'button' %}
-        #rm-hero-{{ section.id }} [data-promo-block="{{ block.id }}"] {
-          {% render 'button-overrides', bg: block.settings.bg, text: block.settings.text_color, border: block.settings.border_color %}
-          {%- unless block.settings.use_theme_button -%}
-          --btn-border-width: {{ block.settings.border_width }}px;
-          --mb-radius: {{ block.settings.radius }}px;
-          --mb-padding-y: {{ block.settings.pad_v }}px;
-          --mb-padding-x: {{ block.settings.pad_h }}px;
-          --mb-weight: {{ block.settings.weight }};
-          --mb-font-size: {{ block.settings.size_d }}px;
-          --rm-btn-size-m: {{ block.settings.size_m }}px;
-          border-style: solid;
-          border-width: {{ block.settings.border_width }}px;
-          border-radius: {{ block.settings.radius }}px;
-          padding: {{ block.settings.pad_v }}px {{ block.settings.pad_h }}px;
-          font-weight: {{ block.settings.weight }};
-          font-size: {{ block.settings.size_d }}px;
-          {%- endunless -%}
-          {%- if block.settings.bg != blank -%}background-color: {% render 'scheme-color', color: block.settings.bg, fallback: 'transparent' %};{%- endif -%}
-          {%- if block.settings.text_color != blank -%}color: {% render 'scheme-color', color: block.settings.text_color, fallback: 'currentColor' %};{%- endif -%}
-          {%- if block.settings.border_color != blank -%}border-color: {% render 'scheme-color', color: block.settings.border_color, fallback: 'transparent' %};{%- endif -%}
-        }
-        {%- unless block.settings.use_theme_button -%}
-        @media (max-width: 749px){
-          #rm-hero-{{ section.id }} [data-promo-block="{{ block.id }}"] { --mb-font-size: var(--rm-btn-size-m); font-size: var(--rm-btn-size-m); }
-        }
-        {%- endunless -%}
-      {% endif %}
-      {%- comment -%}Explicit block choices override global theme priority, only while enabled.{%- endcomment -%}
-      #rm-hero-{{ section.id }} [data-promo-block="{{ block.id }}"]{
-        {% case block.type %}
-        {% when 'eyebrow' %}font-family:var(--rm-eyebrow-font)!important;font-weight:var(--rm-eyebrow-weight)!important;line-height:var(--rm-eyebrow-lineheight)!important;letter-spacing:var(--rm-eyebrow-letterspace)!important;text-transform:var(--rm-eyebrow-transform)!important;
-        {% when 'heading' %}font-family:var(--rm-heading-font)!important;font-weight:var(--rm-heading-weight)!important;line-height:var(--rm-heading-lineheight)!important;letter-spacing:var(--rm-heading-letterspace)!important;text-transform:var(--rm-heading-transform)!important;
-        {% when 'subheading' %}font-family:var(--rm-sub-font)!important;font-weight:var(--rm-sub-weight)!important;line-height:var(--rm-sub-lineheight)!important;letter-spacing:var(--rm-sub-letterspace)!important;text-transform:var(--rm-sub-transform)!important;
-        {% when 'button' %}--mb-weight:{{ block.settings.weight }};font-weight:var(--mb-weight,var(--btn-font-weight,500))!important;font-size:var(--mb-font-size,var(--btn-font-size,14px))!important;border-radius:var(--mb-radius,var(--theme-button-radius,var(--btn-radius,8px)))!important;padding:var(--mb-padding-y,var(--theme-button-padding-y,14px)) var(--mb-padding-x,var(--theme-button-padding-x,26px))!important;
-        {% endcase %}
-      }
-      {% else %}
-      #rm-hero-{{ section.id }} [data-promo-block="{{ block.id }}"]{
-        {% case block.type %}
-        {% when 'eyebrow' %}--rm-eyebrow-color:var(--rm-heading-c);--rm-eyebrow-font:var(--rm-font-body);--rm-eyebrow-weight:var(--rm-weight-body);--rm-eyebrow-transform:none;--rm-eyebrow-letterspace:normal;--rm-eyebrow-lineheight:var(--body-line-height,1.6);--rm-eyebrow-opacity:1;--rm-eyebrow-size-d:var(--body-font-size,16px);--rm-eyebrow-size-m:var(--body-font-size,16px);
-        {% when 'heading' %}--rm-heading-color:var(--rm-heading-c);--rm-heading-font:var(--rm-font-heading);--rm-heading-weight:var(--rm-weight-heading);--rm-heading-transform:var(--heading-text-transform,none);--rm-heading-lineheight:var(--heading-line-height,1.15);--rm-heading-letterspace:var(--heading-letter-spacing,normal);--rm-heading-size-d:var(--h2-size,2.4rem);--rm-heading-size-m:var(--h2-size,2.4rem);
-        {% when 'subheading' %}--rm-sub-color:var(--rm-text-c);--rm-sub-font:var(--rm-font-body);--rm-sub-weight:var(--rm-weight-body);--rm-sub-transform:none;--rm-sub-letterspace:normal;--rm-sub-lineheight:var(--body-line-height,1.6);--rm-sub-opacity:1;--rm-sub-size-d:var(--body-font-size,16px);--rm-sub-size-m:var(--body-font-size,16px);
-        {% endcase %}
-      }
-      {% endif %}
-    {% endfor %}
 
     #rm-hero-{{ section.id }}{
       position: relative;
@@ -250,10 +168,8 @@
       border: var(--rm-border-w) solid var(--rm-border-c);
       box-shadow: var(--rm-shadow);
       overflow: hidden;
-      {%- if section.settings.hover_lift -%}
-      transition: transform 300ms cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 300ms ease;
-      {%- endif -%}
     }
+    #rm-hero-{{ section.id }}[data-hover-lift]{ transition: transform 300ms cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 300ms ease; }
     @media (min-width: 750px){
       #rm-hero-{{ section.id }}{
         margin-left: var(--rm-section-pad-left);
@@ -261,11 +177,9 @@
         padding: var(--rm-pt) var(--rm-inner-pad) var(--rm-pb);
       }
     }
-    {%- if section.settings.hover_lift -%}
     @media (hover: hover){
-      #rm-hero-{{ section.id }}:hover{ transform: translateY(-4px); box-shadow: 0 16px 40px rgba(0,0,0,0.12); }
+      #rm-hero-{{ section.id }}[data-hover-lift]:hover{ transform: translateY(-4px); box-shadow: 0 16px 40px rgba(0,0,0,0.12); }
     }
-    {%- endif -%}
     #rm-hero-{{ section.id }}::before{
       content:"";
       position:absolute; inset:0;
@@ -324,6 +238,7 @@
       overflow-wrap: break-word;
     }
     #rm-hero-{{ section.id }} .rm-hero__inner > :last-child{ margin-bottom: 0; }
+    #rm-hero-{{ section.id }} .rm-hero__inner > [hidden]{ display: none !important; }
     @media (min-width: 750px){
       #rm-hero-{{ section.id }} .rm-hero__eyebrow{ font-size: var(--rm-eyebrow-size-d); }
       #rm-hero-{{ section.id }} .rm-hero__heading{ font-size: var(--rm-heading-size-d); }
@@ -344,69 +259,70 @@
       max-width: 100%;
       text-align: center;
     }
-    #rm-hero-{{ section.id }} .rm-hero__inner > .rm-hero__btn:first-child{ margin-top: 0; }
+    #rm-hero-{{ section.id }} .rm-hero__inner > .rm-hero__btn:not(:not([hidden]) ~ .rm-hero__btn){ margin-top: 0; }
     #rm-hero-{{ section.id }} .rm-hero__btn:focus-visible{
       outline: 2px solid var(--rm-heading-c);
       outline-offset: 3px;
     }
-    {%- if section.settings.mobile_button_full -%}
     @media (max-width: 749px){
-      #rm-hero-{{ section.id }} .rm-hero__btn{ width: 100%; }
+      #rm-hero-{{ section.id }}[data-button-full-mobile] .rm-hero__btn{ width: 100%; }
     }
-    {%- endif -%}
 
     html:is(.shopify-design-mode,.mt-editor) #rm-hero-{{ section.id }}{animation:none!important;opacity:1!important;translate:none!important;scale:none!important;}
     /* Reveal on scroll (CSS only), used when the theme's own scroll animation is off */
-    {%- if section.settings.reveal and theme_anim == false -%}
     @keyframes rm3-in-{{ section.id }} {
-      from {
-        opacity: 0;
-        {%- case section.settings.reveal_style -%}
-          {%- when 'fade_up' -%}translate: 0 32px;
-          {%- when 'zoom' -%}scale: 0.96;
-        {%- endcase -%}
-      }
+      from { opacity: 0; translate: var(--rm-reveal-from-y, none); scale: var(--rm-reveal-from-scale, none); }
       to { opacity: 1; translate: none; scale: none; }
     }
+    #rm-hero-{{ section.id }}[data-reveal="fade_up"] { --rm-reveal-from-y: 0 32px; }
+    #rm-hero-{{ section.id }}[data-reveal="zoom"] { --rm-reveal-from-scale: 0.96; }
     @supports (animation-timeline: view()) {
-      #rm-hero-{{ section.id }} {
+      #rm-hero-{{ section.id }}[data-reveal] {
         animation: rm3-in-{{ section.id }} linear both;
         animation-timeline: view();
-        animation-range: entry 0% entry {{ section.settings.reveal_range | default: 60 }}%;
+        animation-range: entry 0% entry var(--rm-reveal-range, 60%);
       }
     }
-    {%- endif -%}
     @media (prefers-reduced-motion: reduce){
       #rm-hero-{{ section.id }} { animation: none !important; transition: none !important; transform: none !important; translate: none !important; scale: none !important; }
     }
 {% comment %}{% endcomment %}  </style>
 
-  <div class="rm3__container rm3__container--{{ section.settings.section_width | default: 'stretch_width' }}">
-    <div class="rm-hero" id="rm-hero-{{ section.id }}">
+  <div class="rm3__container rm3__container--{{ ss.section_width | default: 'stretch_width' }}">
+    <div
+      class="rm-hero"
+      id="rm-hero-{{ section.id }}"
+      {% if ss.hover_lift %}data-hover-lift{% endif %}
+      {% if ss.mobile_button_full %}data-button-full-mobile{% endif %}
+      {% if reveal_style != blank %}data-reveal="{{ reveal_style }}"{% endif %}
+      style="--rm-bg: {% if grad_solid != blank %}{{ grad_solid }}{% elsif ss.use_custom_bg and ss.bg_color != blank %}{% render 'scheme-color', color: ss.bg_color, fallback: 'var(--color-background)' %}{% elsif surface == 'soft' %}color-mix(in srgb, var(--rm-text-c) {{ tint }}%, var(--color-background, #ffffff)){% else %}var(--color-background, transparent){% endif %}; --rm-gradient: {% if grad != blank %}{{ grad }}{% else %}none{% endif %}; --rm-overlay: {% render 'scheme-color', color: ss.overlay_color, fallback: '#000000' %}; --rm-overlay-opacity: {% if ss.use_custom_bg %}{{ ss.overlay_opacity | default: 0 | divided_by: 100.0 }}{% else %}0{% endif %}; --rm-content-max: {{ ss.max_width }}px; --rm-align: {{ ss.text_align }}; --rm-flex: {{ flex_align }}; --rm-align-m: {{ m_align }}; --rm-flex-m: {{ m_flex_align }}; --rm-gap: {{ ss.stack_gap }}px; --rm-pt: {{ ss.pad_top_desktop }}px; --rm-pb: {{ ss.pad_bottom_desktop }}px; --rm-pt-m: {{ ss.pad_top_mobile }}px; --rm-pb-m: {{ ss.pad_bottom_mobile }}px; --rm-section-pad-left: {{ ss.section_pad_left }}px; --rm-section-pad-right: {{ ss.section_pad_right }}px; --rm-section-pad-left-m: {{ ss.section_pad_left_mobile }}px; --rm-section-pad-right-m: {{ ss.section_pad_right_mobile }}px; --rm-section-radius: {% if ss.use_theme_radius %}var(--rounded-radius, var(--card-corner-radius, var(--theme-card-radius, var(--border-radius, 8px)))){% else %}{{ ss.section_border_radius }}px{% endif %}; --rm-border-w: {{ ss.banner_border_width | default: 0 }}px; --rm-border-c: {% render 'scheme-color', color: ss.banner_border_color, fallback: 'var(--color-border, rgba(0,0,0,0.12))' %}; --rm-shadow: {{ shadow }}; --rm-sub-btn-gap: {{ ss.sub_btn_gap }}px; --rm-inner-pad: {{ ss.side_padding }}px; --rm-reveal-range: {{ ss.reveal_range | default: 60 }}%;"
+    >
       <div class="rm-hero__inner">
         {% for block in section.blocks %}
           {% if block.hidden %}{% continue %}{% endif %}
+          {%- liquid
+            assign bs = block.settings
+            assign own = bs.enable_custom_style
+          -%}
           {% case block.type %}
 
             {% when 'eyebrow' %}
-              {% if block.settings.text != blank %}
-                <p class="rm-hero__eyebrow" data-promo-block="{{ block.id }}" {{ block.shopify_attributes }}>{{ block.settings.text | escape }}</p>
-              {% endif %}
+              <p class="rm-hero__eyebrow" data-promo-block="{{ block.id }}" data-hg-block="{{ block.id }}" data-hg-type="eyebrow" data-hg-settings="{{ bs | json | escape }}"{% if bs.text == blank %} hidden{% endif %}{% if own %} data-custom data-own-font data-own-weight data-own-size style="--rm-eyebrow-color: {% render 'scheme-color', color: bs.color, fallback: 'var(--rm-heading-c)' %}; --rm-eyebrow-font: {% if bs.font == 'heading' %}var(--rm-font-heading){% else %}var(--rm-font-body){% endif %}; --rm-eyebrow-weight: {% if bs.weight == 'theme' %}{% if bs.font == 'heading' %}var(--rm-weight-heading){% else %}var(--rm-weight-body){% endif %}{% else %}{{ bs.weight }}{% endif %}; --rm-eyebrow-transform: {{ bs.transform | default: 'none' }}; --rm-eyebrow-letterspace: {{ bs.letterspace }}em; --rm-eyebrow-lineheight: {{ bs.lineheight | default: '1.4' }}; --rm-eyebrow-opacity: {{ bs.opacity | divided_by: 100.0 }}; --rm-eyebrow-size-d: {{ bs.size_d }}px; --rm-eyebrow-size-m: {{ bs.size_m }}px;"{% endif %} {{ block.shopify_attributes }}>{{ bs.text | escape }}</p>
 
             {% when 'heading' %}
-              {% if block.settings.text != blank %}
-                <{{ htag }} class="rm-hero__heading" data-promo-block="{{ block.id }}" style="{% if block.settings.max_width > 0 %}max-width: {{ block.settings.max_width }}ch;{% endif %}" {{ block.shopify_attributes }}>{{ block.settings.text | escape }}</{{ htag }}>
-              {% endif %}
+              <{{ htag }} class="rm-hero__heading" data-promo-block="{{ block.id }}" data-hg-block="{{ block.id }}" data-hg-type="heading" data-hg-settings="{{ bs | json | escape }}"{% if bs.text == blank %} hidden{% endif %}{% if own %} data-custom data-own-font data-own-weight data-own-size{% endif %} style="{% if bs.max_width > 0 %}max-width: {{ bs.max_width }}ch;{% endif %}{% if own %} --rm-heading-color: {% render 'scheme-color', color: bs.color, fallback: 'var(--rm-heading-c)' %}; --rm-heading-font: {% if bs.font == 'body' %}var(--rm-font-body){% else %}var(--rm-font-heading){% endif %}; --rm-heading-weight: {% if bs.weight == 'theme' %}{% if bs.font == 'body' %}var(--rm-weight-body){% else %}var(--rm-weight-heading){% endif %}{% else %}{{ bs.weight }}{% endif %}; --rm-heading-transform: {{ bs.transform | default: 'none' }}; --rm-heading-lineheight: {{ bs.lineheight | default: '1.15' }}; --rm-heading-letterspace: {{ bs.letterspace }}em; --rm-heading-size-d: {{ bs.size_d }}px; --rm-heading-size-m: {{ bs.size_m }}px;{% endif %}" {{ block.shopify_attributes }}>{{ bs.text | escape }}</{{ htag }}>
 
             {% when 'subheading' %}
-              {% if block.settings.text != blank %}
-                <p class="rm-hero__sub" data-promo-block="{{ block.id }}" style="{% if block.settings.max_width > 0 %}max-width: {{ block.settings.max_width }}ch;{% endif %}" {{ block.shopify_attributes }}>{{ block.settings.text | escape }}</p>
-              {% endif %}
+              <p class="rm-hero__sub" data-promo-block="{{ block.id }}" data-hg-block="{{ block.id }}" data-hg-type="subheading" data-hg-settings="{{ bs | json | escape }}"{% if bs.text == blank %} hidden{% endif %}{% if own %} data-custom data-own-font data-own-weight data-own-size{% endif %} style="{% if bs.max_width > 0 %}max-width: {{ bs.max_width }}ch;{% endif %}{% if own %} --rm-sub-color: {% render 'scheme-color', color: bs.color, fallback: 'var(--rm-text-c)' %}; --rm-sub-font: {% if bs.font == 'heading' %}var(--rm-font-heading){% else %}var(--rm-font-body){% endif %}; --rm-sub-weight: {% if bs.weight == 'theme' or bs.weight == blank %}{% if bs.font == 'heading' %}var(--rm-weight-heading){% else %}var(--rm-weight-body){% endif %}{% else %}{{ bs.weight }}{% endif %}; --rm-sub-transform: {{ bs.transform | default: 'none' }}; --rm-sub-letterspace: {{ bs.letterspace | default: 0 }}em; --rm-sub-lineheight: {{ bs.lineheight | default: '1.5' }}; --rm-sub-opacity: {{ bs.opacity | divided_by: 100.0 }}; --rm-sub-size-d: {{ bs.size_d }}px; --rm-sub-size-m: {{ bs.size_m }}px;{% endif %}" {{ block.shopify_attributes }}>{{ bs.text | escape }}</p>
 
             {% when 'button' %}
-              {% if block.settings.label != blank and block.settings.link != blank %}
-                <a class="rm-hero__btn" data-promo-block="{{ block.id }}" data-theme-button="primary" data-sl-button data-button-role="primary" href="{{ block.settings.link | url | escape }}" {{ block.shopify_attributes }}>{{ block.settings.label | escape }}</a>
-              {% endif %}
+              {%- liquid
+                assign shape = false
+                if own and bs.use_theme_button == false
+                  assign shape = true
+                endif
+              -%}
+              <a class="rm-hero__btn" data-promo-block="{{ block.id }}" data-hg-block="{{ block.id }}" data-hg-type="button" data-hg-settings="{{ bs | json | escape }}" data-theme-button="primary" data-sl-button data-button-role="primary"{% if bs.link != blank %} href="{{ bs.link | url | escape }}"{% endif %}{% if bs.label == blank or bs.link == blank %} hidden{% endif %}{% if own %} data-custom data-own-weight{% if shape %} data-own-shape{% endif %} style="{% render 'button-overrides', bg: bs.bg, text: bs.text_color, border: bs.border_color %}{% if bs.bg != blank %} background-color: {% render 'scheme-color', color: bs.bg, fallback: 'transparent' %};{% endif %}{% if bs.text_color != blank %} color: {% render 'scheme-color', color: bs.text_color, fallback: 'currentColor' %};{% endif %}{% if bs.border_color != blank %} border-color: {% render 'scheme-color', color: bs.border_color, fallback: 'transparent' %};{% endif %} --mb-weight: {{ bs.weight }};{% if shape %} --btn-border-width: {{ bs.border_width }}px; --mb-radius: {{ bs.radius }}px; --mb-padding-y: {{ bs.pad_v }}px; --mb-padding-x: {{ bs.pad_h }}px; --rm-btn-size-d: {{ bs.size_d }}px; --rm-btn-size-m: {{ bs.size_m }}px;{% endif %}"{% endif %} {{ block.shopify_attributes }}>{{ bs.label | escape }}</a>
 
           {% endcase %}
         {% endfor %}

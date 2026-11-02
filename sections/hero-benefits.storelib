@@ -178,6 +178,37 @@
 -%}
 
 {%- if image_desktop == blank -%}{%- assign image_desktop = mobile_image -%}{%- endif -%}
+{%- comment -%} Custom fonts: the same picks shopify/assets/hero-benefits.js makes live (a heading block's own font and font source win over the section's). {%- endcomment -%}
+{%- liquid
+  assign hb_font_heading = 'var(--heading-font)'
+  assign hb_font_body = 'var(--body-font)'
+  if s.enable_custom_fonts
+    capture hb_font_heading
+      render 'hero-benefits-font', picker: s.heading_font_picker, legacy: s.heading_font, fallback: 'var(--heading-font)'
+    endcapture
+    capture hb_font_body
+      render 'hero-benefits-font', picker: s.body_font_picker, legacy: s.body_font, fallback: 'var(--body-font)'
+    endcapture
+  endif
+  assign hb_font_heading_own = hb_font_heading
+  assign hb_heading_custom = s.enable_custom_style
+  assign hb_heading_source = s.heading_font_source
+  assign hb_heading_own_font = false
+  if hb_heading != nil
+    assign hb_heading_custom = hb_heading.settings.enable_custom_style
+    assign hb_heading_source = hb_heading.settings.heading_font_source | default: 'heading'
+    if hb_heading.settings.enable_custom_fonts
+      assign hb_heading_own_font = true
+      capture hb_font_heading_own
+        render 'hero-benefits-font', picker: hb_heading.settings.heading_font_picker, legacy: hb_heading.settings.heading_font, fallback: hb_font_heading
+      endcapture
+    endif
+  endif
+  assign hb_font_heading_final = hb_font_heading_own
+  if hb_heading_custom and hb_heading_source == 'body'
+    assign hb_font_heading_final = hb_font_body
+  endif
+-%}
 {%- style -%}
   /* ============================================================
      SCOPE & ISOLATION BOUNDARY
@@ -489,14 +520,11 @@
     #shopify-section-{{ sid }} .hb__media-desktop { display: block; }
   }
   {%- if s.enable_custom_fonts -%}
-  {% if s.heading_font.family != blank %}
-    {{ s.heading_font | font_face: font_display: 'swap' }}
-    {% for face in s.heading_font.variants %}{{ face | font_face: font_display: 'swap' }}{% endfor %}
-  {% endif %}
-  {% if s.body_font.family != blank %}
-    {{ s.body_font | font_face: font_display: 'swap' }}
-    {% for face in s.body_font.variants %}{{ face | font_face: font_display: 'swap' }}{% endfor %}
-  {% endif %}
+    {%- render 'hero-benefits-font', picker: s.heading_font_picker, legacy: s.heading_font, mode: 'face' -%}
+    {%- render 'hero-benefits-font', picker: s.body_font_picker, legacy: s.body_font, mode: 'face' -%}
+  {%- endif -%}
+  {%- if hb_heading != nil and hb_heading.settings.enable_custom_fonts -%}
+    {%- render 'hero-benefits-font', picker: hb_heading.settings.heading_font_picker, legacy: hb_heading.settings.heading_font, mode: 'face' -%}
   {%- endif -%}
 
   /* Explicit controls must also win when global typography priority is enabled. */
@@ -509,17 +537,9 @@
     text-transform: {% if s.enable_custom_style and s.heading_transform != 'theme' %}{{ s.heading_transform | default: 'none' }}{% else %}var(--heading-text-transform, none){% endif %} !important;
   }
   #shopify-section-{{ sid }} .hb-outer {
-    --hb-heading-font: {% if s.enable_custom_style and s.heading_font_source == 'body' %}var(--body-font, inherit){% else %}var(--heading-font, inherit){% endif %};
-    --hb-title-font: var(--heading-font, inherit);
-    --hb-body-font: var(--body-font, inherit);
-    {% if s.enable_custom_fonts and s.heading_font.family != blank %}
-      --hb-heading-font: {{ s.heading_font.family }}, {{ s.heading_font.fallback_families | default: 'sans-serif' }};
-      --hb-title-font: {{ s.heading_font.family }}, {{ s.heading_font.fallback_families | default: 'sans-serif' }};
-    {% endif %}
-    {% if s.enable_custom_fonts and s.body_font.family != blank %}
-      --hb-body-font: {{ s.body_font.family }}, {{ s.body_font.fallback_families | default: 'sans-serif' }};
-    {% endif %}
-    {% if s.enable_custom_style and s.heading_font_source == 'body' %}--hb-heading-font: var(--hb-body-font);{% endif %}
+    --hb-heading-font: {{ hb_font_heading_final }};
+    --hb-title-font: {{ hb_font_heading }};
+    --hb-body-font: {{ hb_font_body }};
   }
   #shopify-section-{{ sid }} .hb__benefit-title {
     font-family: var(--hb-title-font) !important;
@@ -576,12 +596,12 @@
 {%- endstyle -%}
 {%- capture hb_heading_markup -%}
   {%- if hb_heading != nil -%}
-    <div data-hb-heading-block="{{ hb_heading.id }}" data-hb-content-settings="{{ hb_heading.settings | json | escape }}" {{ hb_heading.shopify_attributes }}>
+    <div data-hb-heading-block="{{ hb_heading.id }}" data-hb-content-settings="{{ hb_heading.settings | json | escape }}"{% if hb_heading_own_font %} data-own-font{% endif %} {{ hb_heading.shopify_attributes }}>
       {%- if heading_text != blank -%}<h2 class="hb__heading">{{ heading_html }}</h2>{%- endif -%}
     </div>
   {%- elsif heading_text != blank -%}<h2 class="hb__heading">{{ heading_html }}</h2>{%- endif -%}
 {%- endcapture -%}
-<div class="hb-outer color-{{ color_scheme }} gradient {{ mobile_layout_class }}" data-hero-benefits="{{ sid }}" data-hero-settings="{{ s | json | escape }}"{% if section.settings.reset_spacing != false %} data-hb-reset-spacing{% endif %}{% if enable_fade %} data-hb-bottom-fade{% endif %}>
+<div class="hb-outer color-{{ color_scheme }} gradient {{ mobile_layout_class }}" data-hero-benefits="{{ sid }}" data-hero-settings="{{ s | json | escape }}"{% if s.enable_custom_fonts %} data-own-font{% endif %}{% if section.settings.reset_spacing != false %} data-hb-reset-spacing{% endif %}{% if enable_fade %} data-hb-bottom-fade{% endif %}>
 <div class="hb {{ wrap_class }}">
   <div class="hb__inner">
     <div class="hb__grid">
@@ -3470,11 +3490,26 @@
         "info": "Independent of custom styling. Applies the chosen heading and body fonts to this section only."
       },
       {
+        "type": "font_picker",
+        "id": "heading_font_picker",
+        "label": "Heading font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font_picker",
+        "label": "Body font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
         "type": "select",
         "id": "heading_font",
         "label": "Default heading font",
         "default": "assistant_n4",
-        "visible_if": "{{ section.settings.enable_custom_fonts }}",
+        "visible_if": "{{ false }}",
+        "info": "Legacy: used while the font picker is on its default",
         "options": [
           {
             "value": "theme_heading",
@@ -3752,7 +3787,8 @@
         "id": "body_font",
         "label": "Default body font",
         "default": "assistant_n4",
-        "visible_if": "{{ section.settings.enable_custom_fonts }}",
+        "visible_if": "{{ false }}",
+        "info": "Legacy: used while the font picker is on its default",
         "options": [
           {
             "value": "theme_heading",
@@ -4521,11 +4557,19 @@
             "info": "Overrides only this heading’s font. Otherwise it follows the section font settings."
           },
           {
+            "type": "font_picker",
+            "id": "heading_font_picker",
+            "label": "Heading font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
+          },
+          {
             "type": "select",
             "id": "heading_font",
             "label": "Heading font",
             "default": "assistant_n4",
-            "visible_if": "{{ block.settings.enable_custom_fonts }}",
+            "visible_if": "{{ false }}",
+            "info": "Legacy: used while the font picker is on its default",
             "options": [
               {
                 "value": "theme_heading",

@@ -21,12 +21,13 @@
   const fontFallbacks = {"Inter":"sans-serif","Manrope":"sans-serif","DM Sans":"sans-serif","Plus Jakarta Sans":"sans-serif","Outfit":"sans-serif","Urbanist":"sans-serif","Space Grotesk":"sans-serif","Sora":"sans-serif","Lexend":"sans-serif","Work Sans":"sans-serif","Figtree":"sans-serif","Onest":"sans-serif","Geist":"sans-serif","Montserrat":"sans-serif","Poppins":"sans-serif","Raleway":"sans-serif","Nunito Sans":"sans-serif","Rubik":"sans-serif","Karla":"sans-serif","Archivo":"sans-serif","Barlow":"sans-serif","Jost":"sans-serif","Albert Sans":"sans-serif","Hanken Grotesk":"sans-serif","Schibsted Grotesk":"sans-serif","Instrument Sans":"sans-serif","IBM Plex Sans":"sans-serif","Roboto":"sans-serif","Lato":"sans-serif","Open Sans":"sans-serif","Quicksand":"sans-serif","Mulish":"sans-serif","Bricolage Grotesque":"sans-serif","Syne":"sans-serif","Unbounded":"sans-serif","Bebas Neue":"sans-serif","Oswald":"sans-serif","Anton":"sans-serif","Archivo Black":"sans-serif","Playfair Display":"Georgia, serif","Cormorant Garamond":"Georgia, serif","DM Serif Display":"Georgia, serif","Fraunces":"Georgia, serif","Lora":"Georgia, serif","Libre Baskerville":"Georgia, serif","EB Garamond":"Georgia, serif","Instrument Serif":"Georgia, serif","Source Serif 4":"Georgia, serif","Bodoni Moda":"Georgia, serif","Libre Caslon Text":"Georgia, serif","Abril Fatface":"Georgia, serif","Merriweather":"Georgia, serif","Newsreader":"Georgia, serif","Young Serif":"Georgia, serif","JetBrains Mono":"ui-monospace, monospace","Space Mono":"ui-monospace, monospace","Geist Mono":"ui-monospace, monospace","Helvetica":"sans-serif","Georgia":"Georgia, serif"};
   const system = /^(Arial|Arial Black|Helvetica|Helvetica Neue|Georgia|Times New Roman|Verdana|Tahoma|Trebuchet MS|Courier New|system-ui|sans-serif|serif|monospace)$/i;
   function font(value) {
-    const raw = typeof value === 'object' ? value?.family || value?.name || value?.value : value;
+    const object = value && typeof value === 'object', raw = object ? value.family || value.name || value.value : value;
     if (typeof raw !== 'string' || !raw.trim()) return '';
     if(raw==='theme_heading')return 'var(--heading-font)';
     if(raw==='theme_body')return 'var(--body-font)';
     const id = raw.trim().replace(/_[ni][1-9]$/, '');
-    const family = (fontNames[id.toLowerCase().replaceAll(' ','_')] || (/_[ni][1-9]$/.test(raw) || raw.includes('_') ? id.replaceAll('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) : id)).replace(/["'\\;<>\r\n{}]/g, '').trim();
+    /* a font picker object keeps its own family name, as the Liquid prints it; a saved handle maps to its family */
+    const family = (object && value.family ? raw : fontNames[id.toLowerCase().replaceAll(' ','_')] || (/_[ni][1-9]$/.test(raw) || raw.includes('_') ? id.replaceAll('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) : id)).replace(/["'\\;<>\r\n{}]/g, '').trim();
     if (!family) return '';
     // Native font objects are drawn with font_face by the template. String
     // picker IDs need a real stylesheet; naming a family alone doesn't load it.
@@ -38,8 +39,11 @@
       link.href = 'https://fonts.googleapis.com/css2?' + params;
       document.head.append(link);
     }
-    return JSON.stringify(family) + ', ' + (typeof value === 'object' && value?.fallback_families ? String(value.fallback_families).replace(/[;<>\r\n{}]/g, '') : fontFallbacks[family] || 'sans-serif');
+    return JSON.stringify(family) + ', ' + (object && value.family ? String(value.fallback_families || 'sans-serif').replace(/[;<>\r\n{}]/g, '') : fontFallbacks[family] || 'sans-serif');
   }
+  /* The native font picker, unless it is still on its default (Assistant) while the hidden legacy list holds another font (snippets/hero-benefits-font). */
+  const pickDefault = v => v == null || v === '' || v === 'assistant_n4' || (typeof v === 'object' && v.family === 'Assistant');
+  const chosen = (picker, legacy) => pickDefault(picker) && legacy != null && legacy !== '' && legacy !== 'assistant_n4' ? legacy : picker;
   function apply(root, state) {
     const s = state.settings, custom = bool(s.enable_custom_style);
     const headBlock=root.querySelector('[data-hb-heading-block]'),imageBlock=root.querySelector('[data-hb-image-block]');
@@ -67,10 +71,12 @@
     const measure = window.MateriaHeroImageOne?.measure;
     const desktop = (measure ? measure.width(parent) : parent.getBoundingClientRect().width) >= 1024;
     const overlay = !desktop && s.mobile_layout === 'overlay' && hasMedia;
-    const headingFont = bool(s.enable_custom_fonts) ? font(s.heading_font) || 'var(--heading-font)' : 'var(--heading-font)';
-    const bodyFont = bool(s.enable_custom_fonts) ? font(s.body_font) || 'var(--body-font)' : 'var(--body-font)';
+    const headingFont = bool(s.enable_custom_fonts) ? font(chosen(s.heading_font_picker, s.heading_font)) || 'var(--heading-font)' : 'var(--heading-font)';
+    const bodyFont = bool(s.enable_custom_fonts) ? font(chosen(s.body_font_picker, s.body_font)) || 'var(--body-font)' : 'var(--body-font)';
     set(root,'--hb-body-font',bodyFont); set(root,'--hb-title-font',headingFont);
-    const ownHeadingFont=hs && bool(hs.enable_custom_fonts)?font(hs.heading_font)||headingFont:headingFont;
+    root.toggleAttribute('data-own-font',bool(s.enable_custom_fonts));
+    const ownHeadingFont=hs && bool(hs.enable_custom_fonts)?font(chosen(hs.heading_font_picker, hs.heading_font))||headingFont:headingFont;
+    if(headBlock)headBlock.toggleAttribute('data-own-font',!!hs && bool(hs.enable_custom_fonts));
     set(root,'--hb-heading-font',hCustom && h.heading_font_source==='body'?bodyFont:ownHeadingFont);
     for (const [key,value,fallback] of [
       ['--hb-bg',s.section_bg,'var(--color-background)'],['--hb-heading',s.text_color,'var(--color-heading)'],

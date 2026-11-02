@@ -387,8 +387,9 @@
       const legacy = root.querySelector('[data-lt-legacy]');
       if (legacy) {
         hide(legacy, !bool(s.show_header));
-        text(legacy.querySelector('[data-lt-score]'), s.overall_score);
-        stars(legacy.querySelector('[data-lt-stars]'), s.overall_score_int);
+        const ls = legacy.querySelector('[data-lt-score]'), noScore = !String(s.overall_score ?? '').trim();
+        text(ls, s.overall_score); hide(ls, noScore);
+        stars(legacy.querySelector('[data-lt-stars]'), s.overall_score_int); hide(legacy.querySelector('[data-lt-stars]'), noScore);
         const n = legacy.querySelector('[data-lt-count]'), o = legacy.querySelector('[data-lt-note]');
         text(n, s.review_count); hide(n, !s.review_count); text(o, s.source_note); hide(o, !s.source_note);
       }
@@ -398,16 +399,23 @@
           rich(el, b.text, st); hide(el, !String(b.text || '').replace(/<[^>]*>/g, '').trim());
           set(el, '--b-c', pick(bool(b.enable_custom_style), b.color, 'var(--color-heading)')); set(el, '--b-fs-d', px(b.size, 36)); set(el, '--b-fs-m', px(b.size_mobile, 26));
         } else if (t === 'summary') {
-          const sc = el.querySelector('[data-lt-score]'); text(sc, b.score); hide(sc, !b.score);
-          stars(el.querySelector('[data-lt-stars]'), parseFloat(String(b.score || '0').replace(',', '.')) || 0);
+          /* No score typed: no number and no stars; nothing typed: no header. */
+          const blankv = v => !String(v ?? '').trim();
+          const sc = el.querySelector('[data-lt-score]'); text(sc, b.score); hide(sc, blankv(b.score));
+          stars(el.querySelector('[data-lt-stars]'), parseFloat(String(b.score || '0').replace(',', '.')) || 0); hide(el.querySelector('[data-lt-stars]'), blankv(b.score));
           const n = el.querySelector('[data-lt-count]'), o = el.querySelector('[data-lt-note]');
-          text(n, b.count); hide(n, !b.count); text(o, b.note); hide(o, !b.note);
+          text(n, b.count); hide(n, blankv(b.count)); text(o, b.note); hide(o, blankv(b.note));
+          hide(el, blankv(b.score) && blankv(b.count) && blankv(b.note));
         } else if (t === 'question') {
           const val = Math.max(0, Math.min(100, num(b.value)));
           set(el, '--v', val + '%');
           const q = b.question || 'Question', lo = b.left_label || 'Low', hi = b.right_label || 'High';
           text(el.querySelector('[data-lt-q]'), q); text(el.querySelector('[data-lt-left]'), lo); text(el.querySelector('[data-lt-right]'), hi);
-          const bar = el.querySelector('[data-lt-bar]'); attr(bar, 'aria-valuenow', val); attr(bar, 'aria-label', q); attr(bar, 'aria-valuetext', val + '% (' + lo + ' to ' + hi + ')');
+          /* An answer is drawn (and the bar is a meter) only with Show the average answer on. */
+          const on = bool(b.show_value), bar = el.querySelector('[data-lt-bar]');
+          attr(el, 'data-empty', !on);
+          attr(bar, 'role', on ? 'meter' : null); attr(bar, 'aria-valuemin', on ? 0 : null); attr(bar, 'aria-valuemax', on ? 100 : null); attr(bar, 'aria-hidden', on ? null : 'true');
+          attr(bar, 'aria-valuenow', on ? val : null); attr(bar, 'aria-label', on ? q : null); attr(bar, 'aria-valuetext', on ? val + '% (' + lo + ' to ' + hi + ')' : null);
         }
       }
     },

@@ -16,7 +16,7 @@ run({
   baseSettings: PAST,
   baseBlocks: [{type: 'message', settings: {text: 'Ends <strong>soon</strong>'}}, {type: 'button', settings: {label: 'Shop now'}}, {type: 'extra_link', settings: {label: 'Delivery', link: '/pages/delivery'}}],
   hover: {'button.bg_hover': '.abp4__btn', 'button.color_hover': '.abp4__btn'},
-  skipEveryControl: {invalid_date_label: true, close_label: true, dismissal: true},
+  skipEveryControl: {invalid_date_label: true, empty_date_label: true, close_label: true, dismissal: true},
   async extra({browser, mount, eq, ok}) {
     const sel = '#shopify-section-test ';
     const blocks = [{type: 'message', settings: {text: 'Ends <strong>soon</strong>'}}, {type: 'button', settings: {label: 'Shop now', link: '/collections/sale'}}, {type: 'extra_link', settings: {label: 'Delivery', link: '/pages/delivery'}}];
@@ -80,6 +80,25 @@ run({
       await o.page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); await o.page.waitForTimeout(1300);
       ok(await o.page.locator('#shopify-section-test [data-unit="s"]').textContent() !== s0, 'pro 4 countdown ticks again on screen');
       await o.page.close();
+    }
+    /* no end date by default: nothing made up. The storefront draws no countdown (first paint too), the builder asks for a date */
+    {
+      for (const width of [375, 1366]) for (const editing of [false, true]) {
+        const where = 'pro 4 no end date ' + width + (editing ? ' editor' : ' storefront');
+        const t = await mount(browser, 'announcement-bar-pro-4', {width, editing, assets: ['announcement-pro-4.css', 'announcement-pro-4.js'], settings: {}, blocks});
+        const st = () => t.page.evaluate(() => { const r = document.querySelector('#shopify-section-test .abp4'), c = r.querySelector('.abp4__countdown'), e = r.querySelector('.abp4__date-error'); return {count: !!c.offsetParent, hint: e.offsetParent ? e.textContent.trim() : '', bar: !!r.offsetParent, msg: r.querySelector('.abp4__message').textContent.trim()}; });
+        const html = t.rendered[0].html || '';
+        if (typeof html === 'string' && html) ok(/class="abp4__countdown"[^>]*\shidden/.test(html), where + ' countdown hidden in first paint');
+        eq(await st(), {count: false, hint: editing ? 'Add an end date to show the countdown.' : '', bar: true, msg: 'Ends soon'}, where);
+        await t.emit({end_date: '2099-12-31'});
+        eq((await st()).count, true, where + ' a date shows the countdown live');
+        eq((await st()).hint, '', where + ' and the hint goes');
+        await t.emit({end_date: ''});
+        eq([(await st()).count, (await st()).hint], [false, editing ? 'Add an end date to show the countdown.' : ''], where + ' empty again live');
+        if (editing) { await t.emit({empty_date_label: 'Pick a date'}); eq((await st()).hint, 'Pick a date', where + ' hint is a setting'); await t.emit({end_date: '2027-02-30'}); eq((await st()).hint, 'Set a valid end date and time.', where + ' a date that does not exist says so'); }
+        eq(t.errors, [], where + ' errors');
+        await t.page.close();
+      }
     }
     return 0;
   },
