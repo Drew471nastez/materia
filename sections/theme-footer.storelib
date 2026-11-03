@@ -5,14 +5,9 @@
 -%}
 {%- assign fb_accessibility_background_image = 'accessibility.background_image' | t -%}
 {%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
-{%- if request.design_mode != true and settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+{%- assign fb_section_anim = section.settings.animation | default: 'theme' -%}
+{%- if request.design_mode != true and fb_section_anim == 'theme' and settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
 <style>
-  /* Phones: each footer menu link is a 44px tap target; the row gap it
-     replaces is dropped so the list barely grows. */
-  @media screen and (max-width: 767.98px) {
-    #shopify-section-{{ section.id }} .footer-block.collapsible-content li.pb-8 { padding-bottom: 0; }
-    #shopify-section-{{ section.id }} .footer-block.collapsible-content li > a { display: inline-flex; align-items: center; min-height: 44px; }
-  }
   #shopify-section-{{ section.id }}.scroll-trigger {
     --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
     --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
@@ -33,6 +28,22 @@
   {%- endif %}
   #shopify-section-{{ section.id }}{font-weight:var(--body-weight,inherit);isolation:isolate;position:relative}
   :where(#shopify-section-{{ section.id }}) :is(h1,h2,h3,h4,h5,h6){font-weight:var(--heading-weight,inherit)}
+  /* Phones: each footer menu link is a 44px tap target, whatever the animation setting. */
+  @media screen and (max-width: 767.98px) {
+    #shopify-section-{{ section.id }} .footer-block.collapsible-content li.pb-8 { padding-bottom: 0; }
+    #shopify-section-{{ section.id }} .footer-block.collapsible-content li > a { display: inline-flex; align-items: center; min-height: 44px; }
+  }
+  /* Heading size, weight and transform reach every footer heading, menu toggles included. */
+  #shopify-section-{{ section.id }} .footer__block-heading{font-size:{{ section.settings.footer_heading_size | default: 16 }}px;font-weight:{{ section.settings.heading_weight | default: 600 }};text-transform:{{ section.settings.heading_transform | default: 'none' }}}
+  #shopify-section-{{ section.id }} .footer__block-heading .footer-acc__toggle{font-size:inherit;font-weight:inherit;text-transform:inherit;letter-spacing:inherit}
+  /* Link hover colour reaches menu, contact, fine print and copyright links. */
+  #shopify-section-{{ section.id }} .footer__blocks a:hover,#shopify-section-{{ section.id }} .footer__copyright a:hover{color:var(--footer-link-hover)}
+  /* Mobile accordion arrow size. */
+  #shopify-section-{{ section.id }} .arrow-toggle svg{width:var(--footer-arrow-size,14px);height:var(--footer-arrow-size,14px)}
+  /* Payment badges area width on desktop. */
+  @media screen and (min-width: 768px) {
+    #shopify-section-{{ section.id }} .footer__payment{flex:0 1 var(--pb-width,auto);max-width:var(--pb-width,100%)}
+  }
 {% comment %}{% endcomment %}</style>
 {{ 'collapsible.css' | asset_url | stylesheet_tag }}
 {%- liquid
@@ -269,8 +280,8 @@
                           {% endif %}
                           {%- liquid
                             assign not_has_store_info = true
-                            for block in section.blocks
-                              if block.type == 'store_info'
+                            for fb in section.blocks
+                              if fb.type == 'store_info'
                                 assign not_has_store_info = false
                               endif
                             endfor
@@ -472,11 +483,11 @@
                 {%- when 'custom_liquid' -%}
                   <div
                     class="footer-block w-full col-md-w-custom-50 col-md-w-custom{% if block.type == 'store_info' %} pb-30 border-bottom border-bottom-md-0{% else %} mb-0 mb-md-20 border-bottom border-bottom-md-0{% endif %} {{ block.type }}"
-                    style="--col-width: {{ block_st.content_width }}; --menu-list: {{ menu_item }}"
+                    style="--col-width: {{ block_st.content_width | default: '100%' }}; --menu-list: {{ menu_item }}"
                     {{ block.shopify_attributes }}
                   >
                     <div
-                      class="block {% if scroll_animation == 'slide_in' %}  opacity-0 {% endif %}"
+                      class="block"
                     >
                       {{ block_st.custom_liquid }}
                     </div>
@@ -515,6 +526,17 @@
           </div>
         {% endif %}
 
+        {%- liquid
+          assign fb_has_social_host = false
+          for fb in section.blocks
+            if fb.type == 'store_info' or fb.type == 'newsletter'
+              assign fb_has_social_host = true
+            endif
+          endfor
+        -%}
+        {%- if section_st.show_social and fb_has_social_host == false -%}
+          <social-icon class="block footer__social-bottom">{% render 'social-icons' %}</social-icon>
+        {%- endif -%}
         {%- comment -%}
           Payment badges row — rendered HERE (in the bottom band, on
           the same line as the © copyright text) when the merchant has
@@ -540,7 +562,7 @@
               endif
             -%}
             {%- if pb_any -%}
-              <div class="footer__payment flex grow-1 align-center max-w-100" style="justify-content: {{ pb_justify_b }};" {{ block.shopify_attributes }}>
+              <div class="footer__payment flex grow-1 align-center max-w-100" style="justify-content: {{ pb_justify_b }};{% if pb_st.content_width != blank %} --pb-width: {{ pb_st.content_width }};{% endif %}{% if pb_align == 'right' %} margin-left: auto;{% elsif pb_align == 'center' %} margin-inline: auto;{% endif %}" {{ block.shopify_attributes }}>
                 <ul class="footer__payment-badges">
                   {%- if pb_st.enable_visa -%}
                     <li class="payment-badge" aria-label="{{ 'payment.methods.visa' | t }}">{% render 'payment-icon', method: 'visa', icon_class: 'icon icon--full-color' %}</li>
@@ -627,12 +649,14 @@
     {
       "type": "checkbox",
       "id": "enable_country_selector",
+      "info": "Appears only when the store sells in more than one country.",
       "default": true,
       "label": "Show country selector"
     },
     {
       "type": "checkbox",
       "id": "enable_language_selector",
+      "info": "Appears only when the store has more than one language.",
       "default": true,
       "label": "Show language selector"
     },
@@ -683,8 +707,28 @@
       ]
     },
     {
+      "type": "select",
+      "id": "heading_transform",
+      "label": "Heading transform",
+      "default": "none",
+      "options": [
+        {
+          "value": "none",
+          "label": "Default"
+        },
+        {
+          "value": "uppercase",
+          "label": "UPPERCASE"
+        },
+        {
+          "value": "capitalize",
+          "label": "Capitalize"
+        }
+      ]
+    },
+    {
       "type": "header",
-      "id": "hdr_11",
+      "id": "hdr_12",
       "label": "Image / Media"
     },
     {
@@ -695,6 +739,7 @@
     {
       "type": "range",
       "id": "footer_bg_brightness",
+      "visible_if": "{{ section.settings.background_image != blank }}",
       "min": 0,
       "max": 200,
       "step": 5,
@@ -704,7 +749,7 @@
     },
     {
       "type": "header",
-      "id": "hdr_14",
+      "id": "hdr_15",
       "label": "Content"
     },
     {
@@ -715,7 +760,7 @@
     },
     {
       "type": "header",
-      "id": "hdr_16",
+      "id": "hdr_17",
       "label": "Colors & appearance"
     },
     {
@@ -749,8 +794,8 @@
     },
     {
       "type": "header",
-      "id": "hdr_19",
-      "label": "Carousel"
+      "id": "hdr_20",
+      "label": "Mobile menus"
     },
     {
       "type": "range",
@@ -764,7 +809,7 @@
     },
     {
       "type": "header",
-      "id": "hdr_21",
+      "id": "hdr_22",
       "label": "Layout & spacing"
     },
     {
@@ -789,37 +834,13 @@
     },
     {
       "type": "header",
-      "id": "hdr_24",
-      "label": "Advanced"
-    },
-    {
-      "type": "select",
-      "id": "heading_transform",
-      "label": "Heading transform",
-      "default": "none",
-      "options": [
-        {
-          "value": "none",
-          "label": "Default"
-        },
-        {
-          "value": "uppercase",
-          "label": "UPPERCASE"
-        },
-        {
-          "value": "capitalize",
-          "label": "Capitalize"
-        }
-      ]
-    },
-    {
-      "type": "header",
-      "id": "hdr_26",
+      "id": "hdr_25",
       "label": "Custom Header Elements"
     },
     {
       "type": "select",
       "id": "custom_header_position",
+      "visible_if": "{{ section.settings.enable_custom_text_big or section.settings.enable_custom_image }}",
       "label": "Position",
       "default": "top",
       "options": [
@@ -842,17 +863,20 @@
     {
       "type": "text",
       "id": "custom_text",
+      "visible_if": "{{ section.settings.enable_custom_text_big }}",
       "label": "Custom Text",
       "default": "Premier®"
     },
     {
       "type": "color",
       "id": "custom_text_color",
+      "visible_if": "{{ section.settings.enable_custom_text_big }}",
       "label": "Text color"
     },
     {
       "type": "range",
       "id": "custom_text_font_size_desktop",
+      "visible_if": "{{ section.settings.enable_custom_text_big }}",
       "label": "Custom Text Font Size (Desktop)",
       "min": 40,
       "max": 400,
@@ -863,6 +887,7 @@
     {
       "type": "range",
       "id": "custom_text_font_size_mobile",
+      "visible_if": "{{ section.settings.enable_custom_text_big }}",
       "label": "Custom Text Font Size (Mobile)",
       "min": 20,
       "max": 200,
@@ -873,6 +898,7 @@
     {
       "type": "checkbox",
       "id": "custom_text_italic",
+      "visible_if": "{{ section.settings.enable_custom_text_big }}",
       "label": "Italic",
       "default": false
     },
@@ -885,11 +911,13 @@
     {
       "type": "image_picker",
       "id": "custom_image",
+      "visible_if": "{{ section.settings.enable_custom_image }}",
       "label": "Custom Image"
     },
     {
       "type": "range",
       "id": "custom_image_size_desktop",
+      "visible_if": "{{ section.settings.enable_custom_image }}",
       "label": "Image Size (Desktop)",
       "min": 40,
       "max": 600,
@@ -900,6 +928,7 @@
     {
       "type": "range",
       "id": "custom_image_size_mobile",
+      "visible_if": "{{ section.settings.enable_custom_image }}",
       "label": "Image Size (Mobile)",
       "min": 32,
       "max": 400,
@@ -910,6 +939,7 @@
     {
       "type": "range",
       "id": "custom_elements_gap",
+      "visible_if": "{{ section.settings.enable_custom_text_big and section.settings.enable_custom_image }}",
       "label": "Custom elements gap",
       "min": 0,
       "max": 120,
@@ -919,7 +949,7 @@
     },
     {
       "type": "header",
-      "id": "hdr_39",
+      "id": "hdr_38",
       "label": "Advanced spacing"
     },
     {
@@ -977,6 +1007,7 @@
         {
           "type": "range",
           "id": "image_width",
+          "visible_if": "{{ block.settings.show_logo or block.settings.image != blank }}",
           "min": 50,
           "max": 200,
           "step": 2,
@@ -1290,7 +1321,8 @@
         {
           "type": "select",
           "id": "content_width",
-          "label": "Column width",
+          "label": "Badges area width (desktop)",
+          "info": "Badges sit on the copyright line. This caps how much of that line they take.",
           "default": "33.333%",
           "options": [
             {
@@ -1331,6 +1363,34 @@
           "type": "liquid",
           "id": "custom_liquid",
           "label": "Custom HTML"
+        },
+        {
+          "type": "select",
+          "id": "content_width",
+          "label": "Column width",
+          "default": "100%",
+          "options": [
+            {
+              "value": "25%",
+              "label": "25%"
+            },
+            {
+              "value": "33.333%",
+              "label": "33%"
+            },
+            {
+              "value": "50%",
+              "label": "50%"
+            },
+            {
+              "value": "66.666%",
+              "label": "66%"
+            },
+            {
+              "value": "100%",
+              "label": "100%"
+            }
+          ]
         }
       ],
       "limit": 1
@@ -1392,12 +1452,14 @@
       {
         "type": "checkbox",
         "id": "enable_country_selector",
+        "info": "Appears only when the store sells in more than one country.",
         "default": true,
         "label": "Show country selector"
       },
       {
         "type": "checkbox",
         "id": "enable_language_selector",
+        "info": "Appears only when the store has more than one language.",
         "default": true,
         "label": "Show language selector"
       },
@@ -1447,6 +1509,26 @@
         ]
       },
       {
+        "type": "select",
+        "id": "heading_transform",
+        "label": "Heading transform",
+        "default": "none",
+        "options": [
+          {
+            "value": "none",
+            "label": "Default"
+          },
+          {
+            "value": "uppercase",
+            "label": "UPPERCASE"
+          },
+          {
+            "value": "capitalize",
+            "label": "Capitalize"
+          }
+        ]
+      },
+      {
         "type": "header",
         "content": "Image / Media"
       },
@@ -1458,6 +1540,7 @@
       {
         "type": "range",
         "id": "footer_bg_brightness",
+        "visible_if": "{{ section.settings.background_image != blank }}",
         "min": 0,
         "max": 200,
         "step": 5,
@@ -1510,7 +1593,7 @@
       },
       {
         "type": "header",
-        "content": "Carousel"
+        "content": "Mobile menus"
       },
       {
         "type": "range",
@@ -1548,35 +1631,12 @@
       },
       {
         "type": "header",
-        "content": "Advanced"
-      },
-      {
-        "type": "select",
-        "id": "heading_transform",
-        "label": "Heading transform",
-        "default": "none",
-        "options": [
-          {
-            "value": "none",
-            "label": "Default"
-          },
-          {
-            "value": "uppercase",
-            "label": "UPPERCASE"
-          },
-          {
-            "value": "capitalize",
-            "label": "Capitalize"
-          }
-        ]
-      },
-      {
-        "type": "header",
         "content": "Custom Header Elements"
       },
       {
         "type": "select",
         "id": "custom_header_position",
+        "visible_if": "{{ section.settings.enable_custom_text_big or section.settings.enable_custom_image }}",
         "label": "Position",
         "default": "top",
         "options": [
@@ -1599,17 +1659,20 @@
       {
         "type": "text",
         "id": "custom_text",
+        "visible_if": "{{ section.settings.enable_custom_text_big }}",
         "label": "Custom Text",
         "default": "Premier®"
       },
       {
         "type": "color",
         "id": "custom_text_color",
+        "visible_if": "{{ section.settings.enable_custom_text_big }}",
         "label": "Text color"
       },
       {
         "type": "range",
         "id": "custom_text_font_size_desktop",
+        "visible_if": "{{ section.settings.enable_custom_text_big }}",
         "label": "Custom Text Font Size (Desktop)",
         "min": 40,
         "max": 400,
@@ -1620,6 +1683,7 @@
       {
         "type": "range",
         "id": "custom_text_font_size_mobile",
+        "visible_if": "{{ section.settings.enable_custom_text_big }}",
         "label": "Custom Text Font Size (Mobile)",
         "min": 20,
         "max": 200,
@@ -1630,6 +1694,7 @@
       {
         "type": "checkbox",
         "id": "custom_text_italic",
+        "visible_if": "{{ section.settings.enable_custom_text_big }}",
         "label": "Italic",
         "default": false
       },
@@ -1642,11 +1707,13 @@
       {
         "type": "image_picker",
         "id": "custom_image",
+        "visible_if": "{{ section.settings.enable_custom_image }}",
         "label": "Custom Image"
       },
       {
         "type": "range",
         "id": "custom_image_size_desktop",
+        "visible_if": "{{ section.settings.enable_custom_image }}",
         "label": "Image Size (Desktop)",
         "min": 40,
         "max": 600,
@@ -1657,6 +1724,7 @@
       {
         "type": "range",
         "id": "custom_image_size_mobile",
+        "visible_if": "{{ section.settings.enable_custom_image }}",
         "label": "Image Size (Mobile)",
         "min": 32,
         "max": 400,
@@ -1667,6 +1735,7 @@
       {
         "type": "range",
         "id": "custom_elements_gap",
+        "visible_if": "{{ section.settings.enable_custom_text_big and section.settings.enable_custom_image }}",
         "label": "Custom elements gap",
         "min": 0,
         "max": 120,
@@ -1733,6 +1802,7 @@
           {
             "type": "range",
             "id": "image_width",
+            "visible_if": "{{ block.settings.show_logo or block.settings.image != blank }}",
             "min": 50,
             "max": 200,
             "step": 2,
@@ -2035,7 +2105,8 @@
           {
             "type": "select",
             "id": "content_width",
-            "label": "Column width",
+            "label": "Badges area width (desktop)",
+            "info": "Badges sit on the copyright line. This caps how much of that line they take.",
             "default": "33.333%",
             "options": [
               {
@@ -2075,6 +2146,34 @@
             "type": "liquid",
             "id": "custom_liquid",
             "label": "Custom HTML"
+          },
+          {
+            "type": "select",
+            "id": "content_width",
+            "label": "Column width",
+            "default": "100%",
+            "options": [
+              {
+                "value": "25%",
+                "label": "25%"
+              },
+              {
+                "value": "33.333%",
+                "label": "33%"
+              },
+              {
+                "value": "50%",
+                "label": "50%"
+              },
+              {
+                "value": "66.666%",
+                "label": "66%"
+              },
+              {
+                "value": "100%",
+                "label": "100%"
+              }
+            ]
           }
         ]
       }
