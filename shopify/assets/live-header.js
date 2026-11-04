@@ -221,11 +221,13 @@
   function mmColors(H, bg, fg) {
     const nav = H.querySelector('nav.navigation.mobile');
     if (bg != null) {
+      document.documentElement.style.setProperty('--hs-mnav-title-bg', bg);
       prop(nav, '--mm-title-bg', bg);
       for (const el of all(H, '.menu-mobile-title')) { prop(el, 'background', bg, true); prop(el, '--mm-title-bg', bg); }
       for (const el of all(H, '.mm-sub-title-bar')) prop(el, 'background', bg, true);
     }
     if (fg != null) {
+      document.documentElement.style.setProperty('--hs-mnav-title-color', fg);
       prop(nav, '--mm-title-color', fg);
       for (const el of all(H, '.menu-mobile-title')) { prop(el, 'color', fg, true); prop(el, '--color-heading', fg); prop(el, '--mm-title-color', fg); }
       for (const el of all(H, '.menu-mobile-title > a[data-menu]')) prop(el, 'color', fg, true);
@@ -281,6 +283,7 @@
         case 'menu_mobile_background': mmColors(H, color(v, '#242424'), null); break;
         case 'menu_mobile_logo_height': for (const img of all(H, '.menu-mobile-title__logo')) prop(img, 'height', px(v, 28)); break;
         case 'menu_mobile_dividers': attr(H, 'data-mm-no-dividers', !bool(v)); break;
+        case 'menu_dropdown_tinted_bg': attr(H, 'data-dd-tinted', bool(v)); break;
         case 'menu_mobile_chevrons': attr(H, 'data-mm-chevrons', bool(v)); break;
         case 'reset_spacing': attr(H, 'data-reset-spacing', bool(v)); break;
         case 'section_margin_top_mobile': prop(S, '--hs-margin-top', px(v)); break;

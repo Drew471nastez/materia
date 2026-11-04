@@ -44,7 +44,17 @@ async function state(browser, opts, width, mode) {
       const tag = `${width} ${mode}${design_mode ? ' builder' : ''}`;
       const a = await state(browser, {old: true, design_mode}, width, mode);
       const b = await state(browser, {design_mode, footer: TOGGLE}, width, mode);
-      const d = L.diff(a.sig, b.sig);
+      /* Two looks changed on purpose since c098384 (the creator's builder edit, 0674ef4): the
+         mobile accordion arrow is drawn at Column arrow size (14px) instead of filling its box,
+         and the saved Badges area width (33.333%) now caps the payment badges on desktop. */
+      const intended = ([, x, y]) => {
+        const A = String(x).split('|'), B = String(y).split('|');
+        const ch = A.map((v, k) => [v, B[k]]).filter(([u, w]) => u !== w);
+        if (A[0].endsWith(' svg')) return ch.every(([u, w]) => u === '100%' && w === '14px');
+        if (A[0].endsWith(' DIV')) return ch.some(([u, w]) => u === '100%' && w === '33.333%') && ch.every(([u, w]) => (u === '100%' && w === '33.333%') || (/^-?[\d.]+(px)?$/.test(u) && /^-?[\d.]+(px)?$/.test(w)));
+        return false;
+      };
+      const d = L.diff(a.sig, b.sig).filter(e => !intended(e));
       ok(a.sig.length > 60 && a.sig.length === b.sig.length, `${tag}: same elements (${a.sig.length} / ${b.sig.length})`);
       ok(d.length === 0, `${tag}: every element looks the same\n` + L.explain(d));
       ok(a.extra.expanded === b.extra.expanded, `${tag}: accordion state the same (${a.extra.expanded} / ${b.extra.expanded})`);
