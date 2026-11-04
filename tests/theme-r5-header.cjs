@@ -191,17 +191,19 @@ const NOPILL = clone(BLOCKS); NOPILL[0].settings.header_pill_enable = false; NOP
       const settle = () => width < 1025 ? p.waitForTimeout(500) : null;
       const base = sectionBase(r);
       const one = async (label, settings0, change, blockChange) => {
+        /* a link changes an address, not a look: read the attributes too */
+        const full = /(^|\.)button_link$/.test(label);
         await draw(p, r, settings0, NOPILL);
-        const before = await L.signature(p, SEL, false);
+        const before = await L.signature(p, SEL, full);
         const bid = blockChange && blockChange[0];
         await L.emit(p, bid ? {section: 'header', block: bid, settings: blockChange[1], live: true} : {section: 'header', settings: change, live: true});
         await settle();
-        const live = await L.signature(p, SEL, false);
+        const live = await L.signature(p, SEL, full);
         let blocks = NOPILL;
         if (bid) { blocks = clone(NOPILL); Object.assign(blocks.find(b => b.id === bid).settings, blockChange[1]); }
         await draw(p, r, bid ? settings0 : {...settings0, ...change}, restore(blocks));
         await settle();
-        const after = await L.signature(p, SEL, false);
+        const after = await L.signature(p, SEL, full);
         const d = L.diff(live, after);
         ok(d.length === 0, `${width} live ${label} equals the redraw\n` + L.explain(d));
         return L.diff(before, live).length;
