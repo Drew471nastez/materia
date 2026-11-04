@@ -97,12 +97,16 @@ const MENU = {handle: 'main-menu', title: 'Main menu', links: [link('Home', '/')
 /* The header reads a badge from a tag in a link's title ([hot], [new] ...): one link for each. */
 const MENU_TAGGED = {...MENU, links: [...MENU.links.map(l => l.title === 'Home' || l.links.length ? l : {...l, links: [link('Our story', '/pages/story'), link('Stores', '/pages/stores')]}), link('Help', '/pages/help', [link('Shipping', '/pages/shipping'), link('Returns', '/pages/returns')]), ...['hot', 'new', 'sale', 'popular', 'custom_1', 'custom_2'].map(k => link('Tagged ' + k + ' [' + k + ']', '/collections/' + k, [link('First ' + k, '/collections/' + k + '-1'), link('Second ' + k, '/collections/' + k + '-2')]))]};
 /* Per section data the base drawing needs beyond the defaults. */
+const SOLD = {...OTHER, id: 'sold-tee-id', handle: 'sold-tee', title: 'Sold Tee', url: '/products/sold-tee', available: false, variants: OTHER.variants.map(v => ({...v, id: 'sold-' + v.id, available: false})), selected_or_first_available_variant: {...OTHER.variants[0], id: 'sold-' + OTHER.variants[0].id, available: false}};
+const OFFER_BLOCKS = {upsell_pro: {manual_product_1: MANY[3], manual_product_2: MANY[5], manual_product_3: SOLD, manual_product_4: '', manual_product_5: '', manual_product_6: ''}, bundle: {product_1: MANY[3]}};
 const DATA = {
   'theme-header': {settings: {mega_menu: MENU_TAGGED}, withBlocks: ['menu_badges']},
   /* how many pictures fit a row only shows with more pictures than one */
   'image-with-text-benefits': {repeat: {media: 3}},
   /* a column's 6th to 8th values fill the 6th to 8th rows */
   'comparison-table-2': {repeat: {row: 8}},
+  /* the product page's offer blocks: products other than the page's own (two to sell, one sold out), so the cards, the bundle lines and their limits draw */
+  'main-product': {blocks: OFFER_BLOCKS}, 'featured-product': {blocks: OFFER_BLOCKS},
 };
 /* A block that names the top-level link it belongs to gets a link of its own, one after the other. */
 const TOP_TITLES = MENU_TAGGED.links.map(l => l.title.replace(/\s*\[.*\]$/, '')).filter(t => t !== 'Home' && t !== 'Help');
@@ -131,6 +135,10 @@ const GLOBALS = {
   routes: {all_products_collection_url: '/collections/all', cart_add_url: '/cart/add', cart_url: '/cart', cart_change_url: '/cart/change', root_url: '/', account_url: '/account', account_login_url: '/account/login', account_logout_url: '/account/logout', account_register_url: '/account/register', account_addresses_url: '/account/addresses', search_url: '/search', predictive_search_url: '/search/suggest', product_recommendations_url: '/recommendations/products', collections_url: '/collections'},
 };
 
+/* SVG markup for a setting that takes a pasted icon (an id naming svg, not its size or colour). */
+const SVG_ID = /(^|_)svg($|_)(?!.*(size|color|colour|width|height|stroke|gap))/;
+const SVG_A = '<svg viewBox="0 0 24 24" width="24" height="24"><path d="M4 12h16" stroke="currentColor" stroke-width="2"></path></svg>';
+const SVG_B = '<svg viewBox="0 0 24 24" width="24" height="24"><circle cx="12" cy="12" r="8" fill="currentColor"></circle></svg>';
 /* A value to change a setting to, given what it holds now. */
 function values(x, cur) {
   const idOf = o => o && (o.id || o.handle || o.src); const other = (a, b) => cur && (cur === a || idOf(cur) === idOf(a)) ? b : a;
@@ -143,6 +151,8 @@ function values(x, cur) {
     case 'color_scheme': { const ids = Object.keys((JSON.parse(read('config/settings.json')).shopify || {}).color_schemes || {}); return [ids.find(i => i !== cur && i !== 'default') || ids[0]]; }
     case 'text': case 'textarea': {
       if (/(^|_)css$/.test(x.id)) return ['#shopify-section-test .sweep-none, #shopify-section-test > * { outline: 3px solid #ab12cd; }', 'outline: 3px solid #ab12cd; background: #ab12cd;'];
+      /* an icon pasted as SVG markup is drawn only when it is an <svg> */
+      if (SVG_ID.test(x.id)) return [cur === SVG_A ? SVG_B : SVG_A];
       const w = [cur === 'Edited words' ? 'Other words' : 'Edited words'];
       /* a length, a ratio or a shadow typed as words */
       if (/width|height|size|gap|radius|ratio|shadow|spacing|offset/.test(x.id)) w.push('640', '640px', '2/1', '2:1', '0 6px 18px #ab12cd');
@@ -172,6 +182,7 @@ function fill(x, cur) {
   const empty = cur === undefined || cur === null || cur === '';
   if (typeof cur === 'string' && cur && /^(product|collection|blog|article|page|link_list)$/.test(x.type)) return {product: PANTS, collection: COLL, blog: BLOG, article: ARTICLE, page: PAGE, link_list: MENU}[x.type];
   if (!empty && !(Array.isArray(cur) && !cur.length)) return cur;
+  if ((x.type === 'text' || x.type === 'textarea') && SVG_ID.test(x.id)) return SVG_A;
   switch (x.type) {
     case 'image_picker': return IMG;
     case 'video': return VIDEO;
@@ -234,6 +245,7 @@ function baseState(schema) {
   fillAll(schema.settings, settings);
   Object.assign(settings, (DATA[schema.__name] || {}).settings || {});
   for (const b of blocks) fillAll(types.find(t => t.type === b.type).settings, b.settings);
+  for (const b of blocks) Object.assign(b.settings, ((DATA[schema.__name] || {}).blocks || {})[b.type] || {});
   return {settings, blocks};
 }
 
