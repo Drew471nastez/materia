@@ -296,12 +296,13 @@ async function motion(browser) {
     await t.page.close();
   }
   for (const a of fx) for (const b of fx) if (a < b) ok(look[a] !== look[b], 'image effects ' + a + ' and ' + b + ' look different');
-  /* Slide changes: the arriving slide moves differently in each. */
+  /* Slide changes: the arriving slide moves differently in each. The slider runs slide or fade; the section draws the
+     rest on each slide's .sec__inner (data-ss-change), so the picture inside the slide is measured too. */
   const changes = schema.settings.find(x => x.id === 'slide_effect').options.map(o => o.value), mid = {};
   for (const e of changes) {
     const t = await mount(browser, 'slideshow', {width: 1366, editing: false, assets: A, settings: {...BASE, slide_effect: e}, blocks: BLOCKS()});
     await t.page.waitForTimeout(250);
-    mid[e] = await t.page.evaluate(() => new Promise(res => { const s = document.querySelector('slide-section'), sw = s.globalSlide; sw.params.speed = 1200; sw.slideNext(1200); setTimeout(() => { const out = sw.slides.map(sl => { const c = getComputedStyle(sl); return [c.transform.replace(/(\d+\.\d)\d+/g, '$1'), (+c.opacity).toFixed(1)].join(); }).join(';'); res(sw.params.effect + '#' + out + '#' + getComputedStyle(sw.wrapperEl).transform.replace(/(\d+\.\d)\d+/g, '$1')); }, 420); }));
+    mid[e] = await t.page.evaluate(() => new Promise(res => { const s = document.querySelector('slide-section'), sw = s.globalSlide; sw.params.speed = 1200; sw.slideNext(1200); setTimeout(() => { const out = sw.slides.map(sl => { const c = getComputedStyle(sl), n = sl.querySelector('.sec__inner'), ci = n ? getComputedStyle(n) : {}; return [c.transform.replace(/(\d+\.\d)\d+/g, '$1'), (+c.opacity).toFixed(1), String(ci.transform).replace(/(\d+\.\d)\d+/g, '$1'), ci.clipPath, (+ci.opacity).toFixed(1)].join(); }).join(';'); res(sw.params.effect + '#' + out + '#' + getComputedStyle(sw.wrapperEl).transform.replace(/(\d+\.\d)\d+/g, '$1')); }, 420); }));
     eq(t.errors, [], e);
     await t.page.close();
   }
@@ -324,10 +325,11 @@ async function motion(browser) {
   eq((await run('a')).running, false, 'off screen: autoplay waits');
   await two.page.evaluate(() => scrollTo(0, 0)); await two.page.waitForTimeout(400);
   eq((await run('a')).running, true, 'back on screen: runs');
-  /* live: change effect, loop and autoplay of b only; a keeps its slider */
+  /* live: change effect, loop and autoplay of b only; a keeps its slider. The slider runs slide or fade; the section
+     draws creative on top (data-ss-change), so Swiper's own effect is fade. */
   const aSwiper = await two.page.evaluateHandle(() => document.querySelector('#shopify-section-a slide-section').globalSlide);
   await two.emit({slide_effect: 'creative', autoplay: true, slide_loop: false}, undefined, 'b'); await frames(two.page); await two.page.waitForTimeout(100);
-  eq(await two.page.evaluate(() => { const sw = document.querySelector('#shopify-section-b slide-section').globalSlide; return [sw.params.effect, !!sw.params.loop, !!sw.params.autoplay.enabled, document.querySelector('#b').classList.contains('creative')]; }), ['creative', false, true, true], 'live effect, loop and autoplay restart the slider');
+  eq(await two.page.evaluate(() => { const sw = document.querySelector('#shopify-section-b slide-section').globalSlide; return [sw.params.effect, !!sw.params.loop, !!sw.params.autoplay.enabled, document.querySelector('#b').classList.contains('creative'), document.querySelector('#b').getAttribute('data-ss-change')]; }), ['fade', false, true, true, 'creative'], 'live effect, loop and autoplay restart the slider');
   ok(await two.page.evaluate(sw => sw === document.querySelector('#shopify-section-a slide-section').globalSlide && !sw.destroyed, aSwiper), 'the other instance keeps its slider');
   await two.emit({heading: 'Only in b'}, two.blockId('slider_item', 0, 'b'), 'b'); await frames(two.page);
   eq([await two.css('[data-first-slide] .sec__content-heading', 'color', 'a'), await two.page.evaluate(() => [document.querySelector('#a [data-first-slide] .sec__content-heading').textContent.trim(), document.querySelector('#b [data-first-slide] .sec__content-heading').textContent.trim()])], ['rgb(255, 255, 255)', ['First slide', 'Only in b']], 'a slide edit stays in its instance');

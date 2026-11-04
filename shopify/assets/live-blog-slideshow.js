@@ -72,7 +72,14 @@
     const slider = root.querySelector('slide-section');
     if (!slider || typeof slider.initSlideshow !== 'function') return;
     const s = st.s, single = root.querySelectorAll('slide-section > .swiper-wrapper > .swiper-slide').length < 2;
-    slider.dataset.effect = s.slide_effect || 'slide';
+    /* The slider runs slide or fade; the section draws every other change on top of it (data-ss-change, --ss-ch-dur),
+       with the same timings the section prints. */
+    const change = s.slide_effect || 'slide', slideMode = ['slide', 'slide_push', 'coverflow'].includes(change);
+    const speed = slideMode ? 750 : (change === 'fade' ? 800 : 900);
+    if (root.dataset.ssChange !== change) root.dataset.ssChange = change;
+    setVar(root, '--ss-ch-dur', speed + 'ms');
+    slider.dataset.effect = slideMode ? 'slide' : 'fade';
+    slider.dataset.speed = String(speed);
     slider.dataset.loop = String(!single && s.slide_loop !== false && s.slide_loop !== 'false');
     slider.dataset.autoplay = String(!single && bool(s.autoplay));
     slider.dataset.autoplaySpeed = String(num(s.autorotate_speed, 5));

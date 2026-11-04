@@ -27,7 +27,9 @@ const hs = L.schemaOf('sections/theme-header.storelib'), old = L.schemaOf('secti
   ok(old.settings.filter(s => s.id).every(s => ids.includes(s.id)), 'every section id at HEAD is kept');
   for (const ob of old.blocks) {
     const nb = hs.blocks.find(b => b.type === ob.type);
-    ok(nb && ob.settings.filter(s => s.id).every(s => nb.settings.some(x => x.id === s.id)), `block ${ob.type} keeps its ids`);
+    /* Storelib's builder renamed open-link-newtab to open_link_newtab in menu_promotion, menu_product and menu_collection; the saved header holds neither and the snippet reads both. */
+    const RENAMED = {'open-link-newtab': 'open_link_newtab'};
+    ok(nb && ob.settings.filter(s => s.id).every(s => nb.settings.some(x => x.id === s.id || x.id === RENAMED[s.id])), `block ${ob.type} keeps its ids`);
     const bids = nb.settings.filter(s => s.id).map(s => s.id);
     ok(new Set(bids).size === bids.length, `block ${ob.type} ids are unique`);
     const file = L.read('blocks/' + ob.type + '.storelib');

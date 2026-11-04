@@ -36,7 +36,9 @@ const B = type => hs.blocks.find(b => b.type === type);
   ok(B('menu_mobile_banner') && ['text', 'image', 'label', 'heading', 'body', 'divider', 'button_label', 'button_link', 'banner_bg', 'banner_text', 'button_bg', 'button_color', 'radius'].every(id => B('menu_mobile_banner').settings.some(s => s.id === id)), 'Mobile menu banner block');
   // the creator's existing ids are all still there
   for (const id of ['mega_menu', 'menu_hover_style', 'dropdowns_animation', 'uppercase_first', 'redirect_to_link', 'menu_dropdown_tinted_bg', 'menu_mobile_color', 'menu_mobile_background']) ok(S(id), `kept ${id}`);
-  for (const id of ['text', 'item_label', 'promotion_image_width', 'promotion_image_1', 'promotion_link_1', 'promotion_link_newtab_1', 'promotion_image_2', 'promotion_link_2', 'promotion_link_newtab_2', 'promotion_menu_column', 'mega_custom_width', 'full_width', 'promotion_position', 'open-link-newtab', 'center_submenu']) ok(B('menu_promotion').settings.some(s => s.id === id), `kept menu_promotion ${id}`);
+  /* Storelib's builder renamed open-link-newtab to open_link_newtab (a setting id may not hold a hyphen there); the saved header holds neither and the snippet reads both, so the new id counts as kept. */
+  const RENAMED = {'open-link-newtab': 'open_link_newtab'};
+  for (const id of ['text', 'item_label', 'promotion_image_width', 'promotion_image_1', 'promotion_link_1', 'promotion_link_newtab_1', 'promotion_image_2', 'promotion_link_2', 'promotion_link_newtab_2', 'promotion_menu_column', 'mega_custom_width', 'full_width', 'promotion_position', 'open-link-newtab', 'center_submenu']) ok(B('menu_promotion').settings.some(s => s.id === id || s.id === RENAMED[id]), `kept menu_promotion ${id}`);
 
   const ts = JSON.parse(read('shopify/config/settings_schema.json'));
   const typo = ts.flatMap(g => g.settings || []).find(s => s.id === 'menu_hover_style');
