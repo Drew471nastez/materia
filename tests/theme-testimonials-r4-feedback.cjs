@@ -11,8 +11,8 @@ const txt = el => el.textContent.trim();
 const blocks = [
   {type: 'heading', settings: {text: 'What customers told <strong>us</strong>'}},
   {type: 'summary', settings: {score: '4,3', count: 'Based on your reviews', note: 'Average answers'}},
-  {type: 'question', settings: {question: 'Is it good value?', value: 80}},
-  {type: 'question', settings: {question: 'How is the quality?', value: 40, left_label: 'Poor', right_label: 'Great'}},
+  {type: 'question', settings: {question: 'Is it good value?', value: 80, show_value: true}},
+  {type: 'question', settings: {question: 'How is the quality?', value: 40, left_label: 'Poor', right_label: 'Great', show_value: true}},
 ];
 const B = (block, id, value, sel, prop, expect, more = {}) => ({block, id, value, sel, prop, expect, ...more});
 const S = (id, value, sel, prop, expect, more = {}) => ({id, value, sel, prop, expect, ...more});
@@ -37,6 +37,8 @@ const S = (id, value, sel, prop, expect, more = {}) => ({id, value, sel, prop, e
       B('question', 'question', 'Changed question', '.cfs__row', null, 'Changed question|Changed question', {get: el => el.querySelector('.cfs__q').textContent.trim() + '|' + el.querySelector('.cfs__bar').getAttribute('aria-label')}),
       B('question', 'left_label', 'Bad', '.cfs__scale span', null, 'Bad', {get: txt}),
       B('question', 'right_label', 'Good', '.cfs__scale span:last-child', null, 'Good', {get: txt}),
+      B('question', 'show_value', false, '.cfs__row', null, 'none|none||true', {get: el => [getComputedStyle(el.querySelector('.cfs__marker')).display, getComputedStyle(el.querySelector('.cfs__fill')).display, el.querySelector('.cfs__bar').getAttribute('role'), el.querySelector('.cfs__bar').getAttribute('aria-hidden')].join('|')}),
+      B('summary', 'score', '', '.cfs__head', null, 'true|true|false', {get: el => [el.querySelector('.cfs__score').hidden, el.querySelector('.lt-stars').hidden, el.hidden].join('|')}),
       B('question', 'value', 30, '.cfs__row', null, '30|30', {get: el => el.querySelector('.cfs__bar').getAttribute('aria-valuenow') + '|' + Math.round((el.querySelector('.cfs__marker').getBoundingClientRect().x + el.querySelector('.cfs__marker').getBoundingClientRect().width / 2 - el.querySelector('.cfs__bar').getBoundingClientRect().x) / el.querySelector('.cfs__bar').getBoundingClientRect().width * 100)}),
     ],
     colours: [
@@ -87,6 +89,22 @@ const S = (id, value, sel, prop, expect, more = {}) => ({id, value, sel, prop, e
       const u = await mount(browser, 'comunitysldier', {blocks, settings: {overall_score: '1,0', review_count: 'Old count'}, assets: ['live-testimonials.js']});
       ok(await u.page.locator('[data-lt-legacy]').count() === 0 && (await u.page.locator('.cfs__count').textContent()) === 'Based on your reviews', 'with a summary block the legacy settings are not used');
       await u.page.close();
+      /* the preset as added: no score, no count, no stars and no answers on the bars; everything typed in later shows, live and after a redraw */
+      const {schemaOf} = require('./media-fixture.cjs');
+      const pre = JSON.parse(JSON.stringify(schemaOf('comunitysldier').schema.presets[0].blocks));
+      for (const editing of [true, false]) {
+        const p = await mount(browser, 'comunitysldier', {editing, blocks: pre, assets: ['live-testimonials.js']});
+        const got = await p.page.evaluate(() => { const r = document.querySelector('.cfs'), vis = el => !!el && el.getClientRects().length > 0; return {head: vis(r.querySelector('.cfs__head')), stars: [...r.querySelectorAll('.lt-stars')].some(vis), marks: [...r.querySelectorAll('.cfs__marker, .cfs__fill')].some(vis), meters: r.querySelectorAll('[role="meter"]').length, digits: /\d/.test(r.innerText), rows: r.querySelectorAll('.cfs__row').length, h: vis(r.querySelector('.cfs__heading'))}; });
+        ok(!got.head && !got.stars && !got.marks && !got.meters && !got.digits && got.rows === 4 && got.h, 'preset draws no made up score, count or answers (' + (editing ? 'editor' : 'storefront') + ') ' + JSON.stringify(got));
+        const sum = p.blockId('summary'), q = p.blockId('question');
+        await p.emit({score: '4,1', count: '12 reviews'}, sum); await p.emit({show_value: true, value: 64}, q); await wait2(p.page);
+        const live = await p.page.evaluate(() => { const r = document.querySelector('.cfs'); return [r.querySelector('.cfs__head').hidden, r.querySelector('.cfs__score').textContent, r.querySelector('.lt-stars').hidden, r.querySelector('.cfs__bar').getAttribute('aria-valuenow'), getComputedStyle(r.querySelector('.cfs__marker')).display].join('|'); });
+        ok(live === 'false|4,1|false|64|block', 'typed score and answer show live ' + live);
+        await p.page.close();
+      }
+      const leg = await mount(browser, 'comunitysldier', {blocks: [{type: 'question', settings: {question: 'Old question'}}], settings: {show_header: true}, assets: ['live-testimonials.js']});
+      ok(await leg.page.evaluate(() => { const h = document.querySelector('[data-lt-legacy]'); return h.querySelector('.cfs__score').hidden && h.querySelector('.lt-stars').hidden && !/\d/.test(h.innerText); }), 'legacy defaults draw no score or stars');
+      await leg.page.close();
     },
   });
   console.log(checks + ' Community Feedback Slider round 4 checks passed');

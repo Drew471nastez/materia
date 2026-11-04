@@ -1,142 +1,130 @@
 <template compat="shopify">
 {% render 'theme-type' %}
-{%- liquid
-  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
--%}
-{%- assign fb_accessibility_spin_again = 'accessibility.spin_again' | t -%}
-{%- assign fb_accessibility_you_won = 'accessibility.you_won' | t -%}
-{%- assign fb_accessibility_spin_to_win = 'accessibility.spin_to_win' | t -%}
-{%- assign fb_accessibility_enter_your_email = 'accessibility.enter_your_email' | t -%}
 {%- comment -%}
-  Spin Wheel Popup
-  --------------------------------------------------------------
-  A gamified discount popup. Visitor enters their email (+ optional
-  phone with country code), clicks Spin, the wheel animates and
-  lands on one of the prize segments. The winning segment's coupon
-  code is revealed and copyable. Submission posts to Shopify's
-  customer endpoint so the email + phone are captured.
-
-  Structure:
-    Section-level: trigger / overlay / layout / colors / fonts
-    Blocks:
-      - heading        (limit 1)
-      - description    (limit 1)
-      - prize          (up to 8, ordered, each with label + coupon code + color)
-      - form           (limit 1) — email + optional phone
-      - dismiss        (limit 1)
-
-  All popups follow the same z-index (2147483647), position:static
-  wrapper, body-scroll-lock, focus management and editor-mode pattern.
+  Materia Themes. Spin Wheel Popup: a heading, a line of text and a signup
+  form (Storelib Subscribers, data-storelib-form="subscribe") beside a wheel
+  of the creator's own prizes (Prize blocks: a label, the creator's own code
+  or none, how likely, colours), in a native <dialog>
+  (snippets/page-popup-dialog). Signing up spins the wheel; the code of the
+  prize it lands on is shown to copy. Every setting reaches the page as a
+  CSS variable, an attribute or a text on its element, so
+  shopify/assets/live-page-popups.js applies a builder edit in place, the
+  same as this Liquid draws it.
 {%- endcomment -%}
-
-{%- assign sw_open_mode = section.settings.open_mode | default: 'delay' -%}
-{%- assign sw_delay_s = section.settings.delay_s | default: 5 -%}
-{%- assign sw_after_dismiss = section.settings.after_dismiss | default: 'after_days' -%}
-{%- assign sw_hide_days = section.settings.hide_days | default: 1 -%}
-{%- assign sw_mobile_gutter = section.settings.mobile_gutter | default: 32 -%}
-{%- assign sw_editor_mode = section.settings.editor_mode -%}
-
-{%- assign block_heading = blank -%}
-{%- assign block_description = blank -%}
-{%- assign block_form = blank -%}
-{%- assign block_dismiss = blank -%}
-{%- assign prize_blocks = '' | split: '' -%}
-{%- for b in section.blocks -%}
-  {%- case b.type -%}
-    {%- when 'heading' -%}{%- assign block_heading = b -%}
-    {%- when 'description' -%}{%- assign block_description = b -%}
-    {%- when 'form' -%}{%- assign block_form = b -%}
-    {%- when 'dismiss' -%}{%- assign block_dismiss = b -%}
-    {%- when 'prize' -%}{%- assign prize_blocks = prize_blocks | concat: b.id | join: ',' -%}
-  {%- endcase -%}
-{%- endfor -%}
-
-{%- comment -%} Collect prize blocks in order so the wheel + JS use the same array {%- endcomment -%}
-
+{%- liquid
+  assign st = section.settings
+  assign sid = section.id
+  assign color_scheme = st.color_scheme.id | default: st.color_scheme | default: 'default-color-scheme'
+  assign fb_accessibility_spin_again = 'accessibility.spin_again' | t
+  assign fb_accessibility_you_won = 'accessibility.you_won' | t
+  assign fb_accessibility_spin_to_win = 'accessibility.spin_to_win' | t
+  assign block_heading = section.blocks | where: 'type', 'heading' | first
+  assign block_description = section.blocks | where: 'type', 'description' | first
+  assign block_form = section.blocks | where: 'type', 'form' | first
+  assign block_dismiss = section.blocks | where: 'type', 'dismiss' | first
+  assign sw_custom = false
+  if st.enable_custom_style == true
+    assign sw_custom = true
+  endif
+  assign c_card = ''
+  assign c_text = ''
+  assign c_close = ''
+  assign c_overlay = ''
+  assign c_bbg = ''
+  assign c_btx = ''
+  assign c_bbgh = ''
+  assign c_btxh = ''
+  assign c_panel = ''
+  assign c_pointer = ''
+  assign c_hub = ''
+  if sw_custom
+    assign c_card = st.card_bg
+    assign c_text = st.text_color
+    assign c_close = st.close_color
+    assign c_overlay = st.overlay_color
+    assign c_bbg = st.spin_btn_bg
+    assign c_btx = st.spin_btn_text
+    assign c_bbgh = st.spin_btn_bg_hover
+    assign c_btxh = st.spin_btn_text_hover
+    assign c_panel = st.wheel_panel_bg
+    assign c_pointer = st.pointer_color
+    assign c_hub = st.hub_color
+  endif
+-%}
 <style>
-  #shopify-section-{{ section.id }} { position: static; }
+  #shopify-section-{{ sid }} { position: static; }
+  .sw-{{ sid }} { font-family: var(--body-font, inherit); }
+  .sw-{{ sid }} *, .sw-{{ sid }} *::before, .sw-{{ sid }} *::after { box-sizing: border-box; }
+  .sw-{{ sid }} .sw-text-{{ sid }} [hidden] { display: none !important; }
 
-  .sw-{{ section.id }} { font-family: var(--body-font, inherit); }
-  .sw-{{ section.id }} *, .sw-{{ section.id }} *::before, .sw-{{ section.id }} *::after { box-sizing: border-box; }
-
-  .sw-overlay-{{ section.id }} {
+  .sw-overlay-{{ sid }} {
     position: fixed; inset: 0;
-    background: {% render 'scheme-color', color: section.settings.overlay_color, fallback: '#000000' %};
+    background: var(--sw-overlay, #000000);
     opacity: 0; pointer-events: none; visibility: hidden;
     transition: opacity .3s ease, visibility 0s linear .3s;
     z-index: 2147483646;
   }
-  .sw-{{ section.id }}.sw-open .sw-overlay-{{ section.id }} {
-    opacity: {{ section.settings.overlay_opacity | default: 60 | times: 0.01 }};
+  .sw-{{ sid }}.sw-open .sw-overlay-{{ sid }} {
+    opacity: var(--sw-overlay-o, .6);
     pointer-events: auto; visibility: visible; transition-delay: 0s;
   }
-
-  .sw-card-{{ section.id }} {
+  .sw-card-{{ sid }} {
     position: fixed; left: 50%; top: 50%;
     transform: translate(-50%, -50%) scale(.96);
     opacity: 0; pointer-events: none; visibility: hidden;
     transition: transform .35s cubic-bezier(.2,.8,.2,1), opacity .3s ease, visibility 0s linear .35s;
     z-index: 2147483647;
-    width: min(calc(100vw - {{ sw_mobile_gutter }}px), {{ section.settings.popup_width | default: 920 }}px);
+    width: min(calc(100vw - var(--sw-gutter, 32px)), var(--sw-w, 920px));
     max-height: calc(var(--sl-vh, 1vh) * 100 - 24px);
     overflow: hidden auto; overscroll-behavior: contain;
-    background: {% render 'scheme-color', color: section.settings.card_bg, fallback: 'var(--color-background)' %};
-    color: {% render 'scheme-color', color: section.settings.text_color, fallback: 'var(--color-text)' %};
-    border-radius: {{ section.settings.popup_radius | default: 16 }}px;
-    box-shadow: 0 12px 40px rgba(0,0,0,.2);
+    background: var(--sw-bg, var(--color-background));
+    color: var(--sw-text, var(--color-text));
+    border-radius: var(--sw-radius, 16px);
+    box-shadow: 0 12px 40px rgba(0,0,0,.18);
   }
-  .sw-{{ section.id }}.sw-open .sw-card-{{ section.id }} {
+  .sw-{{ sid }}.sw-open .sw-card-{{ sid }} {
     opacity: 1; pointer-events: auto; visibility: visible; transition-delay: 0s;
     transform: translate(-50%, -50%) scale(1);
   }
   @media (min-width: 750px) {
-    .sw-card-{{ section.id }} {
-      width: min(92vw, {{ section.settings.popup_width | default: 920 }}px);
-    }
+    .sw-card-{{ sid }} { width: min(92vw, var(--sw-w, 920px)); }
   }
 
-  .sw-grid-{{ section.id }} {
-    display: grid;
-    grid-template-columns: {% if section.settings.wheel_side == 'wheel-right' %}1.05fr .95fr{% else %}.95fr 1.05fr{% endif %};
-    align-items: stretch;
-    gap: 0;
-  }
-  .sw-grid-{{ section.id }}.sw-wheel-right .sw-text-{{ section.id }} { order: 1; }
-  .sw-grid-{{ section.id }}.sw-wheel-right .sw-wheel-col-{{ section.id }} { order: 2; }
+  .sw-grid-{{ sid }} { display: grid; grid-template-columns: .95fr 1.05fr; align-items: stretch; gap: 0; }
+  .sw-{{ sid }}[data-sw-side="wheel-right"] .sw-grid-{{ sid }} { grid-template-columns: 1.05fr .95fr; }
+  .sw-{{ sid }}[data-sw-side="wheel-right"] .sw-text-{{ sid }} { order: 1; }
+  .sw-{{ sid }}[data-sw-side="wheel-right"] .sw-wheel-col-{{ sid }} { order: 2; }
   @media (max-width: 749px) {
-    .sw-grid-{{ section.id }} {
-      grid-template-columns: 1fr;
-      grid-template-rows: auto auto;
-    }
-    .sw-grid-{{ section.id }} .sw-wheel-col-{{ section.id }} { order: 1; }
-    .sw-grid-{{ section.id }} .sw-text-{{ section.id }} { order: 2; }
+    .sw-{{ sid }}[data-sw-side] .sw-grid-{{ sid }} { grid-template-columns: 1fr; grid-template-rows: auto auto; }
+    .sw-{{ sid }}[data-sw-side] .sw-grid-{{ sid }} .sw-wheel-col-{{ sid }} { order: 1; }
+    .sw-{{ sid }}[data-sw-side] .sw-grid-{{ sid }} .sw-text-{{ sid }} { order: 2; }
   }
 
-  .sw-text-{{ section.id }} {
+  .sw-text-{{ sid }} {
     padding: 28px 28px;
     display: flex; flex-direction: column;
     justify-content: center;
-    text-align: {{ section.settings.text_align | default: 'left' }};
-    {% if section.settings.text_align == 'center' %}align-items: center;{% endif %}
+    text-align: start;
     min-height: 0;
   }
+  .sw-{{ sid }}[data-sw-align="center"] .sw-text-{{ sid }} { text-align: center; align-items: center; }
   @media (max-width: 749px) {
-    .sw-text-{{ section.id }} { padding: 20px 22px; }
+    .sw-text-{{ sid }} { padding: 20px 22px; }
   }
 
-  .sw-heading-{{ section.id }} { font-family: var(--heading-font, inherit); font-weight: var(--heading-weight, 800); font-size: 28px; line-height: 1.1; margin: 0 0 10px; }
-  .sw-description-{{ section.id }} { font-size: 15px; line-height: 1.45; margin: 0 0 16px; }
+  .sw-heading-{{ sid }} { font-family: var(--heading-font, inherit); font-weight: var(--heading-weight, 800); font-size: 28px; line-height: 1.1; margin: 0 0 10px; }
+  .sw-description-{{ sid }} { font-size: 15px; line-height: 1.45; margin: 0 0 16px; }
   @media (max-width: 749px) {
-    .sw-heading-{{ section.id }} { font-size: 22px; }
-    .sw-description-{{ section.id }} { font-size: 14px; }
+    .sw-heading-{{ sid }} { font-size: 22px; }
+    .sw-description-{{ sid }} { font-size: 14px; }
   }
 
-  .sw-close-{{ section.id }} {
+  .sw-close-{{ sid }} {
     position: absolute; top: 12px; right: 12px;
     width: 44px; height: 44px; padding: 0;
     border: none; border-radius: 50%;
     background: color-mix(in srgb, var(--color-background) 95%, transparent);
-    color: {% render 'scheme-color', color: section.settings.close_color, fallback: 'var(--color-heading)' %};
+    color: var(--sw-close, var(--color-heading));
     font-size: 20px; line-height: 1;
     cursor: pointer;
     display: inline-flex; align-items: center; justify-content: center;
@@ -144,61 +132,38 @@
     transition: transform var(--btn-anim-duration, .25s) var(--btn-anim-ease, ease), background-color var(--btn-anim-duration, .25s) var(--btn-anim-ease, ease);
     z-index: 2;
   }
-  .sw-close-{{ section.id }}:hover { background: var(--color-background); }
-  .sw-close-{{ section.id }} svg { width: 18px; height: 18px; }
-  .sw-close-{{ section.id }}:focus-visible, .sw-win-code-{{ section.id }}:focus-visible, .sw-dismiss-{{ section.id }}:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+  .sw-close-{{ sid }}:hover { background: var(--color-background); }
+  .sw-close-{{ sid }} svg { width: 18px; height: 18px; }
+  .sw-close-{{ sid }}:focus-visible, .sw-win-code-{{ sid }}:focus-visible, .sw-dismiss-{{ sid }}:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 
-  /* Wheel area */
-  .sw-wheel-col-{{ section.id }} {
-    background: {% render 'scheme-color', color: section.settings.wheel_panel_bg, fallback: 'color-mix(in srgb, var(--color-primary) 6%, var(--color-background))' %};
+  .sw-wheel-col-{{ sid }} {
+    background: var(--sw-panel, color-mix(in srgb, var(--color-primary) 6%, var(--color-background)));
     display: flex; align-items: center; justify-content: center;
     padding: 24px;
     overflow: hidden;
   }
-  .sw-wheel-{{ section.id }} {
-    position: relative;
-    width: 100%;
-    max-width: 320px;
-    aspect-ratio: 1 / 1;
-  }
+  .sw-wheel-{{ sid }} { position: relative; width: 100%; max-width: 320px; aspect-ratio: 1 / 1; }
   @media (max-width: 749px) {
-    .sw-wheel-col-{{ section.id }} { padding: 20px 16px 8px; }
-    .sw-wheel-{{ section.id }} { max-width: min(240px, 64vw); }
+    .sw-wheel-col-{{ sid }} { padding: 20px 16px 8px; }
+    .sw-wheel-{{ sid }} { max-width: min(240px, 64vw); }
   }
-  .sw-wheel-svg-{{ section.id }} {
+  .sw-wheel-svg-{{ sid }} {
     width: 100%; height: 100%;
     border-radius: 50%;
     position: relative;
     transform: rotate(0deg);
-    transition: transform {{ section.settings.spin_duration_s | default: 5 }}s cubic-bezier(.12,.6,.12,1);
+    transition: transform var(--sw-spin-dur, 5s) cubic-bezier(.12,.6,.12,1);
     will-change: transform;
     display: block;
     overflow: hidden;
-    border: 6px solid {% render 'scheme-color', color: section.settings.hub_color, fallback: 'var(--color-background)' %};
+    border: 6px solid var(--sw-hub, var(--color-background));
     box-shadow: 0 6px 24px rgba(0,0,0,.18);
   }
-  /* Hub border on each segment is rendered via SVG <line> elements in the
-     labels overlay below (`.sw-wheel-divider`). Kept as SVG for crisp rendering
-     and reliable cross-browser support. */
-  .sw-wheel-svg-{{ section.id }} .sw-wheel-divider {
-    stroke: {% render 'scheme-color', color: section.settings.segment_divider, fallback: 'color-mix(in srgb, var(--color-border) 60%, transparent)' %};
-    stroke-width: 1;
-  }
-  /* SVG label overlay — text is positioned at the mid-radius of each
-     segment and rotated to read radially. Sized via CSS to match wheel. */
-  .sw-wheel-labels-{{ section.id }} {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-  }
-  .sw-wheel-labels-{{ section.id }} text {
-    font-weight: 800;
-    letter-spacing: .04em;
-    font-family: var(--body-font, inherit);
-  }
-  .sw-wheel-pointer-{{ section.id }} {
+  .sw-wheel-svg-{{ sid }}.sw-wheel-empty { background: #eee; display: flex; align-items: center; justify-content: center; }
+  .sw-wheel-svg-{{ sid }}.sw-wheel-empty span { color: #999; font-size: 12px; }
+  .sw-wheel-labels-{{ sid }} { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .sw-wheel-labels-{{ sid }} text { font-weight: 800; letter-spacing: .04em; font-family: var(--body-font, inherit); }
+  .sw-wheel-pointer-{{ sid }} {
     position: absolute;
     top: -4px;
     left: 50%;
@@ -206,93 +171,65 @@
     width: 0; height: 0;
     border-left: 14px solid transparent;
     border-right: 14px solid transparent;
-    border-top: 22px solid {% render 'scheme-color', color: section.settings.pointer_color, fallback: 'var(--color-heading)' %};
+    border-top: 22px solid var(--sw-pointer, var(--color-heading));
     filter: drop-shadow(0 2px 4px rgba(0,0,0,.25));
     z-index: 3;
   }
-  /* Center hub — decorative button-style ring with brand mark in the middle.
-     Sits above the conic-gradient and labels (z-index: 2) so it covers the
-     center where labels would otherwise crowd. */
-  .sw-wheel-hub-{{ section.id }} {
+  .sw-wheel-hub-{{ sid }} {
     position: absolute;
     top: 50%; left: 50%;
     transform: translate(-50%, -50%);
     width: 24%; height: 24%;
     border-radius: 50%;
-    background:
-      radial-gradient(circle at 30% 30%, rgba(255,255,255,.95) 0%, {% render 'scheme-color', color: section.settings.hub_color, fallback: 'var(--color-background)' %} 65%);
-    box-shadow:
-      0 4px 12px rgba(0,0,0,.18),
-      inset 0 0 0 6px {% render 'scheme-color', color: section.settings.pointer_color, fallback: 'var(--color-heading)' %},
-      inset 0 0 0 8px rgba(255,255,255,.85);
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.95) 0%, var(--sw-hub, var(--color-background)) 65%);
+    box-shadow: 0 4px 12px rgba(0,0,0,.18), inset 0 0 0 6px var(--sw-pointer, var(--color-heading)), inset 0 0 0 8px rgba(255,255,255,.85);
     z-index: 2;
     display: flex;
     align-items: center;
     justify-content: center;
     font-family: var(--body-font, inherit);
   }
-  .sw-wheel-hub-{{ section.id }}::after {
-    content: "{{ section.settings.hub_text | default: '%' }}";
-    color: {% render 'scheme-color', color: section.settings.pointer_color, fallback: 'var(--color-heading)' %};
+  .sw-wheel-hub-{{ sid }}::after {
+    content: var(--sw-hub-text, "%");
+    color: var(--sw-pointer, var(--color-heading));
     font-weight: 900;
     font-size: clamp(14px, 4.4vw, 30px);
     line-height: 1;
     letter-spacing: -.02em;
   }
-  /* Subtle bounce-in animation when the popup opens */
-  @keyframes sw-hub-pop-{{ section.id }} {
+  @keyframes sw-hub-pop-{{ sid }} {
     0%   { transform: translate(-50%, -50%) scale(.6); opacity: 0; }
     60%  { transform: translate(-50%, -50%) scale(1.08); opacity: 1; }
     100% { transform: translate(-50%, -50%) scale(1); }
   }
-  .sw-{{ section.id }}.sw-open .sw-wheel-hub-{{ section.id }} {
-    animation: sw-hub-pop-{{ section.id }} .55s cubic-bezier(.4,0,.2,1) both;
-  }
+  .sw-{{ sid }}.sw-open .sw-wheel-hub-{{ sid }} { animation: sw-hub-pop-{{ sid }} .55s cubic-bezier(.4,0,.2,1) both; }
   @media (prefers-reduced-motion: reduce) {
-    .sw-{{ section.id }}.sw-open .sw-wheel-hub-{{ section.id }} { animation: none; }
+    .sw-{{ sid }}.sw-open .sw-wheel-hub-{{ sid }} { animation: none; }
   }
 
-  /* Form & button */
-  .sw-form-{{ section.id }} { display: flex; flex-direction: column; gap: 12px; max-width: 420px; {% if section.settings.text_align == 'center' %}margin-inline: auto;{% endif %} }
-  .sw-form-{{ section.id }} > form { display: flex; flex-direction: column; gap: 12px; }
-  .sw-form-{{ section.id }} input[type="email"] {
+  .sw-form-{{ sid }} { display: flex; flex-direction: column; gap: 12px; max-width: 420px; }
+  .sw-{{ sid }}[data-sw-align="center"] .sw-form-{{ sid }} { margin-inline: auto; }
+  .sw-form-{{ sid }} > form { display: flex; flex-direction: column; gap: 12px; }
+  .sw-form-{{ sid }} input[type="email"] {
     width: 100%; min-height: var(--input-height, 46px); padding: var(--input-padding, 12px 14px);
     border-radius: var(--input-border-radius, 8px); border: max(1px, var(--inputs-border-width, 1px)) solid var(--color-border, #cccccc);
     font-family: var(--body-font, inherit); font-size: var(--input-font-size, 15px); background: var(--input-bg, var(--color-background)); color: var(--input-color, var(--color-text));
     outline: none;
   }
-  /* Ghost-text placeholder — light gray, full opacity (Firefox default
-     gives placeholders reduced opacity which can read as off-white on
-     some forms; force 1 so the colour stays consistent across browsers). */
-  .sw-form-{{ section.id }} input[type="email"]::placeholder {
-    color: var(--input-placeholder-color, color-mix(in srgb, var(--color-text) 55%, transparent));
-    opacity: 1;
-  }
-  .sw-form-{{ section.id }} input[type="email"]::-webkit-input-placeholder { color: var(--input-placeholder-color, color-mix(in srgb, var(--color-text) 55%, transparent)); opacity: 1; }
-  .sw-form-{{ section.id }} input[type="email"]::-moz-placeholder         { color: var(--input-placeholder-color, color-mix(in srgb, var(--color-text) 55%, transparent)); opacity: 1; }
-  .sw-form-{{ section.id }} input[type="email"]:-ms-input-placeholder      { color: var(--input-placeholder-color, color-mix(in srgb, var(--color-text) 55%, transparent)); opacity: 1; }
-  .sw-form-{{ section.id }} input[type="email"]:focus {
-    border-color: color-mix(in srgb, var(--color-text) 40%, transparent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-text) 8%, transparent);
-  }
-  /* Spin and Spin again are theme buttons (theme-button-contract.css); the
-     section's own spin button colours arrive as --mb-* tokens. */
-  .sw-spin-btn-{{ section.id }} { width: 100%; }
+  .sw-form-{{ sid }} input[type="email"]::placeholder { color: var(--input-placeholder-color, color-mix(in srgb, var(--color-text) 55%, transparent)); opacity: 1; }
+  .sw-form-{{ sid }} input[type="email"]:focus { border-color: color-mix(in srgb, var(--color-text) 40%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-text) 8%, transparent); }
+  .sw-spin-btn-{{ sid }} { width: 100%; }
 
-  /* Pre/Post panes */
-  .sw-pre-{{ section.id }} { display: block; }
-  .sw-{{ section.id }}.sw-spun .sw-pre-{{ section.id }} { display: none; }
-  .sw-post-{{ section.id }} { display: none; }
-  .sw-{{ section.id }}.sw-spun .sw-post-{{ section.id }} { display: block; }
+  .sw-pre-{{ sid }} { display: block; }
+  .sw-{{ sid }}.sw-spun .sw-pre-{{ sid }} { display: none; }
+  .sw-post-{{ sid }} { display: none; }
+  .sw-{{ sid }}.sw-spun .sw-post-{{ sid }} { display: block; }
+  .sw-respin-btn-{{ sid }} { display: none; margin-top: 14px; }
+  .sw-{{ sid }}.sw-can-respin .sw-respin-btn-{{ sid }} { display: inline-flex; }
 
-  /* Re-spin button — hidden by default, only shown when the visitor lands
-     on a no-code slice (e.g. TRY AGAIN) AND there are retries left. */
-  .sw-respin-btn-{{ section.id }} { display: none; margin-top: 14px; }
-  .sw-{{ section.id }}.sw-can-respin .sw-respin-btn-{{ section.id }} { display: inline-flex; }
-
-  .sw-win-label-{{ section.id }} { font-size: 14px; font-weight: 600; opacity: .85; margin: 0 0 6px; letter-spacing: .04em; text-transform: uppercase; }
-  .sw-win-title-{{ section.id }} { font-family: var(--heading-font, inherit); font-size: 28px; font-weight: var(--heading-weight, 800); margin: 0 0 12px; line-height: 1.1; }
-  .sw-win-code-{{ section.id }} {
+  .sw-win-label-{{ sid }} { font-size: 14px; font-weight: 600; opacity: .85; margin: 0 0 6px; letter-spacing: .04em; text-transform: uppercase; }
+  .sw-win-title-{{ sid }} { font-family: var(--heading-font, inherit); font-size: 28px; font-weight: var(--heading-weight, 800); margin: 0 0 12px; line-height: 1.1; }
+  .sw-win-code-{{ sid }} {
     display: inline-block;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-weight: 700; letter-spacing: .12em; font-size: 17px;
@@ -303,127 +240,133 @@
     background: transparent;
     transition: background .2s ease, color .2s ease, border-color .2s ease;
   }
-  .sw-win-code-{{ section.id }}.is-copied {
-    background: #1c8d3a; color: #fff; border-color: #1c8d3a;
-  }
+  .sw-win-code-{{ sid }}.is-copied { background: #1c8d3a; color: #fff; border-color: #1c8d3a; }
 
-  .sw-dismiss-wrap-{{ section.id }} { margin-top: 12px; text-align: {{ section.settings.dismiss_align | default: 'center' }}; }
-  .sw-dismiss-{{ section.id }} {
+  .sw-dismiss-wrap-{{ sid }} { margin-top: 12px; text-align: var(--sw-dismiss-align, center); }
+  .sw-dismiss-{{ sid }} {
     background: none; border: none; cursor: pointer;
     font-size: 13px; text-decoration: underline;
     color: inherit; opacity: .7;
     min-height: 44px; padding: 4px 8px;
     transition: opacity var(--btn-anim-duration, .25s) var(--btn-anim-ease, ease);
   }
-  .sw-dismiss-{{ section.id }}:hover { opacity: 1; }
-
+  .sw-dismiss-{{ sid }}:hover { opacity: 1; }
 
   @media (prefers-reduced-motion: reduce) {
-    .sw-card-{{ section.id }}, .sw-overlay-{{ section.id }},
-    .sw-spin-btn-{{ section.id }}, .sw-respin-btn-{{ section.id }}, .sw-dismiss-{{ section.id }}, .sw-win-code-{{ section.id }}, .sw-close-{{ section.id }} {
-      transition: none !important;
-    }
-    .sw-wheel-svg-{{ section.id }} { transition: transform 0.001ms !important; }
-    .sw-card-{{ section.id }} { transform: translate(-50%, -50%) !important; }
+    .sw-card-{{ sid }}, .sw-overlay-{{ sid }},
+    .sw-spin-btn-{{ sid }}, .sw-respin-btn-{{ sid }}, .sw-dismiss-{{ sid }}, .sw-win-code-{{ sid }}, .sw-close-{{ sid }} { transition: none !important; }
+    .sw-wheel-svg-{{ sid }} { transition: transform 0.001ms !important; }
+    .sw-card-{{ sid }} { transform: translate(-50%, -50%) !important; }
   }
 {% comment %}{% endcomment %}</style>
 
 {%- capture sw_config -%}
-  {"design": {{ request.design_mode | json }}, "preview": {{ sw_editor_mode | json }},
-   "trigger": {"mode": {{ sw_open_mode | json }}, "delay": {{ sw_delay_s | json }}, "scroll": {{ section.settings.scroll_pct | default: 50 | json }}, "views": {{ section.settings.page_views | default: 2 | json }} },
-   "frequency": {"mode": {{ sw_after_dismiss | json }}, "days": {{ sw_hide_days | json }} },
-   "spin": {"seconds": {{ section.settings.spin_duration_s | default: 5 | json }}, "turns": {{ section.settings.spin_full_turns | default: 5 | json }}, "respins": {{ section.settings.max_respins | default: 2 | json }},
-     "closeAfterCopy": {{ section.settings.close_after_copy | json }}, "closeDelay": {{ section.settings.close_after_copy_delay_s | default: 10 | json }},
-     "noWin": {{ section.settings.no_win_label | default: 'Better luck next time' | json }}, "copied": {{ section.settings.copy_done_label | default: 'Copied!' | json }}, "spinning": {{ section.settings.spinning_label | default: 'Spinning' | json }} } }
+  {"design": {{ request.design_mode | json }}, "preview": {{ st.editor_mode | json }},
+   "trigger": {"mode": {{ st.open_mode | default: 'delay' | json }}, "delay": {{ st.delay_s | default: 5 | json }}, "scroll": {{ st.scroll_pct | default: 50 | json }}, "views": {{ st.page_views | default: 2 | json }} },
+   "frequency": {"mode": {{ st.after_dismiss | default: 'after_days' | json }}, "days": {{ st.hide_days | default: 1 | json }} },
+   "spin": {"seconds": {{ st.spin_duration_s | default: 5 | json }}, "turns": {{ st.spin_full_turns | default: 5 | json }}, "respins": {{ st.max_respins | default: 2 | json }},
+     "closeAfterCopy": {{ st.close_after_copy | json }}, "closeDelay": {{ st.close_after_copy_delay_s | default: 10 | json }},
+     "noWin": {{ st.no_win_label | default: 'Better luck next time' | json }}, "copied": {{ st.copy_done_label | default: 'Copied!' | json }}, "spinning": {{ st.spinning_label | default: 'Spinning' | json }} } }
 {%- endcapture -%}
-<section class="sw-{{ section.id }} color-{{ color_scheme }}"
-         data-sw-section="{{ section.id }}" data-popup-root="{{ section.id }}"
+{%- capture sw_vars -%}
+--sw-overlay-o: {{ st.overlay_opacity | default: 60 | times: 0.01 }}; --sw-gutter: {{ st.mobile_gutter | default: 32 }}px; --sw-w: {{ st.popup_width | default: 920 }}px; --sw-radius: {{ st.popup_radius | default: 16 }}px; --sw-spin-dur: {{ st.spin_duration_s | default: 5 }}s; --sw-hub-text: {{ st.hub_text | default: '%' | json | escape }}; --sw-dismiss-align: {{ st.dismiss_align | default: 'center' }};
+{%- if sw_custom %} --sw-overlay: {% render 'scheme-color', color: c_overlay, fallback: '#000000' %}; --sw-bg: {% render 'scheme-color', color: c_card, fallback: 'var(--color-background)' %}; --sw-text: {% render 'scheme-color', color: c_text, fallback: 'var(--color-text)' %}; --sw-close: {% render 'scheme-color', color: c_close, fallback: 'var(--color-heading)' %}; --sw-panel: {% render 'scheme-color', color: c_panel, fallback: 'color-mix(in srgb, var(--color-primary) 6%, var(--color-background))' %}; --sw-hub: {% render 'scheme-color', color: c_hub, fallback: 'var(--color-background)' %}; --sw-pointer: {% render 'scheme-color', color: c_pointer, fallback: 'var(--color-heading)' %};{%- endif -%}
+{%- render 'page-popup-fonts', st: st -%}
+{%- endcapture -%}
+{% render 'page-popup-dialog', sid: sid, st: st %}
+<section class="sw-{{ sid }} color-{{ color_scheme }}" data-pg-root="spin-wheel-popup" data-pg-section="{{ sid }}" data-pg-settings="{{ st | json | escape }}"{% if st.enable_custom_fonts %} data-pg-fonts data-own-font{% endif %}
+         data-sw-side="{{ st.wheel_side | default: 'wheel-left' }}" data-sw-align="{{ st.text_align | default: 'left' }}"
+         data-sw-section="{{ sid }}" data-popup-root="{{ sid }}"
          data-popup-config="{{ sw_config | strip_newlines | escape }}"
+         style="{{ sw_vars | strip_newlines | strip }}"
          aria-hidden="true">
-  <div class="sw-overlay-{{ section.id }}" aria-hidden="true"></div>
-  <div class="sw-card-{{ section.id }}" role="dialog" aria-modal="true"
-       aria-labelledby="sw-title-{{ section.id }}" tabindex="-1">
-    <button type="button" class="sw-close-{{ section.id }}" data-popup-close aria-label="{{ 'accessibility.close_popup' | t }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <dialog class="pg-dialog" data-pg-dialog aria-labelledby="sw-title-{{ sid }}">
+  <div class="sw-overlay-{{ sid }}" data-pg-backdrop aria-hidden="true"></div>
+  <div class="sw-card-{{ sid }}" data-pg-card tabindex="-1">
+    <button type="button" class="sw-close-{{ sid }}" data-popup-close aria-label="{{ 'accessibility.close_popup' | t }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
 
-    <div class="sw-grid-{{ section.id }}{% if section.settings.wheel_side == 'wheel-right' %} sw-wheel-right{% endif %}">
-      <div class="sw-text-{{ section.id }}">
-        {%- if block_heading != blank and block_heading.settings.text != blank -%}
-          <h2 class="sw-heading-{{ section.id }}" id="sw-title-{{ section.id }}"
-              style="color: {% render 'scheme-color', color: block_heading.settings.color, fallback: 'var(--color-heading)' %};"
+    <div class="sw-grid-{{ sid }}">
+      <div class="sw-text-{{ sid }}">
+        {%- if block_heading != blank -%}
+          {%- liquid
+            assign c = ''
+            if block_heading.settings.enable_custom_style == true
+              assign c = block_heading.settings.color
+            endif
+          -%}
+          <h2 class="sw-heading-{{ sid }}" id="sw-title-{{ sid }}" data-pg-block="{{ block_heading.id }}" data-pg-type="heading" data-pg-settings="{{ block_heading.settings | json | escape }}"{% if block_heading.settings.text == blank %} hidden{% endif %}
+              style="color: {% render 'scheme-color', color: c, fallback: 'var(--color-heading)' %};"
               {{ block_heading.shopify_attributes }}>{{ block_heading.settings.text }}</h2>
         {%- endif -%}
-        {%- if block_description != blank and block_description.settings.text != blank -%}
-          <p class="sw-description-{{ section.id }}"
-             style="color: {% render 'scheme-color', color: block_description.settings.color, fallback: 'var(--color-text)' %};"
+        {%- if block_description != blank -%}
+          {%- liquid
+            assign c = ''
+            if block_description.settings.enable_custom_style == true
+              assign c = block_description.settings.color
+            endif
+          -%}
+          <p class="sw-description-{{ sid }}" data-pg-block="{{ block_description.id }}" data-pg-type="description" data-pg-settings="{{ block_description.settings | json | escape }}"{% if block_description.settings.text == blank %} hidden{% endif %}
+             style="color: {% render 'scheme-color', color: c, fallback: 'var(--color-text)' %};"
              {{ block_description.shopify_attributes }}>{{ block_description.settings.text }}</p>
         {%- endif -%}
 
-        <div class="sw-pre-{{ section.id }}">
+        <div class="sw-pre-{{ sid }}">
           {%- if block_form != blank -%}
-            {%- assign sw_form_id = 'sw-form-' | append: section.id -%}
-            {%- assign sw_form_class = 'sw-formel-' | append: section.id -%}
-            <div class="sw-form-{{ section.id }}" {{ block_form.shopify_attributes }}>
+            {%- liquid
+              assign fs = block_form.settings
+              assign sw_form_id = 'sw-form-' | append: sid
+              assign sw_form_class = 'sw-formel-' | append: sid
+              assign sw_email_ph = fs.email_placeholder | default: 'Email address'
+              assign sw_phone_req = 'false'
+              if fs.phone_required
+                assign sw_phone_req = 'true'
+              endif
+              assign sw_phone_off = true
+              if fs.collect_phone
+                assign sw_phone_off = false
+              endif
+            -%}
+            <div class="sw-form-{{ sid }}" data-pg-block="{{ block_form.id }}" data-pg-type="form" data-pg-settings="{{ fs | json | escape }}" data-pg-i18n="{{ fb_accessibility_spin_to_win | escape }}" {{ block_form.shopify_attributes }}>
               <form id="{{ sw_form_id }}" class="{{ sw_form_class }}" data-storelib-form="subscribe">
-                {%- assign sw_email_ph = block_form.settings.email_placeholder | default: 'Email address' -%}
-                <input type="email" name="email" required
-                       autocomplete="email"
-                       placeholder="{{ sw_email_ph | escape }}"
-                       aria-label="{{ sw_email_ph | escape }}" data-popup-autofocus>
-                {%- if block_form.settings.collect_phone -%}
-                  {%- if block_form.settings.phone_required -%}{%- assign sw_phone_req = 'true' -%}{%- else -%}{%- assign sw_phone_req = 'false' -%}{%- endif -%}
-                  {%- render 'cpnb-phone-field',
-                      scope: section.id,
-                      default_country: block_form.settings.phone_default_country,
-                      phone_placeholder: block_form.settings.phone_placeholder,
-                      required: sw_phone_req -%}
-                {%- endif -%}
-                <button type="submit" class="sw-spin-btn-{{ section.id }} btn-primary" data-theme-button="primary" data-sl-button
-                        style="{%- render 'button-overrides', bg: section.settings.spin_btn_bg, text: section.settings.spin_btn_text, hover_bg: section.settings.spin_btn_bg_hover, hover_text: section.settings.spin_btn_text_hover -%}">
-                  {{ block_form.settings.spin_label | default: fb_accessibility_spin_to_win }}
-                </button>
+                <input type="email" name="email" required autocomplete="email" placeholder="{{ sw_email_ph | escape }}" aria-label="{{ sw_email_ph | escape }}" data-popup-autofocus>
+                {%- render 'cpnb-phone-field', scope: sid, default_country: fs.phone_default_country, phone_placeholder: fs.phone_placeholder, required: sw_phone_req, off: sw_phone_off -%}
+                <button type="submit" class="sw-spin-btn-{{ sid }} btn-primary" data-theme-button="primary" data-sl-button
+                        style="{%- render 'button-overrides', bg: c_bbg, text: c_btx, hover_bg: c_bbgh, hover_text: c_btxh -%}">{{ fs.spin_label | default: fb_accessibility_spin_to_win }}</button>
               </form>
             </div>
           {%- endif -%}
 
-          {%- if block_dismiss != blank and block_dismiss.settings.text != blank -%}
-            <div class="sw-dismiss-wrap-{{ section.id }}" {{ block_dismiss.shopify_attributes }}>
-              <button type="button" class="sw-dismiss-{{ section.id }}" data-popup-close>{{ block_dismiss.settings.text }}</button>
+          {%- if block_dismiss != blank -%}
+            <div class="sw-dismiss-wrap-{{ sid }}" data-pg-block="{{ block_dismiss.id }}" data-pg-type="dismiss" data-pg-settings="{{ block_dismiss.settings | json | escape }}"{% if block_dismiss.settings.text == blank %} hidden{% endif %} {{ block_dismiss.shopify_attributes }}>
+              <button type="button" class="sw-dismiss-{{ sid }}" data-popup-close>{{ block_dismiss.settings.text }}</button>
             </div>
           {%- endif -%}
         </div>
 
-        <div class="sw-post-{{ section.id }}" aria-live="polite">
-          <p class="sw-win-label-{{ section.id }}" data-sw-win-label-text>{{ section.settings.win_label | default: fb_accessibility_you_won }}</p>
-          <h3 class="sw-win-title-{{ section.id }}" data-sw-win-title></h3>
-          <button type="button" class="sw-win-code-{{ section.id }}" data-sw-win-code aria-label="{{ 'accessibility.copy_coupon_code' | t }}"></button>
-          {%- comment -%}
-            Re-spin CTA — only shown when the visitor lands on a no-code slice
-            (TRY AGAIN). JS toggles its visibility via the .sw-can-respin
-            class on the root.
-          {%- endcomment -%}
-          <button type="button" class="sw-respin-btn-{{ section.id }} btn-primary" data-theme-button="primary" data-sl-button data-sw-respin
-                  style="{%- render 'button-overrides', bg: section.settings.spin_btn_bg, text: section.settings.spin_btn_text, hover_bg: section.settings.spin_btn_bg_hover, hover_text: section.settings.spin_btn_text_hover -%}">
-            {{ section.settings.respin_label | default: fb_accessibility_spin_again }}
-          </button>
+        <div class="sw-post-{{ sid }}" aria-live="polite">
+          <p class="sw-win-label-{{ sid }}" data-sw-win-label-text data-pg-i18n="{{ fb_accessibility_you_won | escape }}">{{ st.win_label | default: fb_accessibility_you_won }}</p>
+          <h3 class="sw-win-title-{{ sid }}" data-sw-win-title></h3>
+          <button type="button" class="sw-win-code-{{ sid }}" data-sw-win-code aria-label="{{ 'accessibility.copy_coupon_code' | t }}"></button>
+          <button type="button" class="sw-respin-btn-{{ sid }} btn-primary" data-theme-button="primary" data-sl-button data-sw-respin data-pg-i18n="{{ fb_accessibility_spin_again | escape }}"
+                  style="{%- render 'button-overrides', bg: c_bbg, text: c_btx, hover_bg: c_bbgh, hover_text: c_btxh -%}">{{ st.respin_label | default: fb_accessibility_spin_again }}</button>
         </div>
       </div>
 
-      <div class="sw-wheel-col-{{ section.id }}">
-        <div class="sw-wheel-{{ section.id }}">
-          <div class="sw-wheel-pointer-{{ section.id }}"></div>
+      <div class="sw-wheel-col-{{ sid }}">
+        <div class="sw-wheel-{{ sid }}">
+          <div class="sw-wheel-pointer-{{ sid }}"></div>
           {%- assign prize_count = 0 -%}
           {%- for b in section.blocks -%}{% if b.type == 'prize' %}{%- assign prize_count = prize_count | plus: 1 -%}{% endif %}{%- endfor -%}
-          {%- comment -%}
-            Wheel uses a conic-gradient for segment colors. Labels are absolutely
-            positioned and rotated so each sits at its segment's center angle.
-            All math is degree-based (Liquid has no trig); CSS handles the
-            polar→cartesian conversion via rotate() transforms.
-          {%- endcomment -%}
           {%- if prize_count == 0 -%}
-            <div class="sw-wheel-svg-{{ section.id }}" style="background:#eee; display:flex; align-items:center; justify-content:center;">
-              <span style="color:#999; font-size:12px;">{{ 'accessibility.add_prize_blocks' | t }}</span>
+            <div class="sw-wheel-svg-{{ sid }} sw-wheel-empty">
+              <span>{{ 'accessibility.add_prize_blocks' | t }}</span>
             </div>
           {%- else -%}
+            {%- comment -%}
+              The slices are one conic-gradient (each prize from its start to
+              its end angle, clockwise from the pointer at the top); each
+              label sits at its slice's middle angle, kept upright.
+            {%- endcomment -%}
             {%- capture gradient -%}
               {%- assign idx = 0 -%}
               {%- for b in section.blocks -%}
@@ -436,28 +379,11 @@
                 {%- endif -%}
               {%- endfor -%}
             {%- endcapture -%}
-            <div class="sw-wheel-svg-{{ section.id }}" style="background: conic-gradient(from 0deg, {{ gradient | strip }});">
-              {%- comment -%}
-                SVG label overlay. Each <text> sits at (100, 36) inside a 200×200
-                viewBox (so y=36 is 64 units above the wheel center cy=100, putting
-                the label at 64% radius). The transform rotates each label by its
-                segment's mid-angle around the wheel center (100, 100), placing
-                the text radially in its segment.
-              {%- endcomment -%}
-              <svg class="sw-wheel-labels-{{ section.id }}" viewBox="0 0 200 200" aria-hidden="true">
-                {%- comment -%}
-                  Label radial position: percentage of radius (0–100). y=100-radius
-                  puts the text-anchor that far above the wheel center.
-                {%- endcomment -%}
-                {%- assign label_radius_pct = section.settings.label_radius | default: 68 -%}
+            <div class="sw-wheel-svg-{{ sid }}" data-sw-wheel style="background: conic-gradient(from 0deg, {{ gradient | strip }});">
+              <svg class="sw-wheel-labels-{{ sid }}" viewBox="0 0 200 200" aria-hidden="true">
+                {%- assign label_radius_pct = st.label_radius | default: 68 -%}
                 {%- assign label_y = 100 | minus: label_radius_pct -%}
-                {%- assign label_font_size = section.settings.label_font_size | default: 10 -%}
-                {%- comment -%}
-                  Cap the merchant's font-size based on segment count. With more
-                  segments, each slice is narrower so a smaller font is needed.
-                  Cap formula: ~70 / N gives a sensible upper bound in viewBox
-                  units. JS then fine-tunes via getBBox-based auto-fit.
-                {%- endcomment -%}
+                {%- assign label_font_size = st.label_font_size | default: 10 -%}
                 {%- assign cap = 60 | divided_by: prize_count -%}
                 {%- if label_font_size > cap -%}
                   {%- assign label_font_size = cap -%}
@@ -466,21 +392,7 @@
                 {%- for b in section.blocks -%}
                   {%- if b.type == 'prize' -%}
                     {%- assign mid_deg = idx | plus: 0.5 | times: 360.0 | divided_by: prize_count | round: 3 -%}
-                    {%- comment -%}
-                      Divider lines between slices intentionally omitted — the
-                      conic-gradient already produces a clean boundary between
-                      colors. Adding SVG lines on top creates a busy look.
-                    {%- endcomment -%}
-                    {%- comment -%}
-                      Position the label at (100, label_y) — that's directly
-                      above the wheel center at the configured radius — then
-                      rotate the whole label by the segment's mid-angle around
-                      the wheel center. A second inverse rotation around the
-                      label's own anchor keeps the text axis-aligned (upright)
-                      so it never appears tilted or upside-down regardless of
-                      which slice it's in.
-                    {%- endcomment -%}
-                    <text
+                    <text data-pg-block="{{ b.id }}" data-pg-type="prize" data-pg-settings="{{ b.settings | json | escape }}"
                       data-sw-segment="{{ idx }}"
                       data-sw-code="{{ b.settings.code | escape }}"
                       data-sw-label="{{ b.settings.label | default: '?' | escape }}"
@@ -499,11 +411,12 @@
               </svg>
             </div>
           {%- endif -%}
-          <div class="sw-wheel-hub-{{ section.id }}"></div>
+          <div class="sw-wheel-hub-{{ sid }}"></div>
         </div>
       </div>
     </div>
   </div>
+  </dialog>
 </section>
 
 <script src="{{ 'materia-popups.js' | asset_url }}" defer="defer"></script>
@@ -518,12 +431,16 @@
     if (!root || root.__sw) return;
     root.__sw = true;
     var CFG = JSON.parse(root.getAttribute('data-popup-config') || '{}');
-    var SPIN = CFG.spin || {};
+    // The spin words and timings are read from the config each time, so a builder edit applies at once.
+    var SPIN = {};
+    function spinCfg(){ try { SPIN = (JSON.parse(root.getAttribute('data-popup-config') || '{}').spin) || {}; } catch (e) {} return SPIN; }
+    spinCfg();
     var card = root.querySelector('.sw-card-' + SID);
     var form = root.querySelector('.sw-formel-' + SID);
     var spinBtn = form ? form.querySelector('.sw-spin-btn-' + SID) : null;
     var wheel = root.querySelector('.sw-wheel-svg-' + SID);
     var segments = Array.prototype.slice.call(root.querySelectorAll('[data-sw-segment]'));
+    root.__swFit = function(){ segments = Array.prototype.slice.call(root.querySelectorAll('[data-sw-segment]')); fitLabels(); };
     var titleEl = root.querySelector('[data-sw-win-title]');
     var codeEl = root.querySelector('[data-sw-win-code]');
     var labelEl = root.querySelector('[data-sw-win-label-text]');
@@ -575,6 +492,7 @@
       return Math.min(segments.length - 1, Math.floor(under / step));
     }
     function spin(done){
+      spinCfg();
       if (!wheel || !segments.length) { done(null); return; }
       var i = pick();
       var step = 360 / segments.length;
@@ -588,6 +506,7 @@
     }
 
     function reveal(seg){
+      spinCfg();
       root.classList.add('sw-spun');
       if (!seg) return;
       var code = seg.getAttribute('data-sw-code') || '';
@@ -1224,6 +1143,16 @@
     "settings": [
       {
         "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "header",
         "content": "Trigger"
       },
       {
@@ -1501,33 +1430,38 @@
       },
       {
         "type": "header",
-        "content": "Style"
+        "content": "Appearance"
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Custom colours",
+        "default": false,
+        "info": "Off, the popup follows its colour scheme."
       },
       {
         "type": "color",
         "id": "card_bg",
-        "label": "Background"
+        "label": "Background",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "color",
         "id": "text_color",
-        "label": "Text"
+        "label": "Text",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "color",
         "id": "close_color",
-        "label": "Close icon"
+        "label": "Close icon",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "color",
         "id": "overlay_color",
-        "label": "Backdrop"
+        "label": "Backdrop",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "range",
@@ -1542,22 +1476,51 @@
       {
         "type": "color",
         "id": "spin_btn_bg",
-        "label": "Button background"
+        "label": "Button background",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "color",
         "id": "spin_btn_text",
-        "label": "Button text"
+        "label": "Button text",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "color",
         "id": "spin_btn_bg_hover",
-        "label": "Hover background"
+        "label": "Hover background",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "color",
         "id": "spin_btn_text_hover",
-        "label": "Hover text"
+        "label": "Hover text",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Custom fonts",
+        "default": false,
+        "info": "Off, the popup uses the theme fonts."
+      },
+      {
+        "type": "font_picker",
+        "id": "heading_font",
+        "label": "Heading font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts == true }}"
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Text font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts == true }}"
       },
       {
         "type": "header",
@@ -1566,17 +1529,20 @@
       {
         "type": "color",
         "id": "wheel_panel_bg",
-        "label": "Panel background"
+        "label": "Panel background",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "color",
         "id": "pointer_color",
-        "label": "Pointer"
+        "label": "Pointer",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "color",
         "id": "hub_color",
-        "label": "Centre"
+        "label": "Centre",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "text",
@@ -1607,7 +1573,10 @@
       {
         "type": "color",
         "id": "segment_divider",
-        "label": "Divider"
+        "label": "Divider",
+        "visible_if": "{{ false }}",
+        "hidden": true,
+        "info": "Not used: the slices meet without lines."
       }
     ],
     "blocks": [
@@ -1623,9 +1592,16 @@
             "default": "Spin to reveal your discount"
           },
           {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Custom colours",
+            "default": false
+          },
+          {
             "type": "color",
             "id": "color",
-            "label": "Color"
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}"
           }
         ]
       },
@@ -1638,12 +1614,19 @@
             "type": "textarea",
             "id": "text",
             "label": "Text",
-            "default": "Enter your email for a chance to win up to 15% off your order."
+            "default": "Enter your email and spin the wheel."
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Custom colours",
+            "default": false
           },
           {
             "type": "color",
             "id": "color",
-            "label": "Color"
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}"
           }
         ]
       },
@@ -1655,13 +1638,14 @@
             "type": "text",
             "id": "label",
             "label": "Label",
-            "default": "10%"
+            "default": "Prize",
+            "info": "What the segment says, for example the discount the code gives."
           },
           {
             "type": "text",
             "id": "code",
             "label": "Code (empty = no prize)",
-            "default": "SPIN10"
+            "info": "Your own discount code for this prize. Empty, this segment wins nothing."
           },
           {
             "type": "range",

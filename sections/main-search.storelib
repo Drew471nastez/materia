@@ -107,23 +107,59 @@
 {%- capture style_padding -%}
 --section-pt: {{ section_st.padding_top }}; --section-pb: {{ section_st.padding_bottom }};
 {%- endcapture -%}
+{%- liquid
+  comment
+    Custom styling and fonts reach the page heading, the result count, and the
+    empty-results text only; product cards follow Theme settings > Product cards.
+  endcomment
+  assign ms_custom = section_st.enable_custom_style
+  assign ms_fonts = section_st.enable_custom_fonts
+  assign ms_hf = false
+  assign ms_bf = false
+  if ms_fonts and section_st.heading_font.family != blank
+    assign ms_hf = true
+  endif
+  if ms_fonts and section_st.body_font.family != blank
+    assign ms_bf = true
+  endif
+-%}
+{%- capture ms_head_color -%}{% render 'scheme-color', color: section_st.heading_color, fallback: 'var(--color-heading)' %}{%- endcapture -%}
+{%- capture ms_text_color -%}{% render 'scheme-color', color: section_st.text_color, fallback: 'var(--color-text)' %}{%- endcapture -%}
+{%- capture ms_vars -%}
+  {%- if ms_custom %} --lcs-head: {{ ms_head_color }}; --lcs-text: {{ ms_text_color }};{% endif -%}
+  {%- if ms_hf %} --lcs-hf: {{ section_st.heading_font.family }}, {{ section_st.heading_font.fallback_families | default: 'sans-serif' }};{% endif -%}
+  {%- if ms_bf %} --lcs-bf: {{ section_st.body_font.family }}, {{ section_st.body_font.fallback_families | default: 'sans-serif' }};{% endif -%}
+{%- endcapture -%}
+{%- if ms_hf or ms_bf -%}<style>{% if ms_hf %}{{ section_st.heading_font | font_face: font_display: 'swap' }}{% endif %}{% if ms_bf %}{{ section_st.body_font | font_face: font_display: 'swap' }}{% endif %}{% comment %}{% endcomment %}</style>{%- endif -%}
+<style>
+  #shopify-section-{{ section.id }} .sec__search-main[data-lcs-custom] :is([data-lcs-heading], .facets-empty__title) { color: var(--lcs-head); }
+  #shopify-section-{{ section.id }} .sec__search-main[data-lcs-custom] :is(.facets-toolbar__count, .facets-empty__text) { color: var(--lcs-text); }
+  #shopify-section-{{ section.id }} .sec__search-main :is([data-lcs-heading], .facets-empty__title)[data-own-font] { font-family: var(--lcs-hf); }
+  #shopify-section-{{ section.id }} .sec__search-main[data-lcs-bf] :is(.facets-toolbar__count, .facets-empty__text) { font-family: var(--lcs-bf) !important; }
+  #shopify-section-{{ section.id }} .sec__search-main :is(.facets-sort, .facets-toolbar__count, [data-lcs-empty-text], [data-lcs-empty-link])[hidden] { display: none !important; }
+{% comment %}{% endcomment %}</style>
 {%- capture style -%}
 {% if enable_filtering and filter_layout == 'vertical' %}--col-width: 27rem;--col-gap: 3rem;{% endif %} {% if enable_filtering and filter_layout == 'vertical' and section_width != 'default' %}--col-gap-desktop: 6rem;{% endif %}{% if enable_filtering and filter_layout == 'vertical' and section_width == 'default' %}--col-gap: 3rem;{% endif %}  --section-pt: {{ section_st.padding_top }}; --section-pb: {{ section_st.padding_bottom }};
 {%- endcapture -%}
 <section
   class="section color-{{ color_scheme }} gradient{% if section_st.padding_top < 30 %} pt-min{% endif %}{% if section_st.padding_bottom < 30 %} pb-min{% endif %}{% if section_st.reset_spacing %} remove_spacing{% endif %} sec__collection-main sec__search-main {{ scroll_animation }}"
   data-section-id="{{ section.id }}"
-  style="{{ style_padding | strip | strip_newlines }}"
+  data-lcs-root="main-search"
+  data-lcs-section="{{ section.id }}"
+  data-lcs-settings="{{ section_st | json | escape }}"
+  data-lcs-w="{{ section_width }}"{% if ms_bf %} data-lcs-bf{% endif %}{% if ms_custom %} data-lcs-custom{% endif %}
+  style="{{ style_padding | strip | strip_newlines }}{{ ms_vars | strip | strip_newlines }}"
 >
   <grid-list
     {% if scroll_animation != 'slide_in' %}
       hold
     {% endif %}
   >
-  <div class="{{ section_width }}">
+  <div class="{{ section_width }}" data-lcs-width>
     <div class="title-wrapper-with-link text-center page-title section-spacing-top mb-60 search-page-header">
-      <h1 class="heading-title heading-letter-spacing h2 mt-8 mb-0">
-        {{ 'general.search.search' | t | default: fb_accessibility_search }}
+      {%- assign ms_fallback_heading = 'general.search.search' | t | default: fb_accessibility_search -%}
+      <h1 class="heading-title heading-letter-spacing h2 mt-8 mb-0" data-lcs-heading data-lcs-fallback="{{ ms_fallback_heading | escape }}"{% if ms_hf %} data-own-font{% endif %}>
+        {{ section_st.heading | default: ms_fallback_heading | escape }}
       </h1>
       <div class="search-form inset-x-0 z-4 bg-default h-full d-flex flex-column">
         <action-search
@@ -343,14 +379,12 @@
             {%- else -%}
               <div class="facets-empty" data-facets-empty>
                 {%- if active_filters > 0 -%}
-                  <h2 class="facets-empty__title h4">{{ 'sections.collection_template.empty' | t }}</h2>
+                  <h2 class="facets-empty__title h4"{% if ms_hf %} data-own-font{% endif %}>{{ 'sections.collection_template.empty' | t }}</h2>
                   <a class="facets-empty__action" href="{{ clear_url }}" data-facets-link data-theme-button="secondary">{{ 'collections.sidebar.clear_all' | t }}</a>
                 {%- else -%}
-                  <h2 class="facets-empty__title h4">{{ 'templates.search.results_with_count_and_term.none' | t: terms: terms }}</h2>
-                  <p class="facets-empty__text">{{ section_st.empty_text }}</p>
-                  {%- if section_st.empty_link_label != blank -%}
-                    <a class="facets-empty__action" href="{{ section_st.empty_link_url | default: '/collections/all' }}" data-theme-button="secondary">{{ section_st.empty_link_label | escape }}</a>
-                  {%- endif -%}
+                  <h2 class="facets-empty__title h4"{% if ms_hf %} data-own-font{% endif %}>{{ 'templates.search.results_with_count_and_term.none' | t: terms: terms }}</h2>
+                  <p class="facets-empty__text" data-lcs-empty-text{% if ms_bf %} data-own-font{% endif %}{% if section_st.empty_text == blank %} hidden{% endif %}>{{ section_st.empty_text | escape }}</p>
+                  <a class="facets-empty__action" href="{{ section_st.empty_link_url | default: routes.all_products_collection_url }}" data-theme-button="secondary" data-sl-button data-lcs-empty-link data-lcs-all="{{ routes.all_products_collection_url }}"{% if section_st.empty_link_label == blank %} hidden{% endif %}>{{ section_st.empty_link_label | escape }}</a>
                   <a class="facets-empty__clear" href="{{ clear_url }}" data-facets-link data-facets-clear-fallback hidden>{{ 'collections.sidebar.clear_all' | t }}</a>
                 {%- endif -%}
               </div>
@@ -699,12 +733,18 @@
     }
   ],
   "shopify": {
-    "name": "t:sections.search-main.name",
+    "name": "Search page",
     "class": "section",
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
       },
       {
         "type": "select",
@@ -731,20 +771,21 @@
         ]
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
-      },
-      {
         "type": "checkbox",
         "id": "reset_spacing",
-        "label": "Remove default space between sections",
+        "label": "Remove space between sections",
         "default": true
       },
       {
         "type": "header",
-        "content": "General"
+        "content": "Content"
+      },
+      {
+        "type": "text",
+        "id": "heading",
+        "label": "Heading",
+        "default": "",
+        "info": "Empty: the theme's word for Search."
       },
       {
         "type": "checkbox",
@@ -757,80 +798,6 @@
         "id": "sorting",
         "label": "Show sort dropdown",
         "default": true
-      },
-      {
-        "type": "checkbox",
-        "id": "enable_filtering",
-        "label": "Enable filtering",
-        "default": true
-      },
-      {
-        "type": "checkbox",
-        "id": "show_filter_counts",
-        "label": "Show count next to filter values",
-        "default": true
-      },
-      {
-        "type": "text",
-        "id": "price_min_label",
-        "label": "Lowest price label",
-        "default": "From"
-      },
-      {
-        "type": "text",
-        "id": "price_max_label",
-        "label": "Highest price label",
-        "default": "To"
-      },
-      {
-        "type": "text",
-        "id": "show_results_label",
-        "label": "Button that closes the filters on phones",
-        "default": "Show results"
-      },
-      {
-        "type": "header",
-        "content": "Sort options"
-      },
-      {
-        "type": "paragraph",
-        "content": "Names of the ways results can be sorted. Leave one empty to hide it."
-      },
-      {
-        "type": "text",
-        "id": "sort_relevance",
-        "label": "Best match",
-        "default": "Relevance"
-      },
-      {
-        "type": "text",
-        "id": "sort_price_ascending",
-        "label": "Price, low to high",
-        "default": "Price, low to high"
-      },
-      {
-        "type": "text",
-        "id": "sort_price_descending",
-        "label": "Price, high to low",
-        "default": "Price, high to low"
-      },
-      {
-        "type": "text",
-        "id": "sort_title_ascending",
-        "label": "A to Z",
-        "default": "Alphabetically, A-Z"
-      },
-      {
-        "type": "text",
-        "id": "sort_title_descending",
-        "label": "Z to A",
-        "default": "Alphabetically, Z-A"
-      },
-      {
-        "type": "text",
-        "id": "sort_created_descending",
-        "label": "Newest first",
-        "default": "Date, new to old"
       },
       {
         "type": "header",
@@ -852,22 +819,187 @@
         "type": "url",
         "id": "empty_link_url",
         "label": "Button link",
-        "default": "/collections/all"
+        "default": "/collections/all",
+        "visible_if": "{{ section.settings.empty_link_label != blank }}"
       },
       {
         "type": "header",
-        "content": "Content"
+        "content": "Sort options"
+      },
+      {
+        "type": "paragraph",
+        "content": "Names of the ways results can be sorted. Leave one empty to hide it."
       },
       {
         "type": "text",
-        "id": "button_show_more",
-        "label": "Load-more button text",
-        "default": "Show more",
-        "visible_if": "{{ section.settings.pagination == 'load_more_button' }}"
+        "id": "sort_relevance",
+        "label": "Best match",
+        "default": "Relevance",
+        "visible_if": "{{ section.settings.sorting }}"
+      },
+      {
+        "type": "text",
+        "id": "sort_price_ascending",
+        "label": "Price, low to high",
+        "default": "Price, low to high",
+        "visible_if": "{{ section.settings.sorting }}"
+      },
+      {
+        "type": "text",
+        "id": "sort_price_descending",
+        "label": "Price, high to low",
+        "default": "Price, high to low",
+        "visible_if": "{{ section.settings.sorting }}"
+      },
+      {
+        "type": "text",
+        "id": "sort_title_ascending",
+        "label": "A to Z",
+        "default": "Alphabetically, A-Z",
+        "visible_if": "{{ section.settings.sorting }}"
+      },
+      {
+        "type": "text",
+        "id": "sort_title_descending",
+        "label": "Z to A",
+        "default": "Alphabetically, Z-A",
+        "visible_if": "{{ section.settings.sorting }}"
+      },
+      {
+        "type": "text",
+        "id": "sort_created_descending",
+        "label": "Newest first",
+        "default": "Date, new to old",
+        "visible_if": "{{ section.settings.sorting }}"
       },
       {
         "type": "header",
-        "content": "Carousel Options"
+        "content": "Filters"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_filtering",
+        "label": "Enable filtering",
+        "default": true
+      },
+      {
+        "type": "select",
+        "id": "filter_layout",
+        "label": "Desktop filter layout",
+        "default": "vertical",
+        "options": [
+          {
+            "value": "vertical",
+            "label": "Sidebar (vertical, beside products)"
+          },
+          {
+            "value": "horizontal",
+            "label": "Dropdowns above products"
+          },
+          {
+            "value": "drawer",
+            "label": "Drawer (opens on click)"
+          }
+        ],
+        "visible_if": "{{ section.settings.enable_filtering }}"
+      },
+      {
+        "type": "select",
+        "id": "vertical_posion",
+        "label": "Sidebar position",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ],
+        "visible_if": "{{ section.settings.enable_filtering and section.settings.filter_layout == 'vertical' }}"
+      },
+      {
+        "type": "select",
+        "id": "default_filter",
+        "label": "Default state of filter panels",
+        "default": "open_all",
+        "options": [
+          {
+            "value": "open_all",
+            "label": "All open"
+          },
+          {
+            "value": "close_all",
+            "label": "All collapsed"
+          },
+          {
+            "value": "first_open",
+            "label": "Only the first one open"
+          }
+        ],
+        "visible_if": "{{ section.settings.enable_filtering }}"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_filter_counts",
+        "label": "Show count next to filter values",
+        "default": true,
+        "visible_if": "{{ section.settings.enable_filtering }}"
+      },
+      {
+        "type": "text",
+        "id": "price_min_label",
+        "label": "Lowest price label",
+        "default": "From",
+        "visible_if": "{{ section.settings.enable_filtering }}"
+      },
+      {
+        "type": "text",
+        "id": "price_max_label",
+        "label": "Highest price label",
+        "default": "To",
+        "visible_if": "{{ section.settings.enable_filtering }}"
+      },
+      {
+        "type": "text",
+        "id": "show_results_label",
+        "label": "Button that closes the filters on phones",
+        "default": "Show results",
+        "visible_if": "{{ section.settings.enable_filtering }}"
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "range",
+        "id": "items_per_row",
+        "label": "Columns on desktop",
+        "min": 2,
+        "max": 5,
+        "step": 1,
+        "default": 4
+      },
+      {
+        "type": "range",
+        "id": "column_gap",
+        "label": "Spacing between products",
+        "min": 0,
+        "max": 50,
+        "step": 2,
+        "default": 30,
+        "unit": "px"
+      },
+      {
+        "type": "range",
+        "id": "items_to_show",
+        "label": "Results per page",
+        "min": 4,
+        "max": 16,
+        "step": 1,
+        "default": 9
       },
       {
         "type": "select",
@@ -890,8 +1022,65 @@
         ]
       },
       {
+        "type": "text",
+        "id": "button_show_more",
+        "label": "Load-more button text",
+        "default": "Show more",
+        "visible_if": "{{ section.settings.pagination == 'load_more_button' }}"
+      },
+      {
         "type": "header",
-        "content": "Layout & Spacing"
+        "content": "Appearance"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Enable custom styling",
+        "default": false,
+        "info": "Off: colours follow the colour scheme."
+      },
+      {
+        "type": "color",
+        "id": "heading_color",
+        "label": "Heading color",
+        "default": "#111111",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "text_color",
+        "label": "Text color",
+        "default": "#555555",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Enable custom fonts",
+        "default": false
+      },
+      {
+        "type": "font_picker",
+        "id": "heading_font",
+        "label": "Heading font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Body font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}",
+        "info": "The result count and the no results text."
+      },
+      {
+        "type": "header",
+        "content": "Desktop spacing"
       },
       {
         "type": "range",
@@ -914,25 +1103,6 @@
         "unit": "px"
       },
       {
-        "type": "range",
-        "id": "items_per_row",
-        "label": "Columns on desktop",
-        "min": 2,
-        "max": 5,
-        "step": 1,
-        "default": 4
-      },
-      {
-        "type": "range",
-        "id": "column_gap",
-        "label": "Spacing between products",
-        "min": 0,
-        "max": 50,
-        "step": 2,
-        "default": 30,
-        "unit": "px"
-      },
-      {
         "type": "header",
         "content": "Mobile"
       },
@@ -944,76 +1114,6 @@
         "max": 3,
         "step": 1,
         "default": 2
-      },
-      {
-        "type": "header",
-        "content": "Advanced"
-      },
-      {
-        "type": "range",
-        "id": "items_to_show",
-        "label": "Results per page",
-        "min": 4,
-        "max": 16,
-        "step": 1,
-        "default": 9
-      },
-      {
-        "type": "select",
-        "id": "filter_layout",
-        "label": "Desktop filter layout",
-        "default": "vertical",
-        "options": [
-          {
-            "value": "vertical",
-            "label": "Sidebar (vertical, beside products)"
-          },
-          {
-            "value": "horizontal",
-            "label": "Dropdowns above products"
-          },
-          {
-            "value": "drawer",
-            "label": "Drawer (opens on click)"
-          }
-        ]
-      },
-      {
-        "type": "select",
-        "id": "vertical_posion",
-        "label": "Sidebar position",
-        "default": "left",
-        "options": [
-          {
-            "value": "left",
-            "label": "Left"
-          },
-          {
-            "value": "right",
-            "label": "Right"
-          }
-        ],
-        "visible_if": "{{ section.settings.filter_layout == 'vertical' }}"
-      },
-      {
-        "type": "select",
-        "id": "default_filter",
-        "label": "Default state of filter panels",
-        "default": "open_all",
-        "options": [
-          {
-            "value": "open_all",
-            "label": "All open"
-          },
-          {
-            "value": "close_all",
-            "label": "All collapsed"
-          },
-          {
-            "value": "first_open",
-            "label": "Only the first one open"
-          }
-        ]
       }
     ]
   }

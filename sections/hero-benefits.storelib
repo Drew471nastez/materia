@@ -178,6 +178,37 @@
 -%}
 
 {%- if image_desktop == blank -%}{%- assign image_desktop = mobile_image -%}{%- endif -%}
+{%- comment -%} Custom fonts: the same picks shopify/assets/hero-benefits.js makes live (a heading block's own font and font source win over the section's). {%- endcomment -%}
+{%- liquid
+  assign hb_font_heading = 'var(--heading-font)'
+  assign hb_font_body = 'var(--body-font)'
+  if s.enable_custom_fonts
+    capture hb_font_heading
+      render 'hero-benefits-font', picker: s.heading_font_picker, legacy: s.heading_font, fallback: 'var(--heading-font)'
+    endcapture
+    capture hb_font_body
+      render 'hero-benefits-font', picker: s.body_font_picker, legacy: s.body_font, fallback: 'var(--body-font)'
+    endcapture
+  endif
+  assign hb_font_heading_own = hb_font_heading
+  assign hb_heading_custom = s.enable_custom_style
+  assign hb_heading_source = s.heading_font_source
+  assign hb_heading_own_font = false
+  if hb_heading != nil
+    assign hb_heading_custom = hb_heading.settings.enable_custom_style
+    assign hb_heading_source = hb_heading.settings.heading_font_source | default: 'heading'
+    if hb_heading.settings.enable_custom_fonts
+      assign hb_heading_own_font = true
+      capture hb_font_heading_own
+        render 'hero-benefits-font', picker: hb_heading.settings.heading_font_picker, legacy: hb_heading.settings.heading_font, fallback: hb_font_heading
+      endcapture
+    endif
+  endif
+  assign hb_font_heading_final = hb_font_heading_own
+  if hb_heading_custom and hb_heading_source == 'body'
+    assign hb_font_heading_final = hb_font_body
+  endif
+-%}
 {%- style -%}
   /* ============================================================
      SCOPE & ISOLATION BOUNDARY
@@ -215,14 +246,14 @@
     --hb-mobile-overlay-fade: {{ mobile_overlay_fade_strength | default: 70 }}%;
 
     position: relative;
-    isolation: isolate;           /* own stacking context — z-index can't leak out/in */
+    isolation: isolate;           /* own stacking context, z-index can't leak out/in */
     z-index: 0;
     background: var(--hb-bg);
     color: var(--hb-text);
     margin-top: {{ section_margin_top }}px;
     margin-bottom: {{ section_margin_bottom }}px;
     /* reset_spacing removes the section gap (vertical margin / theme defaults)
-       but does NOT touch the content padding — those sliders always apply. */
+       but does NOT touch the content padding; those sliders always apply. */
     padding-top: {{ padding_top_mobile }}px;
     padding-bottom: {{ padding_bottom_mobile }}px;
     overflow: hidden;             /* clips fades/overlays to this section only */
@@ -489,14 +520,11 @@
     #shopify-section-{{ sid }} .hb__media-desktop { display: block; }
   }
   {%- if s.enable_custom_fonts -%}
-  {% if s.heading_font.family != blank %}
-    {{ s.heading_font | font_face: font_display: 'swap' }}
-    {% for face in s.heading_font.variants %}{{ face | font_face: font_display: 'swap' }}{% endfor %}
-  {% endif %}
-  {% if s.body_font.family != blank %}
-    {{ s.body_font | font_face: font_display: 'swap' }}
-    {% for face in s.body_font.variants %}{{ face | font_face: font_display: 'swap' }}{% endfor %}
-  {% endif %}
+    {%- render 'hero-benefits-font', picker: s.heading_font_picker, legacy: s.heading_font, mode: 'face' -%}
+    {%- render 'hero-benefits-font', picker: s.body_font_picker, legacy: s.body_font, mode: 'face' -%}
+  {%- endif -%}
+  {%- if hb_heading != nil and hb_heading.settings.enable_custom_fonts -%}
+    {%- render 'hero-benefits-font', picker: hb_heading.settings.heading_font_picker, legacy: hb_heading.settings.heading_font, mode: 'face' -%}
   {%- endif -%}
 
   /* Explicit controls must also win when global typography priority is enabled. */
@@ -509,17 +537,9 @@
     text-transform: {% if s.enable_custom_style and s.heading_transform != 'theme' %}{{ s.heading_transform | default: 'none' }}{% else %}var(--heading-text-transform, none){% endif %} !important;
   }
   #shopify-section-{{ sid }} .hb-outer {
-    --hb-heading-font: {% if s.enable_custom_style and s.heading_font_source == 'body' %}var(--body-font, inherit){% else %}var(--heading-font, inherit){% endif %};
-    --hb-title-font: var(--heading-font, inherit);
-    --hb-body-font: var(--body-font, inherit);
-    {% if s.enable_custom_fonts and s.heading_font.family != blank %}
-      --hb-heading-font: {{ s.heading_font.family }}, {{ s.heading_font.fallback_families | default: 'sans-serif' }};
-      --hb-title-font: {{ s.heading_font.family }}, {{ s.heading_font.fallback_families | default: 'sans-serif' }};
-    {% endif %}
-    {% if s.enable_custom_fonts and s.body_font.family != blank %}
-      --hb-body-font: {{ s.body_font.family }}, {{ s.body_font.fallback_families | default: 'sans-serif' }};
-    {% endif %}
-    {% if s.enable_custom_style and s.heading_font_source == 'body' %}--hb-heading-font: var(--hb-body-font);{% endif %}
+    --hb-heading-font: {{ hb_font_heading_final }};
+    --hb-title-font: {{ hb_font_heading }};
+    --hb-body-font: {{ hb_font_body }};
   }
   #shopify-section-{{ sid }} .hb__benefit-title {
     font-family: var(--hb-title-font) !important;
@@ -576,12 +596,12 @@
 {%- endstyle -%}
 {%- capture hb_heading_markup -%}
   {%- if hb_heading != nil -%}
-    <div data-hb-heading-block="{{ hb_heading.id }}" data-hb-content-settings="{{ hb_heading.settings | json | escape }}" {{ hb_heading.shopify_attributes }}>
+    <div data-hb-heading-block="{{ hb_heading.id }}" data-hb-content-settings="{{ hb_heading.settings | json | escape }}"{% if hb_heading_own_font %} data-own-font{% endif %} {{ hb_heading.shopify_attributes }}>
       {%- if heading_text != blank -%}<h2 class="hb__heading">{{ heading_html }}</h2>{%- endif -%}
     </div>
   {%- elsif heading_text != blank -%}<h2 class="hb__heading">{{ heading_html }}</h2>{%- endif -%}
 {%- endcapture -%}
-<div class="hb-outer color-{{ color_scheme }} gradient {{ mobile_layout_class }}" data-hero-benefits="{{ sid }}" data-hero-settings="{{ s | json | escape }}"{% if section.settings.reset_spacing != false %} data-hb-reset-spacing{% endif %}{% if enable_fade %} data-hb-bottom-fade{% endif %}>
+<div class="hb-outer color-{{ color_scheme }} gradient {{ mobile_layout_class }}" data-hero-benefits="{{ sid }}" data-hero-settings="{{ s | json | escape }}"{% if s.enable_custom_fonts %} data-own-font{% endif %}{% if section.settings.reset_spacing != false %} data-hb-reset-spacing{% endif %}{% if enable_fade %} data-hb-bottom-fade{% endif %}>
 <div class="hb {{ wrap_class }}">
   <div class="hb__inner">
     <div class="hb__grid">
@@ -2684,191 +2704,191 @@
           "options": [
             {
               "value": "star",
-              "label": "General — Star"
+              "label": "General: Star"
             },
             {
               "value": "heart",
-              "label": "General — Heart"
+              "label": "General: Heart"
             },
             {
               "value": "check",
-              "label": "General — Check"
+              "label": "General: Check"
             },
             {
               "value": "shield",
-              "label": "General — Shield"
+              "label": "General: Shield"
             },
             {
               "value": "lock",
-              "label": "General — Lock"
+              "label": "General: Lock"
             },
             {
               "value": "zap",
-              "label": "General — Zap"
+              "label": "General: Zap"
             },
             {
               "value": "award",
-              "label": "General — Award"
+              "label": "General: Award"
             },
             {
               "value": "crown",
-              "label": "General — Crown"
+              "label": "General: Crown"
             },
             {
               "value": "sparkle",
-              "label": "General — Sparkle"
+              "label": "General: Sparkle"
             },
             {
               "value": "flame",
-              "label": "General — Flame"
+              "label": "General: Flame"
             },
             {
               "value": "truck",
-              "label": "Commerce — Truck"
+              "label": "Commerce: Truck"
             },
             {
               "value": "package",
-              "label": "Commerce — Package"
+              "label": "Commerce: Package"
             },
             {
               "value": "tag",
-              "label": "Commerce — Tag"
+              "label": "Commerce: Tag"
             },
             {
               "value": "gift",
-              "label": "Commerce — Gift"
+              "label": "Commerce: Gift"
             },
             {
               "value": "cart",
-              "label": "Commerce — Shopping cart"
+              "label": "Commerce: Shopping cart"
             },
             {
               "value": "credit-card",
-              "label": "Commerce — Credit card"
+              "label": "Commerce: Credit card"
             },
             {
               "value": "receipt",
-              "label": "Commerce — Receipt"
+              "label": "Commerce: Receipt"
             },
             {
               "value": "refresh",
-              "label": "Commerce — Refresh / Returns"
+              "label": "Commerce: Refresh / Returns"
             },
             {
               "value": "clock",
-              "label": "Time — Clock"
+              "label": "Time: Clock"
             },
             {
               "value": "calendar",
-              "label": "Time — Calendar"
+              "label": "Time: Calendar"
             },
             {
               "value": "timer",
-              "label": "Time — Timer"
+              "label": "Time: Timer"
             },
             {
               "value": "thumbs-up",
-              "label": "Quality — Thumbs up"
+              "label": "Quality: Thumbs up"
             },
             {
               "value": "smile",
-              "label": "Quality — Smile"
+              "label": "Quality: Smile"
             },
             {
               "value": "verified",
-              "label": "Quality — Verified"
+              "label": "Quality: Verified"
             },
             {
               "value": "trophy",
-              "label": "Quality — Trophy"
+              "label": "Quality: Trophy"
             },
             {
               "value": "leaf",
-              "label": "Eco — Leaf"
+              "label": "Eco: Leaf"
             },
             {
               "value": "sun",
-              "label": "Eco — Sun"
+              "label": "Eco: Sun"
             },
             {
               "value": "moon",
-              "label": "Eco — Moon"
+              "label": "Eco: Moon"
             },
             {
               "value": "droplet",
-              "label": "Eco — Droplet"
+              "label": "Eco: Droplet"
             },
             {
               "value": "wind",
-              "label": "Eco — Wind"
+              "label": "Eco: Wind"
             },
             {
               "value": "flower",
-              "label": "Eco — Flower"
+              "label": "Eco: Flower"
             },
             {
               "value": "apple",
-              "label": "Eco — Apple"
+              "label": "Eco: Apple"
             },
             {
               "value": "wifi",
-              "label": "Tech — Wi-Fi"
+              "label": "Tech: Wi-Fi"
             },
             {
               "value": "battery",
-              "label": "Tech — Battery"
+              "label": "Tech: Battery"
             },
             {
               "value": "phone",
-              "label": "Tech — Phone"
+              "label": "Tech: Phone"
             },
             {
               "value": "mail",
-              "label": "Tech — Mail"
+              "label": "Tech: Mail"
             },
             {
               "value": "globe",
-              "label": "Tech — Globe"
+              "label": "Tech: Globe"
             },
             {
               "value": "compass",
-              "label": "Tech — Compass"
+              "label": "Tech: Compass"
             },
             {
               "value": "map",
-              "label": "Tech — Map"
+              "label": "Tech: Map"
             },
             {
               "value": "headphones",
-              "label": "Misc — Headphones"
+              "label": "Misc: Headphones"
             },
             {
               "value": "rocket",
-              "label": "Misc — Rocket"
+              "label": "Misc: Rocket"
             },
             {
               "value": "magnet",
-              "label": "Misc — Magnet"
+              "label": "Misc: Magnet"
             },
             {
               "value": "book",
-              "label": "Misc — Book"
+              "label": "Misc: Book"
             },
             {
               "value": "cake",
-              "label": "Misc — Cake"
+              "label": "Misc: Cake"
             },
             {
               "value": "coffee",
-              "label": "Misc — Coffee"
+              "label": "Misc: Coffee"
             },
             {
               "value": "music",
-              "label": "Misc — Music"
+              "label": "Misc: Music"
             },
             {
               "value": "camera",
-              "label": "Misc — Camera"
+              "label": "Misc: Camera"
             }
           ],
           "visible_if": "{{ block.settings.icon_type == 'library' }}"
@@ -3470,11 +3490,25 @@
         "info": "Independent of custom styling. Applies the chosen heading and body fonts to this section only."
       },
       {
+        "type": "font_picker",
+        "id": "heading_font_picker",
+        "label": "Heading font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font_picker",
+        "label": "Body font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
         "type": "select",
         "id": "heading_font",
         "label": "Default heading font",
         "default": "assistant_n4",
-        "visible_if": "{{ section.settings.enable_custom_fonts }}",
+        "visible_if": "{{ false }}",
         "options": [
           {
             "value": "theme_heading",
@@ -3745,14 +3779,14 @@
             "label": "Courier New"
           }
         ],
-        "info": "Uses the theme font library. The selected family and its available weights load for this section only."
+        "info": "Legacy: used while the font picker is on its default"
       },
       {
         "type": "select",
         "id": "body_font",
         "label": "Default body font",
         "default": "assistant_n4",
-        "visible_if": "{{ section.settings.enable_custom_fonts }}",
+        "visible_if": "{{ false }}",
         "options": [
           {
             "value": "theme_heading",
@@ -4023,7 +4057,7 @@
             "label": "Courier New"
           }
         ],
-        "info": "Uses the theme font library. The selected family and its available weights load for this section only."
+        "info": "Legacy: used while the font picker is on its default"
       },
       {
         "type": "header",
@@ -4521,11 +4555,18 @@
             "info": "Overrides only this heading’s font. Otherwise it follows the section font settings."
           },
           {
+            "type": "font_picker",
+            "id": "heading_font_picker",
+            "label": "Heading font",
+            "default": "assistant_n4",
+            "visible_if": "{{ block.settings.enable_custom_fonts }}"
+          },
+          {
             "type": "select",
             "id": "heading_font",
             "label": "Heading font",
             "default": "assistant_n4",
-            "visible_if": "{{ block.settings.enable_custom_fonts }}",
+            "visible_if": "{{ false }}",
             "options": [
               {
                 "value": "theme_heading",
@@ -4796,7 +4837,7 @@
                 "label": "Courier New"
               }
             ],
-            "info": "Uses the theme font library. The selected family and its available weights load for this section only."
+            "info": "Legacy: used while the font picker is on its default"
           },
           {
             "type": "range",
@@ -5014,191 +5055,191 @@
             "options": [
               {
                 "value": "star",
-                "label": "General — Star"
+                "label": "General: Star"
               },
               {
                 "value": "heart",
-                "label": "General — Heart"
+                "label": "General: Heart"
               },
               {
                 "value": "check",
-                "label": "General — Check"
+                "label": "General: Check"
               },
               {
                 "value": "shield",
-                "label": "General — Shield"
+                "label": "General: Shield"
               },
               {
                 "value": "lock",
-                "label": "General — Lock"
+                "label": "General: Lock"
               },
               {
                 "value": "zap",
-                "label": "General — Zap"
+                "label": "General: Zap"
               },
               {
                 "value": "award",
-                "label": "General — Award"
+                "label": "General: Award"
               },
               {
                 "value": "crown",
-                "label": "General — Crown"
+                "label": "General: Crown"
               },
               {
                 "value": "sparkle",
-                "label": "General — Sparkle"
+                "label": "General: Sparkle"
               },
               {
                 "value": "flame",
-                "label": "General — Flame"
+                "label": "General: Flame"
               },
               {
                 "value": "truck",
-                "label": "Commerce — Truck"
+                "label": "Commerce: Truck"
               },
               {
                 "value": "package",
-                "label": "Commerce — Package"
+                "label": "Commerce: Package"
               },
               {
                 "value": "tag",
-                "label": "Commerce — Tag"
+                "label": "Commerce: Tag"
               },
               {
                 "value": "gift",
-                "label": "Commerce — Gift"
+                "label": "Commerce: Gift"
               },
               {
                 "value": "cart",
-                "label": "Commerce — Shopping cart"
+                "label": "Commerce: Shopping cart"
               },
               {
                 "value": "credit-card",
-                "label": "Commerce — Credit card"
+                "label": "Commerce: Credit card"
               },
               {
                 "value": "receipt",
-                "label": "Commerce — Receipt"
+                "label": "Commerce: Receipt"
               },
               {
                 "value": "refresh",
-                "label": "Commerce — Refresh / Returns"
+                "label": "Commerce: Refresh / Returns"
               },
               {
                 "value": "clock",
-                "label": "Time — Clock"
+                "label": "Time: Clock"
               },
               {
                 "value": "calendar",
-                "label": "Time — Calendar"
+                "label": "Time: Calendar"
               },
               {
                 "value": "timer",
-                "label": "Time — Timer"
+                "label": "Time: Timer"
               },
               {
                 "value": "thumbs-up",
-                "label": "Quality — Thumbs up"
+                "label": "Quality: Thumbs up"
               },
               {
                 "value": "smile",
-                "label": "Quality — Smile"
+                "label": "Quality: Smile"
               },
               {
                 "value": "verified",
-                "label": "Quality — Verified"
+                "label": "Quality: Verified"
               },
               {
                 "value": "trophy",
-                "label": "Quality — Trophy"
+                "label": "Quality: Trophy"
               },
               {
                 "value": "leaf",
-                "label": "Eco — Leaf"
+                "label": "Eco: Leaf"
               },
               {
                 "value": "sun",
-                "label": "Eco — Sun"
+                "label": "Eco: Sun"
               },
               {
                 "value": "moon",
-                "label": "Eco — Moon"
+                "label": "Eco: Moon"
               },
               {
                 "value": "droplet",
-                "label": "Eco — Droplet"
+                "label": "Eco: Droplet"
               },
               {
                 "value": "wind",
-                "label": "Eco — Wind"
+                "label": "Eco: Wind"
               },
               {
                 "value": "flower",
-                "label": "Eco — Flower"
+                "label": "Eco: Flower"
               },
               {
                 "value": "apple",
-                "label": "Eco — Apple"
+                "label": "Eco: Apple"
               },
               {
                 "value": "wifi",
-                "label": "Tech — Wi-Fi"
+                "label": "Tech: Wi-Fi"
               },
               {
                 "value": "battery",
-                "label": "Tech — Battery"
+                "label": "Tech: Battery"
               },
               {
                 "value": "phone",
-                "label": "Tech — Phone"
+                "label": "Tech: Phone"
               },
               {
                 "value": "mail",
-                "label": "Tech — Mail"
+                "label": "Tech: Mail"
               },
               {
                 "value": "globe",
-                "label": "Tech — Globe"
+                "label": "Tech: Globe"
               },
               {
                 "value": "compass",
-                "label": "Tech — Compass"
+                "label": "Tech: Compass"
               },
               {
                 "value": "map",
-                "label": "Tech — Map"
+                "label": "Tech: Map"
               },
               {
                 "value": "headphones",
-                "label": "Misc — Headphones"
+                "label": "Misc: Headphones"
               },
               {
                 "value": "rocket",
-                "label": "Misc — Rocket"
+                "label": "Misc: Rocket"
               },
               {
                 "value": "magnet",
-                "label": "Misc — Magnet"
+                "label": "Misc: Magnet"
               },
               {
                 "value": "book",
-                "label": "Misc — Book"
+                "label": "Misc: Book"
               },
               {
                 "value": "cake",
-                "label": "Misc — Cake"
+                "label": "Misc: Cake"
               },
               {
                 "value": "coffee",
-                "label": "Misc — Coffee"
+                "label": "Misc: Coffee"
               },
               {
                 "value": "music",
-                "label": "Misc — Music"
+                "label": "Misc: Music"
               },
               {
                 "value": "camera",
-                "label": "Misc — Camera"
+                "label": "Misc: Camera"
               }
             ],
             "visible_if": "{{ block.settings.icon_type == 'library' }}"

@@ -75,7 +75,7 @@ const TABLE = [
   {block: 'footnote', id: 'size', v: 17, sel: '.pgr__footnote', css: 'fontSize', exp: '17px'},
   {block: 'footnote', id: 'margin_top', v: 30, sel: '.pgr__footnote', css: 'marginTop', exp: '30px'},
 ];
-const FULL = [{type: 'heading'}, {type: 'subheading'}, ...L.schemaOf(NAME).schema.presets[0].blocks.filter(b => b.type !== 'heading')];
+const FULL = [{type: 'heading'}, {type: 'subheading'}, ...L.SAMPLE[NAME].filter(b => b.type !== 'heading')];
 
 L.suite({
   name: NAME, table: TABLE, extra: ['enable_custom_style', 'enable_custom_fonts'], full: FULL,

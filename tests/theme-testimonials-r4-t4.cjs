@@ -22,7 +22,7 @@ const BTN = '.t4__btn', withBtn = {button: 'Shop now', button_url: '/collections
 const V = '.t4';
 (async () => {
   const checks = await run({
-    name: 'testimon4', root: '.t4', blocks, settings: {button: 'Shop now', button_url: '/collections/all', arrow_show_mobile: true, dots_show_mobile: true, dots_show_desktop: true, border_thickness: 2, card_border_thickness: 1},
+    name: 'testimon4', root: '.t4', blocks, settings: {rating: 4.6, rating_text: 'Rated', text: '<p>Test summary line.</p>', button: 'Shop now', button_url: '/collections/all', arrow_show_mobile: true, dots_show_mobile: true, dots_show_desktop: true, border_thickness: 2, card_border_thickness: 1},
     inherit: [['.t4', 'backgroundColor', 'rgb(24, 32, 40)'], ['.t4__heading', 'color', 'rgb(255, 255, 255)'], ['.t4__heading', 'fontFamily', /Georgia/], ['.t4__copy p', 'fontFamily', /Arial/], ['.t4__card-heading', 'fontFamily', /Georgia/], ['.t4__review', 'fontFamily', /Arial/], ['.t4__card', 'borderTopColor', 'rgb(68, 85, 102)'], ['.t4', 'borderTopColor', 'rgb(68, 85, 102)'], ['.lt-star', 'backgroundImage', /51, 102, 153/], [BTN, 'backgroundColor', 'rgb(18, 52, 86)'], [BTN, 'borderTopLeftRadius', '12px']],
     controls: [
       S('full_width', false, '.t4__inner', 'maxWidth', '1500px', {pre: {content_width: 1500}}),

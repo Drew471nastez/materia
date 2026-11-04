@@ -1,21 +1,6 @@
 <template compat="shopify">
 {% render 'theme-type' %}
-{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
-{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' and section.settings.reveal != false -%}
-<style>
-  #shopify-section-{{ section.id }}.scroll-trigger {
-    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
-    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
-  }
-{% comment %}{% endcomment %}</style>
-<script>
-  (function(){
-    var el = document.getElementById('shopify-section-{{ section.id }}');
-    if (!el || el.classList.contains('scroll-trigger')) return;
-    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
-  })();
-{% comment %}{% endcomment %}</script>
-{%- endif -%}
+{%- comment -%} The floating video slides in on its own (live-product-extras.js); the theme's section reveal is not used, because fading the zero-height wrapper would hide the fixed video with it. {%- endcomment -%}
 <style data-rs-bulletproof>
   {%- if section.settings.reset_spacing -%}
     /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
@@ -80,16 +65,32 @@
 
 <style>
   #shopify-section-{{ section.id }} .close-mini-video {
-    background: var(--btn-primary-bg-color, #111111) !important;
-    color: var(--btn-primary-color, #ffffff) !important;
+    background: var(--btn-primary-bg-color, var(--color-heading)) !important;
+    color: var(--btn-primary-color, var(--color-background)) !important;
+  }
+  #shopify-section-{{ section.id }} .close-mini-video__hit {
+    position: absolute;
+    inset: -11px;
+    border-radius: 50%;
+  }
+  #shopify-section-{{ section.id }} .close-mini-video:focus-visible {
+    outline: 2px solid var(--color-heading);
+    outline-offset: 2px;
+  }
+  {%- comment -%} In the builder the video is shown at once, so the creator sees what they edit. {%- endcomment %}
+  html.shopify-design-mode #shopify-section-{{ section.id }} .mini-video__video {
+    transform: translateX(var(--left));
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ section.id }} .mini-video__video { transition: none; }
   }
   #shopify-section-{{ section.id }} .mini-video__product-link:focus-visible {
     outline: 2px solid var(--color-heading);
     outline-offset: 3px;
   }
 {% comment %}{% endcomment %}</style>
-<shopable-video-sticky class="shopable-video-sticky__mini-video color-{{ color_scheme }}" data-action-close="{{ action_close }}">
-  <div class="mini-video__video fixed z-16" style="bottom: {{ offset_bottom }}px; --left: {{ offset_left }}px;">
+<shopable-video-sticky class="shopable-video-sticky__mini-video color-{{ color_scheme }}" data-action-close="{{ action_close }}" data-svs-root data-svs-section="{{ section.id }}">
+  <div class="mini-video__video fixed z-16" style="bottom: {{ offset_bottom }}px; --left: {{ offset_left }}px;"{% if request.design_mode %} data-svs-design{% endif %}>
       {% liquid
           assign block_st = section.blocks[0].settings
           assign poster_image = block_st.poster_image
@@ -153,11 +154,12 @@
                 playsinline="true"
                 autoplay="true"
                 muted="true"
+                aria-hidden="true"
                 class="lazy-video-item"
               ></video>
             {% else %}
               {% if poster_image != blank %}
-                {%- assign image_alt = poster_image.alt | default: 'poster' | escape -%}
+                {%- assign image_alt = poster_image.alt | default: mini_product.title | escape -%}
                 {% render 'responsive-image', type: 'banner', image: poster_image, image_alt: image_alt %}
               {% else %}
                 {% render 'placeholder-render' %}
@@ -194,11 +196,13 @@
           </div>
         {% endif %}
         <button
+          type="button"
           class="btn-reset button-close close-mini-video justify-center pointer inline-flex align-center"
           style="z-index: 2;"
           aria-label="{{ 'accessibility.close' | t }}"
         >
-          <svg width="11" height="11" viewBox="0 0 11 11" fill="none" class="transition">
+          <span class="close-mini-video__hit" aria-hidden="true"></span>
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none" class="transition" aria-hidden="true">
             <use href="#icon-close" />
           </svg>
         </button>
@@ -363,7 +367,7 @@
     ]
   },
   "shopify": {
-    "name": "t:sections.shopable-video-sticky.name",
+    "name": "Floating video",
     "tag": "section",
     "disabled_on": {
       "groups": [
@@ -374,75 +378,35 @@
     "settings": [
       {
         "type": "header",
-        "content": "Layout"
+        "content": "General"
       },
       {
         "type": "color_scheme",
         "id": "color_scheme",
-        "label": "Color scheme",
+        "label": "Colour scheme",
         "default": "default-color-scheme"
       },
       {
         "type": "checkbox",
         "id": "reset_spacing",
-        "label": "Remove section spacing",
+        "label": "Remove space between sections",
         "default": true
-      },
-      {
-        "type": "header",
-        "content": "General"
       },
       {
         "type": "checkbox",
         "id": "action_close",
-        "label": "t:sections.shopable-video-sticky.action_close.name",
-        "default": false
+        "label": "Stay closed for a day",
+        "default": false,
+        "info": "After a visitor closes the video, it stays hidden for 24 hours."
       },
       {
         "type": "header",
-        "content": "Image / Media"
-      },
-      {
-        "type": "select",
-        "id": "image_ratio",
-        "label": "t:sections.all.image.image_ratio.label",
-        "options": [
-          {
-            "value": "adapt",
-            "label": "t:sections.all.image.image_ratio.adapt.label"
-          },
-          {
-            "value": "square",
-            "label": "t:sections.all.image.image_ratio.square.label"
-          },
-          {
-            "value": "portrait",
-            "label": "t:sections.all.image.image_ratio.portrait.label"
-          },
-          {
-            "value": "landscape",
-            "label": "t:sections.all.image.image_ratio.landscape.label"
-          },
-          {
-            "value": "custom",
-            "label": "t:sections.all.image.image_ratio.custom.label"
-          }
-        ],
-        "default": "adapt"
-      },
-      {
-        "type": "text",
-        "id": "custom_ratio",
-        "label": "t:sections.all.image.image_ratio.custom_ratio.label"
-      },
-      {
-        "type": "header",
-        "content": "Layout & Spacing"
+        "content": "Layout"
       },
       {
         "type": "range",
         "id": "offset_bottom",
-        "label": "t:sections.shopable-video-sticky.blocks.settings.offset_bottom",
+        "label": "Distance from bottom",
         "default": 150,
         "min": 5,
         "max": 300,
@@ -452,7 +416,7 @@
       {
         "type": "range",
         "id": "offset_left",
-        "label": "t:sections.shopable-video-sticky.blocks.settings.offset_left",
+        "label": "Distance from side",
         "default": 25,
         "min": 5,
         "max": 155,
@@ -463,34 +427,65 @@
         "type": "checkbox",
         "id": "reveal",
         "label": "Reveal on scroll",
-        "default": true
+        "default": true,
+        "hidden": true,
+        "info": "Legacy: the floating video slides in on its own after the visitor scrolls.",
+        "visible_if": "{{ false }}"
+      },
+      {
+        "type": "select",
+        "id": "image_ratio",
+        "label": "Image ratio",
+        "options": [
+          {
+            "value": "adapt",
+            "label": "Adapt to image"
+          },
+          {
+            "value": "square",
+            "label": "Square"
+          },
+          {
+            "value": "portrait",
+            "label": "Portrait"
+          },
+          {
+            "value": "landscape",
+            "label": "Landscape"
+          },
+          {
+            "value": "custom",
+            "label": "Custom"
+          }
+        ],
+        "default": "adapt",
+        "hidden": true,
+        "info": "Legacy: the floating video is always a 150px circle.",
+        "visible_if": "{{ false }}"
+      },
+      {
+        "type": "text",
+        "id": "custom_ratio",
+        "label": "Custom ratio",
+        "hidden": true,
+        "info": "Legacy: the floating video is always a 150px circle.",
+        "visible_if": "{{ false }}"
       },
       {
         "type": "color",
         "id": "section_bg",
-        "label": "Section background"
+        "label": "Section background",
+        "hidden": true,
+        "info": "Legacy: the floating video has no background area.",
+        "visible_if": "{{ false }}"
       }
     ],
     "blocks": [
       {
         "type": "video",
-        "limit": 10,
-        "name": "t:sections.shopable-video.blocks.name",
+        "limit": 1,
+        "name": "Video",
         "settings": [
-          {
-            "type": "header",
-            "content": "Image / Media"
-          },
-          {
-            "type": "image_picker",
-            "id": "poster_image",
-            "label": "t:sections.shopable-video.blocks.poster_image"
-          },
-          {
-            "type": "video",
-            "id": "local_video",
-            "label": "t:sections.shopable-video.blocks.video_local.label"
-          },
           {
             "type": "header",
             "content": "Content"
@@ -498,7 +493,23 @@
           {
             "type": "product",
             "id": "product",
-            "label": "t:sections.shopable-video.blocks.product"
+            "label": "Product",
+            "info": "The video links to this product."
+          },
+          {
+            "type": "header",
+            "content": "Media"
+          },
+          {
+            "type": "image_picker",
+            "id": "poster_image",
+            "label": "Poster image",
+            "info": "Shown before the video plays, and instead of it when motion is reduced."
+          },
+          {
+            "type": "video",
+            "id": "local_video",
+            "label": "Video"
           }
         ]
       }

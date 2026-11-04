@@ -130,7 +130,10 @@
     /* text */
     put(root, '@aria-label', strip(T ? T.heading_text || 'Latest Orders' : 'Latest Orders'));
     put(c.q('[data-fo-purchased]'), 'text', T && !blank(T.purchased_text) ? T.purchased_text : i18n.purchased || 'purchased');
-    put(c.q('[data-fo-time-text]'), 'text', T && !blank(T.time_text) ? T.time_text : i18n.time || 'minutes ago');
+    /* time line: only what the creator wrote; nothing time based is made up */
+    const tl = T && !blank(T.time_line) ? String(T.time_line).trim() : '';
+    put(c.q('[data-fo-time-text]'), 'text', tl);
+    put(c.q('[data-fo-time]'), 'hidden', !tl);
     const verify = c.q('[data-fo-verify]'), vText = T ? T.text_verify : 'Verify';
     put(verify, 'hidden', blank(vText));
     put(c.q('[data-fo-verify-text]'), 'rich', vText || '');
@@ -401,12 +404,11 @@
     let i = Math.floor(Math.random() * items.length);
     if (items.length > 1 && i === st.lastItem) i = (i + 1) % items.length;
     st.lastItem = i; st.running = true;
-    const it = items[i] || {}, title = root.querySelector('[data-title-fake]'), img = root.querySelector('[data-img]'), user = root.querySelector('[data-user]'), time = root.querySelector('[data-time]');
+    const it = items[i] || {}, title = root.querySelector('[data-title-fake]'), img = root.querySelector('[data-img]'), user = root.querySelector('[data-user]');
     if (title) title.textContent = it.title || '';
     for (const a of root.querySelectorAll('[data-url]')) if (it.url) a.href = it.url;
     if (img && it.img && img.getAttribute('src') !== it.img) img.src = it.img;
     if (user) user.textContent = users.length ? users[Math.floor(Math.random() * users.length)] : st.fallback || 'Someone';
-    if (time) time.textContent = String(1 + Math.floor(Math.random() * 59));
     root.dataset.foState = 'shown';
     foLater(st, num(root.dataset.animDuration, 15000), () => {
       root.dataset.foState = 'hidden';

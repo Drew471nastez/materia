@@ -74,6 +74,7 @@
     else if (key === 'rich') rich(el, v);
     else if (key === 'scheme') { for (const c of [...el.classList]) if (c.startsWith('color-')) el.classList.remove(c); el.classList.add('color-' + v); }
     else if (key.startsWith('href:')) return link(el, v, st, key.slice(5));
+    else if (key === 'card') return clCard(el, v);
     else if (key === 'picture') {
       /* An image setting: the same <img> gets the new address (no reload when unchanged); a placeholder becomes an <img>. */
       const d = parse(v); if (!d.src) return el;
@@ -649,12 +650,71 @@
 
 
   /* ---------- Collections Display (theme collection cards in a grid or the theme carousel) ---------- */
+  /* A card is drawn again from its card settings the way snippets/collection-item prints it: the picture
+     keeps its element (only the frame's classes and shape change), the name area is printed again from the
+     store data the section left on the card (data-cl-card). A picked collection or picture waits for the redraw. */
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, ch => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[ch]);
+  const CL_ARROW = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg>';
+  const CL_RATIO = {square: '1/1', landscape: '4/3', portrait: '3/4'};
+  function clCard(el, v) {
+    const k = parse(v), d = parse(el.dataset.clCard);
+    const media = el.querySelector('.collection-item__media'), frame = media && media.querySelector('.collection-item__media--ratio'), info = el.querySelector('.collection-item__information');
+    if (!media || !frame || !info) return el;
+    const below = k.pos === 'below_image', over = k.pos === 'overlay_image', mod = k.des === 'morden', def = k.des === 'default', al = k.al, either = below || over;
+    let mc = 'collection-item__media relative' + (over ? ' ' + k.des + ' ' : '') + ' rounded overflow-hidden';
+    if (below && k.icw) mc += ' w-custom max-w-100' + (al === 'left' ? ' me-auto' : al === 'right' ? ' ms-auto' : ' mx-auto');
+    if (below && k.round) mc += ' rounded-50 overflow-hidden';
+    if (media.className !== mc) media.className = mc;
+    if (below && k.icw) media.setAttribute('style', '--custom-width: ' + k.iw + 'px'); else media.removeAttribute('style');
+    const ratio = k.ratio === 'adapt' ? d.ar ?? '' : CL_RATIO[k.ratio] ?? (k.cr == null ? '' : k.cr === '' ? '3/4' : String(k.cr).split(':').join('/'));
+    frame.setAttribute('style', '--aspect-ratio: ' + ratio + ';');
+    for (const img of frame.querySelectorAll('img:not(.placeholder-image)')) img.alt = d.ia || (!blank(k.title) ? k.title : '') || d.t || 'Collection Title';
+    const title = !blank(k.title) ? k.title : d.e ? d.ot : d.t;
+    const nameCls = 'collection-item__name no-underline word-break heading-color ' + (k.fw ?? '') + (num(k.fs) > 14 ? ' fs-medium-list' : ' fs-custom') + (below ? ' mb-10' : ' inline-flex gap-5 align-center justify-content-' + al) + (over && def ? ' btn btn-white' : '');
+    const nameStyle = '--font-size: ' + (k.fs ?? '') + ';--space-bottom: ';
+    const countDiv = k.cnt && ((over && mod && !k.desc) || (below && def) || (below && mod && !k.desc));
+    let h = '<div class="collection-item__information' + (below ? ' mt-custom' : ' absolute inset-x-15 bottom-15 inset-x-md-30 bottom-md-30 z-3 flex justify-content-' + al) + ' text-' + al + (over && mod ? ' flex-column align-item-' + al + ' gap-5' : '') + '"' + (below ? ' style="--space-top: ' + k.isp + 'px;"' : '') + '>';
+    const icon = over && k.icon && mod;
+    if (icon) h += '<div class="flex align-center justify-between"><div>';
+    if (d.e) {
+      h += '<a class="' + nameCls + '" style="' + nameStyle + '" role="link" aria-disabled="true"><span class="collection-item__name-inner lh-normal inline-block' + (over && mod ? ' heading_weight' : '') + '">' + esc(title) + '</span>';
+      if (over && def && k.cnt) h += '<span class="collection-item__count">(0)</span>';
+      else if (either && mod && k.cnt && k.desc) h += '<span class="collection-item__count">0</span>';
+      h += '</a>';
+      if (countDiv) h += '<div class="collection-item__count">' + esc(d.oc) + '</div>';
+      if (either && k.desc && mod) h += '<div class="collection-information-description lh-small">' + esc(d.od) + '</div>';
+      if (icon) h += '</div><a class="icon_collection btn-primary no-underline flex align-center justify-center w-45 h-45 rounded-50 transition" role="link" aria-disabled="true" aria-label="' + esc(d.ot) + '">' + CL_ARROW + '</a></div>';
+    } else {
+      h += '<a aria-label="' + esc(d.t) + '" class="' + nameCls + '" style="' + nameStyle + '" href="' + esc(d.u) + '"><span class="collection-item__name-inner lh-normal inline-block' + (over && mod ? ' heading_weight' : '') + ' overflow-visible-important relative">' + esc(title);
+      if (either && mod && k.cnt && k.desc) h += '<span class="collection-item__count whitespace-nowrap fs-12 heading_weight absolute">' + esc(d.c1) + '</span>';
+      h += '</span>';
+      if (over && def && k.cnt) h += '<span class="collection-item__count whitespace-nowrap">' + esc(d.c2) + '</span>';
+      h += '</a>';
+      if (countDiv) h += '<div class="collection-item__count">' + esc(d.c3) + '</div>';
+      /* The collection's own description, as the store prints it. */
+      if (either && k.desc && !blank(d.d) && mod) h += '<div class="collection-information-description lh-small">' + d.d + '</div>';
+      if (icon) h += '</div><a class="icon_collection btn-primary no-underline flex align-center justify-center w-45 h-45 rounded-50 transition" href="' + esc(d.u) + '" aria-label="' + esc(d.t) + '">' + CL_ARROW + '</a></div>';
+    }
+    const tpl = document.createElement('template'); tpl.innerHTML = h + '</div>';
+    info.replaceWith(tpl.content.firstElementChild);
+    return el;
+  }
+  const CL_WIDTHS = ['container', 'fluid_container', 'stretch_width', 'full_width'];
   TYPES['collection-list'] = {
     derive(c) {
       const {root, s, put, blocks, q, qa} = c;
       put(root, '.pt-min', num(s.padding_top) < 30); put(root, '.pb-min', num(s.padding_bottom) < 30);
       put(root, '.remove_spacing', bool(s.reset_spacing));
       put(root, '@data-custom-bg', bool(s.enable_custom_bg) && !!color(s.custom_section_bg, '') || null);
+      put(root, '@data-width', s.section_width ?? '');
+      const inner = root.firstElementChild;
+      if (inner && CL_WIDTHS.includes(s.section_width)) for (const w of CL_WIDTHS) put(inner, '.' + w, s.section_width === w);
+      /* Every card, drawn again only when one of its own settings changes. */
+      for (const x of blocks) {
+        if (x.type !== 'collection') continue;
+        put(x.el, 'card', JSON.stringify({pos: s.collection_information_position, des: s.design, al: s.text_alignment, fw: s.font_weight, fs: s.font_size, cnt: bool(s.show_product_count), icon: bool(s.show_icon), desc: bool(s.show_description),
+          ratio: s.image_ratio, cr: s.custom_ratio, round: bool(s.rounded_image), icw: bool(s.image_custom_width), iw: s.image_width, isp: s.information_spacing, title: x.b.collection_title ?? ''}));
+      }
       const heads = header(c, '.cdl__head-inner', [['heading', 'heading', 'rich'], ['description', 'description', 'rich']]);
       for (const h of qa('.cdl__heading')) { put(h, '.h3', s.header_size === 'small'); put(h, '.h1-size', s.header_size === 'large'); }
       /* The View all button: its block, or the legacy settings. */

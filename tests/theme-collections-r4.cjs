@@ -132,9 +132,9 @@ const CFG = {
     lifeBlocks: () => presetBlocks('collection-list'), assets: ['section-collection.css', 'pagination-styles.css'],
     desk: ['items_per_row', 'pagination_position'], mob: ['items_per_row_mobile'], bp: 768,
     pre: {image_ratio: {custom_ratio: '2/1'}, design: {collection_information_position: 'overlay_image', show_product_count: true}}, preBlock: {},
+    /* The card settings (shape, name position, design, count, arrow, description, name size, weight and alignment, the block's own name) and the width are live; the carousel's layout and a picked collection or picture wait for the redraw. */
     redraw: ['display_mode', 'items_per_row', 'column_gap', 'show_arrow', 'carousel_pagination', 'pagination_style', 'pagination_position', 'infinite', 'autoplay', 'autorotate_speed', 'reveal',
-      'items_per_row_mobile', 'image_ratio', 'custom_ratio', 'rounded_image', 'image_custom_width', 'image_width', 'information_spacing', 'design', 'collection_information_position',
-      'show_product_count', 'show_icon', 'show_description', 'font_size', 'font_weight', 'text_alignment', 'section_width', 'collection', 'collection_image', 'collection_title'],
+      'items_per_row_mobile', 'collection', 'collection_image'],
     behaviour: ['autoplay', 'autorotate_speed', 'infinite', 'reveal', 'pagination_style', 'pagination_position'],
     hoverSel: '.collection-item', hover: ['card_hover_effect'],
     same: [['image_ratio', 'adapt', 'portrait'], ['carousel_pagination', 'show_dots', 'show_dots_on_mobile'], ['carousel_pagination', 'show_dots', 'show_progress_bar'], ['carousel_pagination', 'show_dots_on_mobile', 'show_progress_bar']],
@@ -436,6 +436,55 @@ async function motion(browser, name) {
 }
 
 const EXTRA = {};
+/* Collections Display with picked collections: every card setting drawn live equals the redraw (count, description, arrow button, shapes, the block's own name). */
+EXTRA['collection-list'] = async browser => {
+  const {schema} = schemaOf('collection-list');
+  const base = Object.fromEntries(schema.settings.filter(x => x.id).map(x => [x.id, x.default ?? (x.type === 'checkbox' ? false : '')]));
+  Object.assign(base, {display_mode: 'grid', items_per_row: 3});
+  const blocks = [{type: 'collection', settings: {collection: COLL}}, {type: 'collection', settings: {collection: COLL, collection_title: 'Own name'}}, {type: 'collection', settings: {collection: COLL, collection_image: IMG}}, {type: 'collection'}];
+  const cases = [
+    {show_product_count: true},
+    {design: 'morden', show_product_count: true},
+    {design: 'morden', show_product_count: true, show_description: true},
+    {collection_information_position: 'overlay_image', show_product_count: true},
+    {collection_information_position: 'overlay_image', design: 'morden', show_icon: true, show_product_count: true},
+    {collection_information_position: 'overlay_image', design: 'morden', show_icon: true, show_description: true, show_product_count: true, text_alignment: 'center'},
+    {image_ratio: 'adapt'}, {image_ratio: 'custom', custom_ratio: '2:1'}, {image_ratio: 'landscape'},
+    {rounded_image: true, image_custom_width: true, image_width: 150, text_alignment: 'right'}, {rounded_image: true}, {information_spacing: 30},
+    {font_size: 12, font_weight: 'body_weight'}, {font_size: 22, text_alignment: 'center'}, {section_width: 'container'},
+  ];
+  for (const editing of [true, false]) for (const width of [375, 1366]) {
+    const tag = 'collection-list picked @' + width + (editing ? ' editor' : ' storefront');
+    const t = await mount(browser, 'collection-list', {width, editing, settings: base, blocks, assets: [ASSET, 'section-collection.css', 'pagination-styles.css']});
+    await addFp(t.page);
+    for (const c of cases) {
+      await t.redraw({settings: base, blocks});
+      await t.emit(c);
+      await t.page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))); await settle(t.page);
+      const live = await fp(t);
+      await t.redraw({settings: {...base, ...c}, blocks});
+      await settle(t.page);
+      const red = await fp(t);
+      eq(diff(live, red).map(k => k + ' ' + Object.keys({...live[k], ...red[k]}).filter(p => JSON.stringify((live[k] || {})[p]) !== JSON.stringify((red[k] || {})[p])).map(p => p + ': ' + JSON.stringify((live[k] || {})[p]) + ' / ' + JSON.stringify((red[k] || {})[p])).join('; ')), [], tag + ' ' + JSON.stringify(c) + ': live equals redraw');
+      eq(await audit(t), [], tag + ' ' + JSON.stringify(c) + ': markup matches controller');
+    }
+    /* the block's own name, live */
+    await t.redraw({settings: {...base, collection_information_position: 'overlay_image', design: 'morden', show_icon: true}, blocks});
+    await t.emit({collection_title: 'Live name'}, 'test-b0');
+    await t.page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+    const live = await fp(t);
+    const b2 = clone(blocks); b2[0].settings.collection_title = 'Live name';
+    await t.redraw({settings: {...base, collection_information_position: 'overlay_image', design: 'morden', show_icon: true}, blocks: b2});
+    eq(diff(live, await fp(t)), [], tag + ' collection_title: live equals redraw');
+    ok(await t.page.evaluate(() => document.querySelector('[data-cl-block="test-b0"] .collection-item__name').textContent.trim() === 'Live name'), tag + ' block name drawn');
+    /* the empty card: no link anywhere, marked disabled */
+    const empty = await t.page.evaluate(() => [...document.querySelectorAll('[data-cl-block="test-b3"] a')].map(a => [a.hasAttribute('href'), a.getAttribute('aria-disabled')].join()));
+    if (editing) eq([...new Set(empty)], ['false,true'], tag + ' empty card links are disabled with no address');
+    else eq(empty, [], tag + ' empty card not on the storefront');
+    eq(t.errors, [], tag + ' errors');
+    await t.page.close();
+  }
+};
 module.exports = {CFG, EXTRA, IMG, IMG2, COLL, PRODUCT, FONT, fp, addFp, audit, diff};
 
 if (require.main === module) (async () => {

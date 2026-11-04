@@ -199,8 +199,9 @@
           let t = item.querySelector('.banner__badge-text');
           if (!t && String(b['badge_' + n + '_text'] || '').trim()) { t = document.createElement('span'); t.className = 'banner__badge-text'; item.append(t); }
           if (t) { text(t, b['badge_' + n + '_text']); show(t, !!String(b['badge_' + n + '_text'] || '').trim()); }
-          const fg = item.querySelector('.badge-stars__fg'); if (fg) fg.style.width = num(b['badge_' + n + '_rating'], 5) * 20 + '%';
-          const stars = item.querySelector('.badge-stars'); if (stars) stars.setAttribute('aria-label', num(b['badge_' + n + '_rating'], 5) + ' out of 5 stars');
+          if (type === 'stars') item.hidden = !(num(b['badge_' + n + '_rating'], 0) > 0);
+          const fg = item.querySelector('.badge-stars__fg'); if (fg) fg.style.width = num(b['badge_' + n + '_rating'], 0) * 20 + '%';
+          const stars = item.querySelector('.badge-stars'); if (stars) stars.setAttribute('aria-label', num(b['badge_' + n + '_rating'], 0) + ' out of 5 stars');
         }
       }
     }

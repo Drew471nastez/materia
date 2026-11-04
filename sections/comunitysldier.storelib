@@ -61,6 +61,7 @@
   #shopify-section-{{ sid }} .cfs__scale { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--cfs-muted-c); }
   #shopify-section-{{ sid }} .cfs__bar { position: relative; height: var(--cfs-bar-h); margin: 4px calc(var(--cfs-marker) / 2) 0; background: var(--cfs-track); border-radius: 999px; }
   #shopify-section-{{ sid }} .cfs__fill { position: absolute; inset: 0 auto 0 0; width: var(--v); background: var(--cfs-fill); border-radius: 999px; }
+  #shopify-section-{{ sid }} .cfs__row[data-empty] :is(.cfs__fill, .cfs__marker) { display: none; }
   #shopify-section-{{ sid }} .cfs__marker { position: absolute; top: 50%; left: var(--v); width: var(--cfs-marker); height: var(--cfs-marker); border-radius: 50%; background: var(--cfs-marker-c); transform: translate(-50%, -50%); box-shadow: 0 0 0 4px var(--cfs-card-bg), 0 2px 6px rgba(0, 0, 0, .18); }
   @media (min-width: 750px) {
     #shopify-section-{{ sid }} .cfs__heading { font-size: var(--b-fs-d); }
@@ -79,10 +80,17 @@
         {%- for b in summaries -%}
           {%- assign bs = b.settings -%}
           {%- assign score_num = bs.score | replace: ',', '.' | plus: 0 -%}
-          <div class="cfs__head" data-lt-block="{{ b.id }}" data-lt-type="summary" data-lt-settings="{{ bs | json | escape }}" {{ b.shopify_attributes }}>
+          {%- comment -%} No score typed: no number and no stars; nothing typed at all: no header. {%- endcomment -%}
+          {%- liquid
+            assign no_score = false
+            if bs.score == blank
+              assign no_score = true
+            endif
+          -%}
+          <div class="cfs__head" data-lt-block="{{ b.id }}" data-lt-type="summary" data-lt-settings="{{ bs | json | escape }}"{% if no_score and bs.count == blank and bs.note == blank %} hidden{% endif %} {{ b.shopify_attributes }}>
             <div class="cfs__score-row">
-              <span class="cfs__score" data-lt-score{% if bs.score == blank %} hidden{% endif %}>{{ bs.score | escape }}</span>
-              {% render 'live-testimonials-stars', rating: score_num %}
+              <span class="cfs__score" data-lt-score{% if no_score %} hidden{% endif %}>{{ bs.score | escape }}</span>
+              {% render 'live-testimonials-stars', rating: score_num, hidden: no_score %}
             </div>
             <p class="cfs__source">
               <span class="cfs__count" data-lt-count{% if bs.count == blank %} hidden{% endif %}>{{ bs.count | escape }}</span>
@@ -94,8 +102,14 @@
         {%- comment -%} Legacy: saved before the Rating summary block. {%- endcomment -%}
         <div class="cfs__head" data-lt-legacy{% unless st.show_header %} hidden{% endunless %}>
           <div class="cfs__score-row">
-            <span class="cfs__score" data-lt-score>{{ st.overall_score | escape }}</span>
-            {% render 'live-testimonials-stars', rating: st.overall_score_int %}
+            <span class="cfs__score" data-lt-score{% if st.overall_score == blank %} hidden{% endif %}>{{ st.overall_score | escape }}</span>
+            {%- liquid
+              assign no_legacy_score = false
+              if st.overall_score == blank
+                assign no_legacy_score = true
+              endif
+            -%}
+            {% render 'live-testimonials-stars', rating: st.overall_score_int, hidden: no_legacy_score %}
           </div>
           <p class="cfs__source">
             <span class="cfs__count" data-lt-count{% if st.review_count == blank %} hidden{% endif %}>{{ st.review_count | escape }}</span>
@@ -108,10 +122,11 @@
           {%- if b.type != 'question' -%}{%- continue -%}{%- endif -%}
           {%- assign bs = b.settings -%}
           {%- assign val = bs.value | default: 0 | at_least: 0 | at_most: 100 -%}
-          <div class="cfs__row" data-lt-block="{{ b.id }}" data-lt-type="question" data-lt-settings="{{ bs | json | escape }}" style="--v: {{ val }}%;" {{ b.shopify_attributes }}>
+          {%- comment -%} The bar shows an answer only once Show the average answer is on, so a new question draws no made up result. {%- endcomment -%}
+          <div class="cfs__row" data-lt-block="{{ b.id }}" data-lt-type="question" data-lt-settings="{{ bs | json | escape }}" style="--v: {{ val }}%;"{% unless bs.show_value %} data-empty{% endunless %} {{ b.shopify_attributes }}>
             <h3 class="cfs__q" data-lt-q>{{ bs.question | default: fb_question | escape }}</h3>
             <div class="cfs__scale" aria-hidden="true"><span data-lt-left>{{ bs.left_label | default: fb_low | escape }}</span><span data-lt-right>{{ bs.right_label | default: fb_high | escape }}</span></div>
-            <div class="cfs__bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ val }}" aria-label="{{ bs.question | default: fb_question | escape }}" aria-valuetext="{{ val }}% ({{ bs.left_label | default: fb_low | escape }} to {{ bs.right_label | default: fb_high | escape }})" data-lt-bar>
+            <div class="cfs__bar"{% if bs.show_value %} role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ val }}" aria-label="{{ bs.question | default: fb_question | escape }}" aria-valuetext="{{ val }}% ({{ bs.left_label | default: fb_low | escape }} to {{ bs.right_label | default: fb_high | escape }})"{% else %} aria-hidden="true"{% endif %} data-lt-bar>
               <span class="cfs__fill"></span>
               <span class="cfs__marker"></span>
             </div>
@@ -170,15 +185,17 @@
       "label": "Show rating header",
       "default": true,
       "hidden": true,
-      "info": "Legacy: used only when the section has no Rating summary block. "
+      "info": "Legacy: used only when the section has no Rating summary block. ",
+      "visible_if": "{{ false }}"
     },
     {
       "type": "text",
       "id": "overall_score",
       "label": "Score (display)",
-      "default": "4,3",
+      "default": "",
       "hidden": true,
-      "info": "Legacy: used only when the section has no Rating summary block. "
+      "info": "Legacy: used only when the section has no Rating summary block. ",
+      "visible_if": "{{ false }}"
     },
     {
       "type": "range",
@@ -187,25 +204,28 @@
       "max": 5,
       "step": 1,
       "label": "Filled stars",
-      "default": 4,
+      "default": 0,
       "hidden": true,
-      "info": "Legacy: used only when the section has no Rating summary block. "
+      "info": "Legacy: used only when the section has no Rating summary block. ",
+      "visible_if": "{{ false }}"
     },
     {
       "type": "text",
       "id": "review_count",
       "label": "Review count text",
-      "default": "BASED ON 127+ REVIEWS",
+      "default": "",
       "hidden": true,
-      "info": "Legacy: used only when the section has no Rating summary block. "
+      "info": "Legacy: used only when the section has no Rating summary block. ",
+      "visible_if": "{{ false }}"
     },
     {
       "type": "text",
       "id": "source_note",
       "label": "Source note",
-      "default": "All reviews are verified purchasers",
+      "default": "",
       "hidden": true,
-      "info": "Legacy: used only when the section has no Rating summary block. "
+      "info": "Legacy: used only when the section has no Rating summary block. ",
+      "visible_if": "{{ false }}"
     },
     {
       "type": "header",
@@ -448,20 +468,21 @@
           "id": "score",
           "type": "text",
           "label": "Score",
-          "default": "4.5",
-          "info": "A number from 0 to 5. The stars fill to it."
+          "default": "",
+          "info": "A number from 0 to 5, from your own reviews. The stars fill to it. Empty: no score and no stars."
         },
         {
           "id": "count",
           "type": "text",
           "label": "Review count",
-          "default": "Based on your reviews"
+          "default": "",
+          "info": "For example how many reviews the score is based on."
         },
         {
           "id": "note",
           "type": "text",
           "label": "Note",
-          "default": "Average answers from customers"
+          "default": ""
         }
       ],
       "limit": 1
@@ -489,6 +510,13 @@
           "default": "Excellent"
         },
         {
+          "type": "checkbox",
+          "id": "show_value",
+          "label": "Show the average answer",
+          "default": false,
+          "info": "Off: the bar shows no answer. Turn it on once you have real answers."
+        },
+        {
           "type": "range",
           "id": "value",
           "min": 0,
@@ -496,7 +524,9 @@
           "step": 1,
           "unit": "%",
           "label": "Average answer",
-          "default": 80
+          "default": 50,
+          "info": "From your own customer answers.",
+          "visible_if": "{{ block.settings.show_value }}"
         }
       ]
     }
@@ -515,15 +545,13 @@
         {
           "type": "question",
           "settings": {
-            "question": "Is it good value for money?",
-            "value": 80
+            "question": "Is it good value for money?"
           }
         },
         {
           "type": "question",
           "settings": {
-            "question": "How is the quality?",
-            "value": 85
+            "question": "How is the quality?"
           }
         },
         {
@@ -531,8 +559,7 @@
           "settings": {
             "question": "Does it fit as expected?",
             "left_label": "Too small",
-            "right_label": "Too big",
-            "value": 50
+            "right_label": "Too big"
           }
         },
         {
@@ -540,8 +567,7 @@
           "settings": {
             "question": "Would you buy it again?",
             "left_label": "No",
-            "right_label": "Yes",
-            "value": 90
+            "right_label": "Yes"
           }
         }
       ]
@@ -604,15 +630,17 @@
         "label": "Show rating header",
         "default": true,
         "hidden": true,
-        "info": "Legacy: used only when the section has no Rating summary block. "
+        "info": "Legacy: used only when the section has no Rating summary block. ",
+        "visible_if": "{{ false }}"
       },
       {
         "type": "text",
         "id": "overall_score",
         "label": "Score (display)",
-        "default": "4,3",
+        "default": "",
         "hidden": true,
-        "info": "Legacy: used only when the section has no Rating summary block. "
+        "info": "Legacy: used only when the section has no Rating summary block. ",
+        "visible_if": "{{ false }}"
       },
       {
         "type": "range",
@@ -621,25 +649,28 @@
         "max": 5,
         "step": 1,
         "label": "Filled stars",
-        "default": 4,
+        "default": 0,
         "hidden": true,
-        "info": "Legacy: used only when the section has no Rating summary block. "
+        "info": "Legacy: used only when the section has no Rating summary block. ",
+        "visible_if": "{{ false }}"
       },
       {
         "type": "text",
         "id": "review_count",
         "label": "Review count text",
-        "default": "BASED ON 127+ REVIEWS",
+        "default": "",
         "hidden": true,
-        "info": "Legacy: used only when the section has no Rating summary block. "
+        "info": "Legacy: used only when the section has no Rating summary block. ",
+        "visible_if": "{{ false }}"
       },
       {
         "type": "text",
         "id": "source_note",
         "label": "Source note",
-        "default": "All reviews are verified purchasers",
+        "default": "",
         "hidden": true,
-        "info": "Legacy: used only when the section has no Rating summary block. "
+        "info": "Legacy: used only when the section has no Rating summary block. ",
+        "visible_if": "{{ false }}"
       },
       {
         "type": "header",
@@ -877,20 +908,21 @@
             "id": "score",
             "type": "text",
             "label": "Score",
-            "default": "4.5",
-            "info": "A number from 0 to 5. The stars fill to it."
+            "default": "",
+            "info": "A number from 0 to 5, from your own reviews. The stars fill to it. Empty: no score and no stars."
           },
           {
             "id": "count",
             "type": "text",
             "label": "Review count",
-            "default": "Based on your reviews"
+            "default": "",
+            "info": "For example how many reviews the score is based on."
           },
           {
             "id": "note",
             "type": "text",
             "label": "Note",
-            "default": "Average answers from customers"
+            "default": ""
           }
         ],
         "limit": 1
@@ -918,6 +950,13 @@
             "default": "Excellent"
           },
           {
+            "type": "checkbox",
+            "id": "show_value",
+            "label": "Show the average answer",
+            "default": false,
+            "info": "Off: the bar shows no answer. Turn it on once you have real answers."
+          },
+          {
             "type": "range",
             "id": "value",
             "min": 0,
@@ -925,7 +964,9 @@
             "step": 1,
             "unit": "%",
             "label": "Average answer",
-            "default": 80
+            "default": 50,
+            "info": "From your own customer answers.",
+            "visible_if": "{{ block.settings.show_value }}"
           }
         ]
       }
@@ -944,15 +985,13 @@
           {
             "type": "question",
             "settings": {
-              "question": "Is it good value for money?",
-              "value": 80
+              "question": "Is it good value for money?"
             }
           },
           {
             "type": "question",
             "settings": {
-              "question": "How is the quality?",
-              "value": 85
+              "question": "How is the quality?"
             }
           },
           {
@@ -960,8 +999,7 @@
             "settings": {
               "question": "Does it fit as expected?",
               "left_label": "Too small",
-              "right_label": "Too big",
-              "value": 50
+              "right_label": "Too big"
             }
           },
           {
@@ -969,8 +1007,7 @@
             "settings": {
               "question": "Would you buy it again?",
               "left_label": "No",
-              "right_label": "Yes",
-              "value": 90
+              "right_label": "Yes"
             }
           }
         ]

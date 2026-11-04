@@ -1,109 +1,76 @@
 <template compat="shopify">
 {% render 'theme-type' %}
+{%- comment -%}
+  Materia Themes. Image Banner Popup: a picture (with an optional link) in a
+  native <dialog> (snippets/page-popup-dialog). Every setting reaches the
+  page as a CSS variable or an attribute on the root, so
+  shopify/assets/live-page-popups.js applies a builder edit in place, the
+  same as this Liquid draws it. The Banner image block's settings win over
+  the section's old ones (kept, hidden, for popups saved without the block).
+{%- endcomment -%}
 {%- liquid
-  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+  assign st = section.settings
+  assign color_scheme = st.color_scheme.id | default: st.color_scheme | default: 'default-color-scheme'
+  assign block_image = section.blocks | where: 'type', 'image' | first
+  assign im = st
+  if block_image != blank
+    assign im = block_image.settings
+  endif
+  assign ib_custom = false
+  if st.enable_custom_style == true
+    assign ib_custom = true
+  endif
+  assign ib_bg = ''
+  assign ib_close = ''
+  if ib_custom
+    assign ib_bg = st.popup_container_background_color
+    assign ib_close = st.close_button_color
+  endif
+  case st.display_options
+    when 'after_seconds'
+      assign ib_mode = 'delay'
+    when 'after_scrolling'
+      assign ib_mode = 'scroll'
+    when 'mouse_close'
+      assign ib_mode = 'exit'
+    when 'pageviews'
+      assign ib_mode = 'pageviews'
+    else
+      assign ib_mode = 'manual'
+  endcase
+  assign ib_alt_default = 'accessibility.banner_image' | t
+  assign ib_alt = ib_alt_default
+  if st.image_alt != blank
+    assign ib_alt = st.image_alt
+  endif
+  assign ib_frequency = 'always'
+  if st.hide_promobanner_days > 0
+    assign ib_frequency = 'after_days'
+  endif
 -%}
 <style>
-  /* Popup must escape section stacking contexts so it can render above all
-     other content (Comparison Table 4 etc. were overlapping it). */
-  #shopify-section-{{ section.id }} {
-    position: static;
+  #shopify-section-{{ section.id }} { position: static; }
+  :where(#shopify-section-{{ section.id }}) { font-family: var(--body-font, inherit); }
+  :where(#shopify-section-{{ section.id }}) :where(button, input, textarea, select, optgroup) { font-family: inherit; }
+  /* "Open on button click" draws its button in the page; otherwise the
+     section takes no room (the popup itself is fixed over the page). */
+  #shopify-section-{{ section.id }} .section-{{ section.id }} {
+    text-align: center;
+    padding-top: var(--ib-pad-t, 10px);
+    padding-bottom: var(--ib-pad-b, 10px);
   }
-  :where(#shopify-section-{{ section.id }}) {
-    font-family: var(--body-font, inherit);
+  #shopify-section-{{ section.id }} [data-pg-root]:not([data-ib-mode="click"]) .section-{{ section.id }} {
+    display: none !important;
   }
-  :where(#shopify-section-{{ section.id }}) :where(button, input, textarea, select, optgroup) {
-    font-family: inherit;
+  {%- unless request.design_mode %}
+  #shopify-section-{{ section.id }}:has([data-pg-root]:not([data-ib-mode="click"])) {
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
-{% comment %}{% endcomment %}</style>
-{%- comment -%}
-  Block resolution: image settings can come from an Image block (limit 1).
-  Fall back to legacy section settings when no block exists so existing
-  instances render unchanged.
-{%- endcomment -%}
-{%- assign block_image = blank -%}
-{%- for b in section.blocks -%}
-  {%- if b.type == 'image' -%}{%- assign block_image = b -%}{%- endif -%}
-{%- endfor -%}
-
-{%- liquid
-  assign display_options = section.settings.display_options
-  assign seconds = section.settings.seconds
-  assign percent = section.settings.percent
-  assign hide_promobanner_days = section.settings.hide_promobanner_days
-
-  assign promobanner_width = section.settings.promobanner_width
-  assign promobanner_width_mobile = section.settings.promobanner_width_mobile
-  assign promobanner_radius = section.settings.promobanner_radius
-  assign promobanner_border_thickness = section.settings.promobanner_border_thickness
-  assign promobanner_overlay = section.settings.promobanner_overlay
-  assign promobanner_horizontal_position = section.settings.promobanner_horizontal_position
-  assign promobanner_horizontal_position_mobile = section.settings.promobanner_horizontal_position_mobile
-  assign promobanner_vertical_position = section.settings.promobanner_vertical_position
-  assign promobanner_vertical_position_mobile = section.settings.promobanner_vertical_position_mobile
-
-  if block_image != blank
-    assign image_desktop = block_image.settings.image_desktop
-    assign image_mobile = block_image.settings.image_mobile
-    assign image_link = block_image.settings.image_link
-    assign image_border_radius = block_image.settings.image_border_radius
-    assign image_width_desktop = block_image.settings.image_width_desktop
-    assign image_height_desktop = block_image.settings.image_height_desktop
-    assign image_width_mobile = block_image.settings.image_width_mobile
-    assign image_height_mobile = block_image.settings.image_height_mobile
-    assign lazy = block_image.settings.lazy
-    assign image_hover_animation = block_image.settings.image_hover_animation
-  else
-    assign image_desktop = section.settings.image_desktop
-    assign image_mobile = section.settings.image_mobile
-    assign image_link = section.settings.image_link
-    assign image_border_radius = section.settings.image_border_radius
-    assign image_width_desktop = section.settings.image_width_desktop
-    assign image_height_desktop = section.settings.image_height_desktop
-    assign image_width_mobile = section.settings.image_width_mobile
-    assign image_height_mobile = section.settings.image_height_mobile
-    assign lazy = section.settings.lazy
-    assign image_hover_animation = section.settings.image_hover_animation
-  endif
-
-  assign close_button_color = section.settings.close_button_color
-  assign hide_on_mobile = section.settings.hide_on_mobile
-
-  assign section_padding_top = section.settings.section_padding_top
-  assign section_padding_bottom = section.settings.section_padding_bottom
-
-  assign popup_container_background_color = section.settings.popup_container_background_color
--%}
-
-{%- style -%}
-  /* The section wrapper is invisible unless display mode is "Open on button click" —
-     we don't want it to occupy any layout space under the footer when the popup is
-     auto-triggered (delay / scroll / exit-intent). The popup overlay is position:fixed
-     and renders on top regardless. */
-  {% if display_options == 'click' %}
-    .section-{{ section.id }} {
-      text-align: center;
-      padding-top: {{ section_padding_top }}px;
-      padding-bottom: {{ section_padding_bottom }}px;
-    }
-  {% else %}
-    .section-{{ section.id }} {
-      display: none !important;
-      height: 0 !important;
-      padding: 0 !important;
-      margin: 0 !important;
-    }
-    /* Make sure the parent <section> tag the theme renders also collapses */
-    #shopify-section-{{ section.id }} {
-      height: 0 !important;
-      min-height: 0 !important;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-  {% endif %}
-  .promobanner-button-{{ section.id }} {
-    cursor: pointer;
-  }
+  {%- endunless %}
+  .promobanner-button-{{ section.id }} { cursor: pointer; }
 
   /* Popup container (overlay) */
   .promobanner-popup-{{ section.id }} {
@@ -113,14 +80,14 @@
     left: 0;
     position: fixed;
     display: flex;
-    align-items: {{ promobanner_vertical_position_mobile }};
-    justify-content: {{ promobanner_horizontal_position_mobile }};
+    align-items: var(--ib-v, center);
+    justify-content: var(--ib-h, center);
     opacity: 0;
     visibility: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
     pointer-events: none;
-    background: rgba(0, 0, 0, {{ promobanner_overlay | times: 0.01 }});
+    background: rgba(0, 0, 0, var(--ib-overlay-o, .5));
     padding: 16px;
     transition: opacity 0.35s ease, visibility 0s linear 0.35s;
     z-index: 2147483646;
@@ -136,55 +103,39 @@
     transition: transform .4s cubic-bezier(.2,.8,.2,1);
   }
   .promobanner-popup-{{ section.id }}.active .promobanner-popup-inner-{{ section.id }} { transform: none; }
-  /* Popup inner container (where the image stays) */
   .promobanner-popup-inner-{{ section.id }} {
     position: relative;
-    max-width: {{ promobanner_width_mobile }}%;
-    border: {{ promobanner_border_thickness }}px solid var(--color-border);
-    background: {% render 'scheme-color', color: popup_container_background_color, fallback: 'var(--color-background)' %};
-    border-radius: {{ promobanner_radius }}px;
+    max-width: var(--ib-w-m, 100%);
+    border: var(--ib-border, 0px) solid var(--color-border);
+    background: var(--ib-bg, var(--color-background));
+    border-radius: var(--ib-radius, 0px);
     overflow: hidden;
-    max-width: 100%;
+    z-index: 2147483647;
   }
   .promobanner-popup-inner-{{ section.id }} .promobanner-placeholder { width: 100%; height: 100%; display: block; background: color-mix(in srgb, var(--color-heading) 8%, var(--color-background)); fill: color-mix(in srgb, var(--color-text) 30%, transparent); }
+  .promobanner-popup-inner-{{ section.id }} [data-ib-link] { display: contents; }
 
-  /* Image containers (only one is shown at a time) */
   .promobanner-popup-image-desktop-{{ section.id }},
-  .promobanner-popup-image-mobile-{{ section.id }} {
-    margin: 0 auto;
-  }
+  .promobanner-popup-image-mobile-{{ section.id }} { margin: 0 auto; }
   .promobanner-popup-image-desktop-{{ section.id }} img,
   .promobanner-popup-image-mobile-{{ section.id }} img {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    border-radius: {{ image_border_radius }}px;
+    border-radius: var(--ib-img-radius, 0px);
   }
   @media (min-width: 1024px) {
-    .promobanner-popup-inner-{{ section.id }} {
-      max-width: {{ promobanner_width }}%;
-    }
-    .promobanner-popup-image-desktop-{{ section.id }} {
-      display: block;
-      width: {{ image_width_desktop }}%;
-      height: {{ image_height_desktop }}px;
-    }
-    .promobanner-popup-image-mobile-{{ section.id }} {
-      display: none;
-    }
+    .promobanner-popup-inner-{{ section.id }} { max-width: var(--ib-w-d, 60%); }
+    .promobanner-popup-image-desktop-{{ section.id }} { display: block; width: var(--ib-iw-d, 100%); height: var(--ib-ih-d, 300px); }
+    .promobanner-popup-image-mobile-{{ section.id }} { display: none; }
   }
   @media (max-width: 1023px) {
-    .promobanner-popup-image-mobile-{{ section.id }} {
-      display: block;
-      width: {{ image_width_mobile }}%;
-      height: {{ image_height_mobile }}px;
-    }
-    .promobanner-popup-image-desktop-{{ section.id }} {
-      display: none;
-    }
+    .promobanner-popup-image-mobile-{{ section.id }} { display: block; width: var(--ib-iw-m, 100%); height: var(--ib-ih-m, 200px); }
+    .promobanner-popup-image-desktop-{{ section.id }} { display: none; }
+    #shopify-section-{{ section.id }} [data-ib-phone-off] .section-{{ section.id }},
+    #shopify-section-{{ section.id }} [data-ib-phone-off] .promobanner-popup-{{ section.id }} { display: none !important; }
   }
 
-  /* Close icon */
   .promobanner-popup-close-{{ section.id }} {
     position: absolute;
     top: 6px;
@@ -201,63 +152,22 @@
     cursor: pointer;
     z-index: 2147483647;
   }
-  /* The popup container itself sits at maximum z-index */
-  .promobanner-popup-inner-{{ section.id }} {
-    z-index: 2147483647;
-  }
-  .promobanner-popup-close-{{ section.id }} svg {
-    width: 24px;
-    height: 24px;
-  }
+  .promobanner-popup-close-{{ section.id }} svg { width: 24px; height: 24px; }
   .promobanner-popup-close-{{ section.id }} svg path {
-    fill: {% render 'scheme-color', color: close_button_color, fallback: '#ffffff' %};
+    fill: var(--ib-close, #ffffff);
     transition: filter var(--btn-anim-duration, .3s) var(--btn-anim-ease, ease);
   }
   .promobanner-popup-close-{{ section.id }}:hover { background: rgba(0, 0, 0, .55); }
 
-  /* Hide section on mobile if enabled */
-  {% if hide_on_mobile %}
-  @media (max-width: 1023px) {
-    .section-{{ section.id }},
-    .promobanner-popup-{{ section.id }} {
-      display: none !important;
-    }
-  }
-  {% endif %}
+  /* Picture on hover */
+  #shopify-section-{{ section.id }} [data-ib-hover="smooth_fade"] .promobanner-popup-inner-{{ section.id }} img,
+  #shopify-section-{{ section.id }} [data-ib-hover="smooth_blink"] .promobanner-popup-inner-{{ section.id }} img { transition: opacity 0.3s ease; }
+  #shopify-section-{{ section.id }} [data-ib-hover="smooth_fade"] .promobanner-popup-inner-{{ section.id }} img:hover { opacity: 0.8; }
+  #shopify-section-{{ section.id }} [data-ib-hover="smooth_blink"] .promobanner-popup-inner-{{ section.id }} img:hover { animation: ib-blink-{{ section.id }} 1s linear infinite; }
+  @keyframes ib-blink-{{ section.id }} { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  #shopify-section-{{ section.id }} [data-ib-hover="smooth_shadow"] .promobanner-popup-inner-{{ section.id }} img { transition: box-shadow 0.3s ease; }
+  #shopify-section-{{ section.id }} [data-ib-hover="smooth_shadow"] .promobanner-popup-inner-{{ section.id }} img:hover { box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.5); }
 
-  /* Image Hover Animations */
-  {% if image_hover_animation == 'smooth_fade' %}
-    .promobanner-popup-image-desktop-{{ section.id }} img,
-    .promobanner-popup-image-mobile-{{ section.id }} img {
-      transition: opacity 0.3s ease;
-    }
-    .promobanner-popup-image-desktop-{{ section.id }} img:hover,
-    .promobanner-popup-image-mobile-{{ section.id }} img:hover {
-      opacity: 0.8;
-    }
-  {% elsif image_hover_animation == 'smooth_blink' %}
-    .promobanner-popup-image-desktop-{{ section.id }} img,
-    .promobanner-popup-image-mobile-{{ section.id }} img {
-      transition: opacity 0.3s ease;
-    }
-    .promobanner-popup-image-desktop-{{ section.id }} img:hover,
-    .promobanner-popup-image-mobile-{{ section.id }} img:hover {
-      animation: blink 1s linear infinite;
-    }
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-  {% elsif image_hover_animation == 'smooth_shadow' %}
-    .promobanner-popup-image-desktop-{{ section.id }} img,
-    .promobanner-popup-image-mobile-{{ section.id }} img {
-      transition: box-shadow 0.3s ease;
-    }
-    .promobanner-popup-image-desktop-{{ section.id }} img:hover,
-    .promobanner-popup-image-mobile-{{ section.id }} img:hover {
-      box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.5);
-    }
-  {% endif %}
   .promobanner-popup-close-{{ section.id }}:focus-visible { outline: 2px solid var(--color-heading); outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) {
     .promobanner-popup-{{ section.id }},
@@ -265,47 +175,35 @@
     .promobanner-popup-close-{{ section.id }} svg path,
     .promobanner-popup-{{ section.id }} .promobanner-popup-inner-{{ section.id }} { transition: none !important; animation: none !important; transform: none !important; }
   }
-{%- endstyle -%}
-
-{%- liquid
-  case display_options
-    when 'after_seconds'
-      assign ib_mode = 'delay'
-    when 'after_scrolling'
-      assign ib_mode = 'scroll'
-    when 'mouse_close'
-      assign ib_mode = 'exit'
-    when 'pageviews'
-      assign ib_mode = 'pageviews'
-    else
-      assign ib_mode = 'manual'
-  endcase
-  assign ib_alt = 'accessibility.banner_image' | t
-  if section.settings.image_alt != blank
-    assign ib_alt = section.settings.image_alt
-  endif
--%}
+{% comment %}{% endcomment %}</style>
 {%- capture ib_config -%}
-  {"design": {{ request.design_mode | json }}, "preview": {{ section.settings.show_in_builder | json }}, "phoneOff": {{ hide_on_mobile | json }},
-   "trigger": {"mode": {{ ib_mode | json }}, "delay": {{ seconds | default: 0 | json }}, "scroll": {{ percent | default: 50 | json }}, "views": {{ section.settings.page_views | default: 2 | json }} },
-   "frequency": {"mode": {% if hide_promobanner_days > 0 %}"after_days"{% else %}"always"{% endif %}, "days": {{ hide_promobanner_days | default: 0 | json }} } }
+  {"design": {{ request.design_mode | json }}, "preview": {{ st.show_in_builder | json }}, "phoneOff": {{ st.hide_on_mobile | json }},
+   "trigger": {"mode": {{ ib_mode | json }}, "delay": {{ st.seconds | default: 0 | json }}, "scroll": {{ st.percent | default: 50 | json }}, "views": {{ st.page_views | default: 2 | json }} },
+   "frequency": {"mode": {{ ib_frequency | json }}, "days": {{ st.hide_promobanner_days | default: 0 | json }} } }
 {%- endcapture -%}
-<div class="section-{{ section.id }} promobanner-{{ section.id }} color-{{ color_scheme }}">
+{%- capture ib_vars -%}
+--ib-pad-t: {{ st.section_padding_top | default: 0 }}px; --ib-pad-b: {{ st.section_padding_bottom | default: 0 }}px; --ib-v: {{ st.promobanner_vertical_position_mobile | default: 'center' }}; --ib-h: {{ st.promobanner_horizontal_position_mobile | default: 'center' }}; --ib-overlay-o: {{ st.promobanner_overlay | default: 0 | times: 0.01 }}; --ib-w-m: {{ st.promobanner_width_mobile | default: 100 }}%; --ib-w-d: {{ st.promobanner_width | default: 60 }}%; --ib-border: {{ st.promobanner_border_thickness | default: 0 }}px; --ib-radius: {{ st.promobanner_radius | default: 0 }}px; --ib-img-radius: {{ im.image_border_radius | default: 0 }}px; --ib-iw-d: {{ im.image_width_desktop | default: 100 }}%; --ib-ih-d: {{ im.image_height_desktop | default: 300 }}px; --ib-iw-m: {{ im.image_width_mobile | default: 100 }}%; --ib-ih-m: {{ im.image_height_mobile | default: 200 }}px;
+{%- if ib_custom -%} --ib-bg: {% render 'scheme-color', color: ib_bg, fallback: 'var(--color-background)' %}; --ib-close: {% render 'scheme-color', color: ib_close, fallback: '#ffffff' %};{%- endif -%}
+{%- render 'page-popup-fonts', st: st -%}
+{%- endcapture -%}
+{% render 'page-popup-dialog', sid: section.id, st: st %}
+<div class="pg-root" data-pg-root="promotional-image-popup" data-pg-section="{{ section.id }}" data-pg-settings="{{ st | json | escape }}" data-pg-i18n="{{ ib_alt_default | escape }}"{% if st.enable_custom_fonts %} data-pg-fonts data-own-font{% endif %} data-ib-mode="{{ st.display_options }}"{% if st.hide_on_mobile %} data-ib-phone-off{% endif %} data-ib-hover="{{ im.image_hover_animation | default: 'none' }}" style="{{ ib_vars | strip_newlines | strip }}">
+<div class="section-{{ section.id }} promobanner-{{ section.id }} color-{{ color_scheme }}" data-pg-scheme>
   <div class="section-{{ section.id }}-settings">
-    {% if display_options == 'click' %}
-      <button type="button" class="btn-primary promobanner-button-{{ section.id }}" data-theme-button="primary" data-sl-button data-popup-open="{{ section.id }}" aria-haspopup="dialog">{{ section.settings.button_label | default: 'See the offer' }}</button>
-    {% endif %}
+    <button type="button" class="btn-primary promobanner-button-{{ section.id }}" data-theme-button="primary" data-sl-button data-popup-open="{{ section.id }}" aria-haspopup="dialog" data-ib-button>{{ st.button_label | default: 'See the offer' }}</button>
   </div>
 </div>
 
-<div class="promobanner-popup-{{ section.id }}" data-popup-root="{{ section.id }}" data-popup-config="{{ ib_config | strip_newlines | escape }}" aria-hidden="true">
-  <div class="promobanner-popup-inner-{{ section.id }} color-{{ color_scheme }}" role="dialog" aria-modal="true" aria-label="{{ ib_alt | escape }}" tabindex="-1">
+<dialog class="pg-dialog" data-pg-dialog aria-label="{{ ib_alt | escape }}">
+<div class="promobanner-popup-{{ section.id }}" data-popup-root="{{ section.id }}" data-pg-frame data-popup-config="{{ ib_config | strip_newlines | escape }}" aria-hidden="true">
+  <div class="promobanner-popup-inner-{{ section.id }} color-{{ color_scheme }}" data-pg-card data-pg-scheme tabindex="-1"{% if block_image != blank %} data-pg-block="{{ block_image.id }}" data-pg-type="image" data-pg-settings="{{ block_image.settings | json | escape }}" {{ block_image.shopify_attributes }}{% endif %}>
     {%- for ib_view in (1..2) -%}
-      {%- if ib_view == 1 -%}{%- assign ib_img = image_desktop -%}{%- assign ib_class = 'desktop' -%}{%- assign ib_sizes = '(min-width: 1024px) 60vw' -%}{%- else -%}{%- assign ib_img = image_mobile | default: image_desktop -%}{%- assign ib_class = 'mobile' -%}{%- assign ib_sizes = '100vw' -%}{%- endif -%}
-    <div class="promobanner-popup-image-{{ ib_class }}-{{ section.id }}">
-      {% if image_link != blank %}<a href="{{ image_link }}">{% endif %}
+      {%- if ib_view == 1 -%}{%- assign ib_img = im.image_desktop -%}{%- assign ib_class = 'desktop' -%}{%- assign ib_sizes = '(min-width: 1024px) 60vw' -%}{%- else -%}{%- assign ib_img = im.image_mobile | default: im.image_desktop -%}{%- assign ib_class = 'mobile' -%}{%- assign ib_sizes = '100vw' -%}{%- endif -%}
+    <div class="promobanner-popup-image-{{ ib_class }}-{{ section.id }}" data-ib-view="{{ ib_class }}">
+      <template data-pg-ph>{{ 'lifestyle-2' | placeholder_svg_tag: 'promobanner-placeholder' }}</template>
+      <a data-ib-link{% if im.image_link != blank %} href="{{ im.image_link }}"{% endif %}>
       {%- if ib_img != blank -%}
-        {%- if lazy -%}
+        {%- if im.lazy -%}
           {{ ib_img | image_url: width: 1600 | image_tag: alt: ib_alt, loading: 'lazy', decoding: 'async', sizes: ib_sizes, widths: '480,750,1100,1600' }}
         {%- else -%}
           {{ ib_img | image_url: width: 1600 | image_tag: alt: ib_alt, sizes: ib_sizes, widths: '480,750,1100,1600' }}
@@ -313,7 +211,7 @@
       {%- else -%}
         {{ 'lifestyle-2' | placeholder_svg_tag: 'promobanner-placeholder' }}
       {%- endif -%}
-      {% if image_link != blank %}</a>{% endif %}
+      </a>
     </div>
     {%- endfor -%}
     <button type="button" class="promobanner-popup-close-{{ section.id }}" data-popup-close aria-label="{{ 'accessibility.close' | t }}">
@@ -322,6 +220,8 @@
       </svg>
     </button>
   </div>
+</div>
+</dialog>
 </div>
 
 <script src="{{ 'materia-popups.js' | asset_url }}" defer="defer"></script>
@@ -801,6 +701,16 @@
     "settings": [
       {
         "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "header",
         "content": "Trigger"
       },
       {
@@ -839,7 +749,8 @@
         "max": 50,
         "step": 1,
         "unit": "s",
-        "default": 10
+        "default": 10,
+        "visible_if": "{{ section.settings.display_options == 'after_seconds' }}"
       },
       {
         "type": "range",
@@ -902,12 +813,18 @@
       {
         "type": "image_picker",
         "id": "image_desktop",
-        "label": "Image"
+        "label": "Image",
+        "hidden": true,
+        "info": "Legacy: used only when the popup has no Banner image block.",
+        "visible_if": "{{ false }}"
       },
       {
         "type": "image_picker",
         "id": "image_mobile",
-        "label": "Image on phones"
+        "label": "Image on phones",
+        "hidden": true,
+        "info": "Legacy: used only when the popup has no Banner image block.",
+        "visible_if": "{{ false }}"
       },
       {
         "type": "text",
@@ -917,13 +834,19 @@
       {
         "type": "url",
         "id": "image_link",
-        "label": "Link"
+        "label": "Link",
+        "hidden": true,
+        "info": "Legacy: used only when the popup has no Banner image block.",
+        "visible_if": "{{ false }}"
       },
       {
         "type": "checkbox",
         "id": "lazy",
         "label": "Load when needed",
-        "default": true
+        "default": true,
+        "hidden": true,
+        "info": "Legacy: used only when the popup has no Banner image block.",
+        "visible_if": "{{ false }}"
       },
       {
         "type": "range",
@@ -933,7 +856,10 @@
         "max": 100,
         "step": 1,
         "unit": "%",
-        "default": 100
+        "default": 100,
+        "hidden": true,
+        "info": "Legacy: used only when the popup has no Banner image block.",
+        "visible_if": "{{ false }}"
       },
       {
         "type": "range",
@@ -943,7 +869,10 @@
         "max": 1000,
         "step": 10,
         "unit": "px",
-        "default": 300
+        "default": 300,
+        "hidden": true,
+        "info": "Legacy: used only when the popup has no Banner image block.",
+        "visible_if": "{{ false }}"
       },
       {
         "type": "range",
@@ -953,7 +882,10 @@
         "max": 100,
         "step": 1,
         "unit": "%",
-        "default": 100
+        "default": 100,
+        "hidden": true,
+        "info": "Legacy: used only when the popup has no Banner image block.",
+        "visible_if": "{{ false }}"
       },
       {
         "type": "range",
@@ -963,7 +895,10 @@
         "max": 800,
         "step": 10,
         "unit": "px",
-        "default": 200
+        "default": 200,
+        "hidden": true,
+        "info": "Legacy: used only when the popup has no Banner image block.",
+        "visible_if": "{{ false }}"
       },
       {
         "type": "header",
@@ -1073,23 +1008,26 @@
       },
       {
         "type": "header",
-        "content": "Style"
+        "content": "Appearance"
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Custom colours",
+        "default": false,
+        "info": "Off, the popup follows its colour scheme."
       },
       {
         "type": "color",
         "id": "popup_container_background_color",
-        "label": "Background"
+        "label": "Background",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "color",
         "id": "close_button_color",
-        "label": "Close icon"
+        "label": "Close icon",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "range",
@@ -1100,6 +1038,33 @@
         "step": 10,
         "unit": "%",
         "default": 50
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Custom fonts",
+        "default": false,
+        "info": "Off, the popup uses the theme fonts."
+      },
+      {
+        "type": "font_picker",
+        "id": "heading_font",
+        "label": "Heading font",
+        "default": "assistant_n4",
+        "visible_if": "{{ false }}",
+        "hidden": true,
+        "info": "This popup has no heading."
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts == true }}"
       }
     ],
     "blocks": [

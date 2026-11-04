@@ -241,7 +241,7 @@ async function sizeChart(browser) {
 }
 
 const foBlocks = (anim = {}, prod = {}) => L.presetBlocks('fake-order').map(b => b.type === 'animation' ? {...b, settings: {...(b.settings || {}), delay_time: '500', animation_duration: 400, show_gap_seconds: 1, ...anim}} : b.type === 'products' ? {...b, settings: {...b.settings, fake_user: 'Ada | Ben', ...prod}} : b);
-const foState = (t, uid = 'test') => t.page.evaluate(u => { const r = document.querySelector('#shopify-section-' + u + ' [data-pc-root]'); return r ? {state: r.dataset.foState, display: getComputedStyle(r).display, title: r.querySelector('[data-title-fake]').textContent.trim(), user: r.querySelector('[data-user]').textContent.trim(), time: r.querySelector('[data-time]').textContent.trim(), href: r.querySelector('[data-title-fake]').getAttribute('href'), anim: getComputedStyle(r).animationName} : null; }, uid);
+const foState = (t, uid = 'test') => t.page.evaluate(u => { const r = document.querySelector('#shopify-section-' + u + ' [data-pc-root]'); return r ? {state: r.dataset.foState, display: getComputedStyle(r).display, title: r.querySelector('[data-title-fake]').textContent.trim(), user: r.querySelector('[data-user]').textContent.trim(), time: r.querySelector('[data-fo-time-text]').textContent.trim(), timeShown: !!r.querySelector('[data-fo-time]') && getComputedStyle(r.querySelector('[data-fo-time]')).display !== 'none', digits: /\d/.test(r.querySelector('.fo-row').textContent), href: r.querySelector('[data-title-fake]').getAttribute('href'), anim: getComputedStyle(r).animationName} : null; }, uid);
 async function fakeOrder(browser) {
   const {schema} = schemaOf('fake-order');
   const all = JSON.stringify(schema);
@@ -258,7 +258,7 @@ async function fakeOrder(browser) {
     ok(['Pants Down', 'Other Tee'].includes(s.title), tag + ' a real product title (' + s.title + ')');
     ok(['/products/pants-down', '/products/other-tee'].includes(s.href), tag + ' its real link');
     ok(['Ada', 'Ben'].includes(s.user), tag + ' a buyer the creator typed (' + s.user + ')');
-    ok(/^\d+$/.test(s.time), tag + ' minutes');
+    eq([s.time, s.timeShown, s.digits], ['', false, false], tag + ' no time line by default, and no number of minutes made up');
     ok(s.anim !== 'none', tag + ' animates');
     ok((await sel(t, '.fake-order-close').boundingBox()).width >= 44, tag + ' close 44px');
     ok(await t.noOverflow(), tag + ' no sideways scroll');
@@ -282,6 +282,15 @@ async function fakeOrder(browser) {
     await wait(t, 1600);
     eq((await foState(t)).state, 'hidden', tag + ' and it stays closed');
     eq(t.errors, [], tag + ' errors');
+    await t.page.close();
+    /* the time line is only what the creator writes: drawn as typed, on every card, never a number */
+    const withLine = foBlocks().map(b => b.type === 'text' ? {...b, settings: {...(b.settings || {}), time_line: 'Recently'}} : b);
+    t = await mount(browser, 'fake-order', {width, editing: false, blocks: withLine, assets: [L.ASSET]});
+    for (let round = 0; round < 2; round++) {
+      await wait(t, round ? 1500 : 450);
+      s = await foState(t);
+      eq([s.time, s.timeShown, s.digits], ['Recently', true, false], tag + ' time line as written, card ' + (round + 1));
+    }
     await t.page.close();
     /* two cards: closing one leaves the other running; Escape closes */
     t = await mount(browser, 'fake-order', {width, editing: false, assets: [L.ASSET], instances: [{uid: 'a', blocks: foBlocks()}, {uid: 'b', blocks: foBlocks({delay_time: '550'}).map(x => x.type === 'layout' ? {...x, settings: {...(x.settings || {}), position: 'right'}} : x)}]});
@@ -432,7 +441,9 @@ async function savedFakeOrder(browser) {
         const w = document.createElement('div'); w.id = 'shopify-section-S'; w.className = 'shopify-section'; w.innerHTML = h; document.body.append(w);
         const r = w.querySelector('.fake-order'); if (old) r.style.display = 'block'; else r.dataset.foState = 'shown';
         /* the random parts: the same words in both */
-        r.querySelector('[data-user]').textContent = 'Liam (USA)'; r.querySelector('[data-time]').textContent = '12'; r.querySelector('[data-title-fake]').textContent = 'Pants Down';
+        r.querySelector('[data-user]').textContent = 'Liam (USA)'; const tm = r.querySelector('[data-time]'); if (tm) tm.textContent = '12';
+        /* the made-up minutes line is gone on purpose: the saved card has no time line now */
+        if (old) { const m = r.querySelector('.minutes-ago'); if (m) m.style.display = 'none'; } r.querySelector('[data-title-fake]').textContent = 'Pants Down';
         const img = r.querySelector('[data-img]'); if (img) img.src = '/img/black.svg';
       }, [html, old]);
       await page.waitForTimeout(150);
@@ -441,9 +452,10 @@ async function savedFakeOrder(browser) {
       return out;
     };
     const was = await look(await renderRaw(oldRaw, saved), true), now = await look(await renderRaw(newRaw, toggles(saved)), false);
+    eq([now['.minutes-ago'][PROPS.length], now['.minutes-ago'][PROPS.length + 1]], ['0,0,0,0', ''], 'saved Order Notification Pro 1 @' + width + ' draws no time line (no minutes made up)');
     for (const s of SELS) {
       const a = was[s], b = now[s];
-      if (a === 'missing') continue;
+      if (a === 'missing' || s === '.minutes-ago') continue;
       const d = PROPS.concat(['rect', 'text']).map((p, i) => [p, a[i], b[i]]).filter(([p, x, y]) => round(x) !== round(y) && !(LOOSE[s] || []).includes(p));
       eq(d, [], 'saved Order Notification Pro 1 @' + width + ' ' + s + ' looks as before');
     }

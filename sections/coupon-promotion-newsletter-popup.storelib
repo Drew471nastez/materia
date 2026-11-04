@@ -1,181 +1,147 @@
 <template compat="shopify">
 {% render 'theme-type' %}
-{%- liquid
-  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
--%}
-{%- assign fb_accessibility_promotion_image = 'accessibility.promotion_image' | t -%}
-{%- assign fb_accessibility_subscribe = 'accessibility.subscribe' | t -%}
-{%- assign fb_accessibility_enter_your_email = 'accessibility.enter_your_email' | t -%}
 {%- comment -%}
-  Coupon Promotion Newsletter Banner Popup
-  --------------------------------------------------------------
-  A clean, block-based promotional popup that combines an eyebrow,
-  headline, subheading, coupon code, newsletter form and an image.
-  Built from scratch to live in the Promotional Popup category.
-  Renders above all theme content via maximum 32-bit z-index and a
-  position-static section wrapper (no isolation: isolate stacking
-  context trap).
+  Materia Themes. Coupon Promo Popup: an eyebrow, a headline, a line of
+  text, a signup form (Storelib Subscribers, data-storelib-form="subscribe"),
+  the creator's code (shown at once, or only after signing up) and a
+  picture, in a native <dialog> (snippets/page-popup-dialog). Every setting
+  reaches the page as a CSS variable, an attribute or a text on its element,
+  so shopify/assets/live-page-popups.js applies a builder edit in place, the
+  same as this Liquid draws it. Each block is always drawn (hidden while
+  empty) so it can be filled in live.
 {%- endcomment -%}
-
-{%- assign block_eyebrow   = blank -%}
-{%- assign block_headline  = blank -%}
-{%- assign block_subheading = blank -%}
-{%- assign block_coupon    = blank -%}
-{%- assign block_form      = blank -%}
-{%- assign block_image     = blank -%}
-{%- assign block_dismiss   = blank -%}
-{%- for b in section.blocks -%}
-  {%- case b.type -%}
-    {%- when 'eyebrow' -%}{%- assign block_eyebrow = b -%}
-    {%- when 'headline' -%}{%- assign block_headline = b -%}
-    {%- when 'subheading' -%}{%- assign block_subheading = b -%}
-    {%- when 'coupon' -%}{%- assign block_coupon = b -%}
-    {%- when 'form' -%}{%- assign block_form = b -%}
-    {%- when 'image' -%}{%- assign block_image = b -%}
-    {%- when 'dismiss' -%}{%- assign block_dismiss = b -%}
-  {%- endcase -%}
-{%- endfor -%}
-
-{%- assign open_mode = section.settings.open_mode -%}
-{%- assign delay_s = section.settings.delay_s | default: 0 -%}
-{%- assign hide_days = section.settings.hide_days | default: 1 -%}
-{%- assign mobile_gutter = section.settings.mobile_gutter | default: 32 -%}
-
+{%- liquid
+  assign st = section.settings
+  assign sid = section.id
+  assign color_scheme = st.color_scheme.id | default: st.color_scheme | default: 'default-color-scheme'
+  assign fb_accessibility_promotion_image = 'accessibility.promotion_image' | t
+  assign fb_accessibility_subscribe = 'accessibility.subscribe' | t
+  assign fb_accessibility_enter_your_email = 'accessibility.enter_your_email' | t
+  assign block_eyebrow = section.blocks | where: 'type', 'eyebrow' | first
+  assign block_headline = section.blocks | where: 'type', 'headline' | first
+  assign block_subheading = section.blocks | where: 'type', 'subheading' | first
+  assign block_coupon = section.blocks | where: 'type', 'coupon' | first
+  assign block_form = section.blocks | where: 'type', 'form' | first
+  assign block_image = section.blocks | where: 'type', 'image' | first
+  assign block_dismiss = section.blocks | where: 'type', 'dismiss' | first
+  assign cpnb_custom_style = false
+  if st.enable_custom_style == true
+    assign cpnb_custom_style = true
+  endif
+  assign cpnb_gate = false
+  if st.gate_coupon
+    assign cpnb_gate = true
+  endif
+-%}
 <style>
-  /* No section stacking context — popup must escape and render above all */
-  #shopify-section-{{ section.id }} { position: static; }
+  #shopify-section-{{ sid }} { position: static; }
+  .cpnb-{{ sid }} { font-family: var(--body-font, inherit); }
+  .cpnb-{{ sid }} *, .cpnb-{{ sid }} *::before, .cpnb-{{ sid }} *::after { box-sizing: border-box; }
+  .cpnb-{{ sid }} [hidden] { display: none !important; }
 
-  .cpnb-{{ section.id }} { font-family: var(--body-font, inherit); }
-  .cpnb-{{ section.id }} *,
-  .cpnb-{{ section.id }} *::before,
-  .cpnb-{{ section.id }} *::after { box-sizing: border-box; }
-
-  /* Overlay (backdrop) */
-  .cpnb-overlay-{{ section.id }} {
+  .cpnb-overlay-{{ sid }} {
     position: fixed; inset: 0;
-    background: {% render 'scheme-color', color: section.settings.overlay_color, fallback: '#000000' %};
+    background: var(--cpnb-overlay, #000000);
     opacity: 0;
     pointer-events: none; visibility: hidden;
     transition: opacity .3s ease, visibility 0s linear .3s;
     z-index: 2147483646;
   }
-  .cpnb-{{ section.id }}.cpnb-open .cpnb-overlay-{{ section.id }} {
-    opacity: {{ section.settings.overlay_opacity | default: 50 | times: 0.01 }};
+  .cpnb-{{ sid }}.cpnb-open .cpnb-overlay-{{ sid }} {
+    opacity: var(--cpnb-overlay-o, .5);
     pointer-events: auto; visibility: visible; transition-delay: 0s;
   }
 
-  /* Card (popup container) */
-  .cpnb-card-{{ section.id }} {
+  .cpnb-card-{{ sid }} {
     position: fixed; left: 50%; top: 50%;
     transform: translate(-50%, -50%) scale(.96);
     opacity: 0; pointer-events: none; visibility: hidden;
     transition: transform .35s cubic-bezier(.2,.8,.2,1), opacity .3s ease, visibility 0s linear .35s;
     z-index: 2147483647;
-    width: min(calc(100vw - {{ mobile_gutter }}px), {{ section.settings.popup_width | default: 880 }}px);
-    /* Never taller than the screen; the card scrolls inside on a short phone. */
+    width: min(calc(100vw - var(--cpnb-gutter, 32px)), var(--cpnb-w, 880px));
     max-height: calc(var(--sl-vh, 1vh) * 100 - 24px);
     overflow: hidden auto; overscroll-behavior: contain;
-    background: {% render 'scheme-color', color: section.settings.card_bg, fallback: 'var(--color-background)' %};
-    color: {% render 'scheme-color', color: section.settings.text_color, fallback: 'var(--color-text)' %};
-    border-radius: {{ section.settings.popup_radius | default: 14 }}px;
+    background: var(--cpnb-bg, var(--color-background));
+    color: var(--cpnb-text, var(--color-text));
+    border-radius: var(--cpnb-radius, 14px);
     box-shadow: 0 12px 40px rgba(0,0,0,.15);
   }
-  .cpnb-{{ section.id }}.cpnb-open .cpnb-card-{{ section.id }} {
+  .cpnb-{{ sid }}.cpnb-open .cpnb-card-{{ sid }} {
     opacity: 1; pointer-events: auto; visibility: visible; transition-delay: 0s;
     transform: translate(-50%, -50%) scale(1);
   }
   @media (min-width: 750px) {
-    .cpnb-card-{{ section.id }} {
-      width: min(92vw, {{ section.settings.popup_width | default: 880 }}px);
+    .cpnb-card-{{ sid }} {
+      width: min(92vw, var(--cpnb-w, 880px));
       max-height: min(560px, calc(var(--sl-vh, 1vh) * 100 - 32px));
     }
   }
 
-  /* Layout — two columns on desktop, single column on mobile.
-     Each column owns half the card height so neither side scrolls. */
-  .cpnb-grid-{{ section.id }} {
+  /* Two columns on desktop, the picture on the chosen side */
+  .cpnb-grid-{{ sid }} {
     display: grid;
-    grid-template-columns: {% if section.settings.image_side == 'image-left' %}.95fr 1.05fr{% else %}1.05fr .95fr{% endif %};
+    grid-template-columns: 1.05fr .95fr;
     align-items: stretch;
     gap: 0;
     height: 100%;
   }
-  .cpnb-grid-{{ section.id }}.cpnb-image-left .cpnb-text-{{ section.id }} { order: 2; }
-  .cpnb-grid-{{ section.id }}.cpnb-image-left .cpnb-image-{{ section.id }} { order: 1; }
+  .cpnb-{{ sid }}[data-cpnb-side="image-left"] .cpnb-grid-{{ sid }} { grid-template-columns: .95fr 1.05fr; }
+  .cpnb-{{ sid }}[data-cpnb-side="image-left"] .cpnb-text-{{ sid }} { order: 2; }
+  .cpnb-{{ sid }}[data-cpnb-side="image-left"] .cpnb-image-{{ sid }} { order: 1; }
   @media (max-width: 749px) {
-    .cpnb-grid-{{ section.id }} {
+    .cpnb-{{ sid }}[data-cpnb-side] .cpnb-grid-{{ sid }} {
       grid-template-columns: 1fr;
       grid-template-rows: auto 1fr;
       height: auto;
     }
-    {% if section.settings.mobile_image_position == 'above' %}
-    .cpnb-grid-{{ section.id }} .cpnb-text-{{ section.id }} { order: 2; }
-    .cpnb-grid-{{ section.id }} .cpnb-image-{{ section.id }} { order: 1; }
-    {% elsif section.settings.mobile_image_position == 'below' %}
-    .cpnb-grid-{{ section.id }} .cpnb-text-{{ section.id }} { order: 1; }
-    .cpnb-grid-{{ section.id }} .cpnb-image-{{ section.id }} { order: 2; }
-    {% elsif section.settings.mobile_image_position == 'hidden' %}
-    .cpnb-grid-{{ section.id }} .cpnb-image-{{ section.id }} { display: none; }
-    .cpnb-grid-{{ section.id }} { grid-template-rows: 1fr; }
-    {% endif %}
+    .cpnb-{{ sid }}[data-cpnb-mobile-image="above"] .cpnb-grid-{{ sid }} .cpnb-text-{{ sid }} { order: 2; }
+    .cpnb-{{ sid }}[data-cpnb-mobile-image="above"] .cpnb-grid-{{ sid }} .cpnb-image-{{ sid }} { order: 1; }
+    .cpnb-{{ sid }}[data-cpnb-mobile-image="below"] .cpnb-grid-{{ sid }} .cpnb-text-{{ sid }} { order: 1; }
+    .cpnb-{{ sid }}[data-cpnb-mobile-image="below"] .cpnb-grid-{{ sid }} .cpnb-image-{{ sid }} { order: 2; }
+    .cpnb-{{ sid }}[data-cpnb-mobile-image="hidden"] .cpnb-grid-{{ sid }} .cpnb-image-{{ sid }} { display: none; }
+    .cpnb-{{ sid }}[data-cpnb-mobile-image="hidden"][data-cpnb-side] .cpnb-grid-{{ sid }} { grid-template-rows: 1fr; }
   }
 
-  /* Text column */
-  .cpnb-text-{{ section.id }} {
-    padding: {{ section.settings.card_padding_v | default: 24 }}px {{ section.settings.card_padding_h | default: 28 }}px;
+  .cpnb-text-{{ sid }} {
+    padding: var(--cpnb-pad-v, 24px) var(--cpnb-pad-h, 28px);
     display: flex; flex-direction: column;
     justify-content: center;
-    text-align: {{ section.settings.text_align | default: 'left' }};
-    {% if section.settings.text_align == 'center' %}align-items: center;{% endif %}
+    text-align: start;
     min-height: 0;
     overflow: hidden;
   }
+  .cpnb-{{ sid }}[data-cpnb-align="center"] .cpnb-text-{{ sid }} { text-align: center; align-items: center; }
   @media (max-width: 749px) {
-    .cpnb-text-{{ section.id }} {
-      padding: 18px 20px;
-      justify-content: flex-start;
-    }
+    .cpnb-text-{{ sid }} { padding: 18px 20px; justify-content: flex-start; }
   }
 
-  /* Image column — fixed sizing so it never overflows the card */
-  .cpnb-image-{{ section.id }} {
+  .cpnb-image-{{ sid }} {
     background: #f3f3f3;
     overflow: hidden;
     min-height: 0;
-    {%- case section.settings.image_ratio -%}
-      {%- when 'square' -%} aspect-ratio: 1 / 1;
-      {%- when 'portrait' -%} aspect-ratio: 3 / 4;
-      {%- when 'landscape' -%} aspect-ratio: 4 / 3;
-      {%- when 'wide' -%} aspect-ratio: 16 / 9;
-      {%- when 'auto' -%}
-      {%- else -%}
-    {%- endcase -%}
   }
-  .cpnb-image-{{ section.id }} .cpnb-placeholder { display: block; width: 100%; height: 100%; min-height: 200px; opacity: .5; }
-  .cpnb-image-{{ section.id }} img {
+  .cpnb-{{ sid }}[data-cpnb-ratio="square"] .cpnb-image-{{ sid }} { aspect-ratio: 1 / 1; }
+  .cpnb-{{ sid }}[data-cpnb-ratio="portrait"] .cpnb-image-{{ sid }} { aspect-ratio: 3 / 4; }
+  .cpnb-{{ sid }}[data-cpnb-ratio="landscape"] .cpnb-image-{{ sid }} { aspect-ratio: 4 / 3; }
+  .cpnb-{{ sid }}[data-cpnb-ratio="wide"] .cpnb-image-{{ sid }} { aspect-ratio: 16 / 9; }
+  .cpnb-image-{{ sid }} .cpnb-placeholder { display: block; width: 100%; height: 100%; min-height: 200px; opacity: .5; }
+  .cpnb-image-{{ sid }} img {
     width: 100%; height: 100%;
-    object-fit: {{ section.settings.image_fit | default: 'cover' }};
-    object-position: {{ section.settings.image_position | default: 'center' }};
+    object-fit: var(--cpnb-fit, cover);
+    object-position: var(--cpnb-pos, center);
     display: block;
   }
   @media (max-width: 749px) {
-    .cpnb-image-{{ section.id }} {
-      {%- if section.settings.mobile_image_height_mode == 'fixed' -%}
-        height: {{ section.settings.mobile_image_height | default: 180 }}px;
-        aspect-ratio: auto;
-      {%- else -%}
-        aspect-ratio: 16 / 10;
-      {%- endif -%}
-    }
+    .cpnb-{{ sid }}[data-cpnb-ratio] .cpnb-image-{{ sid }} { aspect-ratio: 16 / 10; }
+    .cpnb-{{ sid }}[data-cpnb-ratio][data-cpnb-mh="fixed"] .cpnb-image-{{ sid }} { height: var(--cpnb-mh-px, 180px); aspect-ratio: auto; }
   }
 
-  /* Close */
-  .cpnb-close-{{ section.id }} {
+  .cpnb-close-{{ sid }} {
     position: absolute; top: 10px; right: 10px;
     width: 44px; height: 44px; padding: 0;
     border: none; border-radius: 50%;
     background: var(--color-background, #fff);
-    color: {% render 'scheme-color', color: section.settings.close_color, fallback: 'var(--color-heading)' %};
+    color: var(--cpnb-close, var(--color-heading));
     font-size: 18px; line-height: 1;
     cursor: pointer;
     display: inline-flex; align-items: center; justify-content: center;
@@ -183,36 +149,32 @@
     transition: transform .2s ease, background .2s ease;
     z-index: 2;
   }
-  .cpnb-close-{{ section.id }}:hover { background: color-mix(in srgb, currentColor 10%, var(--color-background, #fff)); }
-  .cpnb-close-{{ section.id }} svg { width: 18px; height: 18px; }
-  .cpnb-close-{{ section.id }}:focus-visible, .cpnb-code-{{ section.id }}:focus-visible, .cpnb-dismiss-{{ section.id }}:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+  .cpnb-close-{{ sid }}:hover { background: color-mix(in srgb, currentColor 10%, var(--color-background, #fff)); }
+  .cpnb-close-{{ sid }} svg { width: 18px; height: 18px; }
+  .cpnb-close-{{ sid }}:focus-visible, .cpnb-code-{{ sid }}:focus-visible, .cpnb-dismiss-{{ sid }}:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 
-  /* Block typography — compact sizes so 2-column popup fits without scroll */
-  .cpnb-eyebrow-{{ section.id }} { font-weight: 700; letter-spacing: .12em; text-transform: uppercase; opacity: .85; margin: 0 0 6px; }
-  .cpnb-headline-{{ section.id }} { font-weight: var(--heading-weight, 800); line-height: 1.1; margin: 0 0 8px; }
-  .cpnb-subheading-{{ section.id }} { line-height: 1.45; margin: 0 0 12px; max-width: 480px; }
+  .cpnb-eyebrow-{{ sid }} { font-weight: 700; letter-spacing: .12em; text-transform: uppercase; opacity: .85; margin: 0 0 6px; }
+  .cpnb-headline-{{ sid }} { font-weight: var(--heading-weight, 800); line-height: 1.1; margin: 0 0 8px; }
+  .cpnb-subheading-{{ sid }} { line-height: 1.45; margin: 0 0 12px; max-width: 480px; }
   @media (max-width: 749px) {
-    .cpnb-headline-{{ section.id }} { font-size: calc(var(--cpnb-size, 32px) * .75) !important; }
-    .cpnb-subheading-{{ section.id }} { font-size: calc(var(--cpnb-size, 15px) * .94) !important; margin-bottom: 10px; }
+    .cpnb-headline-{{ sid }} { font-size: calc(var(--cpnb-size, 32px) * .75) !important; }
+    .cpnb-subheading-{{ sid }} { font-size: calc(var(--cpnb-size, 15px) * .94) !important; margin-bottom: 10px; }
   }
 
-  /* Coupon visibility. When gating is ON, coupon is hidden until subscribe.
-     When gating is OFF, coupon is visible from the start. */
-  {% if section.settings.gate_coupon %}
-    .cpnb-coupon-{{ section.id }}.cpnb-coupon-gated { display: none; }
-    .cpnb-{{ section.id }}.cpnb-subscribed .cpnb-coupon-{{ section.id }}.cpnb-coupon-gated { display: flex; }
-    .cpnb-coupon-{{ section.id }}.cpnb-coupon-ungated { display: none !important; }
-  {% else %}
-    .cpnb-coupon-{{ section.id }}.cpnb-coupon-gated { display: none !important; }
-    .cpnb-coupon-{{ section.id }}.cpnb-coupon-ungated { display: flex; }
-  {% endif %}
-  .cpnb-code-row-{{ section.id }} {
+  /* The code: at once, or only after signing up (gated) */
+  .cpnb-{{ sid }}[data-cpnb-gate="true"] .cpnb-coupon-{{ sid }}.cpnb-coupon-gated { display: none; }
+  .cpnb-{{ sid }}[data-cpnb-gate="true"].cpnb-subscribed .cpnb-coupon-{{ sid }}.cpnb-coupon-gated { display: flex; }
+  .cpnb-{{ sid }}[data-cpnb-gate="true"] .cpnb-coupon-{{ sid }}.cpnb-coupon-ungated { display: none !important; }
+  .cpnb-{{ sid }}[data-cpnb-gate="false"] .cpnb-coupon-{{ sid }}.cpnb-coupon-gated { display: none !important; }
+  .cpnb-{{ sid }}[data-cpnb-gate="false"] .cpnb-coupon-{{ sid }}.cpnb-coupon-ungated { display: flex; }
+  .cpnb-{{ sid }}[data-cpnb-gate="false"] .cpnb-postpane-{{ sid }} { display: none !important; }
+  .cpnb-code-row-{{ sid }} {
     display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
     margin: 0 0 10px;
-    {% if section.settings.text_align == 'center' %}justify-content: center;{% endif %}
   }
-  .cpnb-code-label-{{ section.id }} { font-weight: 600; opacity: .9; font-size: 13px; letter-spacing: .08em; }
-  .cpnb-code-{{ section.id }} {
+  .cpnb-{{ sid }}[data-cpnb-align="center"] .cpnb-code-row-{{ sid }} { justify-content: center; }
+  .cpnb-code-label-{{ sid }} { font-weight: 600; opacity: .9; font-size: 13px; letter-spacing: .08em; }
+  .cpnb-code-{{ sid }} {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-weight: 700; letter-spacing: .12em; font-size: 15px;
     min-height: 44px; padding: 8px 14px; border-radius: 6px;
@@ -221,68 +183,39 @@
     background: transparent;
     transition: background .2s ease, color .2s ease, border-color .2s ease;
   }
-  .cpnb-code-{{ section.id }}.is-copied { background: #1c8d3a; color: #fff; border-color: #1c8d3a; }
+  .cpnb-code-{{ sid }}.is-copied { background: #1c8d3a; color: #fff; border-color: #1c8d3a; }
 
-  /* Pre-subscribe form: hidden after subscribe */
-  .cpnb-prepane-{{ section.id }} { display: block; }
-  .cpnb-{{ section.id }}.cpnb-subscribed .cpnb-prepane-{{ section.id }} { display: none; }
-  /* Post-subscribe success: hidden until subscribe */
-  .cpnb-postpane-{{ section.id }} { display: none; }
-  .cpnb-{{ section.id }}.cpnb-subscribed .cpnb-postpane-{{ section.id }} { display: block; }
+  .cpnb-prepane-{{ sid }} { display: block; }
+  .cpnb-{{ sid }}.cpnb-subscribed .cpnb-prepane-{{ sid }} { display: none; }
+  .cpnb-postpane-{{ sid }} { display: none; }
+  .cpnb-{{ sid }}.cpnb-subscribed .cpnb-postpane-{{ sid }} { display: block; }
+  .cpnb-success-{{ sid }} { color: #1c8d3a; margin: 0 0 12px; font-size: 14px; font-weight: 600; }
 
-  /* Form — gap between input and button is enforced on the inner <form> too */
-  .cpnb-form-{{ section.id }} { max-width: 420px; {% if section.settings.text_align == 'center' %}margin-inline: auto;{% endif %} }
-  .cpnb-form-{{ section.id }} > form,
-  .cpnb-form-{{ section.id }} form.cpnb-formel-{{ section.id }} {
-    display: flex; flex-direction: column; gap: 12px;
-  }
-  .cpnb-form-{{ section.id }} input[type="email"] {
+  .cpnb-form-{{ sid }} { max-width: 420px; }
+  .cpnb-{{ sid }}[data-cpnb-align="center"] .cpnb-form-{{ sid }} { margin-inline: auto; }
+  .cpnb-form-{{ sid }} > form,
+  .cpnb-form-{{ sid }} form.cpnb-formel-{{ sid }} { display: flex; flex-direction: column; gap: 12px; }
+  .cpnb-form-{{ sid }} input[type="email"] {
     width: 100%; min-height: 44px; padding: 12px 14px;
     border-radius: var(--input-radius, 8px);
     border: 1px solid var(--color-border);
     font-size: 16px;
     background: var(--input-bg, var(--color-background)); color: var(--input-color, var(--color-text));
   }
-  .cpnb-form-{{ section.id }} input[type="email"]:focus-visible {
-    outline: 2px solid var(--color-heading);
-    outline-offset: 1px;
-  }
-  /* The submit is a theme button (theme-button-contract.css): Theme settings >
-     Buttons draw it; the form's colours, and its shape when the theme style
-     is off, reach it as --mb-* tokens. */
-  .cpnb-form-{{ section.id }} button[type="submit"] {
-    width: 100%;
-    cursor: pointer;
-    {%- if block_form.settings.use_theme_button == false %}
-    --mb-padding-y: 12px; --mb-padding-x: 20px; --mb-font-size: 15px;
-    {%- endif %}
-  }
-  /* Loading state — shown while the fetch is in-flight */
-  .cpnb-form-{{ section.id }} button[type="submit"].is-loading {
-    pointer-events: none;
-    opacity: .7;
-  }
+  .cpnb-form-{{ sid }} input[type="email"]:focus-visible { outline: 2px solid var(--color-heading); outline-offset: 1px; }
+  /* The submit is a theme button (theme-button-contract.css); with the
+     theme's button style off, its own shape arrives as --mb-* tokens. */
+  .cpnb-form-{{ sid }} button[type="submit"] { width: 100%; cursor: pointer; }
+  .cpnb-form-{{ sid }} button[type="submit"][data-own-shape] { --mb-padding-y: 12px; --mb-padding-x: 20px; --mb-font-size: 15px; }
+  .cpnb-form-{{ sid }} button[type="submit"].is-loading { pointer-events: none; opacity: .7; }
 
-
-  /* Respect prefers-reduced-motion: disable animations for visitors who opted out. */
   @media (prefers-reduced-motion: reduce) {
-    .cpnb-card-{{ section.id }},
-    .cpnb-overlay-{{ section.id }},
-    .cpnb-form-{{ section.id }} button[type="submit"],
-    .cpnb-code-{{ section.id }},
-    .cpnb-close-{{ section.id }} {
-      transition: none !important;
-      animation: none !important;
-    }
-    .cpnb-card-{{ section.id }} { transform: translate(-50%, -50%) !important; }
+    .cpnb-card-{{ sid }}, .cpnb-overlay-{{ sid }}, .cpnb-form-{{ sid }} button[type="submit"], .cpnb-code-{{ sid }}, .cpnb-close-{{ sid }} { transition: none !important; animation: none !important; }
+    .cpnb-card-{{ sid }} { transform: translate(-50%, -50%) !important; }
   }
 
-  /* Dismiss link — alignment is configurable */
-  .cpnb-dismiss-wrap-{{ section.id }} {
-    margin-top: 10px;
-    text-align: {{ section.settings.dismiss_align | default: 'center' }};
-  }
-  .cpnb-dismiss-{{ section.id }} {
+  .cpnb-dismiss-wrap-{{ sid }} { margin-top: 10px; text-align: var(--cpnb-dismiss-align, center); }
+  .cpnb-dismiss-{{ sid }} {
     background: none; border: none; cursor: pointer;
     font-size: 13px;
     text-decoration: underline;
@@ -290,120 +223,155 @@
     min-height: 44px; padding: 4px 8px;
     transition: opacity .2s ease;
   }
-  .cpnb-dismiss-{{ section.id }}:hover { opacity: 1; }
+  .cpnb-dismiss-{{ sid }}:hover { opacity: 1; }
 {% comment %}{% endcomment %}</style>
 
 {%- capture cpnb_config -%}
-  {"design": {{ request.design_mode | json }}, "preview": {{ section.settings.editor_mode | json }}, "gate": {{ section.settings.gate_coupon | json }}, "replay": {{ section.settings.post_subscribe_duration_s | default: 15 | json }},
-   "trigger": {"mode": {{ open_mode | default: 'delay' | json }}, "delay": {{ delay_s | json }}, "scroll": {{ section.settings.scroll_pct | default: 50 | json }}, "views": {{ section.settings.page_views | default: 2 | json }} },
-   "frequency": {"mode": {{ section.settings.after_dismiss | default: 'after_days' | json }}, "days": {{ hide_days | json }} } }
+  {"design": {{ request.design_mode | json }}, "preview": {{ st.editor_mode | json }}, "gate": {{ cpnb_gate | json }}, "replay": {{ st.post_subscribe_duration_s | default: 15 | json }},
+   "trigger": {"mode": {{ st.open_mode | default: 'delay' | json }}, "delay": {{ st.delay_s | default: 0 | json }}, "scroll": {{ st.scroll_pct | default: 50 | json }}, "views": {{ st.page_views | default: 2 | json }} },
+   "frequency": {"mode": {{ st.after_dismiss | default: 'after_days' | json }}, "days": {{ st.hide_days | default: 1 | json }} } }
 {%- endcapture -%}
-<section class="cpnb-{{ section.id }} color-{{ color_scheme }}"
-         data-cpnb-section="{{ section.id }}"
-         data-section-id="{{ section.id }}" data-popup-root="{{ section.id }}"
+{%- capture cpnb_vars -%}
+--cpnb-overlay-o: {{ st.overlay_opacity | default: 50 | times: 0.01 }}; --cpnb-gutter: {{ st.mobile_gutter | default: 32 }}px; --cpnb-w: {{ st.popup_width | default: 880 }}px; --cpnb-radius: {{ st.popup_radius | default: 14 }}px; --cpnb-pad-v: {{ st.card_padding_v | default: 24 }}px; --cpnb-pad-h: {{ st.card_padding_h | default: 28 }}px; --cpnb-fit: {{ st.image_fit | default: 'cover' }}; --cpnb-pos: {{ st.image_position | default: 'center' }}; --cpnb-mh-px: {{ st.mobile_image_height | default: 180 }}px; --cpnb-dismiss-align: {{ st.dismiss_align | default: 'center' }};
+{%- if cpnb_custom_style %} --cpnb-overlay: {% render 'scheme-color', color: st.overlay_color, fallback: '#000000' %}; --cpnb-bg: {% render 'scheme-color', color: st.card_bg, fallback: 'var(--color-background)' %}; --cpnb-text: {% render 'scheme-color', color: st.text_color, fallback: 'var(--color-text)' %}; --cpnb-close: {% render 'scheme-color', color: st.close_color, fallback: 'var(--color-heading)' %};{%- endif -%}
+{%- render 'page-popup-fonts', st: st -%}
+{%- endcapture -%}
+{%- capture cpnb_code_rows -%}
+  {%- if block_coupon != blank -%}
+    {%- for cpnb_row in (1..2) -%}
+      {%- if cpnb_row == 1 -%}{%- assign cpnb_row_class = 'cpnb-coupon-ungated' -%}{%- else -%}{%- assign cpnb_row_class = 'cpnb-coupon-gated' -%}{%- endif -%}
+      <div class="cpnb-code-row-{{ sid }} cpnb-coupon-{{ sid }} {{ cpnb_row_class }}" data-pg-block="{{ block_coupon.id }}" data-pg-type="coupon" data-pg-settings="{{ block_coupon.settings | json | escape }}"{% if block_coupon.settings.code == blank %} hidden{% endif %} {{ block_coupon.shopify_attributes }}>
+        <span class="cpnb-code-label-{{ sid }}"{% if block_coupon.settings.label == blank %} hidden{% endif %}>{{ block_coupon.settings.label }}</span>
+        <button type="button" class="cpnb-code-{{ sid }}" data-code="{{ block_coupon.settings.code | escape }}" aria-label="{{ 'accessibility.copy_coupon_code' | t }}">{{ block_coupon.settings.code | escape }}</button>
+      </div>
+    {%- endfor -%}
+  {%- endif -%}
+{%- endcapture -%}
+{% render 'page-popup-dialog', sid: sid, st: st %}
+<section class="cpnb-{{ sid }} color-{{ color_scheme }}" data-pg-root="coupon-promotion-newsletter-popup" data-pg-section="{{ sid }}" data-pg-settings="{{ st | json | escape }}"{% if st.enable_custom_fonts %} data-pg-fonts data-own-font{% endif %}
+         data-cpnb-side="{{ st.image_side | default: 'image-right' }}" data-cpnb-mobile-image="{{ st.mobile_image_position | default: 'above' }}" data-cpnb-ratio="{{ st.image_ratio | default: 'auto' }}" data-cpnb-mh="{{ st.mobile_image_height_mode | default: 'auto' }}" data-cpnb-align="{{ st.text_align | default: 'left' }}" data-cpnb-gate="{{ cpnb_gate }}"
+         data-cpnb-section="{{ sid }}"
+         data-section-id="{{ sid }}" data-popup-root="{{ sid }}"
          data-popup-config="{{ cpnb_config | strip_newlines | escape }}"
+         style="{{ cpnb_vars | strip_newlines | strip }}"
          aria-hidden="true">
-  <div class="cpnb-overlay-{{ section.id }}" aria-hidden="true"></div>
-  <div class="cpnb-card-{{ section.id }}"
-       role="dialog"
-       aria-modal="true"
-       aria-labelledby="cpnb-title-{{ section.id }}"
-       tabindex="-1">
-    <button type="button" class="cpnb-close-{{ section.id }}" data-popup-close aria-label="{{ 'accessibility.close_popup' | t }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <dialog class="pg-dialog" data-pg-dialog aria-labelledby="cpnb-title-{{ sid }}">
+  <div class="cpnb-overlay-{{ sid }}" data-pg-backdrop aria-hidden="true"></div>
+  <div class="cpnb-card-{{ sid }}" data-pg-card tabindex="-1">
+    <button type="button" class="cpnb-close-{{ sid }}" data-popup-close aria-label="{{ 'accessibility.close_popup' | t }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
 
-    <div class="cpnb-grid-{{ section.id }}{% if section.settings.image_side == 'image-left' %} cpnb-image-left{% endif %}">
-      <div class="cpnb-text-{{ section.id }}">
-        {%- if block_eyebrow != blank and block_eyebrow.settings.text != blank -%}
-          <div class="cpnb-eyebrow-{{ section.id }}"
-               style="font-size: {{ block_eyebrow.settings.size_desktop | default: 12 }}px; color: {% render 'scheme-color', color: block_eyebrow.settings.color, fallback: 'var(--color-text)' %};"
+    <div class="cpnb-grid-{{ sid }}">
+      <div class="cpnb-text-{{ sid }}">
+        {%- if block_eyebrow != blank -%}
+          {%- liquid
+            assign c = ''
+            if block_eyebrow.settings.enable_custom_style == true
+              assign c = block_eyebrow.settings.color
+            endif
+          -%}
+          <div class="cpnb-eyebrow-{{ sid }}" data-pg-block="{{ block_eyebrow.id }}" data-pg-type="eyebrow" data-pg-settings="{{ block_eyebrow.settings | json | escape }}"{% if block_eyebrow.settings.text == blank %} hidden{% endif %}
+               style="font-size: {{ block_eyebrow.settings.size_desktop | default: 12 }}px; color: {% render 'scheme-color', color: c, fallback: 'var(--color-text)' %};"
                {{ block_eyebrow.shopify_attributes }}>{{ block_eyebrow.settings.text }}</div>
         {%- endif -%}
 
-        {%- if block_headline != blank and block_headline.settings.text != blank -%}
-          <h2 class="cpnb-headline-{{ section.id }}" id="cpnb-title-{{ section.id }}"
-              style="--cpnb-size: {{ block_headline.settings.size_desktop | default: 32 }}px; font-size: var(--cpnb-size); color: {% render 'scheme-color', color: block_headline.settings.color, fallback: 'var(--color-heading)' %}; font-weight: {% if block_headline.settings.weight == blank or block_headline.settings.weight == 'theme' %}var(--heading-weight, 800){% else %}{{ block_headline.settings.weight }}{% endif %};"
+        {%- if block_headline != blank -%}
+          {%- liquid
+            assign c = ''
+            if block_headline.settings.enable_custom_style == true
+              assign c = block_headline.settings.color
+            endif
+            assign w = block_headline.settings.weight
+            if w == blank or w == 'theme'
+              assign w = 'var(--heading-weight, 800)'
+            endif
+          -%}
+          <h2 class="cpnb-headline-{{ sid }}" id="cpnb-title-{{ sid }}" data-pg-block="{{ block_headline.id }}" data-pg-type="headline" data-pg-settings="{{ block_headline.settings | json | escape }}"{% unless block_headline.settings.weight == blank or block_headline.settings.weight == 'theme' %} data-own-weight{% endunless %}{% if block_headline.settings.text == blank %} hidden{% endif %}
+              style="--cpnb-size: {{ block_headline.settings.size_desktop | default: 32 }}px; font-size: var(--cpnb-size); color: {% render 'scheme-color', color: c, fallback: 'var(--color-heading)' %}; font-weight: {{ w }};"
               {{ block_headline.shopify_attributes }}>{{ block_headline.settings.text }}</h2>
         {%- endif -%}
 
-        {%- if block_subheading != blank and block_subheading.settings.text != blank -%}
-          <p class="cpnb-subheading-{{ section.id }}"
-             style="--cpnb-size: {{ block_subheading.settings.size_desktop | default: 15 }}px; font-size: var(--cpnb-size); color: {% render 'scheme-color', color: block_subheading.settings.color, fallback: 'var(--color-text)' %};"
+        {%- if block_subheading != blank -%}
+          {%- liquid
+            assign c = ''
+            if block_subheading.settings.enable_custom_style == true
+              assign c = block_subheading.settings.color
+            endif
+          -%}
+          <p class="cpnb-subheading-{{ sid }}" data-pg-block="{{ block_subheading.id }}" data-pg-type="subheading" data-pg-settings="{{ block_subheading.settings | json | escape }}"{% if block_subheading.settings.text == blank %} hidden{% endif %}
+             style="--cpnb-size: {{ block_subheading.settings.size_desktop | default: 15 }}px; font-size: var(--cpnb-size); color: {% render 'scheme-color', color: c, fallback: 'var(--color-text)' %};"
              {{ block_subheading.shopify_attributes }}>{{ block_subheading.settings.text }}</p>
         {%- endif -%}
 
-        {%- comment -%}
-          Pre-subscribe pane: show the newsletter form. Coupon is hidden until
-          the visitor subscribes.
-        {%- endcomment -%}
-        <div class="cpnb-prepane-{{ section.id }}">
-          {%- comment -%} Ungated coupon: visible immediately when gate_coupon is OFF {%- endcomment -%}
-          {%- unless section.settings.gate_coupon -%}
-            {%- if block_coupon != blank and block_coupon.settings.code != blank -%}
-              <div class="cpnb-code-row-{{ section.id }} cpnb-coupon-{{ section.id }} cpnb-coupon-ungated" {{ block_coupon.shopify_attributes }}>
-                {%- if block_coupon.settings.label != blank -%}
-                  <span class="cpnb-code-label-{{ section.id }}">{{ block_coupon.settings.label }}</span>
-                {%- endif -%}
-                <button type="button" class="cpnb-code-{{ section.id }}" data-code="{{ block_coupon.settings.code | escape }}" aria-label="{{ 'accessibility.copy_coupon_code' | t }}">{{ block_coupon.settings.code | escape }}</button>
-              </div>
-            {%- endif -%}
-          {%- endunless -%}
+        <div class="cpnb-prepane-{{ sid }}">
+          {%- assign cpnb_rows = cpnb_code_rows | split: '</div>' -%}
+          {%- if block_coupon != blank -%}{{ cpnb_rows[0] }}</div>{%- endif -%}
 
           {%- if block_form != blank -%}
-            {%- assign cpnb_form_id = 'cpnb-form-' | append: section.id -%}
-            {%- assign cpnb_form_class = 'cpnb-formel-' | append: section.id -%}
-            <div class="cpnb-form-{{ section.id }}" {{ block_form.shopify_attributes }}>
-              {%- assign cpnb_custom = false -%}{%- if block_form.settings.use_theme_button == false -%}{%- assign cpnb_custom = true -%}{%- endif -%}
+            {%- liquid
+              assign cpnb_form_id = 'cpnb-form-' | append: sid
+              assign cpnb_form_class = 'cpnb-formel-' | append: sid
+              assign fs = block_form.settings
+              assign cpnb_custom = false
+              if fs.use_theme_button == false
+                assign cpnb_custom = true
+              endif
+              assign b_bg = ''
+              assign b_tx = ''
+              assign b_bgh = ''
+              assign b_txh = ''
+              if fs.enable_custom_style == true
+                assign b_bg = fs.button_bg
+                assign b_tx = fs.button_text_color
+                assign b_bgh = fs.button_bg_hover
+                assign b_txh = fs.button_text_hover
+              endif
+              assign cpnb_ph = fs.placeholder | default: fb_accessibility_enter_your_email
+              assign cpnb_phone_req = 'false'
+              if fs.phone_required
+                assign cpnb_phone_req = 'true'
+              endif
+              assign cpnb_phone_off = true
+              if fs.collect_phone
+                assign cpnb_phone_off = false
+              endif
+            -%}
+            <div class="cpnb-form-{{ sid }}" data-pg-block="{{ block_form.id }}" data-pg-type="form" data-pg-settings="{{ fs | json | escape }}" data-pg-i18n='{"placeholder":{{ fb_accessibility_enter_your_email | json | escape }},"submit":{{ fb_accessibility_subscribe | json | escape }}}' {{ block_form.shopify_attributes }}>
               <form id="{{ cpnb_form_id }}" class="{{ cpnb_form_class }}" data-storelib-form="subscribe">
-                <label class="visually-hidden" for="{{ cpnb_form_id }}-email">{{ block_form.settings.placeholder | default: fb_accessibility_enter_your_email | escape }}</label>
-                <input id="{{ cpnb_form_id }}-email" type="email" name="email" autocomplete="email" placeholder="{{ block_form.settings.placeholder | default: fb_accessibility_enter_your_email | escape }}" required data-popup-autofocus
-                       {% if block_form.settings.use_theme_field == false %}style="border-radius: {{ block_form.settings.input_radius | default: 8 }}px;"{% endif %}>
-                {%- if block_form.settings.collect_phone -%}
-                  {%- if block_form.settings.phone_required -%}{%- assign cpnb_phone_req = 'true' -%}{%- else -%}{%- assign cpnb_phone_req = 'false' -%}{%- endif -%}
-                  {%- render 'cpnb-phone-field',
-                      scope: section.id,
-                      default_country: block_form.settings.phone_default_country,
-                      phone_placeholder: block_form.settings.phone_placeholder,
-                      required: cpnb_phone_req -%}
-                {%- endif -%}
-                <button type="submit" class="btn-primary" data-theme-button="primary" data-sl-button
-                        style="{%- render 'button-overrides', bg: block_form.settings.button_bg, text: block_form.settings.button_text_color, hover_bg: block_form.settings.button_bg_hover, hover_text: block_form.settings.button_text_hover, custom: cpnb_custom, radius: block_form.settings.button_radius, weight: block_form.settings.button_weight -%}">
-                  {{ block_form.settings.button_text | default: fb_accessibility_subscribe }}
+                <label class="visually-hidden" for="{{ cpnb_form_id }}-email">{{ cpnb_ph | escape }}</label>
+                <input id="{{ cpnb_form_id }}-email" type="email" name="email" autocomplete="email" placeholder="{{ cpnb_ph | escape }}" required data-popup-autofocus
+                       {% if fs.use_theme_field == false %}style="border-radius: {{ fs.input_radius | default: 8 }}px; --mt-select-radius: {{ fs.input_radius | default: 8 }}px;"{% endif %}>
+                {%- render 'cpnb-phone-field',
+                    scope: sid,
+                    default_country: fs.phone_default_country,
+                    phone_placeholder: fs.phone_placeholder,
+                    required: cpnb_phone_req,
+                    off: cpnb_phone_off -%}
+                <button type="submit" class="btn-primary" data-theme-button="primary" data-sl-button{% if cpnb_custom %} data-own-shape{% endif %}
+                        style="{%- render 'button-overrides', bg: b_bg, text: b_tx, hover_bg: b_bgh, hover_text: b_txh, custom: cpnb_custom, radius: fs.button_radius, weight: fs.button_weight -%}">
+                  {{ fs.button_text | default: fb_accessibility_subscribe }}
                 </button>
               </form>
             </div>
           {%- endif -%}
 
-          {%- if block_dismiss != blank and block_dismiss.settings.text != blank -%}
-            <div class="cpnb-dismiss-wrap-{{ section.id }}" {{ block_dismiss.shopify_attributes }}>
-              <button type="button" class="cpnb-dismiss-{{ section.id }}" data-popup-close>{{ block_dismiss.settings.text }}</button>
+          {%- if block_dismiss != blank -%}
+            <div class="cpnb-dismiss-wrap-{{ sid }}" data-pg-block="{{ block_dismiss.id }}" data-pg-type="dismiss" data-pg-settings="{{ block_dismiss.settings | json | escape }}"{% if block_dismiss.settings.text == blank %} hidden{% endif %} {{ block_dismiss.shopify_attributes }}>
+              <button type="button" class="cpnb-dismiss-{{ sid }}" data-popup-close>{{ block_dismiss.settings.text }}</button>
             </div>
           {%- endif -%}
         </div>
 
-        {%- comment -%}
-          Post-subscribe pane: reveal the coupon code + success message.
-        {%- endcomment -%}
-        {%- comment -%} Post-subscribe pane only renders when gating is ON {%- endcomment -%}
-        {%- if section.settings.gate_coupon -%}
-          <div class="cpnb-postpane-{{ section.id }}" aria-live="polite">
-            {%- if block_form != blank -%}
-              <p style="color:#1c8d3a; margin:0 0 12px; font-size:14px; font-weight:600;">{{ block_form.settings.success_text | default: 'Thanks! Here is your code:' }}</p>
-            {%- endif -%}
-
-            {%- if block_coupon != blank and block_coupon.settings.code != blank -%}
-              <div class="cpnb-code-row-{{ section.id }} cpnb-coupon-{{ section.id }} cpnb-coupon-gated" {{ block_coupon.shopify_attributes }}>
-                {%- if block_coupon.settings.label != blank -%}
-                  <span class="cpnb-code-label-{{ section.id }}">{{ block_coupon.settings.label }}</span>
-                {%- endif -%}
-                <button type="button" class="cpnb-code-{{ section.id }}" data-code="{{ block_coupon.settings.code | escape }}" aria-label="{{ 'accessibility.copy_coupon_code' | t }}">{{ block_coupon.settings.code | escape }}</button>
-              </div>
-            {%- endif -%}
-          </div>
-        {%- endif -%}
+        <div class="cpnb-postpane-{{ sid }}" aria-live="polite">
+          {%- if block_form != blank -%}
+            <p class="cpnb-success-{{ sid }}" data-pg-block="{{ block_form.id }}" data-pg-type="form">{{ block_form.settings.success_text | default: 'Thanks! Here is your code:' }}</p>
+          {%- endif -%}
+          {%- if block_coupon != blank -%}{{ cpnb_rows[1] }}</div>{%- endif -%}
+        </div>
       </div>
 
       {%- if block_image != blank -%}
-        <div class="cpnb-image-{{ section.id }}" {{ block_image.shopify_attributes }}>
+        <div class="cpnb-image-{{ sid }}" data-pg-block="{{ block_image.id }}" data-pg-type="image" data-pg-settings="{{ block_image.settings | json | escape }}" data-pg-i18n="{{ fb_accessibility_promotion_image | escape }}" {{ block_image.shopify_attributes }}>
+          <template data-pg-ph>{{ 'image' | placeholder_svg_tag: 'cpnb-placeholder' }}</template>
           {%- if block_image.settings.image != blank -%}
             {{ block_image.settings.image | image_url: width: 900 | image_tag: loading: 'lazy', alt: block_image.settings.alt | default: fb_accessibility_promotion_image, sizes: '(min-width: 750px) 50vw, 100vw', widths: '360,540,720,900' }}
           {%- else -%}
@@ -413,6 +381,7 @@
       {%- endif -%}
     </div>
   </div>
+  </dialog>
 </section>
 
 <script src="{{ 'materia-popups.js' | asset_url }}" defer="defer"></script>
@@ -443,14 +412,13 @@
 
     // Coupon copy: every code button in the popup (before and after signup).
     root.querySelectorAll('.cpnb-code-' + SID).forEach(function(btn){
-      var original = btn.textContent;
       btn.addEventListener('click', function(){
         var code = (btn.dataset.code || '').trim();
         if (!code) return;
         P.copy(code).catch(function(){}).then(function(){
           btn.classList.add('is-copied');
           btn.textContent = I18N_COPIED;
-          setTimeout(function(){ btn.classList.remove('is-copied'); btn.textContent = original; }, 2200);
+          setTimeout(function(){ btn.classList.remove('is-copied'); btn.textContent = btn.dataset.code || ''; }, 2200);
         });
       });
     });
@@ -1257,6 +1225,16 @@
     "settings": [
       {
         "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "header",
         "content": "Trigger"
       },
       {
@@ -1607,34 +1585,39 @@
       },
       {
         "type": "header",
-        "content": "Style"
+        "content": "Appearance"
       },
       {
-        "type": "color_scheme",
-        "id": "color_scheme",
-        "label": "Color scheme",
-        "default": "default-color-scheme"
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Custom colours",
+        "default": false,
+        "info": "Off, the popup follows its colour scheme."
       },
       {
         "type": "color",
         "id": "card_bg",
-        "label": "Background"
+        "label": "Background",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "color",
         "id": "text_color",
-        "label": "Text"
+        "label": "Text",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "color",
         "id": "close_color",
-        "label": "Close icon"
+        "label": "Close icon",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "color",
         "id": "overlay_color",
         "label": "Backdrop",
-        "default": "#000000"
+        "default": "#000000",
+        "visible_if": "{{ section.settings.enable_custom_style == true }}"
       },
       {
         "type": "range",
@@ -1645,6 +1628,31 @@
         "step": 5,
         "unit": "%",
         "default": 50
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Custom fonts",
+        "default": false,
+        "info": "Off, the popup uses the theme fonts."
+      },
+      {
+        "type": "font_picker",
+        "id": "heading_font",
+        "label": "Heading font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts == true }}"
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Text font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts == true }}"
       }
     ],
     "blocks": [
@@ -1661,7 +1669,7 @@
             "type": "text",
             "id": "text",
             "label": "Text",
-            "default": "LIMITED TIME OFFER"
+            "default": "Welcome offer"
           },
           {
             "type": "header",
@@ -1678,9 +1686,16 @@
             "default": 12
           },
           {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Custom colours",
+            "default": false
+          },
+          {
             "type": "color",
             "id": "color",
-            "label": "Color"
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}"
           }
         ]
       },
@@ -1697,7 +1712,7 @@
             "type": "text",
             "id": "text",
             "label": "Headline",
-            "default": "15% off your first order"
+            "default": "A code for your first order"
           },
           {
             "type": "header",
@@ -1746,9 +1761,16 @@
             ]
           },
           {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Custom colours",
+            "default": false
+          },
+          {
             "type": "color",
             "id": "color",
-            "label": "Color"
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}"
           }
         ]
       },
@@ -1782,9 +1804,16 @@
             "default": 15
           },
           {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Custom colours",
+            "default": false
+          },
+          {
             "type": "color",
             "id": "color",
-            "label": "Color"
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}"
           }
         ]
       },
@@ -1803,7 +1832,7 @@
             "type": "text",
             "id": "code",
             "label": "Code",
-            "default": "WELCOME15"
+            "info": "Your own discount code. Empty, no code is shown."
           }
         ]
       },
@@ -1929,24 +1958,34 @@
             "visible_if": "{{ block.settings.use_theme_button == false }}"
           },
           {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Custom colours",
+            "default": false
+          },
+          {
             "type": "color",
             "id": "button_bg",
-            "label": "Button background"
+            "label": "Button background",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}"
           },
           {
             "type": "color",
             "id": "button_text_color",
-            "label": "Button text"
+            "label": "Button text",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}"
           },
           {
             "type": "color",
             "id": "button_bg_hover",
-            "label": "Hover background"
+            "label": "Hover background",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}"
           },
           {
             "type": "color",
             "id": "button_text_hover",
-            "label": "Hover text"
+            "label": "Hover text",
+            "visible_if": "{{ block.settings.enable_custom_style == true }}"
           }
         ]
       },

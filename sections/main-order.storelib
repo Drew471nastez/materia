@@ -1,254 +1,139 @@
 <template compat="shopify">
 {% render 'theme-type' %}
-<style>
-  /* Theme font-weight inheritance — inherit theme weights by default; explicit rules still override */
-  #shopify-section-{{ section.id }} {
-    font-weight: var(--body-weight, inherit);
-  }
-  :where(#shopify-section-{{ section.id }}) :is(h1, h2, h3, h4, h5, h6) {
-    font-weight: var(--heading-weight, inherit);
-  }
-{% comment %}{% endcomment %}</style>
-{%- comment -%}Section isolation — prevent CSS/JS bleed between sections{%- endcomment -%}
-<style>
-  #shopify-section-{{ section.id }} { isolation: isolate; position: relative; }
-  /* On a phone the order table scrolls sideways inside its column instead of
-     widening the column past the screen, where the page would cut it off. */
-  #shopify-section-{{ section.id }} .col-lg-w-custom { min-width: 0; }
-  #shopify-section-{{ section.id }} .overflow-x-auto { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-{% comment %}{% endcomment %}</style>
 {%- comment -%}
-  Materia Themes. Developed By Materia Themes.
+  Materia Themes. One order (/account/orders/<id>): its lines, totals and addresses.
+ 
+  Live edits: shopify/assets/live-account-pages.js.
 {%- endcomment -%}
-{{ 'my-account.css' | asset_url | stylesheet_tag }}
-
-<div class="container">
-  <div class="flex flex-wrap gap" style="--col-gap: 30px;--col-width: 25%;">
-    <div class=" col-lg-w-custom border-right mb-30" style="--col-width:75%">
-      <div class="mb-15">
-        <h3 class="title-default mb-10">{{ 'customer.order.title' | t: name: order.name }}</h3>
-        <p class="text-order">
-          {{ 'customer.order.date_html' | t: date: order.created_at | date: '%B %d, %Y %I:%M%p' }}
-        </p>
-      </div>
-
-      {% if order.cancelled %}
-        {%- assign cancelled_at = order.cancelled_at | date: '%B %d, %Y %I:%M%p' -%}
-        <p>{{ 'customer.order.cancelled_html' | t: date: cancelled_at }}</p>
-        <p>{{ 'customer.order.cancelled_reason' | t: reason: order.cancel_reason }}</p>
-      {% endif %}
-      <div class="overflow-hidden overflow-x-auto">
-        <table class="responsive-table table-history-order">
-          <thead>
-            <tr>
-              <th class="text-left border ">{{ 'customer.order.product' | t }}</th>
-              <th class="text-left border ">{{ 'customer.order.sku' | t }}</th>
-              <th class="text-left border ">{{ 'customer.order.price' | t }}</th>
-              <th class="text-left border ">{{ 'customer.order.quantity' | t }}</th>
-              <th class="text-left border ">{{ 'customer.order.total' | t }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for line_item in order.line_items %}
-              <tr id="{{ line_item.key }}" class="">
-                <td class="border " data-label="{{ 'customer.order.product' | t }}">
-                  <div>
-                    {{ line_item.title | link_to: line_item.product.url }}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+  <style>
+    #shopify-section-{{ section.id }}.scroll-trigger {
+      --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+      --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+    }
+{% comment %}{% endcomment %}  </style>
+  <script>
+    (function(){
+      var el = document.getElementById('shopify-section-{{ section.id }}');
+      if (!el || el.classList.contains('scroll-trigger')) return;
+      el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+    })();
+{% comment %}{% endcomment %}  </script>
+{%- endif -%}
+{%- liquid
+  assign st = section.settings
+  assign sid = section.id
+  assign scheme = st.color_scheme.id | default: st.color_scheme | default: 'default-color-scheme'
+  assign custom = st.enable_custom_style
+-%}
+{% render 'account-pages-base', sid: sid %}
+{% render 'account-pages-font-face', st: st %}
+{%- capture fonts -%}{% render 'account-pages-font-vars', st: st %}{%- endcapture -%}
+<div
+  class="ap ap-order color-{{ scheme }} gradient"
+  data-ap-root="main-order"
+  data-ap-section="{{ sid }}"
+  data-ap-settings="{{ st | json | escape }}"
+  {% if st.reset_spacing %}data-ap-reset{% endif %}
+  style="--ap-pt: {{ st.padding_top | default: 0 }}px; --ap-pb: {{ st.padding_bottom | default: 0 }}px; --ap-pt-m: {{ st.padding_top_mobile | default: 0 }}px; --ap-pb-m: {{ st.padding_bottom_mobile | default: 0 }}px; --ap-hfs-d: {{ st.heading_size_desktop | default: 30 }}px; --ap-hfs-m: {{ st.heading_size_mobile | default: 24 }}px;{% if custom and st.heading_color != blank %} --ap-h-c: {{ st.heading_color }};{% endif %}{% if custom and st.text_color != blank %} --ap-t-c: {{ st.text_color }};{% endif %}{{ fonts }}"
+>
+  <div class="{{ st.section_width | default: 'container' }}" data-ap-width>
+    <p class="ap-order__back"><a class="ap__link" href="{{ routes.account_url }}" data-ap-text="back_label" data-ap-opt{% if st.back_label == blank %} hidden{% endif %}>{{ st.back_label | escape }}</a></p>
+    <div class="ap-order__grid">
+      <div class="ap-order__main">
+        <h1 class="ap__h title-default"><span data-ap-text="heading">{{ st.heading | escape }}</span> {{ order.name }}</h1>
+        <p class="ap__t text-order"><span data-ap-text="placed_label">{{ st.placed_label | escape }}</span> {{ order.created_at | date: '%B %d, %Y %I:%M%p' }}</p>
+        {%- if order.cancelled -%}
+          <p class="ap__msg error" role="status"><span><span data-ap-text="cancelled_label">{{ st.cancelled_label | escape }}</span> {{ order.cancelled_at | date: '%B %d, %Y %I:%M%p' }}. {{ order.cancel_reason_label | default: order.cancel_reason }}</span></p>
+        {%- endif -%}
+        <div class="ap-table-wrap">
+          <table class="ap-table responsive-table">
+            <thead>
+              <tr>
+                <th scope="col" data-ap-text="product_label">{{ st.product_label | escape }}</th>
+                <th scope="col" data-ap-text="price_label">{{ st.price_label | escape }}</th>
+                <th scope="col" data-ap-text="quantity_label">{{ st.quantity_label | escape }}</th>
+                <th scope="col" data-ap-text="total_label">{{ st.total_label | escape }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {%- for line_item in order.line_items -%}
+                <tr>
+                  <td>
+                    {%- if line_item.product.url != blank -%}<a class="ap__link" href="{{ line_item.product.url }}">{{ line_item.title }}</a>{%- else -%}{{ line_item.title }}{%- endif -%}
+                    {%- if line_item.sku != blank -%}<div class="ap-order__sku">{{ line_item.sku }}</div>{%- endif -%}
                     {%- assign property_size = line_item.properties | size -%}
-                    {% unless line_item.selling_plan_allocation == null and property_size == 0 %}
-                      <div class="item-props">
-                        {% unless line_item.selling_plan_allocation == null %}
-                          <span class="item-props__property">
-                            {{ line_item.selling_plan_allocation.selling_plan.name }}
-                          </span>
-                        {% endunless %}
-                        {% if property_size != 0 %}
-                          {% for property in line_item.properties %}
-                            {% assign property_first_char = property.first | slice: 0 %}
-                            {% if property.last != blank and property_first_char != '_' %}
-                              <span class="item-props__property">
-                                {{ property.first }}:&nbsp;
-                                {%- if property.last contains '/uploads/' -%}
-                                  <a href="{{ property.last }}">{{ property.last | split: '/' | last }}</a>
-                                {%- else -%}
-                                  {{ property.last }}
-                                {% endif %}
-                              </span>
-                            {% endif %}
-                          {% endfor %}
-                        {% endif %}
-                      </div>
-                    {% endunless %}
-                    {%- if line_item.line_level_discount_allocations != blank -%}
-                      <ul class=" scd-cart__discounts mt-2" aria-label="{{ 'customer.order.discount' | t }}">
-                        {%- for discount_allocation in line_item.line_level_discount_allocations -%}
-                          <li class="__item" style="justify-content: flex-start;">
-                            <svg
-                              aria-hidden="true"
-                              width="20"
-                              height="20"
-                              focusable="false"
-                              role="presentation"
-                              viewBox="0 0 12 13"
-                            >
-                              <path fill-rule="evenodd" clip-rule="evenodd" d="M7 .5h3a2 2 0 0 1 2 2v3a.995.995 0 0 1-.293.707l-6 6a1 1 0 0 1-1.414 0l-4-4a1 1 0 0 1 0-1.414l6-6A.995.995 0 0 1 7 .5zm2 2a1 1 0 1 0 2 0 1 1 0 0 0-2 0z" fill="currentColor"></path>
-                            </svg>
-                            {{ discount_allocation.discount_application.title }} (-
-                            {{- discount_allocation.amount | money -}}
-                            )
-                          </li>
+                    {%- if property_size > 0 -%}
+                      <div class="ap-order__props">
+                        {%- for property in line_item.properties -%}
+                          {%- assign first_char = property.first | slice: 0 -%}
+                          {%- if property.last != blank and first_char != '_' -%}
+                            <span>{{ property.first }}: {% if property.last contains '/uploads/' %}<a href="{{ property.last }}">{{ property.last | split: '/' | last }}</a>{% else %}{{ property.last }}{% endif %}</span>
+                          {%- endif -%}
                         {%- endfor -%}
-                      </ul>
-                    {% endif %}
-                  </div>
-                  {%- if line_item.fulfillment -%}
-                    <div class="note">
-                      {%- assign created_at = line_item.fulfillment.created_at | time_tag: format: 'date' -%}
-                      {{ 'customer.order.fulfilled_at_html' | t: date: created_at }}
-                      <div>
-                        {%- if line_item.fulfillment.tracking_url -%}
-                          <a href="{{ line_item.fulfillment.tracking_url }}">
-                            {{ 'customer.order.track_shipment' | t }}
-                          </a>
-                        {% endif %}
-                        <div>
-                          {{ line_item.fulfillment.tracking_company }}
-                          {%- if line_item.fulfillment.tracking_number -%}
-                            #{{ line_item.fulfillment.tracking_number }}
-                          {% endif %}
-                        </div>
                       </div>
-                    </div>
-                  {% endif %}
-                </td>
-                <td class="border " data-label="{{ 'customer.order.sku' | t }}">{{ line_item.sku }}</td>
-                <td class="border " data-label="{{ 'customer.order.price' | t }}">
-                  <dl>
-                    {%- if line_item.original_price != line_item.final_price -%}
-                      <dt>
-                        <span class="visually-hidden">{{ 'products.price.regular_price' | t }}</span>
-                      </dt>
-                      <dd>
-                        <s>{{ line_item.original_price | money }}</s>
-                      </dd>
-                      <dt>
-                        <span class="visually-hidden">{{ 'products.price.sale_price' | t }}</span>
-                      </dt>
-                      <dd>
-                        <span class="">{{ line_item.final_price | money }}</span>
-                      </dd>
-                    {%- else -%}
-                      <dt>
-                        <span class="visually-hidden">{{ 'products.price.regular_price' | t }}</span>
-                      </dt>
-                      <dd>
-                        {{ line_item.original_price | money }}
-                      </dd>
-                    {% endif %}
-
-                    {%- if line_item.unit_price_measurement -%}
-                      <dt>
-                        <span class="visually-hidden visually-hidden--inline">
-                          {{- 'products.product.price.unit_price' | t -}}
-                        </span>
-                      </dt>
-                      <dd>
-                        <small class="price-unit-price">
-                          {%- capture unit_price_separator -%}
-                          <span aria-hidden="true">/</span><span class="visually-hidden">{{ 'accessibility.unit_price_separator' | t }}&nbsp;</span>
-                        {%- endcapture -%}
-                          {%- capture unit_price_base_unit -%}
-                          {%- if line_item.unit_price_measurement.reference_value != 1 -%}
-                            {{- line_item.unit_price_measurement.reference_value -}}
-                          {% endif %}
-                          {{ line_item.unit_price_measurement.reference_unit }}
-                        {%- endcapture -%}
-
-                          <span data-unit-price>{{ line_item.unit_price | money }}</span>
-                          {{- unit_price_separator -}}
-                          {{- unit_price_base_unit -}}
-                        </small>
-                      </dd>
-                    {% endif %}
-                  </dl>
-                </td>
-                <td class="border " data-label="{{ 'customer.order.quantity' | t }}">{{ line_item.quantity }}</td>
-                <td class="border " data-label="{{ 'customer.order.total' | t }}">
-                  {{ line_item.quantity | times: line_item.price | money }}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-          <tfoot>
-            <tr class="">
-              <td class="border  " colspan="4" class="small--hide">{{ 'customer.order.subtotal' | t }}</td>
-              <td class="border " data-label="{{ 'customer.order.subtotal' | t }}">
-                {{ order.line_items_subtotal_price | money }}
-              </td>
-            </tr>
-
-            {% for discount in order.discounts %}
-              <tr>
-                <td class="border  " colspan="4" class="small--hide">
-                  {{ discount.code }}
-                  {{ 'customer.order.discount' | t }}
-                </td>
-                <td class="border " data-label="{{ 'customer.order.discount' | t }}">{{ discount.savings | money }}</td>
-              </tr>
-            {% endfor %}
-
-            {% for shipping_method in order.shipping_methods %}
-              <tr>
-                <td class="border  " colspan="4" class="small--hide">
-                  {{ 'customer.order.shipping' | t }} ({{ shipping_method.title }})
-                </td>
-                <td class="border " data-label="{{ 'customer.order.shipping' | t }} ({{ shipping_method.title }})">
-                  {{ shipping_method.price | money }}
-                </td>
-              </tr>
-            {% endfor %}
-
-            {% for tax_line in order.tax_lines %}
-              <tr>
-                <td class="border  " colspan="4" class="small--hide">
-                  {{ 'customer.order.tax' | t }} ({{ tax_line.title }}
-                  {{ tax_line.rate | times: 100 }}%)
-                </td>
-                <td
-                  class="border "
-                  data-label="{{ 'customer.order.tax' | t }} ({{ tax_line.title }} {{ tax_line.rate | times: 100 }}%)"
-                >
-                  {{ tax_line.price | money }}
-                </td>
-              </tr>
-            {% endfor %}
-
-            <tr>
-              <td class="border  " colspan="4" class="small--hide">{{ 'customer.order.total' | t }}</td>
-              <td class="border " data-label="{{ 'customer.order.total' | t }}">
-                {{ order.total_price | money }}
-                {{ order.currency }}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
+                    {%- endif -%}
+                    {%- for discount_allocation in line_item.line_level_discount_allocations -%}
+                      <div class="ap-order__discount">{{ discount_allocation.discount_application.title }} (-{{ discount_allocation.amount | money }})</div>
+                    {%- endfor -%}
+                    {%- if line_item.fulfillment.tracking_url != blank -%}
+                      <div><a class="ap__link" href="{{ line_item.fulfillment.tracking_url }}" data-ap-text="track_label">{{ st.track_label | escape }}</a></div>
+                    {%- endif -%}
+                  </td>
+                  <td>
+                    {%- if line_item.original_price != line_item.final_price -%}<s>{{ line_item.original_price | money }}</s> {{ line_item.final_price | money }}{%- else -%}{{ line_item.original_price | money }}{%- endif -%}
+                  </td>
+                  <td>{{ line_item.quantity }}</td>
+                  <td>{{ line_item.final_line_price | default: line_item.line_price | money }}</td>
+                </tr>
+              {%- endfor -%}
+            </tbody>
+            <tfoot>
+              <tr><th scope="row" colspan="3" data-ap-text="subtotal_label">{{ st.subtotal_label | escape }}</th><td>{{ order.line_items_subtotal_price | money }}</td></tr>
+              {%- for discount in order.discounts -%}
+                <tr><th scope="row" colspan="3">{{ discount.code }}</th><td>-{{ discount.savings | money }}</td></tr>
+              {%- endfor -%}
+              {%- for shipping_method in order.shipping_methods -%}
+                <tr><th scope="row" colspan="3"><span data-ap-text="shipping_label">{{ st.shipping_label | escape }}</span> ({{ shipping_method.title }})</th><td>{{ shipping_method.price | money }}</td></tr>
+              {%- endfor -%}
+              {%- for tax_line in order.tax_lines -%}
+                <tr><th scope="row" colspan="3"><span data-ap-text="tax_label">{{ st.tax_label | escape }}</span> ({{ tax_line.title }} {{ tax_line.rate | times: 100 }}%)</th><td>{{ tax_line.price | money }}</td></tr>
+              {%- endfor -%}
+              <tr><th scope="row" colspan="3" data-ap-text="total_label">{{ st.total_label | escape }}</th><td>{{ order.total_price | money }} {{ order.currency }}</td></tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
-    </div>
-    <div class="col-lg-w-custom mb-30" style="--col-width:25%">
-      <div class="mb-30">
-        <h3 class="title-default mb-15">{{ 'customer.order.billing_address' | t }}</h3>
-        <p class="">{{ 'customer.order.payment_status' | t }}: {{ order.financial_status_label }}</p>
-        <div class="">{{ order.billing_address | format_address }}</div>
-      </div>
-      <div>
-        <h3 class="title-default mb-15">{{ 'customer.order.shipping_address' | t }}</h3>
-        <p class="">{{ 'customer.order.fulfillment_status' | t }}: {{ order.fulfillment_status_label }}</p>
-        <div class="">{{ order.shipping_address | format_address }}</div>
+      <div class="ap-order__side">
+        <div class="ap-card ap-block">
+          <h2 class="ap__h ap__h--sub" data-ap-text="billing_heading">{{ st.billing_heading | escape }}</h2>
+          <p class="ap__t"><span data-ap-text="payment_label">{{ st.payment_label | escape }}</span> {{ order.financial_status_label }}</p>
+          <div class="ap__t">{{ order.billing_address | format_address }}</div>
+        </div>
+        {%- if order.shipping_address != blank -%}
+          <div class="ap-card ap-block">
+            <h2 class="ap__h ap__h--sub" data-ap-text="shipping_heading">{{ st.shipping_heading | escape }}</h2>
+            <p class="ap__t"><span data-ap-text="fulfillment_label">{{ st.fulfillment_label | escape }}</span> {{ order.fulfillment_status_label }}</p>
+            <div class="ap__t">{{ order.shipping_address | format_address }}</div>
+          </div>
+        {%- endif -%}
       </div>
     </div>
   </div>
 </div>
-
+<style>
+  #shopify-section-{{ sid }} .ap-order__back { margin: 0 0 12px; }
+  #shopify-section-{{ sid }} .ap-order__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 30px; }
+  @media (min-width: 990px) { #shopify-section-{{ sid }} .ap-order__grid { grid-template-columns: minmax(0, 3fr) minmax(220px, 1fr); } }
+  #shopify-section-{{ sid }} .ap-order__grid > * { min-width: 0; }
+  #shopify-section-{{ sid }} .ap-order__sku,
+  #shopify-section-{{ sid }} .ap-order__props,
+  #shopify-section-{{ sid }} .ap-order__discount { font-size: .9em; margin-top: 4px; }
+  #shopify-section-{{ sid }} .ap-order__props span { display: block; }
+  #shopify-section-{{ sid }} .ap-table { min-width: 460px; }
+  #shopify-section-{{ sid }} .ap-table tfoot th { font-weight: 400; color: var(--ap-t-c, var(--color-text)); }
+  #shopify-section-{{ sid }} .ap-card .ap__t { margin: 0 0 8px; }
+{% comment %}{% endcomment %}</style>
 </template>
 
 <schema>
@@ -256,6 +141,266 @@
   "type": "main-order",
   "name": "Main order",
   "settings": [],
-  "shopify": {}
+  "shopify": {
+    "name": "Order",
+    "settings": [
+      {
+        "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "container",
+        "options": [
+          {
+            "value": "container",
+            "label": "Default"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Content"
+      },
+      {
+        "type": "text",
+        "id": "back_label",
+        "label": "Back link",
+        "default": "Back to my account"
+      },
+      {
+        "type": "text",
+        "id": "heading",
+        "label": "Heading",
+        "default": "Order"
+      },
+      {
+        "type": "text",
+        "id": "placed_label",
+        "label": "Date text",
+        "default": "Placed on"
+      },
+      {
+        "type": "text",
+        "id": "cancelled_label",
+        "label": "Cancelled text",
+        "default": "Cancelled on"
+      },
+      {
+        "type": "text",
+        "id": "product_label",
+        "label": "Product column",
+        "default": "Product"
+      },
+      {
+        "type": "text",
+        "id": "price_label",
+        "label": "Price column",
+        "default": "Price"
+      },
+      {
+        "type": "text",
+        "id": "quantity_label",
+        "label": "Quantity column",
+        "default": "Quantity"
+      },
+      {
+        "type": "text",
+        "id": "total_label",
+        "label": "Total",
+        "default": "Total"
+      },
+      {
+        "type": "text",
+        "id": "subtotal_label",
+        "label": "Subtotal",
+        "default": "Subtotal"
+      },
+      {
+        "type": "text",
+        "id": "shipping_label",
+        "label": "Shipping",
+        "default": "Shipping"
+      },
+      {
+        "type": "text",
+        "id": "tax_label",
+        "label": "Tax",
+        "default": "Tax"
+      },
+      {
+        "type": "text",
+        "id": "track_label",
+        "label": "Tracking link",
+        "default": "Track shipment"
+      },
+      {
+        "type": "text",
+        "id": "billing_heading",
+        "label": "Billing heading",
+        "default": "Billing address"
+      },
+      {
+        "type": "text",
+        "id": "payment_label",
+        "label": "Payment status text",
+        "default": "Payment:"
+      },
+      {
+        "type": "text",
+        "id": "shipping_heading",
+        "label": "Shipping heading",
+        "default": "Shipping address"
+      },
+      {
+        "type": "text",
+        "id": "fulfillment_label",
+        "label": "Delivery status text",
+        "default": "Delivery:"
+      },
+      {
+        "type": "header",
+        "content": "Appearance"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Enable custom styling",
+        "default": false,
+        "info": "Off: colours follow the colour scheme."
+      },
+      {
+        "type": "color",
+        "id": "heading_color",
+        "label": "Heading color",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "text_color",
+        "label": "Text color",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Enable custom fonts",
+        "default": false,
+        "info": "Off: fonts follow Theme settings > Typography."
+      },
+      {
+        "type": "font_picker",
+        "id": "heading_font",
+        "label": "Heading font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Body font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "range",
+        "id": "heading_size_desktop",
+        "label": "Heading size (desktop)",
+        "min": 14,
+        "max": 60,
+        "step": 1,
+        "default": 30,
+        "unit": "px"
+      },
+      {
+        "type": "header",
+        "content": "Desktop spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "default": 40,
+        "unit": "px"
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom padding (desktop)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "default": 60,
+        "unit": "px"
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "range",
+        "id": "heading_size_mobile",
+        "label": "Heading size (mobile)",
+        "min": 14,
+        "max": 48,
+        "step": 1,
+        "default": 24,
+        "unit": "px"
+      },
+      {
+        "type": "range",
+        "id": "padding_top_mobile",
+        "label": "Top padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "default": 30,
+        "unit": "px"
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_mobile",
+        "label": "Bottom padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "default": 40,
+        "unit": "px"
+      }
+    ]
+  }
 }
 </schema>
