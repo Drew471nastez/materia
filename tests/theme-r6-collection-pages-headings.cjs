@@ -96,7 +96,7 @@ async function savedAll(browser) {
       if (!['page-heading', 'main-collection-heading'].includes(sec.type)) continue;
       const blocks = (sec.block_order || Object.keys(sec.blocks || {})).map(k => sec.blocks[k]).filter(Boolean);
       const globals = sec.type === 'page-heading' ? {template: kind === 'about' || kind === 'faqs' || kind === 'wishlist' || kind === 'contact' ? 'page' : kind, page: {title: 'A page', content: ''}, page_title: 'A page', blog: {title: 'Blog', url: '/blogs/news'}, cart: {item_count: 1, items: [1]}} : COLL;
-      await L.saved(browser, sec.type, {inst: {settings: sec.settings, blocks, blockToggles: {description: {enable_custom_style: true}}}, globals, look, label: 'templates/' + f + ' ' + key});
+      await L.saved(browser, sec.type, {inst: {settings: sec.settings, blocks, blockToggles: {description: {enable_custom_style: true}}}, globals, look, label: 'templates/' + f + ' ' + key, ...(sec.type === 'page-heading' ? {ref: '0674ef4'} : {})}); /* page-heading: the builder edit 0674ef4 sized custom headings and text a little smaller on phones on purpose */
     }
   }
 }

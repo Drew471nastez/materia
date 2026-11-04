@@ -120,8 +120,8 @@ async function sweep(browser, name, opts) {
 /* The page as it prints, with and without the controller: the same look. */
 async function firstPaint(browser, name, {settings = {}, blocks, globals = {}, sig, label = ''} = {}) {
   for (const width of [375, 1366]) for (const editing of [true, false]) {
-    const a = await mount(browser, name, {width, editing, settings, blocks, globals, assets: []}); await settle(a.page); const s1 = await sig(a.page); await a.page.close();
-    const b = await mount(browser, name, {width, editing, settings, blocks, globals, assets: [CTRL]}); await frames(b.page); await settle(b.page); const s2 = await sig(b.page);
+    const a = await mount(browser, name, {width, editing, settings, blocks, globals, assets: []}); await a.page.mouse.move(width - 1, 1); await settle(a.page); const s1 = await sig(a.page); await a.page.close();
+    const b = await mount(browser, name, {width, editing, settings, blocks, globals, assets: [CTRL]}); /* the pointer off to the right edge, so a left-aligned link is never read in its hover colour */ await b.page.mouse.move(width - 1, 1); await frames(b.page); await settle(b.page); const s2 = await sig(b.page);
     eq(diff(s1, s2), [], name + ' first paint equals hydrated ' + label + width + (editing ? ' editor' : ' storefront'));
     ok(await b.noOverflow(), name + ' no sideways scroll ' + label + width);
     eq(b.errors, [], name + ' no errors ' + label + width);
