@@ -241,9 +241,9 @@ const NOPILL = clone(BLOCKS); NOPILL[0].settings.header_pill_enable = false; NOP
         const mob = flat.filter(k => /logo_width_mobile|menu_mobile|mbanner/.test(k));
         assert.deepEqual(mob, [], `${width}: phone values that changed nothing live: ${mob.join(', ')}`);
       }
-      /* the actions: off hides at once, the redraw leaves them out */
+      /* the actions: off hides at once, the redraw leaves them out (each drawn on first: the saved header has the country and language pickers off) */
       for (const [k, sel] of [['show_search', '.header_search'], ['show_account_icon', '.header_account'], ['show_wishlist_icon', '.header__wishlist'], ['show_shopping_cart', '.minicart'], ['show_currency', 'localization-form:has(input[name="country_code"])'], ['show_language', 'localization-form:has(input[name="language_code"])']]) {
-        await draw(p, r, base);
+        await draw(p, r, {...base, [k]: true});
         await L.emit(p, {section: 'header', settings: {[k]: false}, live: true});
         const live = await p.evaluate(s => { const el = document.querySelector('#shopify-section-header .header__action ' + s); return el && getComputedStyle(el).display; }, sel);
         await draw(p, r, {...base, [k]: false});
