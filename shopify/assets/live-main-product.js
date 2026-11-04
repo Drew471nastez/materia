@@ -223,7 +223,9 @@
     if (!el) return;
     const keys = Object.keys(d.settings), type = el.getAttribute('data-pib-type');
     /* Anything else this block draws: the block is drawn again from the page as the builder has it now. */
-    const painted = k => OWN_KEYS.includes(k) || (SLIDING[type] && SLIDING[type].has(k));
+    /* title and price sizes are painted live only where the section paints them (Main product); elsewhere (Featured product) the block is drawn again */
+    const slides = !!sec.querySelector('[data-mp-root]');
+    const painted = k => OWN_KEYS.includes(k) || (slides && SLIDING[type] && SLIDING[type].has(k));
     if (keys.some(k => !painted(k))) refetch(sec, bid);
     if (!keys.some(k => OWN_KEYS.includes(k))) return;
     let st = blockStates.get(el);
