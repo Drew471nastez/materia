@@ -18,9 +18,12 @@
    effect, loop or autoplay changes.
 
    Blog posts: every setting applies live (colours, fonts, weights, sizes,
-   words, alignment, ratio, spacing); the carousel is set up again when its
-   layout, loop or autoplay changes; autoplay stops off screen, in a hidden tab
-   and under reduced motion. */
+   words, alignment, ratio, spacing, the View all link), and so does every
+   setting of the Subheading, Heading and Text blocks (words, style, size,
+   line width, colour); the carousel is set up again when its layout, loop or
+   autoplay changes; autoplay stops off screen, in a hidden tab and under
+   reduced motion. A block added, removed or moved, or a block's words emptied
+   or filled from empty, is drawn again by Storelib (storelib:section-load). */
 (() => {
   if (window.MateriaBlogSlideshow) return;
   const parse = v => { try { return JSON.parse(v || '{}') || {}; } catch (e) { return {}; } };
@@ -220,6 +223,41 @@
   /* ---------- Blog posts ---------- */
   const BP = new Map();
   const RATIO = {square: '1/1', landscape: '4/3', portrait: '3/4'};
+  const SUB_STYLES = ['caption', 'plain', 'muted'], H_SIZES = ['theme', 'small', 'medium', 'large', 'custom'], T_SIZES = ['small', 'base', 'large'], T_WIDTHS = ['narrow', 'medium', 'full'];
+  const blank = v => !String(v ?? '').replace(/<[^>]*>/g, '').trim();
+  /* A block's own colour is an inline colour (as the section prints it), else the scheme or the custom colours. */
+  const ownColor = (el, v) => { const c = color(v, ''); if (c) { if (el.style.color !== c) el.style.setProperty('color', c); } else if (el.style.color) el.style.removeProperty('color'); };
+  /* The Subheading, Heading and Text blocks, drawn the way the section draws them. */
+  function bpBlocks(root, st) {
+    const s = st.s, ownSize = bool(s.enable_custom_heading_size);
+    for (const el of root.querySelectorAll('[data-bp-block]')) {
+      const id = el.dataset.bpBlock, touched = st.touchedBlocks.has(id), b = {...parse(el.dataset.bpBlockSettings), ...(st.blocks.get(id) || {})};
+      switch (el.dataset.bpBlockType) {
+        case 'subheading':
+          if (touched) { text(el, b.text); show(el, !blank(b.text)); }
+          swapClass(el, 'bp-sub--', SUB_STYLES.includes(b.style) ? b.style : 'caption', SUB_STYLES.map(x => 'bp-sub--' + x));
+          ownColor(el, b.color);
+          break;
+        case 'heading': {
+          if (touched) { rich(el, String(b.heading ?? '').trim(), st.cache); show(el, !blank(b.heading)); }
+          const size = H_SIZES.includes(b.size) ? b.size : 'theme';
+          swapClass(el, 'bp-h--', size, H_SIZES.map(x => 'bp-h--' + x));
+          el.classList.toggle('bp-h-own', size === 'theme' && ownSize);
+          setVar(el, '--bp-h-size', size === 'custom' ? num(b.custom_size, 36) + 'px' : '');
+          ownColor(el, b.color);
+          break;
+        }
+        case 'text':
+          if (touched) { rich(el, b.text, st.cache); show(el, !blank(b.text)); }
+          swapClass(el, 'bp-text--', T_SIZES.includes(b.size) ? b.size : 'base', T_SIZES.map(x => 'bp-text--' + x));
+          swapClass(el, 'bp-mw--', T_WIDTHS.includes(b.max_width) ? b.max_width : 'medium', T_WIDTHS.map(x => 'bp-mw--' + x));
+          ownColor(el, b.color);
+          break;
+      }
+    }
+    /* The heading without blocks: its own size while Custom heading size is on. */
+    for (const el of root.querySelectorAll('.bp-h-old')) el.classList.toggle('bp-h-own', ownSize);
+  }
   function bpAllowed(st) { return bool(st.s.autoplay) && !reduced.matches && !document.hidden && st.inView; }
   function bpAutoplay(root, st) {
     const slider = root.querySelector('[data-bp-slider]'), sw = slider?.globalSlide;
@@ -255,6 +293,7 @@
     setVar(root, '--section-pb', String(num(s.padding_bottom)));
     setVar(root, '--vertical-gap', num(s.vertical_gap, 30) + 'px');
     setVar(root, '--heading-font-size', num(s.heading_font_size, 24) + 'px');
+    setVar(root, '--heading-subtext-gap', num(s.heading_subtext_gap, 12) + 'px');
     /* Custom styling: colours of the heading, text, titles, author and date, and the View all button. */
     const custom = bool(s.enable_custom_style);
     attr(root, 'data-bp-custom', custom);
@@ -264,6 +303,8 @@
       setVar(btn, '--mb-border', custom ? color(s.view_all_bg_color, '') : '');
       setVar(btn, '--mb-hover-border', custom ? color(s.view_all_hover_bg_color, '') : '');
       if (st.touched.has('view_all_label')) text(btn, String(s.view_all_label || '').trim() || st.viewAllDefault);
+      /* View all link: the one set, else the blog the posts come from. A link that appears or goes is a redraw (a link or a button). */
+      if (st.touched.has('view_all_link') && btn.tagName === 'A') { const href = url(s.view_all_link) || root.dataset.bpBlogUrl || ''; if (href && btn.getAttribute('href') !== href) btn.setAttribute('href', href); }
     }
     /* Fonts, heading weight, heading line height and letter spacing. */
     const fonts = bool(s.enable_custom_fonts), weight = bool(s.enable_custom_weight), size = bool(s.enable_custom_size);
@@ -273,18 +314,22 @@
     setVar(root, '--bp-heading-weight', weight ? String(s.heading_weight || 600) : '');
     setVar(root, '--bp-heading-lh', size ? String(num(s.heading_line_height, 1.2)) : '');
     setVar(root, '--bp-heading-ls', size ? num(s.heading_letter_spacing) + 'px' : '');
-    const h2 = root.querySelector('.section__header-heading');
-    attr(h2, 'data-own-weight', weight); attr(h2, 'data-own-size', size);
-    /* Words. */
+    for (const h of root.querySelectorAll('.section__header-heading')) { attr(h, 'data-own-weight', weight); attr(h, 'data-own-size', size); }
+    /* Words of the heading without blocks. */
+    const h2 = root.querySelector('.bp-h-old'), des = root.querySelector('.bp-head-old .section__header-des');
     if (h2 && st.touched.has('heading')) rich(h2, s.heading, st.cache);
-    const des = root.querySelector('.section__header-des');
-    if (des && st.touched.has('description')) rich(des, s.description, st.cache);
+    if (des && st.touched.has('description')) { rich(des, s.description, st.cache); show(des, !blank(s.description)); }
+    /* Alone, the heading keeps its old pull of 20px below (as the section prints it); with text, the text sits the heading gap below it. */
+    if (h2 && st.touched.has('description')) { if (blank(s.description)) setImp(h2, 'margin-bottom', '-20px'); else if (h2.style.getPropertyValue('margin-bottom')) h2.style.removeProperty('margin-bottom'); }
+    if (des && st.touched.has('heading')) setVar(des, 'margin-top', h2 && !blank(s.heading) ? 'var(--heading-subtext-gap)' : '');
+    bpBlocks(root, st);
     /* Alignment, author and date, image ratio. */
     const header = root.querySelector('.section__header');
     if (header) swapClass(header, 'text-', s.header_alignment || 'left');
     const row = header?.firstElementChild;
     if (row && row.classList.contains('flex')) row.classList.toggle('flex-row-reverse', s.header_alignment === 'right');
     const align = s.content_alignment || 'left';
+    if (root.dataset.bpAlign !== align) root.dataset.bpAlign = align; /* the section's alignment rules read it */
     for (const el of root.querySelectorAll('.blog-posts-info')) swapClass(el, 'text-', align);
     for (const el of root.querySelectorAll('.blog-posts-bottom')) swapClass(el, 'justify-content-', align);
     for (const el of root.querySelectorAll('.blog-posts-author')) show(el, bool(s.show_author));
@@ -301,7 +346,7 @@
   }
   function bpInit(root) {
     if (BP.has(root)) return BP.get(root);
-    const st = {s: parse(root.dataset.bpSettings), touched: new Set(), cache: new WeakMap(), frame: 0, inView: false, viewAllDefault: (root.querySelector('[data-bp-view-all]')?.textContent || '').trim()};
+    const st = {s: parse(root.dataset.bpSettings), touched: new Set(), blocks: new Map(), touchedBlocks: new Set(), cache: new WeakMap(), frame: 0, inView: false, viewAllDefault: (root.querySelector('[data-bp-view-all]')?.textContent || '').trim()};
     if (String(st.s.view_all_label || '').trim() === st.viewAllDefault) st.viewAllDefault = 'View all';
     st.schedule = () => { if (!st.frame) st.frame = requestAnimationFrame(() => { st.frame = 0; if (root.isConnected) bpPaint(root, st); }); };
     const slider = root.querySelector('[data-bp-slider]');
@@ -331,9 +376,9 @@
       else { Object.assign(st.s, d.settings); for (const k of Object.keys(d.settings)) { st.touched.add(k); if (/margin|reset_spacing/.test(k)) st.touched.add('margins'); } }
       st.schedule();
     }
-    for (const [root, st] of BP) if (root.dataset.bpSection === id && !block) {
-      Object.assign(st.s, d.settings);
-      for (const k of Object.keys(d.settings)) st.touched.add(k);
+    for (const [root, st] of BP) if (root.dataset.bpSection === id) {
+      if (block) { st.blocks.set(block, {...(st.blocks.get(block) || {}), ...d.settings}); st.touchedBlocks.add(block); }
+      else { Object.assign(st.s, d.settings); for (const k of Object.keys(d.settings)) st.touched.add(k); }
       st.schedule();
     }
   });
