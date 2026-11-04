@@ -277,6 +277,17 @@
         case 'sticky_header_type': if (['none', 'always', 'on-scroll-up'].includes(v)) attr(H, 'data-sticky', v); break;
         case 'sticky_header_mobile': attr(H, 'data-sticky-mobile', String(bool(v))); break;
         case 'transparent_text_icon_color': prop(H, '--transparent-color', color(v, 'var(--color-heading)')); break;
+        /* spacing and logo nudge: the variables the header's own rules read (0 stays 0); the offsets act only with Custom logo position on */
+        case 'menu_link_spacing': prop(S, '--hs-menu-gap', px(v, 32)); break;
+        case 'icon_spacing': prop(S, '--hs-icon-gap', px(v, 20)); break;
+        case 'icon_spacing_mobile': prop(S, '--hs-icon-gap-mobile', px(v, 14)); break;
+        case 'logo_offset_x': st.logoX = num(v, 0); if (st.logoCustom !== false) prop(S, '--hs-logo-x', px(st.logoX)); break;
+        case 'logo_offset_x_mobile': st.logoXm = num(v, 0); if (st.logoCustom !== false) prop(S, '--hs-logo-x-mobile', px(st.logoXm)); break;
+        case 'logo_custom_position':
+          st.logoCustom = bool(v);
+          prop(S, '--hs-logo-x', st.logoCustom ? (st.logoX != null ? px(st.logoX) : '') : '0px');
+          prop(S, '--hs-logo-x-mobile', st.logoCustom ? (st.logoXm != null ? px(st.logoXm) : '') : '0px');
+          break;
         case 'transparent_hover_fill_color': prop(S, '--hs-hover-fill', color(v, '#FFFFFF')); break;
         case 'disable_white_fill_on_hover': cls(H, 'no-hover-fill', bool(v)); break;
         case 'menu_mobile_color': mmColors(H, null, color(v, '#ffffff')); break;

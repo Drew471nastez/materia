@@ -95,6 +95,9 @@
     if (s.slide_effect && !root.classList.contains(s.slide_effect)) root.classList.add(s.slide_effect);
     /* Image effect and its intensity. */
     if (s.image_effect != null && root.dataset.slideshowPointer !== String(s.image_effect)) root.dataset.slideshowPointer = s.image_effect;
+    /* the section's own effects read data-ss-fx and --fxi (1 to 10) */
+    if (s.image_effect != null && root.dataset.ssFx !== String(s.image_effect || 'none')) root.dataset.ssFx = s.image_effect || 'none';
+    if (s.image_effect_intensity != null) setVar(root, '--fxi', String(s.image_effect_intensity));
     /* a new effect: slideshow-pointer.js measures the scroll position once now (parallax), not on the next scroll */
     if (st.pointer !== undefined && st.pointer !== s.image_effect) dispatchEvent(new Event('scroll'));
     st.pointer = s.image_effect;
