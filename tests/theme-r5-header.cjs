@@ -70,8 +70,8 @@ const BLOCKS = [
   {id: 'conly', type: 'menu_collections_only', settings: {text: 'Brands', collection_list: [coll('One'), coll('Two'), coll('Three')], columns: 3, show_titles: true, image_ratio: 'square', mega_custom_width: 900}},
   {id: 'cats', type: 'menu_categories', settings: {text: 'Journal', heading: 'Browse', collection_list: [coll('Shirts'), coll('Hats')], show_links: true, layout: 'grid', columns: 3, image_style: 'circle', image_size: 64, show_count: true, count_label: 'items', view_all_label: 'Shop all', view_all_url: '/collections/all', banner_image: L.img('cat'), banner_heading: 'New in', banner_button: 'Shop', banner_link: '/collections/new', mega_custom_width: 1000}},
   {id: 'lstyle', type: 'menu_link_style', settings: {text: 'Buy Theme!', item_label: 'popular', link_color: '#2f6fdb', link_hover_color: '#e03131'}},
-  /* the builder's Header button, as saved (a theme Primary button before the icons, shown in the phone row) */
-  {id: 'cta', type: 'header_button', settings: saved('header_button-1793700593404-rjjsl')},
+  /* the builder's Header button, as saved (a theme Primary button before the icons, shown in the phone row), with the schema default the saved block leaves out */
+  {id: 'cta', type: 'header_button', settings: {mobile_bar_full_width: true, ...saved('header_button-1793700593404-rjjsl')}},
 ];
 const ctxValues = {collection: coll('Changed'), collections: [coll('Changed'), coll('Other')], product: {...OTHER, title: 'Changed product'}};
 const clone = v => JSON.parse(JSON.stringify(v));

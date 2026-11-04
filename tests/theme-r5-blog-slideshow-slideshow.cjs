@@ -73,7 +73,7 @@ async function sig(page, uid = 'test') {
       arrows: vis(R.querySelector('.swiper-actions')) && {...cs(R.querySelector('.swiper-actions'), ['opacity', 'visibility', 'display']), a: cs(R.querySelector('.swiper-button-next'), ['width', 'borderTopLeftRadius', 'backgroundColor', 'color', 'borderTopColor', '--ss-arrow-hover-bg', '--ss-arrow-hover-icon', 'opacity', 'display', 'visibility'])},
       pag: vis(R.querySelector('.swiper-pagination')) && {...cs(R.querySelector('.swiper-pagination'), ['justifyContent', 'display']), bullet: cs(R.querySelector('.swiper-pagination-bullet-active, .swiper-pagination-bullet'), ['width', 'height', 'borderTopLeftRadius', 'backgroundColor', 'borderTopWidth']), style: slider.dataset.paginationStyle},
       swiper: sw && !sw.destroyed ? {effect: sw.params.effect, loop: !!sw.params.loop, autoplay: !!(sw.params.autoplay && sw.params.autoplay.enabled), delay: sw.params.autoplay?.enabled ? sw.params.autoplay.delay : 0} : null, split: cs(S.querySelector('.banner__media-split'), ['columnGap', 'rowGap']),
-      pointer: R.dataset.slideshowPointer,
+      pointer: R.dataset.ssFx || R.dataset.slideshowPointer, /* the image effect: data-ss-fx now, data-slideshow-pointer before */
     };
     return JSON.parse(JSON.stringify(out));
   }, uid);
