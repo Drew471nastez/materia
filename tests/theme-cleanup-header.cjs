@@ -147,7 +147,8 @@ async function render() {
       shots.push(await p.screenshot({ animations: 'disabled', caret: 'hide' }));
       const facts = await p.evaluate(() => {
         const s = document.querySelector('#shopify-section-header'), c = getComputedStyle(s);
-        return { mt: c.marginTop, mb: c.marginBottom, sticky: c.position, logo: getComputedStyle(s.querySelector('.header__logo')).maxWidth };
+        const lc = getComputedStyle(s.querySelector('.header__logo'));
+        return { mt: c.marginTop, mb: c.marginBottom, sticky: c.position, logo: lc.maxWidth, logoWidth: lc.width, slider: getComputedStyle(s).getPropertyValue('--hs-logo-width' + (innerWidth < 1025 ? '-mobile' : '')).trim() };
       });
       await ctx.close();
       return { shots, facts };
@@ -157,7 +158,8 @@ async function render() {
       ok(a.shots.every((s, i) => Buffer.compare(s, b.shots[i]) === 0), `${width}px: linked files and inline text draw the same pixels, closed and open`);
       ok(a.facts.mt === '0px' && a.facts.mb === '0px', `${width}px: Reset spacing still zeroes the section margins (${JSON.stringify(a.facts)})`);
       ok(a.facts.sticky === 'sticky', `${width}px: Always sticky is native sticky`);
-      ok(/min\(/.test(a.facts.logo) || /px$/.test(a.facts.logo), `${width}px: the logo width comes from the header's slider value`);
+      /* on phones the builder's bar grid keeps the logo in its column (max-width: 100%); its width is still the slider's */
+      ok(/min\(/.test(a.facts.logo) || /px$/.test(a.facts.logo) || (width < 500 && a.facts.logoWidth === a.facts.slider), `${width}px: the logo width comes from the header's slider value (${JSON.stringify(a.facts)})`);
     }
   } finally {
     await browser.close();

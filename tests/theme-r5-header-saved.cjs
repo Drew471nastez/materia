@@ -8,8 +8,8 @@
    element of both sections is compared: box, computed colours, type,
    borders, spacing, layout and its text. */
 const assert = require('node:assert/strict');
-/* Compared with the builder's own header edit (0674ef4: the logo sized for the phone bar, the tinted dropdown with or without glass), which the saved header is drawn with on the site; HEADER_BASE=2002b49 compares with the theme before round 5. */
-process.env.HEADER_BASE = process.env.HEADER_BASE || '0674ef4';
+/* Compared with the builder's own header edit (7d5d059: the Header button block, the phone bar grid, spacing and logo nudge, on top of 0674ef4's logo sized for the phone bar and tinted dropdown), which the saved header is drawn with on the site; the saved header holds a Header button, which 0674ef4 cannot draw. HEADER_BASE=2002b49 compares with the theme before round 5. */
+process.env.HEADER_BASE = process.env.HEADER_BASE || '7d5d059';
 const L = require('./theme-r5-header-lib.cjs');
 if (!L.Liquid) { console.log('0 saved header checks (render skipped: set LIQUIDJS=<path to liquidjs>)'); process.exit(0); }
 const {chromium} = require('playwright');

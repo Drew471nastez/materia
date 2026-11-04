@@ -70,6 +70,8 @@ const BLOCKS = [
   {id: 'conly', type: 'menu_collections_only', settings: {text: 'Brands', collection_list: [coll('One'), coll('Two'), coll('Three')], columns: 3, show_titles: true, image_ratio: 'square', mega_custom_width: 900}},
   {id: 'cats', type: 'menu_categories', settings: {text: 'Journal', heading: 'Browse', collection_list: [coll('Shirts'), coll('Hats')], show_links: true, layout: 'grid', columns: 3, image_style: 'circle', image_size: 64, show_count: true, count_label: 'items', view_all_label: 'Shop all', view_all_url: '/collections/all', banner_image: L.img('cat'), banner_heading: 'New in', banner_button: 'Shop', banner_link: '/collections/new', mega_custom_width: 1000}},
   {id: 'lstyle', type: 'menu_link_style', settings: {text: 'Buy Theme!', item_label: 'popular', link_color: '#2f6fdb', link_hover_color: '#e03131'}},
+  /* the builder's Header button, as saved (a theme Primary button before the icons, shown in the phone row) */
+  {id: 'cta', type: 'header_button', settings: saved('header_button-1793700593404-rjjsl')},
 ];
 const ctxValues = {collection: coll('Changed'), collections: [coll('Changed'), coll('Other')], product: {...OTHER, title: 'Changed product'}};
 const clone = v => JSON.parse(JSON.stringify(v));
@@ -167,24 +169,29 @@ const NOPILL = clone(BLOCKS); NOPILL[0].settings.header_pill_enable = false; NOP
 
     /* ---------- 3. live equals redraw ---------- */
     const LIVE = {
-      logo_width_desktop: 160, logo_width_mobile: 60, logo_position: 'left', separator_line: 'unset', header_height: 90, header_height_mobile: 56, section_width: 'container',
+      logo_width_desktop: 160, logo_width_mobile: 60, logo_position: 'center', separator_line: 'unset', header_height: 90, header_height_mobile: 56, section_width: 'container',
       menu_hover_style: 'color', menu_hover_color: '#2f6fdb', dropdowns_animation: 'fade-in', dropdowns_speed: 250, dropdowns_smoothness: 10, dropdown_width: 300, dropdown_padding: 30,
       dropdown_link_spacing: 12, dropdown_radius: 14, dropdown_shadow: 'strong', mega_column_gap: 50, mega_column_dividers: true, mega_card_radius: 18, mega_card_label: 'pill',
       mega_card_label_bg: '#ffe066', mega_card_label_color: '#222222', uppercase_first: true, sticky_header_type: 'on-scroll-up', sticky_header_mobile: false,
       menu_mobile_color: '#111111', menu_mobile_background: '#ffe066', menu_mobile_dividers: false, menu_mobile_chevrons: true,
       enable_custom_fonts: true, disable_white_fill_on_hover: true,
+      menu_link_spacing: 40, icon_spacing: 30, icon_spacing_mobile: 20, logo_custom_position: true, logo_position_mobile: 'left', logo_gap_mobile: 24,
     };
     /* values seen only on hover, while scrolling or with another value set: checked for equality, not for a visible change at rest */
-    const QUIET = ['menu_hover_style', 'sticky_header_type', 'sticky_header_mobile', 'disable_white_fill_on_hover', 'badges.badge_hover'];
+    const QUIET = ['menu_hover_style', 'sticky_header_type', 'sticky_header_mobile', 'disable_white_fill_on_hover', 'badges.badge_hover', 'cta.new_tab'];
     const MARGINS = {section_margin_top_desktop: 20, section_margin_bottom_desktop: 30, section_margin_top_mobile: 10, section_margin_bottom_mobile: 12};
     const LIVE_ON = {enable_custom_fonts: true};
     const LIVE_DEP = {menu_custom_font: {family: 'Georgia', fallback_families: 'serif'}, menu_font_size: 19, menu_font_weight: '700'};
     const TRANS = {transparent_text_icon_color: '#ff00aa', transparent_hover_fill_color: '#00ffaa'};
+    /* values that act only with another one on: the actions as text, Custom logo position */
+    const ACT_ON = {actions_as_text: true}, ACT = {action_text_size: 19, action_text_weight: '700', uppercase_first: true};
+    const NUDGE_ON = {logo_custom_position: true}, NUDGE = {logo_offset_x: 40, logo_offset_x_mobile: 20};
     const BLIVE = {
       badges: {menu_badge_style: 'solid', badge_shape: 'pill', badge_font: 'heading', badge_case: 'none', badge_size: 13, badge_border: 2, badge_position: 'inline', badge_hover: false, hot: 'Hot now', new: 'Fresh', sale: 'Deal', popular: 'Loved', label_color_hot: '#111111', label_background_hot: '#ffe066', label_color_new: '#222222', label_background_new: '#a5d8ff', label_color_sale: '#333333', label_background_sale: '#ffc9c9', label_color_popular: '#444444', label_background_popular: '#d3f9d8'},
       lstyle: {link_color: '#d21f3c', link_hover_color: '#0b7285'},
       mbanner: {banner_bg: '#fff3bf', banner_text: '#212529', button_bg: '#d21f3c', button_color: '#ffffff', radius: 4, label: 'Just in', heading: 'Winter edit', body: 'Coats\nand scarves', button_label: 'See the edit', button_link: '/collections/scarves'},
       promo: {mega_custom_width: 760}, prod: {mega_custom_width: 700}, coll: {mega_custom_width: 640}, conly: {mega_custom_width: 600}, cats: {mega_custom_width: 820},
+      cta: {button_text: 'Shop the edit', button_link: '/collections/new', new_tab: true, button_gap: 40, button_gap_mobile: 24, button_offset_x: -20, button_offset_y: 4, mobile_size: 'small', mobile_hide_icons: 'account_wishlist_search'},
     };
     const optionOk = (bt, id, v) => { const s = hs.blocks.find(b => b.type === bt).settings.find(x => x.id === id); return !s.options || s.options.some(o => o.value === v); };
     for (const [bid, set] of Object.entries(BLIVE)) for (const [k, v] of Object.entries(set)) assert(optionOk(BLOCKS.find(b => b.id === bid).type, k, v), `test value ${bid}.${k}=${v} is an option`);
@@ -220,6 +227,9 @@ const NOPILL = clone(BLOCKS); NOPILL[0].settings.header_pill_enable = false; NOP
       await one('reset_spacing on (margins set)', {...base, ...MARGINS, reset_spacing: false}, {reset_spacing: true});
       for (const [k, v] of Object.entries(LIVE_DEP)) { const n = await one(k + ' (font on)', {...base, ...LIVE_ON}, {[k]: v}); if (!n) flat.push(k); }
       await one('font off', {...base, ...LIVE_ON, ...LIVE_DEP}, {enable_custom_fonts: false});
+      for (const [k, v] of Object.entries(ACT)) { const n = await one(k + ' (actions as text)', {...base, ...ACT_ON}, {[k]: v}); if (!n && width > 1024) flat.push(k); }
+      for (const [k, v] of Object.entries(NUDGE)) { const n = await one(k + ' (custom logo position)', {...base, ...NUDGE_ON}, {[k]: v}); if (!n && (width > 1024) === !/mobile/.test(k)) flat.push(k); }
+      await one('logo_custom_position off (offsets set)', {...base, ...NUDGE_ON, ...NUDGE}, {logo_custom_position: false});
       for (const [k, v] of Object.entries(TRANS)) { const n = await one(k + ' (transparent)', {...base, transparent_header: true, transparent_on_mobile: true}, {[k]: v}); if (!n) flat.push(k); }
       for (const [bid, set] of Object.entries(BLIVE)) for (const [k, v] of Object.entries(set)) { const n = await one(bid + '.' + k, base, null, [bid, {[k]: v}]); if (!n && !(width === 1366 && bid === 'mbanner')) flat.push(bid + '.' + k); }
       /* a whole drag in one emit: many values at once, one frame */

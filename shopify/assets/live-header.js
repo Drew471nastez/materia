@@ -195,11 +195,12 @@
   function headerState(H) {
     if (!H.__lh) {
       const t = parse(H.getAttribute('data-menu-type'));
-      const hc = H.style.getPropertyValue('--menu-hover-color').trim();
+      const hc = H.style.getPropertyValue('--menu-hover-color').trim(), nudge = String(H.getAttribute('data-logo-x') || '0 0').split(' ');
       H.__lh = {
         hover: H.hasAttribute('data-menu-hover-theme') ? 'inherit' : H.getAttribute('data-menu-hover'),
         hoverColor: /^var\(/.test(hc) ? '' : hc,
         fonts: !!t.on, font: /\w/.test(String(t.font || '').split(',')[0]) ? t.font : '', size: t.size, weight: t.weight || 'theme',
+        logoCustom: H.hasAttribute('data-logo-custom'), logoX: num(nudge[0], 0), logoXm: num(nudge[1], 0),
         blocks: {},
       };
     }
@@ -261,6 +262,7 @@
         case 'dropdowns_animation': if (ANIMS.includes(v)) { for (const n of navs) swap(n, ANIMS, v); for (const ul of all(H, '.navigation .horizontal-list')) swap(ul, ANIMS.map(x => 'animation-' + x), 'animation-' + v); } break;
         case 'dropdown_shadow': prop(H, '--dd-shadow', SHADOWS[v] || '0 5px 30px 0 rgba(0, 0, 0, 0.05)'); break;
         case 'uppercase_first':
+          prop(H, '--hs-act-case', bool(v) ? 'uppercase' : 'none');
           for (const a of all(H, '.navigation .level0 > menu-item > a, .navigation .level0.hidden-1025 > a.border-bottom-1025-0, .navigation .level0 > a.border-bottom-1025-0, .mobile-nav-actions__login, .header__action .header-action-text')) cls(a, 'uppercase', bool(v));
           break;
         case 'mega_column_dividers': attr(H, 'data-mega-dividers', bool(v)); break;
@@ -277,17 +279,23 @@
         case 'sticky_header_type': if (['none', 'always', 'on-scroll-up'].includes(v)) attr(H, 'data-sticky', v); break;
         case 'sticky_header_mobile': attr(H, 'data-sticky-mobile', String(bool(v))); break;
         case 'transparent_text_icon_color': prop(H, '--transparent-color', color(v, 'var(--color-heading)')); break;
-        /* spacing and logo nudge: the variables the header's own rules read (0 stays 0); the offsets act only with Custom logo position on */
+        /* spacing and logo nudge: the variables the header's own rules read (0 stays 0); the offsets act only with Custom logo position on, and the saved offsets come from data-logo-x */
         case 'menu_link_spacing': prop(S, '--hs-menu-gap', px(v, 32)); break;
         case 'icon_spacing': prop(S, '--hs-icon-gap', px(v, 20)); break;
         case 'icon_spacing_mobile': prop(S, '--hs-icon-gap-mobile', px(v, 14)); break;
-        case 'logo_offset_x': st.logoX = num(v, 0); if (st.logoCustom !== false) prop(S, '--hs-logo-x', px(st.logoX)); break;
-        case 'logo_offset_x_mobile': st.logoXm = num(v, 0); if (st.logoCustom !== false) prop(S, '--hs-logo-x-mobile', px(st.logoXm)); break;
+        case 'logo_offset_x': st.logoX = num(v, 0); attr(H, 'data-logo-x', st.logoX + ' ' + st.logoXm); if (st.logoCustom) prop(S, '--hs-logo-x', px(st.logoX)); break;
+        case 'logo_offset_x_mobile': st.logoXm = num(v, 0); attr(H, 'data-logo-x', st.logoX + ' ' + st.logoXm); if (st.logoCustom) prop(S, '--hs-logo-x-mobile', px(st.logoXm)); break;
         case 'logo_custom_position':
           st.logoCustom = bool(v);
-          prop(S, '--hs-logo-x', st.logoCustom ? (st.logoX != null ? px(st.logoX) : '') : '0px');
-          prop(S, '--hs-logo-x-mobile', st.logoCustom ? (st.logoXm != null ? px(st.logoXm) : '') : '0px');
+          attr(H, 'data-logo-custom', st.logoCustom);
+          prop(S, '--hs-logo-x', st.logoCustom ? px(st.logoX) : '0px');
+          prop(S, '--hs-logo-x-mobile', st.logoCustom ? px(st.logoXm) : '0px');
           break;
+        /* phone logo on the left, and the actions as text */
+        case 'logo_position_mobile': attr(H, 'data-logo-m', v === 'left' ? 'left' : null); break;
+        case 'logo_gap_mobile': prop(H, '--hs-logo-gap-m', px(v, 12)); break;
+        case 'action_text_size': prop(H, '--hs-act-size', px(v, 15)); break;
+        case 'action_text_weight': prop(H, '--hs-act-weight', ['400', '500', '600', '700'].includes(String(v)) ? String(v) : '500'); break;
         case 'transparent_hover_fill_color': prop(S, '--hs-hover-fill', color(v, '#FFFFFF')); break;
         case 'disable_white_fill_on_hover': cls(H, 'no-hover-fill', bool(v)); break;
         case 'menu_mobile_color': mmColors(H, null, color(v, '#ffffff')); break;
@@ -337,6 +345,54 @@
     }
     if (MEGA.includes(type)) {
       if (has(s, 'mega_custom_width')) for (const li of lis) for (const sub of li.querySelectorAll(':scope > .submenu')) prop(sub, '--mega_custom_width', px(s.mega_custom_width));
+      return;
+    }
+    if (type === 'header_button') {
+      /* Header button: its text, link, spacing, phone size and bar, and the Custom colours and sizes, as the variables on the button (--hs-cta-*) and its bar.
+         Position, Show on phones, Place on phones and Button style change the markup and wait for the redraw. */
+      const links = all(H, 'a.hs-cta[data-lh-block="' + CSS.escape(id) + '"]'), bar = H.querySelector('.hs-cta-bar');
+      const custom = links.some(a => a.classList.contains('hs-cta--custom'));
+      const CUSTOM = {custom_bg: '--hs-cta-bg', custom_text: '--hs-cta-fg', custom_border: '--hs-cta-bd', custom_hover_bg: '--hs-cta-hbg', custom_hover_text: '--hs-cta-hfg', custom_hover_border: '--hs-cta-hbd'};
+      const FALLBACK = {custom_bg: '#ffffff', custom_text: '#111111', custom_hover_bg: '#e5e5e5', custom_hover_text: '#111111'};
+      for (const k of Object.keys(s)) {
+        const v = s[k];
+        for (const a of links) {
+          if (k === 'button_text') text(a, v);
+          else if (k === 'button_link') attr(a, 'href', String(v || '/products'));
+          else if (k === 'new_tab') { attr(a, 'target', bool(v) ? '_blank' : null); attr(a, 'rel', bool(v) ? 'noopener' : null); }
+          else if (k === 'button_gap') prop(a, '--hs-cta-gap', px(v, 20));
+          else if (k === 'button_gap_mobile') prop(a, '--hs-cta-gap-mobile', px(v, 12));
+          else if (k === 'button_offset_x') prop(a, '--hs-cta-x', px(v));
+          else if (k === 'button_offset_y') prop(a, '--hs-cta-y', px(v));
+          else if (k === 'mobile_size') swap(a, ['hs-cta--ms-compact', 'hs-cta--ms-small'], v === 'regular' ? '' : v === 'small' ? 'hs-cta--ms-small' : 'hs-cta--ms-compact');
+          else if (custom && a.hasAttribute('data-cta-reverse') && CUSTOM[k]) {
+            /* Theme settings > Buttons > Reverse on hover: the hover swaps the button's own text and background */
+            const c = color(v, '') || FALLBACK[k] || '';
+            if (k === 'custom_bg') { prop(a, '--hs-cta-bg', c); prop(a, '--hs-cta-hfg', c); }
+            else if (k === 'custom_text') { prop(a, '--hs-cta-fg', c); prop(a, '--hs-cta-hbg', c); prop(a, '--hs-cta-hbd', c); }
+            else if (k === 'custom_border') prop(a, '--hs-cta-bd', c || a.style.getPropertyValue('--hs-cta-bg'));
+          }
+          else if (custom && CUSTOM[k]) {
+            const c = color(v, '');
+            /* an empty border follows its background, as the Liquid does */
+            prop(a, CUSTOM[k], c || (k === 'custom_border' ? a.style.getPropertyValue('--hs-cta-bg') : k === 'custom_hover_border' ? a.style.getPropertyValue('--hs-cta-hbg') : FALLBACK[k]));
+          }
+          else if (custom && k === 'custom_border_width') prop(a, '--hs-cta-bw', px(v));
+          else if (custom && k === 'custom_radius') prop(a, '--hs-cta-radius', px(v));
+          else if (custom && k === 'custom_font_size') prop(a, '--hs-cta-fs', px(v, 15));
+          else if (custom && k === 'custom_font_weight') prop(a, '--hs-cta-fw', String(v || '600'));
+          else if (custom && k === 'custom_uppercase') prop(a, '--hs-cta-tt', bool(v) ? 'uppercase' : 'none');
+          else if (custom && k === 'custom_padding_x') prop(a, '--hs-cta-px', px(v, 20));
+          else if (custom && k === 'custom_padding_y') prop(a, '--hs-cta-py', px(v, 10));
+        }
+        if (k === 'mobile_hide_icons') {
+          /* only while the button shows in the phone row */
+          const row = links.find(a => a.closest('.header__action'));
+          attr(H, 'data-cta-hide', row && !row.classList.contains('hs-cta--desktop') && row.classList.contains('hs-cta--m-in_row') && v && v !== 'none' ? v : null);
+        }
+        if (bar && k === 'mobile_bar_padding') prop(bar, '--hs-cta-bar-pad', px(v, 10));
+        if (bar && k === 'mobile_bar_full_width') cls(bar, 'hs-cta-bar--full', v !== false && v !== 'false');
+      }
       return;
     }
     if (type === 'menu_mobile_banner') {

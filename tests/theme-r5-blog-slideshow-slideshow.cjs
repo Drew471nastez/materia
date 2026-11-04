@@ -46,8 +46,8 @@ const BASE = {autoplay: false};
 /* Everything a visitor can see on the first slide and around it. */
 async function sig(page, uid = 'test') {
   return page.evaluate(uid => {
-    /* compare looks at rest: transitions finished, endless image loops at their start */
-    for (const a of document.getAnimations()) { if (a instanceof CSSTransition) a.finish(); else if (a.effect && a.effect.getComputedTiming().iterations === Infinity) a.currentTime = 0; }
+    /* compare looks at rest: transitions and picture entrances finished, endless image loops at their start */
+    for (const a of document.getAnimations()) { if (a instanceof CSSTransition) a.finish(); else if (a.effect && a.effect.getComputedTiming().iterations === Infinity) a.currentTime = 0; else if (a instanceof CSSAnimation && a.effect && a.effect.target && a.effect.target.closest && a.effect.target.closest('.banner__media')) a.finish(); }
     const W = document.getElementById('shopify-section-' + uid), R = W.querySelector('[data-slideshow-settings]'), S = W.querySelector('[data-first-slide]');
     const cs = (el, props, pseudo) => el ? Object.fromEntries(props.map(p => [p, p.startsWith('--') ? getComputedStyle(el, pseudo).getPropertyValue(p).trim() : getComputedStyle(el, pseudo)[p]])) : null;
     const T = ['fontFamily', 'fontWeight', 'fontSize', 'lineHeight', 'letterSpacing', 'textTransform', 'color', 'marginBottom', 'fontStyle', 'display'];
@@ -138,12 +138,13 @@ const STRUCTURAL = new Set(['image', 'image_mobile', 'local_video', 'video_url',
   'enable_trust_badges', 'trust_badge_position', 'badge_1_type', 'badge_2_type', 'badge_3_type', 'badge_1_icon', 'badge_2_icon', 'badge_3_icon', 'content_below_image', 'reveal', 'carousel_pagination', 'show_arrow', 'slide_height', 'subheading', 'second_button_label', 'enable_accent_heading', 'accent_heading_text']);
 /* Settings that look the same at one width (desktop or mobile only). */
 const SAME = {375: new Set(['subheading_font_size', 'heading_font_size', 'des_font_size', 'section_margin_top_desktop', 'section_margin_bottom_desktop', 'content_position', 'content_alignment', 'content_max_width', 'arrow_visibility', 'show_arrow', 'arrow_shape', 'arrow_style', 'arrow_size', 'arrow_bg', 'arrow_icon_color', 'arrow_border_color', 'content_width', 'pagination_position', 'section_width', 'desktop_height']),
-  1366: new Set(['subheading_font_size_mobile', 'heading_font_size_mobile', 'des_font_size_mobile', 'section_margin_top_mobile', 'section_margin_bottom_mobile', 'content_position_mobile', 'content_alignment_mobile', 'arrow_show_mobile', 'content_below_image', 'mobile_height', 'split_mobile_use_primary', 'split_mobile_primary_image'])};
+  1366: new Set(['subheading_font_size_mobile', 'heading_font_size_mobile', 'des_font_size_mobile', 'section_margin_top_mobile', 'section_margin_bottom_mobile', 'content_position_mobile', 'content_alignment_mobile', 'arrow_show_mobile', 'content_below_image', 'mobile_image_text_gap', 'mobile_height', 'split_mobile_use_primary', 'split_mobile_primary_image'])};
 /* Values whose look is the same as the default by design (an option equal to the theme value here). */
 const SAME_VALUE = {
   subheading_font_weight: ['subheading_weight'], des_font_weight: ['subheading_weight'], heading_font_weight: [], btn_text_transform_override: [],
   carousel_pagination: ['show_dots_on_mobile@375'], content_width: ['fluid_container'], section_width: ['fluid_container', 'container@1366'],
   image_effect: ['zoom_in', 'fade_in', 'reveal_up'], /* hover and entrance effects: checked in motion() */
+  slide_effect: ['slide_push', 'coverflow'], /* the slider runs slide for these too and the section draws them only while slides move: checked in motion() */
   arrow_shape: ['rounded@1366'], /* the fixture theme's own radius is 12px, like Rounded */
   slide_height: ['adapt'], /* no picture here: adapt keeps the full screen ratio */
   btn_second_bg: ['#ab12cd'], /* the theme's second button is an outline here (no fill); checked in themeFirst() with a solid one */
@@ -161,6 +162,8 @@ async function controls(browser) {
   for (const width of [375, 1366]) {
     const L = await mount(browser, 'slideshow', {width, assets: A, settings: BASE, blocks: BLOCKS()});
     const R = await mount(browser, 'slideshow', {width, assets: A, settings: BASE, blocks: BLOCKS()});
+    /* the pointer off the page: a slideshow filling the window is otherwise hovered, which shows hover arrows and plays hover zooms */
+    await L.page.mouse.move(-10, -10); await R.page.mouse.move(-10, -10);
     const fails = [];
     for (const [scope, x] of items) {
       if (ELSEWHERE.has(x.id)) continue;

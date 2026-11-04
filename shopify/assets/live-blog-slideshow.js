@@ -7,8 +7,9 @@
    instance is applied in the next frame; a storelib:section-load (a redraw)
    or a new root sets the instance up again, once.
 
-   Slideshow: slideshow-live.js paints sizes, fonts, colours and layout and
-   slideshow-pointer.js the pointer and scroll effects; the slider itself is
+   Slideshow: slideshow-live.js paints sizes, fonts, colours and layout and the
+   section's own script and CSS draw the image effects (data-ss-fx, --fxi) and
+   slide changes (data-ss-change); the slider itself is
    global.js's <slide-section> (autoplay waits on hover, touch, focus, a hidden
    tab, off screen and is off under reduced motion). This file adds the rest
    of the live edits: the words and links of each slide, the opt-out
@@ -101,11 +102,10 @@
     swapClass(root, '', s.slide_effect, EFFECTS.filter(e => e !== s.slide_effect));
     if (s.slide_effect && !root.classList.contains(s.slide_effect)) root.classList.add(s.slide_effect);
     /* Image effect and its intensity. */
-    if (s.image_effect != null && root.dataset.slideshowPointer !== String(s.image_effect)) root.dataset.slideshowPointer = s.image_effect;
     /* the section's own effects read data-ss-fx and --fxi (1 to 10) */
     if (s.image_effect != null && root.dataset.ssFx !== String(s.image_effect || 'none')) root.dataset.ssFx = s.image_effect || 'none';
     if (s.image_effect_intensity != null) setVar(root, '--fxi', String(s.image_effect_intensity));
-    /* a new effect: slideshow-pointer.js measures the scroll position once now (parallax), not on the next scroll */
+    /* a new effect: the section's script measures the scroll position once now (parallax), not on the next scroll */
     if (st.pointer !== undefined && st.pointer !== s.image_effect) dispatchEvent(new Event('scroll'));
     st.pointer = s.image_effect;
     for (const [p, v] of Object.entries(fxVars(s.image_effect_intensity))) setVar(root, p, v);
@@ -116,6 +116,8 @@
     /* Mobile text sizes: the section's phone rules read these (0 = the desktop size). */
     for (const [sel, v, sz, mob] of [['.sec__content-subheading', '--font-size-mobile-sub', 'subheading_font_size', 'subheading_font_size_mobile'], ['.sec__content-heading', '--font-size-mobile-heading', 'heading_font_size', 'heading_font_size_mobile'], ['.sec__content-des', '--font-size-mobile-des', 'des_font_size', 'des_font_size_mobile']])
       for (const el of root.querySelectorAll(sel)) { setVar(el, '--font-size', String(num(s[sz]))); setVar(el, v, String(num(s[mob]) > 0 ? num(s[mob]) : num(s[sz]))); }
+    /* Phones, text below the image: the gap between picture and text. */
+    if (s.mobile_image_text_gap != null) setVar(root, '--ss-mb-gap', num(s.mobile_image_text_gap, 16) + 'px');
     setVar(root, '--section-pt', String(num(s.padding_top)));
     setVar(root, '--section-pb', String(num(s.padding_bottom)));
     root.classList.toggle('pt-min', num(s.padding_top) < 30);
