@@ -91,11 +91,11 @@
         const P = `#MainProduct-${id} #price-${id}`;
         const cur = `:is(.price-regular, .price-regular *, .price-item--last, .price-item:not(.compare-price):not(.price-item--compare))`;
         const was = `:is(.compare-price, .compare-price *, .price-item--compare, .price-item--compare *, s, s *, del, del *)`;
-        if ('price_font_size_mobile' in s) out.push(`${P}, ${P} ${cur} { font-size: ${num(s.price_font_size_mobile, 18)}px !important; }`);
-        if ('price_font_weight' in s) out.push(`${P}, ${P} ${cur} { font-weight: ${num(s.price_font_weight, 600)} !important; }`);
+        if ('price_font_size_mobile' in s) out.push(`${P} ${cur} { font-size: ${num(s.price_font_size_mobile, 18)}px !important; }`);
+        if ('price_font_weight' in s) out.push(`${P} ${cur} { font-weight: ${num(s.price_font_weight, 600)} !important; }`);
         if ('compare_font_size_mobile' in s) out.push(`${P} ${was} { font-size: ${num(s.compare_font_size_mobile, 14)}px !important; }`);
         if ('compare_font_weight' in s) out.push(`${P} ${was} { font-weight: ${num(s.compare_font_weight, 400)} !important; }`);
-        if ('price_font_size_desktop' in s) out.push(`@media (min-width: 1024px) { ${P}, ${P} ${cur} { font-size: ${num(s.price_font_size_desktop, 20)}px !important; } }`);
+        if ('price_font_size_desktop' in s) out.push(`@media (min-width: 1024px) { ${P} ${cur} { font-size: ${num(s.price_font_size_desktop, 20)}px !important; } }`);
         if ('compare_font_size_desktop' in s) out.push(`@media (min-width: 1024px) { ${P} ${was} { font-size: ${num(s.compare_font_size_desktop, 16)}px !important; } }`);
       }
     }
