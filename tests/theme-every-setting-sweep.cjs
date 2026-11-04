@@ -98,17 +98,17 @@ const MENU = {handle: 'main-menu', title: 'Main menu', links: [link('Home', '/')
 const MENU_TAGGED = {...MENU, links: [...MENU.links.map(l => l.title === 'Home' || l.links.length ? l : {...l, links: [link('Our story', '/pages/story'), link('Stores', '/pages/stores')]}), link('Help', '/pages/help', [link('Shipping', '/pages/shipping'), link('Returns', '/pages/returns')]), ...['hot', 'new', 'sale', 'popular', 'custom_1', 'custom_2'].map(k => link('Tagged ' + k + ' [' + k + ']', '/collections/' + k, [link('First ' + k, '/collections/' + k + '-1'), link('Second ' + k, '/collections/' + k + '-2')]))]};
 /* Per section data the base drawing needs beyond the defaults. */
 const RICH = {...PANTS, metafields: {reviews: {rating: {value: {rating: 4.6, scale_min: 1, scale_max: 5}}, rating_count: {value: 128}}, custom: {sold_count: {value: 34}, size_table: {value: 'Size | Hip\nS | 90\nM | 96'}, countdown_timer: {value: '2027-06-30T23:59:00+00:00'}}}};
-/* and eleven colours (Sand, the eleventh, sold out and named with no CSS colour), so Variant selector pro's colour overrides 3 to 10, its sold out badge, Hide sold out and its text chips show; and products in its more_colors and product_grouped fields */
+/* and eleven colours (Sand, the eleventh, sold out and named with no CSS colour), so Variant selector pro's colour overrides 3 to 10, its sold out badge, Hide sold out and its text chips show; and products in its more_colors field */
 (() => {
   const COLOURS = ['Black', 'Beige', 'Red', 'Blue', 'Green', 'Grey', 'White', 'Navy', 'Olive', 'Ivory', 'Sand'];
   const extra = COLOURS.flatMap(c => ['S', 'M'].map(size => [size, c])).filter(([size, c]) => !PANTS.variants.some(v => v.option1 === size && v.option2 === c))
     .map(([size, c]) => ({...PANTS.variants[0], id: `pants-down-${size}-${c}`.toLowerCase(), title: `${size} / ${c}`, option1: size, option2: c, options: [size, c], available: c !== 'Sand', featured_media: null, featured_image: null, url: `/products/pants-down?variant=pants-down-${size}-${c}`.toLowerCase()}));
   Object.assign(RICH, {variants: [...PANTS.variants, ...extra], options_with_values: [PANTS.options_with_values[0], {...PANTS.options_with_values[1], values: COLOURS}]});
-  Object.assign(RICH.metafields.custom, {more_colors: {value: [OTHER, MANY[3]]}, product_grouped: 'gid://shopify/Product/201,gid://shopify/Product/202'});
+  Object.assign(RICH.metafields.custom, {more_colors: {value: [OTHER, MANY[3]]}});
 })();
 /* a product with fewer left, so Stock pulse's own product shows another count */
 const FEW = {...OTHER, id: 'few-tee-id', handle: 'few-tee', variants: OTHER.variants.map(v => ({...v, inventory_quantity: 3})), selected_or_first_available_variant: {...OTHER.variants[0], inventory_quantity: 3}};
-const PAGE_BLOCKS = {happy_customers: {filled_stars: 4.5}, product_reviews: {manual_review_rating: 4.5, manual_review_count: 12}, sold_counter: {sold: 34, hours: 24}, stock_pulse_notice: {ref_product: FEW}, infotables: {max_width: 480}};
+const PAGE_BLOCKS = {happy_customers: {filled_stars: 4.5}, simple_rating: {filled_stars: 3.5}, product_reviews: {manual_review_rating: 4.5, manual_review_count: 12}, sold_counter: {sold: 34, hours: 24}, stock_pulse_notice: {ref_product: FEW}, infotables: {max_width: 480}};
 const SOLD = {...OTHER, id: 'sold-tee-id', handle: 'sold-tee', title: 'Sold Tee', url: '/products/sold-tee', available: false, variants: OTHER.variants.map(v => ({...v, id: 'sold-' + v.id, available: false})), selected_or_first_available_variant: {...OTHER.variants[0], id: 'sold-' + OTHER.variants[0].id, available: false}};
 /* and the switches their other settings hang on, on (a visible_if here is one simple comparison, tests/theme-product-blocks.cjs): Variant selector pro's custom style, the upsell's option picker, Quantity offer's tier 4, both buy button icons, and Pair with's main button choice */
 const OFFER_BLOCKS = {upsell_pro: {manual_product_1: MANY[3], manual_product_2: MANY[5], manual_product_3: SOLD, manual_product_4: PANTS, manual_product_5: '', manual_product_6: '', show_variant_selector: true}, bundle: {product_1: MANY[3]},
@@ -117,8 +117,8 @@ const DATA = {
   'theme-header': {settings: {mega_menu: MENU_TAGGED}, withBlocks: ['menu_badges']},
   /* how many pictures fit a row only shows with more pictures than one */
   'image-with-text-benefits': {repeat: {media: 3}, without: {text_max_width: ['media']}},
-  /* an image effect that shows at rest (Parallax moves the picture only as the page scrolls, and the drawing is at the top), on a first slide with no video (a slide's video takes the place of its picture) */
-  'slideshow': {settings: {image_effect: 'zoom_out'}, blocks: {slider_item: [{local_video: '', video_url: ''}]}},
+  /* an image effect that shows at rest (Parallax moves the picture only as the page scrolls, and the drawing is at the top), on a first slide with no video (a slide's video takes the place of its picture) and a part-filled star badge */
+  'slideshow': {settings: {image_effect: 'zoom_out'}, blocks: {slider_item: [{local_video: '', video_url: '', badge_1_type: 'stars', badge_1_rating: 4.5}]}},
   /* a testimonial with a rating (0, the default, shows no stars), so the star icon and size show */
   'testimon4': {blocks: {testimonials: {stars_count: 4.5}}},
   'testimonial-video': {blocks: {video_card: {rating: 4.5}}},
@@ -738,9 +738,11 @@ var ALLOW = [
   [/^(main-product|featured-product):quantity_offer\.(tier_source|custom_picker_(height|radius|width|bg|text|border))$/, 'The store\'s own quantity breaks (Products > Upsells and bundles, in product.metafields.storelib.offers, drawn by product-offers.js) and the option picker drawn with them; the sweep\'s product has none, so the tiers below draw either way. tests/theme-quantity-tier-image-updates.cjs draws both sources; the picker is the one tests/theme-sheet-controls-round6.cjs sizes for a Storelib offer.'],
   [/^(main-product|featured-product):(pair_with_upsell\.btn_(bg|text)_added|product_addon\.active_border_color)$/, 'Storefront state: the colours of a card once its product is added (.is-added) or ticked (.is-active), set by the block\'s script after a click.'],
   [/^(main-product|featured-product):buy_buttons\.show_gift_card_recipient$/, 'The recipient form is drawn only for a gift card product (product.gift_card?); the sweep\'s product is not one.'],
+  [/^(main-product|featured-product):product_grouped\.heading$/, 'Drawn only for a product with a product_grouped field, which also takes the buy buttons\' place (the sweep\'s product keeps them); tests/theme-r6-product-block-data.cjs draws it with a grouped product.'],
   [/^(main-product|featured-product):variant_selector_pro\.thumb_max_size$/, 'A cap on the picture size: it shows only below the picture size (80px), and the sweep tries the largest cap (200px) from 0.'],
   [/^banner3:reveal_range$/, 'Where the scroll-driven reveal ends (animation-range on a view() timeline): storefront motion, which the sweep holds on its first frame.'],
   [/^(progress-benefits|progress-circles|stat-counter|stat-counter-pro):(animate|duration)$/, 'Storefront motion: the numbers count up (and the rings fill) once on the live store; the builder and reduced motion draw the final values, as the setting\'s info says.'],
+  [/^slideshow:slider_item\.slider_effect$/, 'Text entrance motion: its animation plays only on the slide the slider script marks as entering (data-content="enter"), and the sweep holds motion still; the live check sees it only some runs.'],
   [/^promotion-popup:(overlay_opacity|overlay_color)$/, 'The dialog\'s ::backdrop, drawn only while the popup is open as a modal.'],
 ];
 /* Sections other changes own right now: what the sweep finds there is listed (VERBOSE or SHOW_OWNED=1), not failed. */
