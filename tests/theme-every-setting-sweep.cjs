@@ -64,7 +64,7 @@ const {render, schemaOf, THEME_VARS, themeControls, PANTS, OTHER} = require('./m
 
 const RETIRED = ['hero-product4', 'page-sale-banner', 'promo-banner-1'];
 /* Bump when the sweep's checks change, so CACHE results are drawn again. */
-const SWEEP_VERSION = '13';
+const SWEEP_VERSION = '14';
 
 /* ------------------------------------------------------------ sample data */
 const IMG = {id: 'img1', src: 'https://theme.test/pic-a.png', url: 'https://theme.test/pic-a.png', width: 1600, height: 1000, aspect_ratio: 1.6, alt: 'Sample picture', presentation: {focal_point: '50% 50%'}};
@@ -97,17 +97,56 @@ const MENU = {handle: 'main-menu', title: 'Main menu', links: [link('Home', '/')
 /* The header reads a badge from a tag in a link's title ([hot], [new] ...): one link for each. */
 const MENU_TAGGED = {...MENU, links: [...MENU.links.map(l => l.title === 'Home' || l.links.length ? l : {...l, links: [link('Our story', '/pages/story'), link('Stores', '/pages/stores')]}), link('Help', '/pages/help', [link('Shipping', '/pages/shipping'), link('Returns', '/pages/returns')]), ...['hot', 'new', 'sale', 'popular', 'custom_1', 'custom_2'].map(k => link('Tagged ' + k + ' [' + k + ']', '/collections/' + k, [link('First ' + k, '/collections/' + k + '-1'), link('Second ' + k, '/collections/' + k + '-2')]))]};
 /* Per section data the base drawing needs beyond the defaults. */
+const RICH = {...PANTS, metafields: {reviews: {rating: {value: {rating: 4.6, scale_min: 1, scale_max: 5}}, rating_count: {value: 128}}, custom: {sold_count: {value: 34}, size_table: {value: 'Size | Hip\nS | 90\nM | 96'}, countdown_timer: {value: '2027-06-30T23:59:00+00:00'}}}};
+/* and eleven colours (Sand, the eleventh, sold out and named with no CSS colour), so Variant selector pro's colour overrides 3 to 10, its sold out badge, Hide sold out and its text chips show; and products in its more_colors and product_grouped fields */
+(() => {
+  const COLOURS = ['Black', 'Beige', 'Red', 'Blue', 'Green', 'Grey', 'White', 'Navy', 'Olive', 'Ivory', 'Sand'];
+  const extra = COLOURS.flatMap(c => ['S', 'M'].map(size => [size, c])).filter(([size, c]) => !PANTS.variants.some(v => v.option1 === size && v.option2 === c))
+    .map(([size, c]) => ({...PANTS.variants[0], id: `pants-down-${size}-${c}`.toLowerCase(), title: `${size} / ${c}`, option1: size, option2: c, options: [size, c], available: c !== 'Sand', featured_media: null, featured_image: null, url: `/products/pants-down?variant=pants-down-${size}-${c}`.toLowerCase()}));
+  Object.assign(RICH, {variants: [...PANTS.variants, ...extra], options_with_values: [PANTS.options_with_values[0], {...PANTS.options_with_values[1], values: COLOURS}]});
+  Object.assign(RICH.metafields.custom, {more_colors: {value: [OTHER, MANY[3]]}, product_grouped: 'gid://shopify/Product/201,gid://shopify/Product/202'});
+})();
+/* a product with fewer left, so Stock pulse's own product shows another count */
+const FEW = {...OTHER, id: 'few-tee-id', handle: 'few-tee', variants: OTHER.variants.map(v => ({...v, inventory_quantity: 3})), selected_or_first_available_variant: {...OTHER.variants[0], inventory_quantity: 3}};
+const PAGE_BLOCKS = {happy_customers: {filled_stars: 4.5}, product_reviews: {manual_review_rating: 4.5, manual_review_count: 12}, sold_counter: {sold: 34, hours: 24}, stock_pulse_notice: {ref_product: FEW}, infotables: {max_width: 480}};
 const SOLD = {...OTHER, id: 'sold-tee-id', handle: 'sold-tee', title: 'Sold Tee', url: '/products/sold-tee', available: false, variants: OTHER.variants.map(v => ({...v, id: 'sold-' + v.id, available: false})), selected_or_first_available_variant: {...OTHER.variants[0], id: 'sold-' + OTHER.variants[0].id, available: false}};
 const OFFER_BLOCKS = {upsell_pro: {manual_product_1: MANY[3], manual_product_2: MANY[5], manual_product_3: SOLD, manual_product_4: '', manual_product_5: '', manual_product_6: ''}, bundle: {product_1: MANY[3]}};
 const DATA = {
   'theme-header': {settings: {mega_menu: MENU_TAGGED}, withBlocks: ['menu_badges']},
   /* how many pictures fit a row only shows with more pictures than one */
-  'image-with-text-benefits': {repeat: {media: 3}},
+  'image-with-text-benefits': {repeat: {media: 3}, without: {text_max_width: ['media']}},
+  /* an image effect that shows at rest (Parallax moves the picture only as the page scrolls, and the drawing is at the top), on a first slide with no video (a slide's video takes the place of its picture) */
+  'slideshow': {settings: {image_effect: 'zoom_out'}, blocks: {slider_item: [{local_video: '', video_url: ''}]}},
+  /* a testimonial with a rating (0, the default, shows no stars), so the star icon and size show */
+  'testimon4': {blocks: {testimonials: {stars_count: 4.5}}},
+  'testimonial-video': {blocks: {video_card: {rating: 4.5}}},
+  /* the gap between pairs shows from the second pair */
+  'before-and-after-image': {repeat: {comparison: 2}},
+  /* the first benefit keeps its library icon (an SVG, which the icon thickness strokes) instead of a picked picture */
+  'benefits-bar-pro': {blocks: {benefit: [{icon_image: ''}]}},
+  /* the first step has no icon of its own, so it shows the marker style (a step's icon replaces its number) */
+  'steps': {blocks: {step: [{icon: ''}]}}, 'image-with-text-steps': {blocks: {step: [{icon: ''}]}},
+  /* a set leads with the page's product, so the sample set holds two others (the sweep's other list, Other Tee alone, is then a different set) */
+  'product-set': {blocks: {set: {products: [OTHER, MANY[2]]}}},
+  /* the first slide leaves its heading and link to the picked product (the two samples cost the same, so the price alone does not change) */
+  'product-showcase': {blocks: {slide: [{heading: '', button_link: ''}]}},
+  /* the text holds a link, which the link colour paints */
+  'video': {blocks: {subtext: {text: 'A short film of the product in use, <a href="/pages/about">start to finish</a>.'}}},
+  /* a stat with a rising and one with a falling trend, so the trend colours show */
+  'stat-counter-pro': {blocks: {stat: [{trend_direction: 'up', trend_value: '+12%'}, {trend_direction: 'down', trend_value: '-3%'}]}},
+  /* the text's width is the one it takes when the section has no picture or video */
+  'image-with-text-stats': {without: {text_max_width: ['media']}},
   /* a column's 6th to 8th values fill the 6th to 8th rows */
   'comparison-table-2': {repeat: {row: 8}},
+  /* the theme's own check icon (its mark cut out in the highlight colour) draws while no check image or SVG is given */
+  'comparison-table': {settings: {table_icon_check: '', table_icon_check_svg: ''}},
+  /* the two sample products cost the same: the picked one starts as a product at other prices (still on sale, so the struck price shows), so picking another shows */
+  'dynamic-pricing': {settings: {product: (() => { const v = {...PANTS.variants[0], id: 'v-plain', price: 9900, compare_at_price: 12900}; return {...PANTS, id: 'p-plain', handle: 'plain-pants', price: 9900, compare_at_price: 12900, compare_at_price_max: 12900, variants: [v], selected_or_first_available_variant: v, first_available_variant: v}; })()}},
   /* the product page's offer blocks: products other than the page's own (two to sell, one sold out), so the cards, the bundle lines and their limits draw */
   'main-product': {blocks: OFFER_BLOCKS}, 'featured-product': {blocks: OFFER_BLOCKS},
 };
+/* The product page's own product, given a rating, a sold count and a size table of its own (sample data, never in a default), and its blocks' typed counts (DATA globals: what the drawing reads beside the section). */
+for (const n of ['main-product', 'featured-product']) { const d = DATA[n] = DATA[n] || {}; d.globals = {product: RICH, ...(d.globals || {})}; if (n === 'featured-product') d.settings = {product: RICH, ...(d.settings || {})}; d.blocks = {...PAGE_BLOCKS, ...(d.blocks || {})}; }
 /* A block that names the top-level link it belongs to gets a link of its own, one after the other. */
 const TOP_TITLES = MENU_TAGGED.links.map(l => l.title.replace(/\s*\[.*\]$/, '')).filter(t => t !== 'Home' && t !== 'Help');
 let topN = 0;
@@ -196,7 +235,10 @@ function fill(x, cur) {
     case 'product_list': return [PANTS, OTHER];
     case 'collection_list': return [COLL, COLL2];
     case 'text': return /top-level (menu )?link/i.test(x.info || '') ? TOP_TITLES[topN++ % TOP_TITLES.length] : 'Sample words';
-    case 'textarea': case 'inline_richtext': return /iframe|embed/.test(x.id) ? '<iframe src="https://www.google.com/maps?q=Lisbon&output=embed" width="600" height="450" title="Map"></iframe>' : 'Sample words';
+    /* a table typed as rows (its placeholder shows them: cells split by |, one row a line) */
+    case 'textarea': if (/\|/.test(x.placeholder || '') && /\n/.test(x.placeholder)) return x.placeholder;
+    // falls through
+    case 'inline_richtext': return /iframe|embed/.test(x.id) ? '<iframe src="https://www.google.com/maps?q=Lisbon&output=embed" width="600" height="450" title="Map"></iframe>' : 'Sample words';
     case 'richtext': return '<p>Sample text with <a href="/pages/about">a link</a></p>';
     case 'url': return '/collections/all';
     default: return cur;
@@ -245,7 +287,8 @@ function baseState(schema) {
   fillAll(schema.settings, settings);
   Object.assign(settings, (DATA[schema.__name] || {}).settings || {});
   for (const b of blocks) fillAll(types.find(t => t.type === b.type).settings, b.settings);
-  for (const b of blocks) Object.assign(b.settings, ((DATA[schema.__name] || {}).blocks || {})[b.type] || {});
+  /* DATA blocks: settings for every block of a type, or a list of them, one for each block of that type in order */
+  for (const b of blocks) { const d = ((DATA[schema.__name] || {}).blocks || {})[b.type]; Object.assign(b.settings, (Array.isArray(d) ? d[blocks.filter(y => y.type === b.type).indexOf(b)] : d) || {}); }
   return {settings, blocks};
 }
 
@@ -302,7 +345,7 @@ let WRAP_CLASS = '';
   e.registerFilter('asset_url', k => { if (/\.css$/.test(k)) cssSeen.add(k); if (/\.js$/.test(k)) jsSeen.add(k); return '/assets/' + k; });
 }
 async function draw(name, state) {
-  const r = await render(name, {uid: 'test', settings: state.settings, blocks: state.blocks, theme: THEME, globals: GLOBALS, editing: true});
+  const r = await render(name, {uid: 'test', settings: state.settings, blocks: state.blocks, theme: THEME, globals: {...GLOBALS, ...((DATA[name] || {}).globals || {})}, editing: true});
   return r.html + '\n<!--scripts-->\n' + r.scripts.join('\n<!--script-->\n');
 }
 /* A data attribute holding the section's or a block's settings as JSON (the live preview controllers read it) is not a change a visitor sees: it is taken out before the markup is compared. */
@@ -325,8 +368,8 @@ function readersOf(html) {
 }
 
 /* ------------------------------------------------------------ the browser */
-const PROPS = ['color', 'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition', 'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderTopStyle', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius', 'outlineColor', 'outlineWidth', 'outlineStyle', 'outlineOffset', 'boxShadow', 'textShadow', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'textTransform', 'textAlign', 'textDecorationLine', 'textDecorationColor', 'whiteSpace', 'webkitLineClamp', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'rowGap', 'columnGap', 'gridTemplateColumns', 'gridTemplateRows', 'gridColumn', 'gridRow', 'display', 'flexDirection', 'flexWrap', 'flexBasis', 'flexGrow', 'justifyContent', 'alignItems', 'alignSelf', 'justifySelf', 'order', 'position', 'top', 'right', 'bottom', 'left', 'zIndex', 'transform', 'translate', 'scale', 'rotate', 'opacity', 'visibility', 'filter', 'backdropFilter', 'mixBlendMode', 'objectFit', 'objectPosition', 'aspectRatio', 'overflow', 'transitionDuration', 'transitionTimingFunction', 'animationName', 'animationDuration', 'animationDelay', 'animationTimingFunction', 'animationIterationCount', 'fill', 'stroke', 'strokeWidth', 'cursor', 'content', 'clipPath', 'scrollSnapType', 'webkitTextStrokeWidth', 'webkitTextStrokeColor', 'accentColor', 'caretColor', 'columnCount', 'textUnderlineOffset', 'verticalAlign', 'boxSizing', 'pointerEvents', 'wordBreak', 'fontVariantCaps', 'textIndent'];
-const PSEUDO = ['transitionDuration', 'transitionTimingFunction', 'borderLeftColor', 'borderLeftStyle', 'borderLeftWidth', 'borderTopStyle', 'borderBottomColor', 'borderBottomStyle', 'borderBottomWidth', 'borderRightColor', 'content', 'color', 'backgroundColor', 'backgroundImage', 'width', 'height', 'opacity', 'borderTopColor', 'borderTopWidth', 'transform', 'display', 'boxShadow', 'top', 'left', 'borderTopLeftRadius'];
+const PROPS = ['color', 'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition', 'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderTopStyle', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius', 'outlineColor', 'outlineWidth', 'outlineStyle', 'outlineOffset', 'boxShadow', 'textShadow', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'textTransform', 'textAlign', 'textDecorationLine', 'textDecorationColor', 'textDecorationThickness', 'whiteSpace', 'webkitLineClamp', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'rowGap', 'columnGap', 'gridTemplateColumns', 'gridTemplateRows', 'gridColumn', 'gridRow', 'display', 'flexDirection', 'flexWrap', 'flexBasis', 'flexGrow', 'justifyContent', 'alignItems', 'alignSelf', 'justifySelf', 'order', 'position', 'top', 'right', 'bottom', 'left', 'zIndex', 'transform', 'translate', 'scale', 'rotate', 'opacity', 'visibility', 'filter', 'backdropFilter', 'mixBlendMode', 'objectFit', 'objectPosition', 'aspectRatio', 'overflow', 'transitionDuration', 'transitionTimingFunction', 'animationName', 'animationDuration', 'animationDelay', 'animationTimingFunction', 'animationIterationCount', 'fill', 'stroke', 'strokeWidth', 'cursor', 'content', 'clipPath', 'scrollSnapType', 'webkitTextStrokeWidth', 'webkitTextStrokeColor', 'accentColor', 'caretColor', 'columnCount', 'textUnderlineOffset', 'verticalAlign', 'boxSizing', 'pointerEvents', 'wordBreak', 'fontVariantCaps', 'textIndent'];
+const PSEUDO = ['transitionDuration', 'transitionTimingFunction', 'borderLeftColor', 'borderLeftStyle', 'borderLeftWidth', 'borderTopStyle', 'borderBottomColor', 'borderBottomStyle', 'borderBottomWidth', 'borderRightColor', 'content', 'color', 'backgroundColor', 'backgroundImage', 'width', 'height', 'opacity', 'borderTopColor', 'borderTopWidth', 'transform', 'display', 'boxShadow', 'top', 'left', 'borderTopLeftRadius', 'filter', 'backgroundSize'];
 let layoutHtml = null, liveHtml = null;
 /* The real layout with an empty page: its <head> styles and links for the still drawings, and with its scripts too for the live ones. */
 async function pageShell(live) {
@@ -506,6 +549,9 @@ async function sweepSection(name, pages) {
     const light = it.scope === 'section' ? {settings: full.settings, blocks: (DATA[name] || {}).repeat ? full.blocks : full.blocks.slice(0, presetCount)} : {settings: full.settings, blocks: [full.blocks[it.n], ...extra]};
     let r = await one({...it, n: it.scope === 'section' ? undefined : 0}, light);
     if (r.status !== 'pass' && (light.blocks.length !== full.blocks.length)) r = await one(it, full);
+    /* a setting that acts only while the section has no block of some type (DATA without: {id: [types]}): drawn once more without them */
+    const without = it.scope === 'section' && ((DATA[name] || {}).without || {})[it.x.id];
+    if (r.status !== 'pass' && without) r = await one(it, {settings: full.settings, blocks: full.blocks.filter(b => !without.includes(b.type))});
     out.push(r);
   }
   return out;
@@ -686,6 +732,11 @@ var ALLOW = [
   [/^size-chart-popup:use_product_chart$/, 'Uses the product\'s own size chart (Products > Size charts), which the sweep\'s product does not have.'],
   [/^theme-header:pill_glass\.header_pill_border_(width|color)$/, 'The pill border needs both a width above 0 and a colour (snippet: pill_border_w > 0 and pill_border_color != blank); tests/theme-r5-header.cjs sets both.'],
   [/^theme-header:(menu_dropdown_tinted_bg|menu_badges\.badge_border|pill_glass\.glass_text_color)$/, 'Header parts the layout draws around the section: the tinted dropdown and glass text colour apply with the Pill and glass block on (a section setting cannot read a block), the badge border with an outlined badge style; tests/theme-header-*.cjs check them.'],
+  [/^(main-product|featured-product):stock_pulse_notice\.pulse_scale$/, 'How far the dot\'s ring grows at the middle of its pulse (the 70% keyframe); the sweep holds animations on their first frame, where the ring is at its own size.'],
+  [/^(main-product|featured-product):quantity_offer\.(tier_source|custom_picker_(height|radius|width|bg|text|border))$/, 'The store\'s own quantity breaks (Products > Upsells and bundles, in product.metafields.storelib.offers, drawn by product-offers.js) and the option picker drawn with them; the sweep\'s product has none, so the tiers below draw either way. tests/theme-quantity-tier-image-updates.cjs draws both sources; the picker is the one tests/theme-sheet-controls-round6.cjs sizes for a Storelib offer.'],
+  [/^(main-product|featured-product):(pair_with_upsell\.btn_(bg|text)_added|product_addon\.active_border_color)$/, 'Storefront state: the colours of a card once its product is added (.is-added) or ticked (.is-active), set by the block\'s script after a click.'],
+  [/^(main-product|featured-product):buy_buttons\.show_gift_card_recipient$/, 'The recipient form is drawn only for a gift card product (product.gift_card?); the sweep\'s product is not one.'],
+  [/^(main-product|featured-product):variant_selector_pro\.thumb_max_size$/, 'A cap on the picture size: it shows only below the picture size (80px), and the sweep tries the largest cap (200px) from 0.'],
   /* Open: no change seen and no cause found in this round; each needs a closer look (data the fixture may lack, or a real bug). */
   [/^(before-and-after-image:pair_gap|benefits-bar-pro:icon_stroke|benefits2:feature\.svg_icon_size|image-with-text-benefits:text_max_width|image-with-text-steps:marker_text_color|steps:marker_text_color|page-404:icon_color|product-set:set\.products|product-showcase:slide\.product|subcollection-list:font_weight|video:link_color|wavyrichtextbanner:(text|buttons)\.enable_custom_style)$/, 'OPEN: no change seen by the sweep and no cause found yet.'],
 ];

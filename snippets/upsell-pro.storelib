@@ -84,9 +84,31 @@
     collection, else all products. Never the product itself, a manual pick
     twice, or (with Hide unavailable) a product that cannot be bought.
   endcomment
+  comment
+    A manual pick the block does not show (this product with Hide current
+    product, a sold out one with Hide unavailable) leaves its slot free.
+  endcomment
+  assign manual_shown = 0
+  assign manual_keys = 'manual_product_1,manual_product_2,manual_product_3,manual_product_4,manual_product_5,manual_product_6' | split: ','
+  for mk in manual_keys
+    assign mp = s[mk]
+    if mp != blank and mp.title == blank
+      assign mp = all_products[mp]
+    endif
+    if mp == blank or mp.handle == blank
+      continue
+    endif
+    if hide_current and mp.id == current_product.id
+      continue
+    endif
+    if hide_unavailable and mp.available == false
+      continue
+    endif
+    assign manual_shown = manual_shown | plus: 1
+  endfor
   assign auto_pick = ','
   if s.source == 'auto'
-    assign auto_needed = max | minus: handles.size
+    assign auto_needed = max | minus: manual_shown
     if auto_needed > 0
       assign auto_source = collections.all.products
       if current_product.collections.first.products.size > 0
@@ -161,12 +183,15 @@
 {%- capture up_cards -%}
   {%- assign rendered = 0 -%}
   {%- assign cur_id = current_product.id -%}
-  {%- assign manual_keys = 'manual_product_1,manual_product_2,manual_product_3,manual_product_4,manual_product_5,manual_product_6' | split: ',' -%}
   {%- for mk in manual_keys -%}
     {%- assign mp = s[mk] -%}
     {%- if mp != blank and rendered < max -%}
-      {%- render 'upsell-pro-card', p: mp, s: s, cur_id: cur_id, hide_current: hide_current, hide_unavailable: hide_unavailable, mode: up_mode, dom_id: block_id -%}
-      {%- assign rendered = rendered | plus: 1 -%}
+      {%- capture up_card -%}{%- render 'upsell-pro-card', p: mp, s: s, cur_id: cur_id, hide_current: hide_current, hide_unavailable: hide_unavailable, mode: up_mode, dom_id: block_id -%}{%- endcapture -%}
+      {%- assign up_card_check = up_card | strip -%}
+      {%- if up_card_check != blank -%}
+        {{- up_card -}}
+        {%- assign rendered = rendered | plus: 1 -%}
+      {%- endif -%}
     {%- endif -%}
   {%- endfor -%}
   {%- if auto_pick != ',' -%}
