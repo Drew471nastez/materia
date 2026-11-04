@@ -655,6 +655,7 @@ var ALLOW = [
   [/^(hotspot-image-product-2:sold_out_label|hotspotsection:sold_out_text|page-compare:sold_out_label|shop-the-look:sold_out_label)$/, 'Shown only for a sold-out product.'],
   [/^hotspotsection:from_text$/, 'Shown only for a product whose variants have different prices.'],
   [/^(blog-posts|main-blog|main-collection-product|main-list-collections|main-search):items_to_show$/, 'The page size given to {% paginate %} (or a load more step), which the fixture does not cut into pages.'],
+  [/^main-blog:blog_select$/, 'A blog handle typed as text (the builder has no blog picker): the sweep\'s words name no blog, so the blog being read shows; tests/theme-r6-collection-pages-blog.cjs types a real handle.'],
   [/^main-collection-product:popular_product\./, 'The sidebar looks its collection up as collections[handle] and shows only in the vertical filter layout with products; tests/theme-r6-collection-pages-products.cjs draws it.'],
   [/^breadcrumb:next_prev$/, 'Previous and next product links, drawn only on a product page reached from a collection.'],
   [/^(products-listing:(show_vendor|show_rating|show_short_description|show_add_to_cart)|related-products:(show_vendor|show_rating|show_add_to_cart))$/, 'A product card shows these only when Theme settings > Product card turns them on too (off in the saved theme); Storelib products have no vendor today.'],

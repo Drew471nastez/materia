@@ -146,8 +146,8 @@ async function twoInstances(browser, name, {settings = {}, blocks, globals = {},
 
 /* Saved instances: the file at c098384 and the working file, with the saved settings (plus the toggles the lead sets), look the same.
    inst: {settings, blocks: [{type, settings}], toggles: {section settings}, blockToggles: {type: settings}} */
-async function saved(browser, name, {inst, globals = {}, look, label = '', assets = [], widths = [375, 1366]}) {
-  let oldRaw; try { oldRaw = execSync('git show ' + BEFORE + ':sections/' + name + '.storelib', {cwd: ROOT, encoding: 'utf8'}); } catch (_) { return; }
+async function saved(browser, name, {inst, globals = {}, look, label = '', assets = [], widths = [375, 1366], ref = BEFORE}) {
+  let oldRaw; try { oldRaw = execSync('git show ' + ref + ':sections/' + name + '.storelib', {cwd: ROOT, encoding: 'utf8'}); } catch (_) { return; }
   const newRaw = fs.readFileSync(path.join(ROOT, 'sections/' + name + '.storelib'), 'utf8'), controls = await themeControls();
   const fill = (raw, toggles) => {
     const s = JSON.parse(raw.split('<schema>')[1].split('</schema>')[0]).shopify, d = l => Object.fromEntries((l || []).filter(x => x.id && x.default !== undefined).map(x => [x.id, x.default]));
