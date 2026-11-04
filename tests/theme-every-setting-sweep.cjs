@@ -751,4 +751,4 @@ var ALLOW = [
   [/^promotion-popup:(overlay_opacity|overlay_color)$/, 'The dialog\'s ::backdrop, drawn only while the popup is open as a modal.'],
 ];
 /* Sections other changes own right now: what the sweep finds there is listed (VERBOSE or SHOW_OWNED=1), not failed. */
-var OWNED = ['hero-benefits', 'featured-blog-header', 'testimonials4', 'testimonial2', 'testimonial-logos', 'announcement-bar-pro-4', 'hero-section-pro', 'announcement-bar-basic', 'hero-image1', 'hero-pro-scrolling', 'promotional-image-popup'];
+var OWNED = [];

@@ -302,10 +302,15 @@ async function sectionTests({open,load,isOpen,sectionScript,passed}){
         if(s.type==='header'){assert(s.content&&s.content.length<=24,file+' short header '+s.content);continue;}
         assert(!/shopify|liquid/i.test((s.label||'')+' '+(s.info||'')),file+' '+s.id+' label names no Shopify or Liquid');
         if(s.visible_if&&s.visible_if!=='{{ false }}'){
-          const m=s.visible_if.match(/^\{\{ (section|block)\.settings\.(\w+)( (==|!=) ('[\w-]+'|true|false))? \}\}$/);
-          assert(m,file+' simple visible_if '+s.visible_if);
-          assert(list.some(o=>o.id===m[2]),file+' visible_if reads a declared setting '+m[2]);
-          assert(m[3],file+' visible_if compares ('+s.visible_if+')');
+          /* one comparison, or several joined with "and" (a setting that needs two switches on) */
+          const inner=s.visible_if.match(/^\{\{ (.+) \}\}$/);
+          assert(inner,file+' simple visible_if '+s.visible_if);
+          for(const part of inner[1].split(' and ')){
+            const m=part.match(/^(section|block)\.settings\.(\w+)( (==|!=) ('[\w-]+'|true|false))?$/);
+            assert(m,file+' simple visible_if '+s.visible_if);
+            assert(list.some(o=>o.id===m[2]),file+' visible_if reads a declared setting '+m[2]);
+            assert(m[3],file+' visible_if compares ('+s.visible_if+')');
+          }
         }
       }
     }
