@@ -171,7 +171,11 @@ const { chromium } = require('playwright');
   const home = JSON.parse(read('templates/home.json'));
   const fg = JSON.parse(read('sections/footer-group.json')), og = JSON.parse(read('sections/overlay-group.json'));
   const content = home.order.filter(k => SECTIONS[home.sections[k].type] && !home.sections[k].disabled).map(k => [k, home.sections[k]]);
-  const [fid, fsec] = Object.entries(fg.sections).find(([, s]) => s.type === 'theme-footer');
+  const [fid, fsec0] = Object.entries(fg.sections).find(([, s]) => s.type === 'theme-footer');
+  /* Payment badges > Badges area width did nothing before the builder edit 0674ef4 made it work; the saved
+     33.333% now narrows the badges row on purpose, so the look before and after is compared without it. */
+  const fsec = JSON.parse(JSON.stringify(fsec0));
+  for (const b of Object.values(fsec.blocks || {})) if (b.type === 'payment_badges') b.settings.content_width = '';
   const [mid, msec] = Object.entries(og.sections).find(([, s]) => s.type === 'mobile-navigation-bar');
   const page = async src => {
     const parts = [];
@@ -206,7 +210,7 @@ const { chromium } = require('playwright');
           return r.fulfill({ status: 204, body: '' });
         });
         await p.goto('https://fixture.test/');
-        await p.addStyleTag({ content: '*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;caret-color:transparent!important}' });
+        await p.addStyleTag({ content: '*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;caret-color:transparent!important} .footer .arrow-toggle svg{width:var(--footer-arrow-size,14px)!important;height:var(--footer-arrow-size,14px)!important}' }); /* the footer accordion arrow is drawn at Arrow size since 0674ef4, on purpose: both sides draw it so */
         await p.evaluate(async () => { const h = document.documentElement.scrollHeight; for (let y = 0; y < h; y += 400) { window.scrollTo(0, y); await new Promise(r => setTimeout(r, 30)); } window.scrollTo(0, 0); });
         await p.waitForTimeout(500);
         got[w] = { shot: await p.screenshot({ fullPage: true }), computed: await p.evaluate(COMPUTED) };

@@ -356,6 +356,7 @@ async function saved(browser) {
   const oldLive = execSync('git show ' + BEFORE + ':shopify/assets/slideshow-live.js', {cwd: ROOT, encoding: 'utf8'});
   for (const [tpl, key] of [['home', 'slideshow-1793370382889'], ['contact', 'slideshow_Mzc3A8'], ['about', 'slideshow_CwBbLj']]) {
     const sec = JSON.parse(fs.readFileSync(path.join(ROOT, 'templates', tpl + '.json'), 'utf8')).sections[key];
+    if (!sec) continue; /* removed from the page in the builder since */
     const fill = raw => { const s = JSON.parse(raw.split('<schema>')[1].split('</schema>')[0]).shopify, d = l => Object.fromEntries((l || []).filter(x => x.id && x.default !== undefined).map(x => [x.id, x.default]));
       return {id: 'S', settings: {...d(s.settings), ...sec.settings}, blocks: sec.block_order.map(k => ({id: k, type: sec.blocks[k].type, settings: {...d(s.blocks[0].settings), ...sec.blocks[k].settings}}))}; };
     const html = async raw => { const e = engine(); e.registerFilter('script_tag', () => ''); e.registerFilter('img_url', v => v?.url || v || ''); const ctx = {section: fill(raw), settings: {scroll_animation: 'none'}, request: {design_mode: false}};
