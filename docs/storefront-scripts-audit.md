@@ -148,3 +148,77 @@ download, parse and run on every page view.
 
 `tests/theme-builder-scripts-lazy.cjs` checks all of the above on the real
 layout.
+
+## Settings JSON on the page
+
+The live-preview controllers merge a builder change into the section's
+current settings, which the Liquid printed as JSON in `data-*` attributes
+(`data-lt-settings`, `data-pg-settings`, `data-*-defaults`, ...). A visitor's
+browser parsed all of it for nothing: on the saved home page 207 KB of
+the 1.27 MB of HTML. Each family was classified by its readers in
+`shopify/assets` and the sections' inline scripts, then checked in Chromium
+as a visitor: the section drawn as it is, with the attribute removed, and with
+every value in it changed (numbers +3, booleans flipped, colours and words
+replaced), at load, after scrolling, after clicking every button, after a
+resize across the breakpoints, with the clock frozen. A family whose removal
+and change both left every element's attributes, text, computed styles,
+storage and the screenshot alone is printed in the builder only.
+
+**Printed in the builder only** (`{% if request.design_mode %}`):
+
+| Family | Read by | Sections |
+| --- | --- | --- |
+| tg-settings, tg-defaults, tg-block-defaults | media-live-text-grid.js (builder-only file) | image-with-text-bento, -icons, -multirow, imagewithtextgrid |
+| hg-settings | live-hero-gaps.js (builder-only) | banner3 |
+| lcp-settings, lcp-block-settings | live-collection-pages.js (builder-only) | breadcrumb, featured-blog-header, main-article, main-blog, main-collection-heading, main-collection-product, main-list-collections, page-heading, subcollection-list |
+| ap-settings | live-account-pages.js (builder-only) | the account, password and utility pages |
+| ct-settings | live-contact.js (builder-only) | contact-form-simple, contactformsimple2, google-map, newsletter |
+| pib-own | live-main-product.js (builder-only) | snippets/product-info-blocks (Main product, Featured product) |
+| ft-settings, mnb-settings | live-footer.js (builder-only) | theme-footer, mobile-navigation-bar (already so) |
+| sd-settings, sd-socials | live-social-dividers.js | divider, divider3, waves-divider, social-icons-pro2, instagram-promo, social-shop-grid |
+| mlb-settings, -defaults, -block-defaults | media-live-benefits.js | dual-image-with-text, image-and-video-text, image-text-benefits, image-with-text-benefits |
+| fb-settings, fb-bs, fb-spec, fb-bspec | live-features-b.js | the six comparison sections |
+| tm-settings, lt-settings | live-testimonials.js | testimonials, testimonial-video, comunitysldier, reviews2, testimon4, testimonials3 |
+| pg-settings | live-page-popups.js | the eight page popups |
+| rp-settings | live-product-extras.js | related-products |
+| lcs-settings | live-cart-search.js | main-cart-items, main-search |
+| pa-settings | live-products-a.js | featured-product, product-info-box, product-information-tab |
+| an-settings, -defaults, -block-defaults | live-announcements.js | marquee-bar, annoucment-bar-scrolling, announcement-bar, announcement-bar-basic |
+| fa-settings | live-features-a.js | the seven benefits sections |
+| lg-settings, -defaults, -block-defaults | live-logos.js | brand-logo, logo_scroll_strip, logos-list, payment-icons1, testimonial-logos |
+| pc-settings | live-popups-code.js | custom-html, custom-liquid, promotion-popup, size-chart-popup |
+
+On the storefront these controllers only record the first derive (no write)
+and set up behaviour that reads the markup (`data-autoplay`, `data-interval`,
+`data-mode`, `open`, ...). Announcement Bar's close button was the one storefront
+read (its "stay closed for" days): that section now prints
+`data-an-close-days` for a visitor instead of its settings.
+
+**Printed for everyone**, because storefront code reads them: the first-paint
+painters (slideshow and blog posts through live-blog-slideshow.js and
+hero-image-one.js, text-section-controls.js, hero-benefits.js,
+before-after-controls.js, testimonial-quote.js, announcement-three-colors.js,
+announcement-pro-4.js, hero-product-one/two/three.js, marketing-sections.js,
+hero-pro-scrolling.js, live-text.js, live-features-c.js, live-features-d.js,
+media-live-galleries-a/b.js, media-live-image-video.js,
+media-live-stats-reels.js, media-live-before-after.js, live-products-c.js,
+live-products-d.js), and the controllers whose behaviour reads a setting:
+Testimonial Spotlight's autoplay (testimonials4), the FAQ sections (one or
+several questions open), Product Showcase and the other live-products-b.js
+sections (autoplay), the countdowns, Collection Lookbook and Scrolling
+Collection (live-collections.js), Brand info (its first paint), Order
+notification (names and places). The product and popup data the storefront
+needs (`data-options`, `data-offers`, `data-variants`, `data-mt-gallery-*`,
+`data-popup-config`, `data-chart-json`, `data-hp3-product`) is not settings
+and stays.
+
+**In a canvas without `request.design_mode`** the attributes are missing.
+Each controller above then paints nothing for that section, at load or on a
+live change, and does not call `preventDefault()`, so the builder draws the
+section again from the server and the change shows from the redraw (Main
+product's block styles ask for the block's markup again, as for any setting
+it does not paint). With `request.design_mode`, the normal case, nothing
+changed: the attributes are printed and the controllers paint live as before.
+
+`tests/theme-storefront-payload.cjs` checks all of this and holds the JSON
+`data-*` attributes a visitor still gets under a budget per page.

@@ -393,6 +393,8 @@
   }
   function add(root) {
     const type = TYPES[root.dataset.apRoot]; if (!type) return;
+    /* the settings are printed in the builder only (request.design_mode): without them the builder's redraw shows each change */
+    if (!root.hasAttribute('data-ap-settings')) return;
     const wrap = root.closest('.shopify-section');
     if (wrap) { const set = touched.get(wrap); if (set) { for (const k of set) wrap.style.removeProperty(k); set.clear(); } }
     const st = {root, type, live: {}, liveBlocks: new Map(), s: parse(root.dataset.apSettings), raw: root.dataset.apSettings, blocks: new Map(), rawBlocks: new Map(), last: new Map(), mq: matchMedia('(min-width: 768px)')};

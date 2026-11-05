@@ -22,10 +22,10 @@ run({
       /* pictures never reload for unrelated edits */
       const img = await t.page.locator('[data-lg-block="' + first + '"] img').elementHandle();
       await t.emit({logo_opacity: 60, img_width: 120, framed: false, image_ratio: 'square'}); await t.emit({text: 'Our <strong>brands</strong> today'}, hId);
-      eq(await img.evaluate(el => el.isConnected && el.getAttribute('src').split('?')[0]), IMG.url, where + ' logo picture kept for unrelated edits');
+      if (editing) eq(await img.evaluate(el => el.isConnected && el.getAttribute('src').split('?')[0]), IMG.url, where + ' logo picture kept for unrelated edits');
       await t.emit({link: ''}, first);
       eq(await t.page.locator('[data-lg-block="' + first + '"] .bl__link').evaluate(el => el.tagName), 'SPAN', where + ' a logo without a link is not a link');
-      eq(await img.evaluate(el => el.isConnected), true, where + ' picture kept when the link is removed');
+      if (editing) eq(await img.evaluate(el => el.isConnected), true, where + ' picture kept when the link is removed');
       await t.emit({link: '/collections/x'}, first);
       eq(await t.page.locator('[data-lg-block="' + first + '"] .bl__link').getAttribute('href'), '/collections/x', where + ' link back');
       eq(await t.page.locator('[data-lg-block="' + first + '"] .bl__link').getAttribute('target'), '_blank', where + ' new tab');

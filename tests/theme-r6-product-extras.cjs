@@ -93,7 +93,7 @@ async function relatedProducts(browser) {
       ok(before.root[0] === 'rgb(24, 32, 40)' && before.h2[1] === 'rgb(255, 255, 255)' && /Georgia/.test(before.h2[2]) && before.des[1] === 'rgb(204, 204, 204)' && /Arial/.test(before.des[2]), 'theme colours and fonts' + tag + ' priority ' + priority);
       await a.page.addScriptTag({content: read('shopify/assets/' + ASSET)}); await frames(a.page);
       eq(await a.page.evaluate(LOOK, 'test'), before, 'controller changes nothing on load' + tag);
-      eq(await a.page.evaluate(() => window.MateriaProductExtras.audit(document.querySelector('[data-rp-root]'))), [], 'markup equals derived outputs' + tag);
+      eq(await a.page.evaluate(() => [...document.querySelectorAll('[data-rp-root][data-rp-settings]')].flatMap(r => window.MateriaProductExtras.audit(r))), [], 'markup equals derived outputs' + tag);
       await a.page.close();
     }
     for (const custom of [{enable_custom_style: true, heading_color: '#ff0000', text_color: '#00ff00', background_color: '#0000ff', enable_custom_fonts: true, heading_font: FONT, body_font: MONO}]) {

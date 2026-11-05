@@ -228,6 +228,8 @@
     const painted = k => OWN_KEYS.includes(k) || (slides && SLIDING[type] && SLIDING[type].has(k));
     if (keys.some(k => !painted(k))) refetch(sec, bid);
     if (!keys.some(k => OWN_KEYS.includes(k))) return;
+    /* data-pib-own is printed in the builder only (request.design_mode): without it the block is drawn again from the page */
+    if (!el.hasAttribute('data-pib-own')) { refetch(sec, bid); return; }
     let st = blockStates.get(el);
     if (!st) { st = {s: parse(el.getAttribute('data-pib-own'))}; blockStates.set(el, st); }
     Object.assign(st.s, d.settings);

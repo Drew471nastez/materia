@@ -451,7 +451,8 @@
   }
   function paint(root, st) {
     if (st.raw !== root.dataset.pcSettings) { st.raw = root.dataset.pcSettings; st.s = {...parse(st.raw), ...st.live}; }
-    derive(root, st, false);
+    /* the settings are printed in the builder only (request.design_mode): without them nothing is painted here and the builder's redraw shows each change */
+    if (root.hasAttribute('data-pc-settings')) derive(root, st, false);
   }
   function drop(root, st) {
     st.mq.removeEventListener('change', st.schedule);
@@ -469,7 +470,7 @@
     st.schedule = () => { if (!st.frame) st.frame = requestAnimationFrame(() => { st.frame = 0; if (root.isConnected) paint(root, st); }); };
     st.mq.addEventListener('change', st.schedule);
     roots.set(root, st);
-    derive(root, st, true);
+    if (root.hasAttribute('data-pc-settings')) derive(root, st, true);
     if (type.init) type.init(st);
     root.dataset.pcReady = '';
   }

@@ -184,7 +184,7 @@
   }
   function paint(root, st) {
     if (st.raw !== root.dataset.pgSettings) { st.raw = root.dataset.pgSettings; st.s = {...parse(st.raw), ...st.live}; }
-    derive(root, st, false);
+    if (root.hasAttribute('data-pg-settings')) derive(root, st, false);
   }
   function add(root) {
     if (roots.has(root)) return;
@@ -196,7 +196,8 @@
     const wrap = root.closest('.shopify-section');
     if (wrap && /^(promobanner|promonewsletterpopup-2|promotional-popup|promotionalpopup2)$/.test(root.getAttribute('data-pg-root'))) for (const k of ['margin-top', 'margin-bottom', 'z-index']) wrap.style.removeProperty(k);
     roots.set(root, st);
-    derive(root, st, true);
+    /* the settings are printed in the builder only (request.design_mode): without them nothing is painted here and the builder's redraw shows each change */
+    if (root.hasAttribute('data-pg-settings')) derive(root, st, true);
   }
   function scan() {
     for (const [root, st] of roots) if (!root.isConnected) { cancelAnimationFrame(st.frame); roots.delete(root); }

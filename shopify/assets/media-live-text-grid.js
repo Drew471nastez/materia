@@ -253,6 +253,8 @@
     for (const root of document.querySelectorAll('[data-tg-root]')) {
       if (roots.has(root)) { roots.get(root).schedule(); continue; }
       if (!PAINT[root.dataset.tgRoot]) continue;
+      /* the settings are printed in the builder only (request.design_mode): without them the builder's redraw shows each change */
+      if (!root.hasAttribute('data-tg-settings')) continue;
       const defaults = parse(root.dataset.tgDefaults);
       const st = {defaults, raw: null, s: {}, blocks: new Map(), rawBlocks: new Map(), blockDefaults: parse(root.dataset.tgBlockDefaults), rich: new WeakMap(), seen: new WeakSet(), img: new WeakMap(), icon: new WeakMap(), frame: 0, mq: matchMedia('(min-width: ' + (BP[root.dataset.tgRoot] || 768) + 'px)')};
       st.schedule = () => { if (!st.frame) st.frame = requestAnimationFrame(() => { st.frame = 0; if (root.isConnected) paint(root, st); }); };

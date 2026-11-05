@@ -185,7 +185,8 @@
   }
   function paint(root, st) {
     if (st.raw !== root.dataset.paSettings) { st.raw = root.dataset.paSettings; st.s = {...parse(st.raw), ...st.live}; }
-    derive(root, st, false);
+    /* the settings are printed in the builder only (request.design_mode): without them nothing is painted here and the builder's redraw shows each change */
+    if (root.hasAttribute('data-pa-settings')) derive(root, st, false);
   }
 
   /* ---------- runtimes ---------- */
@@ -253,7 +254,7 @@
     state.schedule = () => { if (!state.frame) state.frame = requestAnimationFrame(() => { state.frame = 0; if (root.isConnected) paint(root, state); }); };
     state.mq.addEventListener('change', state.schedule);
     roots.set(root, state);
-    derive(root, state, true);
+    if (root.hasAttribute('data-pa-settings')) derive(root, state, true);
     if (root.dataset.paRoot === 'product-info-box') boxRuntime(root, state);
     if (root.dataset.paRoot === 'product-information-tab') tabsRuntime(root, state);
     root.dataset.paReady = '';

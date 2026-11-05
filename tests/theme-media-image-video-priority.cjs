@@ -53,11 +53,18 @@ async function one(browser, c, width, editing) {
     eq(await attrs(t, c.attrs || []), (c.attrs || []).map(() => true), tag + ' ' + how + ' opt-out attributes');
   };
   const back = async how => { eq(await read(t, c.probes), theme, `${tag} ${how} theme values back`); ok(!(await attrs(t, c.attrs || [])).some(Boolean), tag + ' ' + how + ' attributes removed'); };
-  await t.emit(c.on, block); await check('live on');
-  await t.emit(c.off, block); await back('live off');
+  /* A section whose settings JSON is printed in the builder only (request.design_mode) is edited live
+     in the builder; a visitor's page only ever gets the redrawn markup. */
+  const live = editing || await t.page.evaluate(() => [...document.querySelectorAll('#shopify-section-test *')].some(e => [...e.attributes].some(a => /^data-[a-z0-9-]+-settings$/.test(a.name))));
+  if (live) {
+    await t.emit(c.on, block); await check('live on');
+    await t.emit(c.off, block); await back('live off');
+  }
   await redraw(c.on); await check('redraw on');
-  await t.emit(c.off, block); await back('redraw on, live off');
-  await t.emit(c.on, block); await check('redraw on, live off, live on');
+  if (live) {
+    await t.emit(c.off, block); await back('redraw on, live off');
+    await t.emit(c.on, block); await check('redraw on, live off, live on');
+  }
   await redraw(c.off); await back('redraw off');
   eq(t.errors, [], tag + ' errors');
   await t.page.close();

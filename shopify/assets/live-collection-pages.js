@@ -442,7 +442,8 @@
   }
   function scan() {
     for (const [root, st] of S) if (!root.isConnected) st.dispose();
-    document.querySelectorAll('[data-lcp][data-lcp-id]').forEach(root => init(root));
+    /* the settings are printed in the builder only (request.design_mode): without them the builder's redraw shows each change */
+    document.querySelectorAll('[data-lcp][data-lcp-id][data-lcp-settings]').forEach(root => init(root));
   }
   document.addEventListener('storelib:settings-change', e => {
     const d = e.detail || {}, id = sectionOf(d), block = blockOf(d);

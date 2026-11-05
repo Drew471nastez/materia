@@ -752,6 +752,8 @@
     scan();
     const st = find(idOf(d.section ?? d.sectionId ?? d.section_id));
     if (!st) return;
+    /* the settings are printed in the builder only (request.design_mode): without them nothing is painted here and the builder's redraw shows each change */
+    if (!st.el.hasAttribute('data-lt-settings') && !st.el.hasAttribute('data-tm-settings')) return;
     const blockId = idOf(d.block ?? d.blockId ?? d.block_id);
     if (blockId) {
       const node = [...st.el.querySelectorAll(BSEL)].find(n => bid(n) === blockId);

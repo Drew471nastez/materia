@@ -22,7 +22,7 @@ run({
       const img = await t.page.locator('[data-lg-block="' + first + '"] img').elementHandle();
       await t.emit({image_width_desktop: 200, image_width_mobile: 80, image_ratio: 'square', rounded_image: true, padding_left: 10});
       await t.emit({collection_url: '/collections/other'}, first);
-      eq(await img.evaluate(el => el.isConnected && el.getAttribute('src').split('?')[0]), IMG.url, where + ' logo picture kept for unrelated edits');
+      if (editing) eq(await img.evaluate(el => el.isConnected && el.getAttribute('src').split('?')[0]), IMG.url, where + ' logo picture kept for unrelated edits');
       eq(await t.page.locator('[data-lg-block="' + first + '"] .ll__link').getAttribute('href'), '/collections/other', where + ' link live');
       await t.emit({enable_lazy_load: true});
       eq(await img.getAttribute('loading'), 'lazy', where + ' lazy load on');

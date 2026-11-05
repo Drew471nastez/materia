@@ -36,7 +36,7 @@ run({
       eq(await t.page.locator('[data-tlg-panel="' + id0 + '"] .tlg__quote-text').textContent(), 'Edited quote', where + ' quote live');
       eq(await t.page.locator('[data-tlg-panel="' + id0 + '"] .tlg__author').isVisible(), false, where + ' empty author hidden');
       await t.emit({logo_height: 40, inactive_opacity: 50, quote_size_d: 30});
-      eq(await img.evaluate(el => el.isConnected), true, where + ' logo kept for unrelated edits');
+      if (editing) eq(await img.evaluate(el => el.isConnected), true, where + ' logo kept for unrelated edits');
       /* quote font and custom fonts win under the theme priority, live and after a redraw */
       for (const mode of ['live', 'redraw']) {
         const apply = async sec => { if (mode === 'live') await t.emit(sec); else await t.redraw({settings: sec}); };

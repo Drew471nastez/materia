@@ -451,7 +451,8 @@ async function testSection(browser, name, cfg) {
     const img = page.locator('#shopify-section-' + uid + ' img').first();
     const before = await img.evaluate(el => { el.dataset.mark = 'same'; return el.getAttribute('src'); });
     await t.emit({padding_top_desktop: 90, padding_top_mobile: 50, content_gap: 22, card_padding: 30});
-    ok(await img.evaluate(el => el.dataset.mark) === 'same' && await img.getAttribute('src') === before, tag + ' image node and src kept');
+    /* live in the builder; a visitor's page (no settings JSON) is drawn again instead */
+    if (editing) ok(await img.evaluate(el => el.dataset.mark) === 'same' && await img.getAttribute('src') === before, tag + ' image node and src kept');
 
     /* 9. Added block renders, is live-editable; redraws do not duplicate listeners. */
     const list = t.rendered[0].section.blocks.map(b => ({type: b.type, settings: b.settings})).concat([cfg.added]);

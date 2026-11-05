@@ -57,12 +57,144 @@
   <div data-offer-server-preview>
     {%- case offer_kind -%}
       {%- when 'quantity_offer' -%}
-        {%- for offer in offer_data.quantityBreaks -%}
-          <p>{{ offer.title | escape }}</p>
-          {%- for tier in offer.tiers -%}
-            <p>{{ tier.label | escape }}{% if offer_currency == shop.currency %} <span>{{ tier.totalCents | money }}</span>{% endif %}</p>
-          {%- endfor -%}
-        {%- endfor -%}
+        {%- comment -%}
+          The tiers as product-offers.js draws them (StorelibProductOffers
+          quantity(), paintPrices()), so the cards hold their final size from
+          the first paint and the script only swaps in the same markup. A list
+          of plain lines here grew by 300px when the script ran, pushing the
+          variant picker and the buttons down after the page had shown.
+        {%- endcomment -%}
+        {%- liquid
+          assign qo = offer_data.quantityBreaks.first
+          assign qs = block.settings
+          assign qv = offer_product.selected_or_first_available_variant
+          assign qv_price = qv.price | default: offer_product.price | plus: 0
+          assign qv_compare = qv.compare_at_price | plus: 0
+          assign q_wanted = qs.default_tier | plus: 0 | at_least: 1
+          assign q_market = false
+          if offer_currency != shop.currency
+            assign q_market = true
+          endif
+          assign q_image_size = ''
+          if qs.tier_image_size != blank
+            assign q_image_size = qs.tier_image_size | plus: 0 | at_least: 40 | at_most: 120
+          endif
+          assign q_heading = qs.heading
+          if qs.heading == nil
+            assign q_heading = qo.title
+          endif
+          assign q_initial = 0
+          assign q_n = 0
+          for tier in qo.tiers
+            assign q_key = 'tier_' | append: forloop.index | append: '_enable'
+            if qs[q_key] != false
+              if forloop.index == q_wanted
+                assign q_initial = q_n
+              endif
+              assign q_n = q_n | plus: 1
+            endif
+          endfor
+        -%}
+        {%- comment -%} What refreshTierImages() writes on the element, here on a wrapper the script's markup replaces. {%- endcomment -%}
+        {%- liquid
+          case qs.tier_image_position
+            when 'beside'
+              assign q_pos = 'left'
+            when 'above'
+              assign q_pos = 'top'
+            else
+              assign q_pos = qs.tier_image_position | default: 'auto'
+          endcase
+        -%}
+        <div data-tier-image-position="{{ q_pos }}" data-tier-image-preset="{{ qs.style | default: 'cards' }}" style="{% if qs.tier_image_size > 0 %}--tier-image-size: {{ qs.tier_image_size }}px;{% endif %}--tier-image-gap: {% if qs.tier_image_gap != blank %}{{ qs.tier_image_gap }}{% else %}8{% endif %}px;--tier-image-radius: {% if qs.custom_style %}{% if qs.tier_image_radius != blank %}{{ qs.tier_image_radius }}{% else %}6{% endif %}px{% else %}var(--input-border-radius,var(--rounded-radius,6px)){% endif %};--tier-image-fit: {% if qs.tier_image_fit == 'cover' %}cover{% else %}contain{% endif %};">
+        <div class="po po-qty" data-style="{{ qs.style | default: 'cards' }}" data-image-position="{{ qs.tier_image_position | default: 'beside' }}"
+          {%- if qs.custom_style %} data-custom-style{% if qs.show_border %} data-border{% endif %}{% if qs.show_shadow %} data-shadow{% endif %}{% endif %}
+          style="{% if q_image_size != '' %}--po-tier-image: {{ q_image_size }}px;{% endif %}{% if qs.padding_top != blank %}--po-pad-top: {{ qs.padding_top | at_least: 0 }}px;{% endif %}{% if qs.padding_bottom != blank %}--po-pad-bottom: {{ qs.padding_bottom | at_least: 0 }}px;{% endif %}{% if qs.accent_color != blank %}--po-accent: {{ qs.accent_color }};{% endif %}
+          {%- if qs.custom_style -%}
+            {%- if qs.custom_picker_height != blank %}--offer-picker-height: {{ qs.custom_picker_height }}px;{% endif -%}
+            {%- if qs.custom_picker_radius != blank %}--offer-picker-radius: {{ qs.custom_picker_radius }}px;{% endif -%}
+            {%- if qs.custom_picker_width != blank %}--offer-picker-width: {{ qs.custom_picker_width }}px;{% endif -%}
+            {%- if qs.custom_bg != blank %}--po-c-bg: {{ qs.custom_bg }};{% endif -%}
+            {%- if qs.custom_text != blank %}--po-c-text: {{ qs.custom_text }};{% endif -%}
+            {%- if qs.custom_heading != blank %}--po-c-heading: {{ qs.custom_heading }};{% endif -%}
+            {%- if qs.custom_border != blank %}--po-c-border: {{ qs.custom_border }};{% endif -%}
+            {%- if qs.custom_selected != blank %}--po-c-selected: {{ qs.custom_selected }};{% endif -%}
+            {%- if qs.custom_save != blank %}--po-c-save: {{ qs.custom_save }};{% endif -%}
+            {%- if qs.custom_badge_bg != blank %}--po-c-badge-bg: {{ qs.custom_badge_bg }};{% endif -%}
+            {%- if qs.custom_badge_text != blank %}--po-c-badge-text: {{ qs.custom_badge_text }};{% endif -%}
+            {%- if qs.custom_radius != blank %}--po-c-radius: {{ qs.custom_radius }}px;{% endif -%}
+            {%- if qs.custom_gap != blank %}--po-c-gap: {{ qs.custom_gap }}px;{% endif -%}
+            {%- if qs.custom_border_width != blank %}--po-c-bw: {{ qs.custom_border_width }}px;{% endif -%}
+          {%- endif -%}">
+          {%- if qs.caption != blank %}<p class="po-caption"><span>{{ qs.caption | escape }}</span></p>{% endif -%}
+          {%- if q_heading != blank %}<h2 class="po-heading h5">{{ q_heading | escape }}</h2>{% endif -%}
+          {%- assign q_text = qs.text | default: qs.subheading -%}
+          {%- if q_text != blank %}<p class="po-text">{{ q_text | escape }}</p>{% endif -%}
+          <div class="po-tiers" role="radiogroup" aria-label="{{ qs.heading | default: qo.title | default: 'Quantity' | escape }}">
+            {%- assign q_i = 0 -%}
+            {%- for tier in qo.tiers -%}
+              {%- liquid
+                assign q_slot = forloop.index
+                assign q_key = 'tier_' | append: q_slot | append: '_enable'
+                assign q_paid = tier.quantity | plus: 0 | at_least: 1
+                assign q_free = tier.freeQuantity | plus: 0 | at_least: 0
+                assign q_qty = q_paid | plus: q_free
+                assign q_percent = 0
+                assign q_amount = 0
+                if tier.discountType == 'percent'
+                  assign q_percent = tier.discountValue | plus: 0 | at_least: 0 | at_most: 100
+                elsif tier.discountType == 'amount'
+                  assign q_amount = tier.discountValue | plus: 0 | at_least: 0
+                endif
+                assign q_off = 100 | minus: q_percent
+                assign q_total = qv_price | times: q_off | divided_by: 100.0 | round | times: q_paid | minus: q_amount | at_least: 0
+                assign q_unit = qv_price
+                if q_free == 0 and q_percent == 0 and q_amount == 0
+                  assign q_unit = qv_price | at_least: qv_compare
+                endif
+                assign q_compare = q_unit | times: q_qty
+                assign q_each = q_total | divided_by: q_qty | round
+                assign q_monetary = true
+                if q_market and tier.discountType == 'percent' or q_market and tier.discountType == 'amount'
+                  assign q_monetary = false
+                endif
+                assign q_saving = q_compare | minus: q_total | at_least: 0
+                assign q_image_key = 'tier_' | append: q_slot | append: '_image'
+                assign q_picked = qs[q_image_key]
+                assign q_image = ''
+                if q_picked != blank or qs.style == 'image_tiles'
+                  capture q_image
+                    render 'offer-image-url', image: q_picked
+                  endcapture
+                  if q_image == blank
+                    assign q_image = offer_image_src
+                  endif
+                endif
+                assign q_caption_key = 'tier_' | append: q_slot | append: '_caption'
+                assign q_label_key = 'tier_' | append: q_slot | append: '_label'
+                assign q_badge_key = 'tier_' | append: q_slot | append: '_badge'
+                assign q_badge = tier.badge | default: qs[q_badge_key]
+              -%}
+              {%- if qs[q_key] != false -%}
+              <label class="po-tier{% if q_badge != blank %} po-tier--badged{% endif %}" data-tier-index="{{ q_slot }}"><input class="po-tier__radio" type="radio" value="{{ q_qty }}"{% if q_i == q_initial %} checked{% endif %} tabindex="-1"><span class="po-tier__card"><span class="po-tier__dot"></span><span class="po-tier__main">
+                {%- if q_image != blank %}<img class="po-tier__image" src="{{ q_image }}" alt="{{ q_picked.alt | default: qs[q_caption_key] | default: qs[q_label_key] | default: tier.label | escape }}" width="120" height="120" loading="lazy" decoding="async">{% endif -%}
+                <span class="po-tier__label">{{ tier.label | default: qs[q_caption_key] | default: q_qty | escape }}</span>
+                {%- if qs[q_caption_key] != blank %}<span class="po-tier__caption">{{ qs[q_caption_key] | escape }}</span>{% endif -%}
+                {%- if qs.you_save_label != blank %}<span class="po-tier__yousave"{% unless q_monetary and q_saving > 0 %} hidden{% endunless %}>{% if q_monetary and q_saving > 0 %}{{ qs.you_save_label | escape }} <span>{{ q_saving | money }}</span>{% endif %}</span>{% endif -%}
+                {%- if qs.save_label != blank %}<span class="po-tier__save"{% unless q_monetary and q_percent > 0 %} hidden{% endunless %}>{% if q_monetary and q_percent > 0 %}{{ qs.save_label | escape }} {{ q_percent }}%{% endif %}</span>{% endif -%}
+                </span><span class="po-tier__prices"><span class="po-tier__total">{% if q_monetary %}{{ q_total | money }}{% else %}{{ tier.label | escape }}{% endif %}</span><s class="po-tier__compare"{% unless q_monetary and q_compare > q_total and qs.show_compare != false %} hidden{% endunless %}>{% if q_monetary %}{{ q_compare | money }}{% endif %}</s><span class="po-tier__each"{% unless q_monetary and q_qty > 1 and qs.per_item_label != blank %} hidden{% endunless %}>{% if q_monetary and q_qty > 1 and qs.per_item_label != blank %}{{ q_each | money }} {{ qs.per_item_label | escape }}{% endif %}</span></span>
+                {%- if q_badge != blank %}<span class="po-tier__badge">{{ q_badge | escape }}</span>{% endif -%}
+              </span></label>
+              {%- assign q_i = q_i | plus: 1 -%}
+              {%- endif -%}
+            {%- endfor -%}
+          </div>
+          {%- if qs.show_button != false and qs.purchase_action != 'main' and compact != true -%}
+            <button class="btn btn-primary po-button" type="button" disabled><span class="po-button__text">{{ qs.button_label | default: 'Add to cart' | escape }}</span></button>
+          {%- endif -%}
+          {%- if qs.checkout_note != blank %}<p class="po-note">{{ qs.checkout_note | escape }}</p>{% endif -%}
+        </div>
+        </div>
       {%- when 'bundle' -%}
         {%- for offer in offer_data.bundles -%}
           <p>{{ offer.title | escape }}</p>

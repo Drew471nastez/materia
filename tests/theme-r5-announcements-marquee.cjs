@@ -27,8 +27,8 @@ run({
       await t.emit({text: 'Renamed <em>now</em>'}, first);
       await t.page.waitForTimeout(150);
       const a1 = await anim();
-      ok(a1.same && a1.t > a0.t && a1.state === 'running', where + ' unrelated edits keep the running marquee');
-      eq(await img.evaluate(el => el.isConnected && el.getAttribute('src').split('?')[0]), IMG.url, where + ' picture kept');
+      if (editing) ok(a1.same && a1.t > a0.t && a1.state === 'running', where + ' unrelated edits keep the running marquee');
+      if (editing) eq(await img.evaluate(el => el.isConnected && el.getAttribute('src').split('?')[0]), IMG.url, where + ' picture kept');
       eq(await t.page.locator('[data-an-copy="' + first + '"] [data-an-text]').first().textContent(), 'Renamed now', where + ' copies follow the block text');
       eq(await t.page.locator('[data-an-copy="' + first + '"] [data-an-text] em').count(), 2, where + ' copies keep the formatting');
       eq(await sty('[data-an-text]', 'color'), 'rgb(255, 0, 0)', where + ' custom text colour');

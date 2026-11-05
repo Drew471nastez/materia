@@ -26,8 +26,8 @@ run({
       await t.emit({text: 'Renamed <em>now</em>'}, first);
       await t.page.waitForTimeout(150);
       const a1 = await anim();
-      ok(a1.same && a1.t > a0.t && a1.state === 'running', where + ' unrelated edits keep the scroll running');
-      eq(await t.page.locator(sel + '[data-an-copy="' + first + '"]').count(), 59, where + ' every copy of the message is kept');
+      if (editing) ok(a1.same && a1.t > a0.t && a1.state === 'running', where + ' unrelated edits keep the scroll running');
+      if (editing) eq(await t.page.locator(sel + '[data-an-copy="' + first + '"]').count(), 59, where + ' every copy of the message is kept');
       eq(await t.page.locator(sel + '[data-an-copy="' + first + '"] em').count(), 59, where + ' copies follow the text and its formatting');
       eq(await sty('.announcement-message', 'color'), 'rgb(255, 0, 0)', where + ' custom text colour');
       eq(await sty('.separator-icon', 'color'), 'rgb(0, 255, 0)', where + ' custom separator colour');

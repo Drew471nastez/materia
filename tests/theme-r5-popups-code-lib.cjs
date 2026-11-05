@@ -71,7 +71,7 @@ async function addFp(page) {
   });
 }
 const fp = (t, uid = 'test') => t.page.evaluate(u => window.__fp(u), uid);
-const audit = (t, uid = 'test') => t.page.evaluate(u => { const r = document.querySelector('#shopify-section-' + u + ' [data-pc-root]'); return r ? window.MateriaPopupsCode.audit(r) : []; }, uid);
+const audit = (t, uid = 'test') => t.page.evaluate(u => { const r = document.querySelector('#shopify-section-' + u + ' [data-pc-root]'); return r && r.hasAttribute('data-pc-settings') ? window.MateriaPopupsCode.audit(r) : []; }, uid);
 /* only what a visitor sees: computed styles, boxes and text (no markers) */
 const vis = f => Object.fromEntries(Object.entries(f).filter(([, o]) => o.rect !== 'none').map(([k, o]) => [k, Object.fromEntries(Object.entries(o).filter(([q]) => !['attrs', 'vars', 'cls'].includes(q)))]));
 const diff = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => JSON.stringify(a[k]) !== JSON.stringify(b[k]));

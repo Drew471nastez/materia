@@ -119,7 +119,7 @@ const BTN = '.tcp__btn';
       /* an edit does not restart the drift */
       const a = await t.page.locator(sec + ' .tcp__track').first().evaluate(el => { const an = el.getAnimations()[0]; window.__ltAnim = an; return an.currentTime; });
       await t.emit({text: 'Edited heading'}, t.blockId('heading')); await wait2(t.page); await t.page.waitForTimeout(120);
-      ok(await t.page.locator(sec + ' .tcp__track').first().evaluate((el, before) => el.getAnimations()[0] === window.__ltAnim && el.getAnimations()[0].currentTime > before, a), 'the rows keep moving through an edit');
+      if (editing) ok(await t.page.locator(sec + ' .tcp__track').first().evaluate((el, before) => el.getAnimations()[0] === window.__ltAnim && el.getAnimations()[0].currentTime > before, a), 'the rows keep moving through an edit');
       if (editing && width === 1366) {
         const off = await t.page.evaluate(async s => { const pad = document.createElement('div'); pad.style.height = '5000px'; document.body.append(pad); scrollTo(0, 99999); await new Promise(r => setTimeout(r, 300)); const st = getComputedStyle(document.querySelector(s + ' .tcp__track')).animationPlayState; scrollTo(0, 0); pad.remove(); await new Promise(r => setTimeout(r, 200)); return st + '|' + getComputedStyle(document.querySelector(s + ' .tcp__track')).animationPlayState; }, sec);
         ok(off === 'paused|running', 'rows pause off screen and run again ' + off);
