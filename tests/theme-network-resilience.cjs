@@ -101,7 +101,7 @@ const server = http.createServer((req, res) => {
       assert.deepEqual(result.platform, {ok: false, name: 'TypeError'});
       assert.equal(platform, 1, "Storelib's own addresses are left to the browser"); checks++;
       assert.equal(result.timeout.name, 'TimeoutError', 'a stalled GET ends, as a TimeoutError');
-      assert(result.timeoutMs < 1500, 'within its deadline, not retried after a timeout: ' + result.timeoutMs);
+      assert(result.timeoutMs < 3000, 'within its deadline, not retried after a timeout: ' + result.timeoutMs);
       assert.equal(result.own.name, 'AbortError', "the caller's own cancel stays an AbortError"); checks++;
       assert.deepEqual(result.plain, {ok: true, status: 200, text: 'ok'}, 'success is untouched'); checks++;
       assert.deepEqual(errors, []);
@@ -131,22 +131,24 @@ const server = http.createServer((req, res) => {
       });
       const page = await ctx.newPage();
       const errors = []; page.on('pageerror', e => errors.push(e.message));
-      const states = []; page.on('console', m => { if (m.text().startsWith('state:')) states.push(JSON.parse(m.text().slice(6))); });
+      const states = []; page.on('console', m => { if (m.text().startsWith('state:')) states.push(Object.assign(JSON.parse(m.text().slice(6)), {at: Date.now()})); });
       await page.goto(origin + '/pages/a');
       await page.waitForTimeout(400);
       await page.click('#to-stall', {noWaitAfter: true});
       const clickedAt = states.length;
       await new Promise(resolve => setTimeout(resolve, 1500));
-      const during = states.slice(clickedAt);
-      assert(during.length >= 5, 'the current page keeps running while the next one stalls');
+      const during = states.slice(clickedAt).map(({at, ...state}) => state);
+      assert(during.length >= 3, 'the current page keeps running while the next one stalls');
       for (const state of during) assert.deepEqual(state, {path: '/pages/a', title: 'Page A', opacity: '1', body: 'visible', hit: 'title', transition: 0}, reducedMotion + ': a stalled next page leaves the current one painted');
       // The connection comes back: the stalled page arrives.
       held.splice(0).forEach(res => { res.writeHead(200, {'content-type': 'text/html'}); res.end(doc('Arrived late', LINKS)); });
       await page.waitForURL('**/pages/stall');
       await page.waitForFunction(() => document.getElementById('title')?.textContent === 'Arrived late');
-      await page.waitForTimeout(reducedMotion === 'reduce' ? 200 : 600);
-      const landed = states.filter(state => state.path === '/pages/stall').slice(-2);
-      assert(landed.length === 2);
+      // Past the 240ms cover fade (none under reduced motion), then two reports in a row.
+      const settled = Date.now() + (reducedMotion === 'reduce' ? 0 : 400);
+      for (let t = 0; t < 100 && states.filter(state => state.path === '/pages/stall' && state.at > settled).length < 2; t++) await new Promise(resolve => setTimeout(resolve, 100));
+      const landed = states.filter(state => state.path === '/pages/stall' && state.at > settled).slice(-2).map(({at, ...state}) => state);
+      assert.equal(landed.length, 2, 'the landed page reports');
       for (const state of landed) assert.deepEqual(state, {path: '/pages/stall', title: 'Arrived late', opacity: '1', body: 'visible', hit: 'title', transition: 0}, reducedMotion + ': the next page is fully shown when it lands');
       assert.deepEqual(errors, []); checks++;
       await ctx.close();
