@@ -2,7 +2,8 @@
    shopify/assets/live-contact.js. The shared checks are in
    tests/theme-r5-contact-lib.cjs; this file adds the section's own: the
    sign-up keeps the store's customer form with data-storelib-form="subscribe"
-   and the words materia-forms.js reads (live), the email field labelled,
+   and data-nl-form (its own data-state messages), the words materia-forms.js
+   reads (live), the email field labelled,
    the icon, background image and overlay, the content box, both layouts,
    Match theme fields and Match theme button, and the older Heading and
    Description settings while there are no blocks. The sign-up states
@@ -15,7 +16,9 @@ const {ok, eq, FONT, IMG} = L;
 const name = 'newsletter';
 (async () => {
   const raw = fs.readFileSync(path.join(__dirname, '../sections', name + '.storelib'), 'utf8'), tpl = raw.split('<schema>')[0];
-  ok(/\{%- form 'customer'[^%]*data-storelib-form: 'subscribe'/.test(tpl) && /name="contact\[email\]"/.test(tpl) && /data-mt-words/.test(tpl), 'the sign-up keeps the customer form, data-storelib-form="subscribe" and its words');
+  ok(/\{%- form 'customer'[^%]*data-nl-form: ''[^%]*data-mt-inline-subscribe: 'true'[^%]*data-storelib-form: 'subscribe'/.test(tpl) && /name="contact\[email\]"/.test(tpl) && /data-mt-words/.test(tpl), 'the sign-up keeps the customer form, data-storelib-form="subscribe", one sender (materia-forms) and its words');
+  ok(['success_text', 'error_text'].every(id => new RegExp('data-nl-msg="' + (id === 'success_text' ? 'done' : 'error') + '">\\{\\{ section_st\\.' + id).test(tpl)) && /data-nl-hint>\{\{ section_st\.invalid_text/.test(tpl), 'its messages (done, error, hint) are the section\'s settings');
+  ok(/data-mt-trap>[\s\S]{0,300}name="company"/.test(tpl), 'the honeypot is the one materia-forms checks');
   const r = await L.suite(name, {
     structural: ['background_image', 'custom_icon_image'],
     noop: {375: ['header_size'], 1366: []},

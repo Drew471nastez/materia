@@ -16,6 +16,11 @@
    not go through) and data-success-ms (how long the toast stays).
    A section that draws no message of its own after a post marks the redrawn
    form with a hidden [data-mt-posted] or [data-mt-failed].
+   A form with its own states ([data-nl-form], the newsletter section) is sent
+   here, once, and shows no toast: it gets data-state sending, done or error,
+   its [data-nl-msg="done"|"error"] get the form's words, and done is cleared
+   after data-success-ms so the button reads its label again. An address it
+   cannot take sets aria-invalid on the field, which shows its [data-nl-hint].
    Editor inline forms send real requests unless preview-only is selected; it redraws field colours live when
    Theme settings > Forms and fields change (snippets/field-colors does the
    same at render time). */
@@ -41,6 +46,21 @@
   const say = form => ({ ...(form.querySelector('[data-mt-words]')?.dataset || {}), ...Object.fromEntries(Object.entries(form.dataset).filter(([, v]) => v !== '')) });
   const typeOf = form => form.querySelector('input[name="form_type"]')?.value || form.dataset.storelibForm || '';
   const visible = el => Boolean(el && !el.hidden && el.getClientRects().length);
+  const own = form => Boolean(form && form.hasAttribute('data-nl-form'));
+  const trapField = el => Boolean(el && el.closest?.('[data-mt-trap]'));
+  /* A form with its own states: its words go in its own message elements. */
+  const stateTimers = new WeakMap();
+  const setState = (form, state, text) => {
+    clearTimeout(stateTimers.get(form));
+    form.querySelectorAll('[data-nl-result] > .nl-msg:not([data-nl-msg])').forEach(el => el.remove());
+    const msg = state === 'done' || state === 'error' ? form.querySelector(`[data-nl-msg="${state}"]`) : null;
+    if (msg && text) msg.textContent = text;
+    if (state) form.dataset.state = state; else delete form.dataset.state;
+    if (state === 'done') {
+      const ms = Number(say(form).successMs);
+      stateTimers.set(form, setTimeout(() => { if (form.dataset.state === 'done') delete form.dataset.state; }, (ms >= 1000 ? ms : TOAST_MS) + 450));
+    }
+  };
 
   /* Trap: off screen, out of the tab order, hidden from assistive tech. It
      holds no text: Storelib compares the form's text before and after it
@@ -182,7 +202,7 @@
     else form.removeAttribute('aria-busy');
     const buttons = button ? [button] : [...form.querySelectorAll('button[type="submit"], button:not([type]), input[type="submit"]')];
     buttons.forEach(b => {
-      if (!on || !ownSuccess(form)) b.classList.toggle('materia-form-pending', on);
+      if (!on || (!ownSuccess(form) && !own(form))) b.classList.toggle('materia-form-pending', on);
       if (on) b.setAttribute('aria-disabled', 'true'); else b.removeAttribute('aria-disabled');
     });
     if (!on) form.querySelectorAll('.materia-form-pending').forEach(b => b.classList.remove('materia-form-pending'));
@@ -281,14 +301,21 @@
     if(button && original)button.dataset.inlineOriginalLabel=original;
     let message=form.querySelector('[data-inline-result]');
     if(message){message.textContent='';message.hidden=true;}
+    if(own(form)){setState(form,'sending');form.querySelector('input[type=email]')?.removeAttribute('aria-invalid');}
     try {
       const url=new URL(form.action || '/contact',location.href);url.hash='';
       if(url.origin!==location.origin)throw new Error(say(form).errorMessage || 'Unable to send.');
       if(!/^\/contact(?:\/|$)/.test(url.pathname))url.pathname='/contact';
       const response=await fetch(url.href,{method:'POST',credentials:'same-origin',headers:{Accept:'application/json','X-Requested-With':'XMLHttpRequest'},body:new FormData(form)});
       const result=await response.json();
-      if(!response.ok || result.ok!==true)throw Object.assign(new Error(result.message || say(form).errorMessage || 'Unable to subscribe.'),{userMessage:result.message});
+      if(!response.ok || result.ok!==true)throw Object.assign(new Error(result.message || say(form).errorMessage || 'Unable to subscribe.'),{userMessage:result.message,code:result.code});
       if(!form.isConnected)return;
+      if(own(form)){
+        if(key)remember(key);
+        form.dataset.subscribedEmail=emailOf(form);
+        setState(form,'done',already&&say(form).alreadyMessage||say(form).successMessage);
+        return;
+      }
       form.dataset.state='done';
       if(contact){
         if(!message){message=document.createElement('p');message.dataset.inlineResult='';form.append(message);}
@@ -303,6 +330,12 @@
       toast(already && say(form).alreadyMessage || say(form).successMessage || thanks(form),form,say(form).successMs);
     } catch(error) {
       if(!form.isConnected)return;
+      if(own(form)){
+        // Words from the form only: an address the list will not take, or the post did not go through.
+        const invalid=/email/i.test(error.code||'')||/valid email/i.test(error.userMessage||'');
+        setState(form,'error',invalid&&say(form).invalidMessage||say(form).errorMessage);
+        return;
+      }
       form.dataset.state='error';if(label)label.textContent=original;
       if(!message){message=document.createElement('p');message.dataset.inlineResult='';message.className='mt-form-error';message.setAttribute('role','alert');form.append(message);}
       message.setAttribute('role','alert');message.className='mt-form-error';message.textContent=error.userMessage || say(form).errorMessage || error.message;message.hidden=false;
@@ -310,6 +343,7 @@
   };
   const previewSubscribe = (form,button) => {
     if(!form.reportValidity())return;
+    if(own(form)){form.dataset.subscribedEmail=emailOf(form);setState(form,'done',say(form).successMessage);return;}
     const label=button?.querySelector('[data-inline-label]');
     if(button&&label){button.dataset.inlineOriginalLabel||=label.textContent;label.textContent=say(form).previewSubscribedLabel||'Subscribed (preview)';button.setAttribute('data-subscribed','preview');}
     form.dataset.state='preview';form.dataset.subscribedEmail=emailOf(form);
@@ -325,7 +359,7 @@
     const subscribe=form.hasAttribute('data-mt-inline-subscribe')||(design()&&['customer','subscribe'].includes(typeOf(form)));
     if(!contact&&!subscribe)return false;
     event.preventDefault();event.stopImmediatePropagation();
-    if(form.hasAttribute('data-mt-sending')||form.hasAttribute('data-storelib-sending'))return true;
+    if(form.hasAttribute('data-mt-sending')||form.hasAttribute('data-storelib-sending')||form.dataset.state==='sending')return true;
     const button=event.submitter||form.querySelector('[type=submit]');
     if(!form.reportValidity())return true;
     if(form.querySelector('[name=company]')?.value)return true;
@@ -341,6 +375,16 @@
       // Popups and the promo banner draw their own form states.
       if (!field?.form || !isForm(field.form) || ownSuccess(field.form)) return;
       event.preventDefault();
+      if (trapField(field)) return;
+      if (own(field.form)) {
+        // One message: the form's own hint, in its words.
+        const hint = field.form.querySelector('[data-nl-hint]');
+        if (hint && say(field.form).invalidMessage) hint.textContent = say(field.form).invalidMessage;
+        if (field.form.dataset.state === 'error' || field.form.dataset.state === 'done') setState(field.form, '');
+        field.setAttribute('aria-invalid', 'true');
+        if (field.form.querySelector(':invalid:not(fieldset)') === field) { try { field.focus({ preventScroll: false }); } catch (_) {} }
+        return;
+      }
       fieldError(field, (field.type === 'email' && say(field.form).invalidMessage) || field.validationMessage);
       const first = field.form.querySelector(':invalid:not(fieldset)');
       if (first === field) { try { field.focus({ preventScroll: false }); } catch (_) {} }
@@ -349,6 +393,7 @@
       const field = event.target;
       if (field?.getAttribute?.('data-mt-error') && field.checkValidity()) clearFieldError(field);
       const form=field?.form;
+      if(own(form) && field.getAttribute?.('aria-invalid')==='true' && field.checkValidity())field.removeAttribute('aria-invalid');
       if(form?.hasAttribute('data-mt-inline-subscribe') && form.dataset.state==='done' && emailOf(form)!==form.dataset.subscribedEmail){
         const button=form.querySelector('[data-subscribed]');
         if(button){const label=button.querySelector('[data-inline-label]');if(label)label.textContent=button.dataset.inlineOriginalLabel;button.removeAttribute('data-subscribed');}

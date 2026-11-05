@@ -208,6 +208,11 @@
       put(words, '@data-already-message', str(s.already_text)); put(words, '@data-invalid-message', str(s.invalid_text)); put(words, '@data-error-message', str(s.error_text));
       put(words, '@data-success-ms', str(num(s.success_duration, 5) * 1000));
     }
+    // The form's own messages (data-state done / error, and the hint under the field).
+    const nlMsg = (sel, v, d) => { const el = c.q(sel); if (el) put(el, 'text', str(v) !== '' ? str(v) : d); };
+    nlMsg('[data-nl-msg="done"]', s.success_text, "Thanks, you're on the list.");
+    nlMsg('[data-nl-msg="error"]', s.error_text, 'That did not go through. Check your connection and try again.');
+    nlMsg('[data-nl-hint]', s.invalid_text, 'Enter a valid email address.');
     const fields = c.q('[data-nl-fields]');
     if (fields) {
       put(fields, '.align', 'justify-content-' + align);

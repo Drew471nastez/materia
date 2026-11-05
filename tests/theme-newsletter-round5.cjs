@@ -16,7 +16,12 @@
    real materia-forms.js/.css, and /contact is answered by this test (nothing
    is posted anywhere). States: idle, sending (busy, one submit at a time),
    success (the section's words, for the section's time), already subscribed,
-   invalid address, a refused post, no network, and the builder preview. */
+   invalid address, a refused post, no network, and the builder preview.
+   Since the builder AI's redesign (data-nl-form) the form shows its own
+   states: materia-forms.js sends it once (Storelib's page handler never sees
+   the submit), sets data-state sending / done / error and writes the
+   section's words into [data-nl-msg]; no toast, no second note. The honeypot
+   is checked too: one, empty, off screen, and a filled one sends nothing. */
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
@@ -26,6 +31,7 @@ const body = text => text.split('\n<schema>')[0].replace(/^<template compat="sho
 const schemaOf = f => { const t = read(f); return JSON.parse(t.slice(t.indexOf('\n<schema>') + 9, t.lastIndexOf('</schema>'))).shopify; };
 let checks = 0;
 const ok = (cond, msg) => { assert.ok(cond, msg); checks++; };
+const eq = (a, b, msg) => { assert.deepEqual(a, b, msg); checks++; };
 
 /* ---------- static ---------- */
 const file = read('sections/newsletter.storelib');
@@ -40,11 +46,13 @@ ok(S('success_duration').type === 'range' && S('success_duration').unit === 's' 
 ok(S('button_style').options.length <= 3, 'button style draws as buttons');
 const tpl = body(file);
 ok(/data-mt-words/.test(tpl) && /data-success-message=/.test(tpl) && /data-success-ms=/.test(tpl), 'the form carries its words');
-ok(/form\.posted_successfully\?[\s\S]{0,40}data-mt-posted/.test(tpl) && /form\.errors[\s\S]{0,40}data-mt-failed/.test(tpl), 'the redrawn form says how the post went');
+ok(/data-nl-msg="done">\{\{ section_st\.success_text/.test(tpl) && /data-nl-msg="error">\{\{ section_st\.error_text/.test(tpl) && /data-nl-hint>\{\{ section_st\.invalid_text/.test(tpl), 'the form\'s own messages are the section\'s settings');
+ok(/form\.posted_successfully\?[\s\S]{0,80}section_st\.success_text/.test(tpl) && /form\.errors[\s\S]{0,80}section_st\.invalid_text/.test(tpl), 'a form drawn after a post without script says how it went');
 ok(/<label class="visually-hidden" for="NewsletterEmail-\{\{ section\.id \}\}">/.test(tpl) && /autocomplete="email"/.test(tpl), 'the email field has a label and autocomplete');
 const forms = read('shopify/assets/materia-forms.js');
 ok(!/textContent = 'Company'/.test(forms), 'the bot trap holds no text');
 ok(/data-mt-posted/.test(forms) && /data-mt-failed/.test(forms) && /\[data-mt-words\]/.test(forms), 'materia-forms reads the markers and the words');
+ok(/data-nl-form/.test(forms) && /data-nl-msg=/.test(forms) && /\[data-nl-hint\]/.test(forms), 'materia-forms drives the form\'s own states and messages');
 ok(/Sign-ups go to Subscribers on your live site/.test(forms), 'the builder previews the success state');
 ok(!/\b(unlock|elevate|seamless|powerful|effortlessly|supercharge|transform)\b|—/i.test(['success_text', 'already_text', 'invalid_text', 'error_text'].map(id => S(id).default).join(' ')), 'plain message copy');
 
@@ -77,9 +85,9 @@ function engine(formState) {
   e.registerTag('javascript', block('javascript', null));
   // What Storelib draws for {% form 'customer' %}: the post goes to /contact, and `form` says how the last one went.
   e.registerTag('form', {
-    parse(tok, remain) { this.cls = (/class:\s*'([^']*)'/.exec(tok.args) || [])[1] || ''; this.tpls = []; const s = this.liquid.parser.parseStream(remain); s.on('tag:endform', () => s.stop()).on('template', t => this.tpls.push(t)).on('end', () => { throw new Error('unclosed form'); }); s.start(); },
+    parse(tok, remain) { this.cls = (/class:\s*'([^']*)'/.exec(tok.args) || [])[1] || ''; this.data = [...tok.args.matchAll(/(data-[\w-]+):\s*'([^']*)'/g)].map(m => ` ${m[1]}="${m[2]}"`).join(''); this.tpls = []; const s = this.liquid.parser.parseStream(remain); s.on('tag:endform', () => s.stop()).on('template', t => this.tpls.push(t)).on('end', () => { throw new Error('unclosed form'); }); s.start(); },
     * render(ctx, em) {
-      em.write(`<form method="post" action="/contact#contact_form" id="contact_form" accept-charset="UTF-8" class="${this.cls}" data-storelib-form="subscribe"><input type="hidden" name="form_type" value="customer"><input type="hidden" name="utf8" value="✓">`);
+      em.write(`<form method="post" action="/contact#contact_form" id="contact_form" accept-charset="UTF-8" class="${this.cls}"${/data-storelib-form/.test(this.data) ? '' : ' data-storelib-form="subscribe"'}${this.data}><input type="hidden" name="form_type" value="customer"><input type="hidden" name="utf8" value="✓">`);
       ctx.push({ form: formState });
       yield this.liquid.renderer.renderTemplates(this.tpls, ctx, em);
       ctx.pop();
@@ -168,79 +176,106 @@ const { chromium } = require('playwright');
       ok(r.mt === '64px', 'a top margin wins over Remove default space: ' + r.mt);
       ok(!/Company/.test(r.text), 'the form text is the same before and after it is armed');
 
-      /* 2. Success: busy, one post, the section's words, gone after the section's time. */
+      /* 2. Success: one sender (materia-forms), busy, one post, the section's
+         words once in the form's own message, Subscribed for the section's time. */
+      const look = () => p.evaluate(() => {
+        const f = document.querySelector('#shopify-section-nl form'), b = f.querySelector('button[type=submit]');
+        const shown = el => !!el && getComputedStyle(el).display !== 'none' && getComputedStyle(el).visibility !== 'hidden' && el.getClientRects().length > 0;
+        const msgs = [...document.querySelectorAll('#shopify-section-nl .nl-msg, .mt-toast[data-show], .storelib-form-note, .mt-field-error')].filter(shown).map(el => el.textContent.trim());
+        return { state: f.dataset.state || '', msgs, label: shown(f.querySelector('[data-nl-label]')), subscribed: shown(f.querySelector('[data-nl-subscribed]')), spinner: shown(f.querySelector('.nl-spinner')), pending: b.classList.contains('materia-form-pending'), aria: b.getAttribute('aria-disabled'), disabled: b.disabled, sending: f.hasAttribute('data-mt-sending'), storelib: f.hasAttribute('data-storelib-sending'), value: f.querySelector('input[type=email]').value, invalid: f.querySelector('input[type=email]').getAttribute('aria-invalid') };
+      });
       await submit(p, 'test+materia-check@example.com');
-      const busy = await p.evaluate(() => { const f = document.querySelector('#shopify-section-nl form'), b = f.querySelector('button[type=submit]'); return { pending: b.classList.contains('materia-form-pending'), aria: b.getAttribute('aria-disabled'), sending: f.hasAttribute('data-mt-sending') }; });
-      ok(busy.pending && busy.aria === 'true' && busy.sending, 'the button shows it is sending: ' + JSON.stringify(busy));
+      const busy = await look();
+      ok(busy.state === 'sending' && busy.spinner && !busy.label && busy.aria === 'true' && busy.sending && !busy.pending, 'sending: the form\'s own spinner, one submit at a time: ' + JSON.stringify(busy));
       await p.evaluate(() => { const f = document.querySelector('#shopify-section-nl form'); f.requestSubmit(); f.requestSubmit(); });
-      await p.waitForSelector('.mt-toast[data-show]', { timeout: 5000 });
+      await p.waitForFunction(() => document.querySelector('#shopify-section-nl form').dataset.state === 'done', null, { timeout: 5000 });
       ok(calls.length === 1 && /contact%5Bemail%5D|contact\[email\]/.test(calls[0]) && /test\+materia-check@example\.com/.test(calls[0]), 'one post, with the address');
-      let t = await toast(p);
-      ok(t.text === settings.success_text && t.role === 'status' && t.live === 'polite', 'success says the section\'s words: ' + JSON.stringify(t));
-      { const left = await p.evaluate(() => [document.querySelector('.storelib-form-note')?.outerHTML, document.querySelector('#shopify-section-nl [data-mt-sending], #shopify-section-nl .materia-form-pending')?.outerHTML.slice(0, 200)]); ok(!left[0] && !left[1], 'no second note; pending cleared: ' + JSON.stringify(left)); }
-      ok(await p.evaluate(() => document.querySelector('#NewsletterEmail-nl').value === ''), 'the field is empty for the next address');
+      let l = await look();
+      ok(!l.storelib && !l.pending && !l.sending, 'Storelib\'s page handler did not send it a second time: ' + JSON.stringify(l));
+      eq(l.msgs, [settings.success_text], 'success: the section\'s words, shown once (no toast, no second note)');
+      ok(l.subscribed && !l.label, 'the button reads Subscribed');
       await p.waitForTimeout(2300);
-      ok((await toast(p)).shown, 'still shown before the section\'s time');
-      await p.waitForTimeout(1200);
-      ok(!(await toast(p)).shown, 'gone after the section\'s 3 seconds');
+      l = await look();
+      ok(l.state === 'done' && l.subscribed && l.msgs.length === 1, 'still Subscribed before the section\'s time');
+      await p.waitForTimeout(1300);
+      l = await look();
+      ok(l.state === '' && l.label && !l.subscribed && l.msgs.length === 0, 'after the section\'s 3 seconds the button reads its label again: ' + JSON.stringify(l));
 
       /* 3. Already subscribed from this browser. */
-      await p.waitForTimeout(400);
       await submit(p, 'TEST+materia-check@example.com ');
-      await p.waitForSelector('.mt-toast[data-show]', { timeout: 5000 });
-      t = await toast(p);
-      ok(t.text === defaults.already_text, 'the same address again says it is already on the list: ' + t.text);
+      await p.waitForFunction(() => document.querySelector('#shopify-section-nl form').dataset.state === 'done', null, { timeout: 5000 });
+      eq((await look()).msgs, [defaults.already_text], 'the same address again says it is already on the list');
       ok(calls.length === 2, 'it is still sent (the list decides)');
       ok(await p.evaluate(() => !/materia-check/.test(localStorage.getItem('materia:signed-up') || '')), 'the address itself is not stored');
       ok(errs.length === 0, 'no page errors: ' + errs.join(' | '));
       await ctx.close();
     }
 
-    /* 4. Invalid address, refused post, no network. */
+    /* 4. Invalid address, refused post, no network, the honeypot. */
     settings = { invalid_text: 'That address is missing something.', error_text: 'No connection. Try again in a moment.' };
     {
       const { p, ctx, errs } = await open({ width: 375 });
+      const look = () => p.evaluate(() => {
+        const f = document.querySelector('#shopify-section-nl form'), b = f.querySelector('button[type=submit]');
+        const shown = el => !!el && getComputedStyle(el).display !== 'none' && getComputedStyle(el).visibility !== 'hidden' && el.getClientRects().length > 0;
+        const msgs = [...document.querySelectorAll('#shopify-section-nl .nl-msg, .mt-toast[data-show], .storelib-form-note, .mt-field-error')].filter(shown).map(el => el.textContent.trim());
+        return { state: f.dataset.state || '', msgs, disabled: b.disabled || b.getAttribute('aria-disabled') === 'true', sending: f.hasAttribute('data-mt-sending') || f.hasAttribute('data-storelib-sending'), value: f.querySelector('input[type=email]').value, invalid: f.querySelector('input[type=email]').getAttribute('aria-invalid') };
+      });
       const lay = await p.evaluate(() => ({ over: document.documentElement.scrollWidth - innerWidth, h: document.querySelector('#shopify-section-nl button[type=submit]').getBoundingClientRect().height }));
       ok(lay.over <= 0 && lay.h >= 44, 'fits 375px with a 44px button: ' + JSON.stringify(lay));
       await submit(p, 'not-an-email');
-      await p.waitForSelector('.mt-field-error');
-      const inv = await p.evaluate(() => ({ text: document.querySelector('.mt-field-error').textContent, role: document.querySelector('.mt-field-error').getAttribute('role'), aria: document.querySelector('#NewsletterEmail-nl').getAttribute('aria-invalid') }));
-      ok(inv.text === settings.invalid_text && inv.role === 'alert' && inv.aria === 'true' && calls.length === 0, 'invalid: the section\'s words under the field, nothing sent: ' + JSON.stringify(inv));
+      await p.waitForTimeout(150);
+      let l = await look();
+      ok(l.invalid === 'true' && calls.length === 0, 'invalid: nothing sent, the field is marked: ' + JSON.stringify(l));
+      eq(l.msgs, [settings.invalid_text], 'invalid: the section\'s hint, once, under the field');
       await p.fill('#NewsletterEmail-nl', 'ana@example.com');
-      ok(await p.locator('.mt-field-error').count() === 0, 'cleared once valid');
+      l = await look();
+      ok(l.invalid === null && l.msgs.length === 0, 'the hint goes once the address is valid: ' + JSON.stringify(l));
 
       reply = { ok: false, code: 'email', message: 'Enter a valid email address.' };
       await p.click('.sec__newsletter button[type=submit]');
-      await p.waitForSelector('.storelib-form-note[role=alert]', { timeout: 5000 });
-      let note = await p.evaluate(() => document.querySelector('.storelib-form-note').textContent);
-      ok(note === settings.invalid_text, 'a refused address: the section\'s words: ' + note);
-      ok(await p.evaluate(() => document.querySelector('#NewsletterEmail-nl').value === 'ana@example.com' && !document.querySelector('.mt-toast[data-show]')), 'the address stays typed, no success toast');
+      await p.waitForFunction(() => document.querySelector('#shopify-section-nl form').dataset.state === 'error', null, { timeout: 5000 });
+      l = await look();
+      eq(l.msgs, [settings.invalid_text], 'a refused address: the section\'s words, once');
+      ok(l.value === 'ana@example.com' && !l.sending, 'the address stays typed');
 
       reply = { ok: false, code: 'failed' };
       await p.click('.sec__newsletter button[type=submit]');
-      await p.waitForFunction(() => /Try again in a moment/.test(document.querySelector('.storelib-form-note')?.textContent || ''), null, { timeout: 5000 });
-      ok(true, 'a post that failed: the section\'s words');
+      await p.waitForFunction(t => document.querySelector('#shopify-section-nl [data-nl-msg="error"]').textContent === t && document.querySelector('#shopify-section-nl form').dataset.state === 'error', settings.error_text, { timeout: 5000 });
+      eq((await look()).msgs, [settings.error_text], 'a post that failed: the section\'s words, once');
 
       offline = true;
       await p.click('.sec__newsletter button[type=submit]');
-      await p.waitForTimeout(100);
-      await p.waitForFunction(() => { const f = document.querySelector('#shopify-section-nl form'); return !f.hasAttribute('data-mt-sending') && !f.hasAttribute('data-storelib-sending'); }, null, { timeout: 5000 });
-      note = await p.evaluate(() => ({ t: document.querySelector('.storelib-form-note[role=alert]')?.textContent, dis: document.querySelector('#shopify-section-nl button[type=submit]').disabled }));
-      ok(note.t === settings.error_text && !note.dis, 'no network: the section\'s words, the button works again: ' + JSON.stringify(note));
+      await p.waitForFunction(() => { const f = document.querySelector('#shopify-section-nl form'); return f.dataset.state === 'error' && !f.hasAttribute('data-mt-sending'); }, null, { timeout: 5000 });
+      l = await look();
+      ok(!l.disabled && !l.sending, 'no network: the button works again: ' + JSON.stringify(l));
+      eq(l.msgs, [settings.error_text], 'no network: the section\'s error words, once');
       offline = false; reply = { ok: true };
+      const before = calls.length;
+      await p.click('.sec__newsletter button[type=submit]');
+      await p.waitForFunction(() => document.querySelector('#shopify-section-nl form').dataset.state === 'done', null, { timeout: 5000 });
+      ok(calls.length === before + 1 && (await look()).msgs.length === 1, 'after an error the next try goes through, with one message');
+
+      const hp = await p.evaluate(() => { const f = document.querySelector('#shopify-section-nl form'), traps = f.querySelectorAll('[data-mt-trap]'), i = f.querySelector('[data-mt-trap] input'), r = i.getBoundingClientRect(); return { traps: traps.length, name: i.name, value: i.value, off: r.right <= 0 || r.width <= 1, hidden: traps[0].getAttribute('aria-hidden'), tab: i.tabIndex }; });
+      ok(hp.traps === 1 && hp.name === 'company' && hp.value === '' && hp.off && hp.hidden === 'true' && hp.tab === -1, 'the honeypot: one, empty, off screen, out of the tab order: ' + JSON.stringify(hp));
+      ok(calls.every(c => /name="company"\r\n\r\n\r\n/.test(c) || /company=(&|$)/.test(c)), 'every post sent the honeypot empty');
+      const sent = calls.length;
+      await p.evaluate(() => { const f = document.querySelector('#shopify-section-nl form'); f.querySelector('[data-mt-trap] input').value = 'bot'; f.requestSubmit(); });
+      await p.waitForTimeout(600);
+      ok(calls.length === sent, 'a filled honeypot sends nothing');
       ok(errs.length === 0, 'no page errors: ' + errs.join(' | '));
       await ctx.close();
     }
 
-    /* 5. Builder: nothing is sent, the success state is shown. */
+    /* 5. Builder: one request at most, the success state is shown in the form. */
     settings = { success_text: 'Thanks for joining.', success_duration: 4 };
     {
       const { p, ctx, errs } = await open({ design: true });
       await submit(p, 'test+materia-check@example.com');
-      await p.waitForSelector('.mt-toast[data-show]', { timeout: 3000 });
-      const t = await toast(p);
-      // Builder sign-ups now send a real request (materia-forms.js: unless a form is set to preview only).
-      ok(calls.length <= 1 && t.text.startsWith('Thanks for joining.'), 'builder: one request at most, the success words shown: ' + JSON.stringify(t));
+      await p.waitForFunction(() => document.querySelector('#shopify-section-nl form').dataset.state === 'done', null, { timeout: 3000 });
+      const t = await p.evaluate(() => ({ msg: document.querySelector('#shopify-section-nl [data-nl-msg="done"]').textContent, toast: !!document.querySelector('.mt-toast[data-show]') }));
+      // Builder sign-ups send a real request (materia-forms.js: unless a form is set to preview only).
+      ok(calls.length <= 1 && t.msg === 'Thanks for joining.' && !t.toast, 'builder: one request at most, the success words shown once: ' + JSON.stringify(t));
       ok(await p.evaluate(() => location.pathname === '/'), 'the canvas did not navigate');
       ok(errs.length === 0, 'no page errors: ' + errs.join(' | '));
       await ctx.close();

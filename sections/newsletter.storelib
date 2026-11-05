@@ -275,7 +275,7 @@
   #shopify-section-{{ section.id }} .newsletter-note[hidden] { display: none !important; }
   #shopify-section-{{ section.id }} .subcribe-input[data-own-font] { --body-font: var(--ct-bf); }
   #shopify-section-{{ section.id }} .newsletter-note[data-own-font] { font-family: var(--ct-bf, var(--body-font)); }
-  /* Sign-up states, driven by the data-state Storelib puts on the form */
+  /* Sign-up states, driven by the data-state materia-forms.js puts on the form (sending, done, error) */
   #shopify-section-{{ section.id }} [data-nl-form] .nl-msg { margin: 0; font-size: 14px; line-height: 1.5; }
   #shopify-section-{{ section.id }} [data-nl-form] [data-nl-result] .nl-msg { display: none; }
   #shopify-section-{{ section.id }} [data-nl-form][data-state="error"] [data-nl-msg="error"] { display: block; color: #b91c1c; }
@@ -289,10 +289,10 @@
   #shopify-section-{{ section.id }} [data-nl-form] .nl-button { cursor: pointer; }
   #shopify-section-{{ section.id }} [data-nl-form][data-state="sending"] .nl-button { opacity: .85; cursor: progress; pointer-events: none; }
   /* Honeypot: off screen, never focusable, bots that fill it fail validation and the form never sends */
-  #shopify-section-{{ section.id }} .nl-hp { position: absolute !important; left: -10000px !important; top: auto !important; width: 1px !important; height: 1px !important; overflow: hidden !important; opacity: 0 !important; pointer-events: none !important; }
+  #shopify-section-{{ section.id }} .nl-hp { position: absolute !important; left: -10000px !important; top: auto !important; width: 1px !important; height: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; pointer-events: none !important; }
   #shopify-section-{{ section.id }} .nl-form .nl-input:user-invalid { border-color: #b91c1c; }
   #shopify-section-{{ section.id }} [data-nl-hint] { display: none; margin: 6px 0 0; font-size: 14px; line-height: 1.5; color: #b91c1c; width: 100%; }
-  #shopify-section-{{ section.id }} [data-nl-form]:has(.nl-input:user-invalid) [data-nl-hint] { display: block; }
+  #shopify-section-{{ section.id }} [data-nl-form]:has(.nl-input:user-invalid) [data-nl-hint], #shopify-section-{{ section.id }} [data-nl-form]:has(.nl-input[aria-invalid="true"]) [data-nl-hint] { display: block; }
   #shopify-section-{{ section.id }} [data-nl-form][data-state="sending"] [data-nl-label] { visibility: hidden; }
   #shopify-section-{{ section.id }} [data-nl-form][data-state="sending"] .nl-spinner { visibility: visible; }
   /* After a sign-up the button reads Subscribed, then returns to Subscribe so another address can be sent */
@@ -384,12 +384,22 @@
             assign nl_button_style = section_st.button_style | default: 'primary'
             assign nl_success_ms = section_st.success_duration | default: 5 | times: 1000
           -%}
-          {%- comment -%} A plain Storelib sign-up form: the page sends it straight to the creator's Subscribers and sets data-state on it (sending, done, error). {%- endcomment -%}
-          {%- form 'customer', id: 'NewsletterForm-' | append: section.id, class: 'nl-form justify-content-inherit', data-nl-form: '' -%}
+          {%- comment -%} A Storelib sign-up form (data-storelib-form="subscribe") to the creator's Subscribers. materia-forms.js sends it, once, and sets data-state on it (sending, done, error); the messages below and in data-mt-words are the section's own words. {%- endcomment -%}
+          {%- form 'customer', id: 'NewsletterForm-' | append: section.id, class: 'nl-form justify-content-inherit', data-nl-form: '', data-mt-inline-subscribe: 'true', data-storelib-form: 'subscribe' -%}
             <input type="hidden" name="contact[tags]" value="newsletter">
-            <div class="nl-hp" aria-hidden="true">
+            {%- comment -%} The words materia-forms.js shows (live-contact.js keeps them live). Hidden, so they are not part of the form's text. {%- endcomment -%}
+            <span
+              hidden
+              data-mt-words
+              data-success-message="{{ section_st.success_text | default: "Thanks, you're on the list." | escape }}"
+              data-already-message="{{ section_st.already_text | escape }}"
+              data-invalid-message="{{ section_st.invalid_text | escape }}"
+              data-error-message="{{ section_st.error_text | escape }}"
+              data-success-ms="{{ nl_success_ms }}"
+            ></span>
+            <div class="nl-hp" aria-hidden="true" data-mt-trap>
               <label for="NewsletterHp-{{ section.id }}">Leave this field empty</label>
-              <input id="NewsletterHp-{{ section.id }}" type="text" tabindex="-1" autocomplete="off" pattern="^$" maxlength="0" value="">
+              <input id="NewsletterHp-{{ section.id }}" type="text" name="company" tabindex="-1" autocomplete="off" pattern="^$" maxlength="0" value="">
             </div>
             <div class="newsletter-inner flex flex-wrap gap-10 w-full justify-content-{{ header_alignment }}" data-nl-fields style="{{ nl_field_vars | strip | strip_newlines }}">
               <label class="visually-hidden" for="NewsletterEmail-{{ section.id }}">{{ nl_email_label }}</label>
@@ -409,19 +419,19 @@
                 autocomplete="email"
                 autocapitalize="off"
                 spellcheck="false"
-                class="nl-input btn-radius"
+                class="nl-input subcribe-input btn-radius{% if form_layout == 'horizontal' %} col{% else %} input-vertical{% endif %}"
                 {% if sec_font %}data-own-font{% endif %}
               >
               <button
                 type="submit"
-                class="nl-button {% if nl_button_style == 'secondary' %}btn-secondary{% else %}btn-primary{% endif %}"
+                class="nl-button subcribe-button {% if nl_button_style == 'secondary' %}btn-secondary{% else %}btn-primary{% endif %}"
                 data-theme-button="{{ nl_button_style }}" data-sl-button{% if nl_own_shape %} data-own-shape{% endif %}{% if sec_font %} data-own-font{% endif %}
                 style="{{ nl_button_vars | strip | strip_newlines }}{% if sec_font and section_st.body_font.family != blank %}--mb-font: var(--ct-bf);{% endif %}"
               >
                 <span class="newsletter-button-stack">
-                  <span data-nl-label class="newsletter-button-state" data-ct-default="{{ 'newsletter.button_label' | t | escape }}">{{- nl_button_label -}}</span>
+                  <span data-nl-label data-inline-label class="newsletter-button-state" data-ct-default="{{ 'newsletter.button_label' | t | escape }}">{{- nl_button_label -}}</span>
                   <span class="newsletter-button-state nl-spinner" aria-hidden="true"></span>
-                  <span data-nl-subscribed class="newsletter-button-state newsletter-button-measure" aria-hidden="true">{{ section_st.subscribed_button_text | default: 'Subscribed' | escape_once }}</span>
+                  <span data-nl-subscribed data-subscribed-label class="newsletter-button-state newsletter-button-measure" aria-hidden="true">{{ section_st.subscribed_button_text | default: 'Subscribed' | escape_once }}</span>
                 </span>
               </button>
             </div>
@@ -433,7 +443,6 @@
               {%- if form.errors -%}<p class="nl-msg" style="display:block;color:#b91c1c">{{ section_st.invalid_text | default: 'Enter a valid email address.' | escape }}</p>{%- endif -%}
             </div>
           {%- endform -%}
-          <p class="nl-msg nl-msg--done nl-success" hidden aria-hidden="true">{{ section_st.success_text | default: "Thanks, you're on the list." | escape }}</p>
           <div class="sec_newsletter_note newsletter-note mt-12 mx-auto fs-12" data-nl-note{% if sec_font %} data-own-font{% endif %}{% if section_st.note == blank %} hidden{% endif %}>{{ section_st.note }}</div>
         </motion-element>
       </div>
@@ -568,9 +577,7 @@
       "type": "text",
       "id": "already_text",
       "label": "Already subscribed message",
-      "hidden": true,
-      "visible_if": "{{ false }}",
-      "info": "Legacy: Storelib's sign-up does not report repeat addresses.",
+      "info": "Shown when this address was signed up from the same browser before.",
       "default": "You're already on the list."
     },
     {
@@ -1460,9 +1467,7 @@
         "type": "text",
         "id": "already_text",
         "label": "Already subscribed message",
-        "hidden": true,
-        "visible_if": "{{ false }}",
-        "info": "Legacy: Storelib's sign-up does not report repeat addresses.",
+        "info": "Shown when this address was signed up from the same browser before.",
         "default": "You're already on the list."
       },
       {
