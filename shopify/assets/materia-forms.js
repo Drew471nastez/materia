@@ -28,7 +28,10 @@
   };
   const MIN_MS = 2000;
   const TOAST_MS = 5000;
-  const FORMS = 'form[data-storelib-form="subscribe"], form[data-storelib-form="contact"], form:has(input[name="form_type"][value="customer"]), form:has(input[name="form_type"][value="contact"])';
+  // :has() where the browser reads it; before Safari 15.4 and Firefox 121 the
+  // same forms are found by the address they post to.
+  const HAS = (() => { try { document.querySelector(':has(*)'); return true; } catch (_) { return false; } })();
+  const FORMS = HAS ? 'form[data-storelib-form="subscribe"], form[data-storelib-form="contact"], form:has(input[name="form_type"][value="customer"]), form:has(input[name="form_type"][value="contact"])' : 'form[data-storelib-form="subscribe"], form[data-storelib-form="contact"], form[action*="/contact"]';
   const SUCCESS = '.newsletter-form__message--success, .form__message.success, .cfs__success, .cp-alert--ok, p.success, .form-status--success, .storelib-form-note[role="status"]';
   const ERROR = '.errors, .form__message.error, .newsletter-form__message.error, .cfs__errors, .cp-alert--err, .storelib-form-note[role="alert"], [role="alert"]:not(.mt-field-error)';
   const reduced = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;

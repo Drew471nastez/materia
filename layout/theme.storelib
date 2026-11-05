@@ -433,7 +433,6 @@
     <script src="{{ 'media-live-galleries-b.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'media-live-image-video.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'media-live-benefits.js' | asset_url }}" defer="defer"></script>
-    <script src="{{ 'media-live-text-grid.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'media-live-stats-reels.js' | asset_url }}" defer="defer"></script>
     {%- comment -%} Products sections: scoped live editor updates. {%- endcomment -%}
     <script src="{{ 'live-products-a.js' | asset_url }}" defer="defer"></script>
@@ -451,26 +450,96 @@
     <script src="{{ 'live-logos.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'live-countdown.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'live-announcements.js' | asset_url }}" defer="defer"></script>
-    <script src="{{ 'live-contact.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'live-social-dividers.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'live-popups-code.js' | asset_url }}" defer="defer"></script>
-    <script src="{{ 'live-hero-gaps.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'live-page-popups.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'live-product-extras.js' | asset_url }}" defer="defer"></script>
-    <script src="{{ 'live-main-product.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'live-header.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'live-blog-slideshow.js' | asset_url }}" defer="defer"></script>
-    <script src="{{ 'live-footer.js' | asset_url }}" defer="defer"></script>
-    <script src="{{ 'live-collection-pages.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'live-cart-search.js' | asset_url }}" defer="defer"></script>
-    <script src="{{ 'live-account-pages.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'hero-benefits.js' | asset_url }}" defer="defer"></script>
     {{ 'text-section-controls.css' | asset_url | stylesheet_tag }}
     <script src="{{ 'scroll-text-reveal.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'text-section-controls.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'live-text.js' | asset_url }}" defer="defer"></script>
-    <script src="{{ 'slideshow-pointer.js' | asset_url }}" defer="defer"></script>
-    <script src="{{ 'slideshow-live.js' | asset_url }}" defer="defer"></script>
+    {%- comment -%}
+      Builder-only live preview. These controllers only repaint a section from
+      the builder's storelib:settings-change and storelib:section-load; on a
+      visitor's page they draw nothing (docs/storefront-scripts-audit.md), so a
+      visitor never downloads them. In the builder (request.design_mode,
+      window.Shopify.designMode or the builder referrer) they are written here
+      as deferred scripts, in this order, as before. A canvas with none of
+      those signals gets them on its first live event: they load in order, and
+      every live event that arrives meanwhile is held, before any listener
+      sees it, and given again on the same target with the same detail once
+      they have run, so each listener sees each event once, in order.
+    {%- endcomment -%}
+    <script>
+      (function () {
+        var L = [
+          {{ 'media-live-text-grid.js' | asset_url | json }},
+          {{ 'live-contact.js' | asset_url | json }},
+          {{ 'live-hero-gaps.js' | asset_url | json }},
+          {{ 'live-main-product.js' | asset_url | json }},
+          {{ 'live-footer.js' | asset_url | json }},
+          {{ 'live-collection-pages.js' | asset_url | json }},
+          {{ 'live-account-pages.js' | asset_url | json }},
+          {{ 'slideshow-pointer.js' | asset_url | json }},
+          {{ 'slideshow-live.js' | asset_url | json }}
+        ];
+        var TYPES = ['storelib:settings-change', 'storelib:section-load'];
+        var design = {% if request.design_mode %}true{% else %}false{% endif %} || !!(window.Shopify && window.Shopify.designMode);
+        if (!design) try {
+          var ref = new URL(document.referrer);
+          design = window.top !== window && (ref.hostname === 'storelib.com' || /\.storelib\.com$/.test(ref.hostname)) && ref.pathname.indexOf('/website-builder') > -1;
+        } catch (e) {}
+        if (design && document.readyState === 'loading' && document.currentScript) {
+          var tags = '';
+          for (var i = 0; i < L.length; i++) tags += '<script src="' + String(L[i]).replace(/"/g, '&quot;') + '" defer="defer"><\/script>';
+          document.write(tags);
+          return;
+        }
+        var state = 0, held = [], replaying = false;
+        function hold(e) {
+          if (state === 2 || replaying) return;
+          e.stopImmediatePropagation();
+          held.push({target: e.target, type: e.type, detail: e.detail, bubbles: e.bubbles, cancelable: e.cancelable, composed: e.composed});
+          if (!state) start();
+        }
+        function replay() {
+          if (state === 2) return;
+          state = 2;
+          for (var t = 0; t < TYPES.length; t++) window.removeEventListener(TYPES[t], hold, true);
+          var list = held;
+          held = [];
+          replaying = true;
+          try {
+            for (var k = 0; k < list.length; k++) {
+              var h = list[k];
+              try { h.target.dispatchEvent(new CustomEvent(h.type, {detail: h.detail, bubbles: h.bubbles, cancelable: h.cancelable, composed: h.composed})); } catch (err) { setTimeout(function () { throw err; }); }
+            }
+          } finally { replaying = false; }
+        }
+        function load() {
+          var left = L.length;
+          function done() { if (--left === 0) setTimeout(replay, 0); }
+          for (var j = 0; j < L.length; j++) {
+            var s = document.createElement('script');
+            s.src = L[j];
+            s.async = false;
+            s.onload = s.onerror = done;
+            document.head.appendChild(s);
+          }
+          setTimeout(replay, 8000);
+        }
+        function start() {
+          state = 1;
+          if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load, {once: true}); else load();
+        }
+        for (var t = 0; t < TYPES.length; t++) window.addEventListener(TYPES[t], hold, true);
+        if (design) start();
+      })();
+{% comment %}{% endcomment %}    </script>
     {{ 'testimonial-quote.css' | asset_url | stylesheet_tag }}
     <script src="{{ 'testimonial-quote.js' | asset_url }}" defer="defer"></script>
     {{ 'announcement-pro-4.css' | asset_url | stylesheet_tag }}

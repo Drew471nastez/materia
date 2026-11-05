@@ -122,7 +122,7 @@
       event.preventDefault();
       const url = new URL(share.dataset.shareUrl, location.href).href;
       const panel = document.getElementById(share.dataset.sharePanel);
-      if (panel) { panel.querySelector('[data-share-value]').value = url;if(window.MateriaProductDialogs)MateriaProductDialogs.open(panel,share);else panel.showPopover(); }
+      if (panel) { panel.querySelector('[data-share-value]').value = url;if(window.MateriaProductDialogs)MateriaProductDialogs.open(panel,share);else if(panel.showPopover)panel.showPopover();else panel.toggleAttribute('open',true); }
     }
     if (copy) {
       const panel = copy.closest('.mt-product-dialog'), input = panel.querySelector('[data-share-value]'), status = panel.querySelector('[data-copy-status]');

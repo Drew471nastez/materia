@@ -100,14 +100,16 @@
   /* A product's chart from its own page, once per address. */
   const remote = new Map();
   const ask = url => fetch(url, {credentials: 'same-origin'})
-    .then(r => r.ok ? r.text() : '').then(html => new DOMParser().parseFromString(html || '', 'text/html')).catch(() => null);
+    .then(r => r.ok ? r.text() : (r.status >= 500 || r.status === 429 ? null : '')).then(html => html == null ? null : new DOMParser().parseFromString(html || '', 'text/html')).catch(() => null);
   const chartFor = url => {
     if (!remote.has(url)) remote.set(url, ask(url).then(doc => {
-      const source = doc?.querySelector('[data-size-chart-data]');
+      // No answer (offline, timed out): not remembered, so the next look asks again.
+      if (!doc) { remote.delete(url); return null; }
+      const source = doc.querySelector('[data-size-chart-data]');
       const host = source?.querySelector('[data-assigned-chart-host]');
       if (host) return host;
       return null;
-    }).catch(() => null));
+    }).catch(() => { remote.delete(url); return null; }));
     return remote.get(url);
   };
   const place = (slot, host) => {
@@ -141,7 +143,14 @@
     const url = slot.dataset.sizeChartRemote;
     const local = /^\/(?!\/)/.test(url || '') || (url || '').startsWith(location.origin + '/');
     if (!local) return;
-    chartFor(url).then(host => { if (host && slot.isConnected) place(slot, host); });
+    chartFor(url).then(host => {
+      if (host && slot.isConnected) place(slot, host);
+      // Back online, a slot that got no answer asks once more.
+      else if (!host && !remote.has(url) && slot.isConnected) {
+        slot._mtAsked = false;
+        addEventListener('online', () => load(slot), {once: true});
+      }
+    });
   };
   // Ask when the link (or its block) comes near the screen; a slot in a
   // closed dialog is watched through the block that holds it.

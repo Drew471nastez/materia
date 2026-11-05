@@ -1,5 +1,93 @@
 /* Materia Themes. Developed By Materia Themes. */
 "use-strict";
+/* Safari 15.0-15.3 and older Firefox lack these two, which the theme's
+   scripts use for the last item of a list and an own-key check. */
+if (!Array.prototype.at) {
+  Object.defineProperty(Array.prototype, "at", { configurable: true, writable: true, value(index) {
+    const n = Math.trunc(index) || 0;
+    return this[n < 0 ? this.length + n : n];
+  } });
+}
+if (!Object.hasOwn) {
+  Object.defineProperty(Object, "hasOwn", { configurable: true, writable: true, value: (object, key) => Object.prototype.hasOwnProperty.call(object, key) });
+}
+/* The theme's own requests (cart, sections, search, recommendations, product
+   pages) on a slow or broken connection. Each one gets a deadline, so a
+   stalled request ends in its caller's error state instead of a spinner that
+   never stops. A GET that fails on the network, or meets a busy server (429,
+   502-504), is asked once more. A POST is never sent twice: the cart may
+   already have taken it, so its caller shows the error and the shopper
+   decides. A timeout is a TimeoutError, never an AbortError, so callers that
+   ignore their own cancelled requests still show it. Success is untouched:
+   the same response, at the same time. Other addresses (Storelib's own,
+   other sites) go straight to the browser. */
+(() => {
+  const native = window.fetch;
+  if (typeof native !== "function" || native.__materiaResilient || typeof AbortController !== "function") return;
+  const THEME_PATH = /^\/(?:[a-z]{2}(?:-[a-z]{2,4})?\/)?(?:cart|products|collections|search|recommendations|variants|pages|blogs)(?:[/.?]|$)/i;
+  const PLATFORM = /^\/(?:api|_|admin|checkout|apps|builder)(?:[/.?_-]|$)/i;
+  const BUSY = [429, 502, 503, 504];
+  const limits = () => Object.assign({ get: 15000, post: 25000, retryDelay: 600 }, window.materiaFetchLimits);
+  const timeoutError = () => {
+    try { return new DOMException("The request took too long.", "TimeoutError"); }
+    catch (_) { const error = new Error("The request took too long."); error.name = "TimeoutError"; return error; }
+  };
+  const describe = (input, init) => {
+    try {
+      const isRequest = typeof Request === "function" && input instanceof Request;
+      const url = new URL(isRequest ? input.url : String(input), location.href);
+      const method = String((init && init.method) || (isRequest ? input.method : "GET")).toUpperCase();
+      if (url.origin !== location.origin || (init && init.keepalive) || PLATFORM.test(url.pathname)) return null;
+      if (!THEME_PATH.test(url.pathname) && !/[?&](section_id|sections)=/.test(url.search)) return null;
+      if (method !== "GET" && method !== "HEAD" && method !== "POST") return null;
+      return { method, signal: (init && init.signal) || (isRequest ? input.signal : null) };
+    } catch (_) { return null; }
+  };
+  const once = (input, init, outer, ms) => {
+    const controller = new AbortController();
+    let timedOut = false;
+    const cancel = () => controller.abort();
+    const done = () => { clearTimeout(timer); if (outer) outer.removeEventListener("abort", cancel); };
+    const timer = setTimeout(() => { timedOut = true; done(); controller.abort(); }, ms);
+    if (outer) outer.addEventListener("abort", cancel, { once: true });
+    const fail = error => { done(); throw timedOut ? timeoutError() : error; };
+    return native.call(window, input, Object.assign({}, init, { signal: controller.signal })).then(response => {
+      // The deadline covers reading the body too, and ends once it is read.
+      ["text", "json", "blob", "arrayBuffer", "formData"].forEach(name => {
+        const read = response[name];
+        if (typeof read !== "function") return;
+        try {
+          Object.defineProperty(response, name, { configurable: true, writable: true, value() {
+            return read.apply(response, arguments).then(value => { done(); return value; }, fail);
+          } });
+        } catch (_) {}
+      });
+      return response;
+    }, fail);
+  };
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const resilient = function (input, init) {
+    const request = describe(input, init);
+    if (!request || (request.signal && request.signal.aborted)) return native.apply(window, arguments);
+    const limit = limits();
+    const ms = request.method === "POST" ? limit.post : limit.get;
+    const outer = request.signal;
+    const first = once(input, init, outer, ms);
+    if (request.method === "POST") return first;
+    const again = () => (outer && outer.aborted) ? Promise.reject(new DOMException("The request was cancelled.", "AbortError")) : once(input, init, outer, ms);
+    return first.then(response => {
+      if (BUSY.indexOf(response.status) === -1) return response;
+      const after = Math.min(3000, (parseFloat(response.headers.get("Retry-After")) || 0) * 1000) || limit.retryDelay;
+      return wait(after).then(again).catch(() => response);
+    }, error => {
+      // TypeError is a network failure in every browser; a timeout is not retried.
+      if (!error || error.name !== "TypeError" || (outer && outer.aborted)) throw error;
+      return wait(limit.retryDelay).then(again);
+    });
+  };
+  resilient.__materiaResilient = true;
+  window.fetch = resilient;
+})();
 function getCookie(cname) {
   let name = cname + "=";
   let decodedCookie = decodeURIComponent(document.cookie);

@@ -58,13 +58,16 @@
   // browsers get a plain prefetch on hover (mouse only: a tap is already the
   // click) or keyboard focus.
   const speculation = !!(window.HTMLScriptElement && HTMLScriptElement.supports && HTMLScriptElement.supports('speculationrules'));
-  const skip = /\/(cart|checkout|account|search|apps|api)(\/|$)|logout|add-to-cart|\/add(\/|$)/i;
+  const skip = /\/(cart|checkout|account|search|apps|api|admin|builder)(\/|$)|logout|add-to-cart|\/add(\/|$)/i;
+  // A query that changes something (adds to the cart, signs out, removes or
+  // clears a thing) is never fetched early: fetching it would do it.
+  const acts = /[?&](add-to-cart|add|action|logout|remove|delete|clear|return_to|checkout)(=|&|$)/i;
   const warmed = new Set();
   const eligible = anchor => {
     if (!anchor || anchor.target || anchor.hasAttribute('download') || anchor.hasAttribute('data-no-prefetch') || anchor.relList.contains('nofollow')) return null;
     let url;
     try { url = new URL(anchor.href, location.href); } catch { return null; }
-    if (url.origin !== location.origin || url.pathname === location.pathname || skip.test(url.pathname)) return null;
+    if (url.origin !== location.origin || url.pathname === location.pathname || skip.test(url.pathname) || acts.test(url.search) || navigator.onLine === false) return null;
     url.hash = '';
     if (warmed.has(url.href) || warmed.size >= 12) return null;
     return url;
