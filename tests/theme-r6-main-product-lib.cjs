@@ -128,8 +128,9 @@ async function renderMain({tree = repo, settings = {}, blocks, product = R5.PANT
   const content = [{id: sid, html: first.html}, ...others].map(x => `<div id="shopify-section-${x.id}" class="shopify-section">${x.html}</div>`).join('') + '<div style="height:600px"></div>';
   let html = await le.parseAndRender(clean(body(readIn(tree, 'layout/theme.storelib'))), {...base, content_for_header: '', content_for_layout: content}, {globals: base});
   /* The controller, until the layout loads it. */
-  /* outside the builder the layout loads it only on the first live event (layout/theme.storelib's builder-script loader); these checks send live events to a storefront page, so it is added here */
-  if (script && fs.existsSync(path.join(tree, 'shopify/assets/live-main-product.js')) && !/<script[^>]*live-main-product\.js/.test(html) && !(design && html.includes('live-main-product.js'))) html = html.replace('</body>', '<script src="/assets/live-main-product.js" defer></script></body>');
+  /* outside the builder the layout loads its builder scripts only on the first live event, holding that event until they have run (layout/theme.storelib's builder-script loader); these checks send live events to a storefront page, so the loader is told it is in the builder and loads them at once */
+  if (!design) html = html.replace(/var design = false \|\|/, 'var design = true ||');
+  if (script && fs.existsSync(path.join(tree, 'shopify/assets/live-main-product.js')) && !html.includes('live-main-product.js')) html = html.replace('</body>', '<script src="/assets/live-main-product.js" defer></script></body>');
   if (!script) html = html.replace(/<script[^>]*live-main-product\.js[^>]*><\/script>/g, '');
   if (extraHead) html = html.replace('</head>', extraHead + '</head>');
   return {html, sectionHtml: first.html, id: sid, settings: first.settings, blocks: first.blocks, more: others, schemes};
