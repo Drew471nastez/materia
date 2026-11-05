@@ -289,9 +289,11 @@ const NOPILL = clone(BLOCKS); NOPILL[0].settings.header_pill_enable = false; NOP
 
     /* ---------- 5. logo, phone targets, keyboard, redraw ---------- */
     if (part('a11y')) {
-      const {p, ctx, r} = await page(375);
+      /* the Header button kept to desktop here: in the phone pill beside it the logo has no room to grow, and shrinks with its column */
+      const A11Y = clone(BLOCKS).map(b => b.type === 'header_button' ? {...b, settings: {...b.settings, show_on_mobile: false}} : b);
+      const {p, ctx, r} = await page(375, {headerBlocks: A11Y});
       const base = sectionBase(r);
-      await draw(p, r, base);
+      await draw(p, r, base, A11Y);
       const logo = () => p.evaluate(() => Math.max(...[...document.querySelectorAll('#shopify-section-header .header__logo img, #shopify-section-header .header__logo svg')].map(e => Math.round(e.getBoundingClientRect().width))));
       const w0 = await logo();
       await L.emit(p, {section: 'header', settings: {logo_width_mobile: 120}, live: true});
@@ -307,7 +309,7 @@ const NOPILL = clone(BLOCKS); NOPILL[0].settings.header_pill_enable = false; NOP
       await p.keyboard.press('Escape'); await p.waitForTimeout(700);
       ok(await t.getAttribute('aria-expanded') === 'false', 'Escape closes the drawer');
       /* a redraw binds once: one tap opens */
-      await draw(p, r, base);
+      await draw(p, r, base, A11Y);
       await p.locator('#shopify-section-header button.nav-toggle').click(); await p.waitForTimeout(700);
       ok(await p.locator('#shopify-section-header button.nav-toggle').getAttribute('aria-expanded') === 'true', 'after a redraw one tap opens the drawer (no double binding)');
       await ctx.close();
