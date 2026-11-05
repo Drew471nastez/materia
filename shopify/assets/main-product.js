@@ -393,12 +393,14 @@ customElements.define("sold-product", SoldProduct);
           })
           .catch(error => {
             submitBtn?.removeAttribute('disabled');
+            // No connection, a timeout or a page instead of JSON: the cart's own words, not the browser's.
+            const message = (error instanceof TypeError || error instanceof SyntaxError || error.name === 'TimeoutError') ? (window.cartStrings?.error || 'Could not add this item.') : error.message;
             const owner = form.closest('product-form');
-            if (owner?.handleErrorMessage) owner.handleErrorMessage(error.message);
+            if (owner?.handleErrorMessage) owner.handleErrorMessage(message);
             else {
               let alert = form.querySelector('[data-personalization-error]');
               if (!alert) { alert = document.createElement('p'); alert.dataset.personalizationError = ''; alert.setAttribute('role','alert'); form.append(alert); }
-              alert.textContent = error.message;
+              alert.textContent = message;
             }
           });
       },

@@ -108,31 +108,46 @@ const server = http.createServer((req, res) => {
       await ctx.close();
     }
 
-    /* 2. Page to page while the next page stalls, then lands. */
+    /* 2. Page to page while the next page stalls, then lands. The pages
+       report what a shopper sees from inside (a script on each page), since
+       a test driver cannot reach a page whose next page is still on its way. */
     for (const reducedMotion of ['no-preference', 'reduce']) {
       const ctx = await browser.newContext({reducedMotion});
+      await ctx.addInitScript(() => {
+        const report = () => {
+          const title = document.getElementById('title');
+          if (!title) return;
+          const box = title.getBoundingClientRect();
+          const hit = document.elementFromPoint(box.left + 10, box.top + box.height / 2);
+          console.log('state:' + JSON.stringify({
+            path: location.pathname, title: title.textContent,
+            opacity: getComputedStyle(document.documentElement).opacity,
+            body: getComputedStyle(document.body).visibility,
+            hit: hit && (hit.id || hit.tagName),
+            transition: document.getAnimations().filter(a => a.playState === 'running' && /view-transition/.test(a.effect && a.effect.pseudoElement || '')).length,
+          }));
+        };
+        setInterval(report, 150);
+      });
       const page = await ctx.newPage();
       const errors = []; page.on('pageerror', e => errors.push(e.message));
+      const states = []; page.on('console', m => { if (m.text().startsWith('state:')) states.push(JSON.parse(m.text().slice(6))); });
       await page.goto(origin + '/pages/a');
+      await page.waitForTimeout(400);
       await page.click('#to-stall', {noWaitAfter: true});
-      await page.waitForTimeout(1500);
-      const during = await page.evaluate(() => ({
-        title: document.getElementById('title').textContent,
-        opacity: getComputedStyle(document.documentElement).opacity,
-        body: getComputedStyle(document.body).visibility,
-        hit: document.elementFromPoint(20, 20)?.id || document.elementFromPoint(20, 20)?.tagName,
-      }));
-      assert.deepEqual(during, {title: 'Page A', opacity: '1', body: 'visible', hit: 'title'}, reducedMotion + ': a stalled next page leaves the current one painted');
-      await page.click('#to-slow');
-      await page.waitForURL('**/pages/slow');
-      await page.waitForTimeout(reducedMotion === 'reduce' ? 50 : 500);
-      const after = await page.evaluate(() => ({
-        title: document.getElementById('title').textContent,
-        opacity: getComputedStyle(document.documentElement).opacity,
-        running: document.getAnimations().filter(a => a.playState === 'running' && /view-transition/.test(a.effect?.pseudoElement || '')).length,
-        hit: document.elementFromPoint(20, 20)?.id,
-      }));
-      assert.deepEqual(after, {title: 'Slow page', opacity: '1', running: 0, hit: 'title'}, reducedMotion + ': the next page is fully shown when it lands');
+      const clickedAt = states.length;
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      const during = states.slice(clickedAt);
+      assert(during.length >= 5, 'the current page keeps running while the next one stalls');
+      for (const state of during) assert.deepEqual(state, {path: '/pages/a', title: 'Page A', opacity: '1', body: 'visible', hit: 'title', transition: 0}, reducedMotion + ': a stalled next page leaves the current one painted');
+      // The connection comes back: the stalled page arrives.
+      held.splice(0).forEach(res => { res.writeHead(200, {'content-type': 'text/html'}); res.end(doc('Arrived late', LINKS)); });
+      await page.waitForURL('**/pages/stall');
+      await page.waitForFunction(() => document.getElementById('title')?.textContent === 'Arrived late');
+      await page.waitForTimeout(reducedMotion === 'reduce' ? 200 : 600);
+      const landed = states.filter(state => state.path === '/pages/stall').slice(-2);
+      assert(landed.length === 2);
+      for (const state of landed) assert.deepEqual(state, {path: '/pages/stall', title: 'Arrived late', opacity: '1', body: 'visible', hit: 'title', transition: 0}, reducedMotion + ': the next page is fully shown when it lands');
       assert.deepEqual(errors, []); checks++;
       await ctx.close();
     }
@@ -236,6 +251,6 @@ const server = http.createServer((req, res) => {
   } finally {
     held.forEach(res => { try { res.destroy(); } catch (_) {} });
     await browser.close();
-    server.close();
+    server.closeAllConnections(); server.close();
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });
