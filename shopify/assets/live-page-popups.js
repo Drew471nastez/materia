@@ -182,9 +182,11 @@
     c0 = c;
     if (st.type.derive) st.type.derive(c);
   }
+  /* the settings are printed in the builder only (request.design_mode); Back To Top Pro prints none and is painted from what the live edits bring */
+  const printed = root => root.hasAttribute('data-pg-settings') || root.getAttribute('data-pg-root') === 'back-to-top-pro';
   function paint(root, st) {
     if (st.raw !== root.dataset.pgSettings) { st.raw = root.dataset.pgSettings; st.s = {...parse(st.raw), ...st.live}; }
-    if (root.hasAttribute('data-pg-settings')) derive(root, st, false);
+    if (printed(root)) derive(root, st, false);
   }
   function add(root) {
     if (roots.has(root)) return;
@@ -197,7 +199,7 @@
     if (wrap && /^(promobanner|promonewsletterpopup-2|promotional-popup|promotionalpopup2)$/.test(root.getAttribute('data-pg-root'))) for (const k of ['margin-top', 'margin-bottom', 'z-index']) wrap.style.removeProperty(k);
     roots.set(root, st);
     /* the settings are printed in the builder only (request.design_mode): without them nothing is painted here and the builder's redraw shows each change */
-    if (root.hasAttribute('data-pg-settings')) derive(root, st, true);
+    if (printed(root)) derive(root, st, true);
   }
   function scan() {
     for (const [root, st] of roots) if (!root.isConnected) { cancelAnimationFrame(st.frame); roots.delete(root); }

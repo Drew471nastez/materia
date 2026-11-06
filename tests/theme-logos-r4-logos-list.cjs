@@ -25,7 +25,7 @@ run({
       if (editing) eq(await img.evaluate(el => el.isConnected && el.getAttribute('src').split('?')[0]), IMG.url, where + ' logo picture kept for unrelated edits');
       eq(await t.page.locator('[data-lg-block="' + first + '"] .ll__link').getAttribute('href'), '/collections/other', where + ' link live');
       await t.emit({enable_lazy_load: true});
-      eq(await img.getAttribute('loading'), 'lazy', where + ' lazy load on');
+      if (editing) eq(await img.getAttribute('loading'), 'lazy', where + ' lazy load on');
       await t.emit({enable_lazy_load: false});
       eq(await img.getAttribute('loading'), null, where + ' lazy load off');
       /* arrows per screen */

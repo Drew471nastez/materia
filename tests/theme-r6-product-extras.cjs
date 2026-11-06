@@ -168,7 +168,7 @@ async function relatedProducts(browser) {
           const after = [await look(), await snap()];
           ok(JSON.stringify(after) !== before, `${id}=${JSON.stringify(v).slice(0, 30)} changes the section (${via})${tag}`);
           if (via === 'live') {
-            eq(await t.page.evaluate(() => window.MateriaProductExtras.audit(document.querySelector('[data-rp-root]'))), [], 'live output for ' + id + tag);
+            eq(await t.page.evaluate(() => [...document.querySelectorAll('[data-rp-root][data-rp-settings]')].flatMap(r => window.MateriaProductExtras.audit(r))), [], 'live output for ' + id + tag);
             await t.redraw({settings: ch}); await frames(t.page);
             eq(await look(), after[0], `${id} live equals the server's redraw${tag}`);
           }

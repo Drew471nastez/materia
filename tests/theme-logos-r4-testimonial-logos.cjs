@@ -62,6 +62,8 @@ run({
     /* autoplay: storefront only, per instance, off screen paused, one timer after redraws */
     {
       const t = await mount(browser, 'testimonial-logos', {width: 1366, editing: false, assets: ['live-logos.js'], instances: [{uid: 'a', settings: {autoplay: true, autoplay_interval: 3, transition_speed: 150}, blocks: three()}, {uid: 'b', settings: {autoplay: false}, blocks: three()}]});
+      /* the pointer rests outside the rows (a pointer over them holds the autoplay) */
+      await t.page.mouse.move(1300, 890); await t.page.evaluate(() => document.querySelectorAll('[data-lg-root]').forEach(r => r.dispatchEvent(new PointerEvent('pointerleave'))));
       await t.page.waitForTimeout(3500);
       eq(await t.page.locator('#shopify-section-a [data-tlg-panel]:not([hidden]) .tlg__author').textContent(), 'Source 1', 'testimonial-logos autoplay moves on');
       eq(await t.page.locator('#shopify-section-b [data-tlg-panel]:not([hidden]) .tlg__author').textContent(), 'Source 0', 'testimonial-logos other instance stays');

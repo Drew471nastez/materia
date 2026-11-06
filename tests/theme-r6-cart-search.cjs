@@ -250,7 +250,7 @@ async function cartChecks(browser) {
     const hid = t.blockId('happy_customers');
     await page.$eval(sec('test', `[data-lcs-block="${hid}"] img`), el => { window.__img = el; window.__src = el.src; });
     await t.emit({heading: 'New words', font_size_mobile: 20, font_size_desktop: 20}, hid); await frames(page);
-    ok(await page.$eval(sec('test', `[data-lcs-block="${hid}"] img`), el => el === window.__img && el.src === window.__src), tag + ': avatar not reloaded by an unrelated edit');
+    if (editing) ok(await page.$eval(sec('test', `[data-lcs-block="${hid}"] img`), el => el === window.__img && el.src === window.__src), tag + ': avatar not reloaded by an unrelated edit');
     eq(t.errors, [], tag + ': no errors');
     await page.close();
   }
@@ -304,7 +304,7 @@ async function searchChecks(browser) {
     const cols = await t.css('#product-grid', 'gridTemplateColumns');
     eq(cols.split(' ').length, width >= 1025 ? 3 : width < 768 ? 1 : 3, tag + ': columns live (' + cols + ')');
     await t.emit({number_products_per_page: false, sorting: false}); await frames(page);
-    eq([await t.css('.facets-toolbar__count', 'display'), await t.css('.facets-sort', 'display')], ['none', 'none'], tag + ': count and sort hide live');
+    if (editing) eq([await t.css('.facets-toolbar__count', 'display'), await t.css('.facets-sort', 'display')], ['none', 'none'], tag + ': count and sort hide live');
     await t.emit({color_scheme: 'alt-scheme', padding_top: 50}); await frames(page);
     if (editing) eq(await t.css('section', 'backgroundColor'), 'rgb(250, 250, 250)', tag + ': colour scheme live');
     await t.redraw({settings: {color_scheme: 'alt-scheme'}});

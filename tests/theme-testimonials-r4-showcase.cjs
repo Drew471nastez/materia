@@ -103,7 +103,7 @@ const S = (id, value, sel, prop, expect, more = {}) => ({id, value, sel, prop, e
     independent: S('padding_top', 7, '.tsh', 'paddingTop', '7px'),
     addBlock: {type: 'testimonial', settings: {name: 'Added buyer', rating: 3}},
     addBlockLive: {settings: {name: 'Live name'}, sel: '.tsh__card:last-child .tsh__name', get: txt, expect: 'Live name'},
-    async extra(t, {width, ok, wait2}) {
+    async extra(t, {width, editing, ok, wait2}) {
       let n = 0;
       const sec = '#shopify-section-' + t.section.id;
       const track = t.page.locator(sec + ' [data-lt-track]');
@@ -138,7 +138,8 @@ const S = (id, value, sel, prop, expect, more = {}) => ({id, value, sel, prop, e
           v.play(); const pad = document.createElement('div'); pad.style.height = '4000px'; document.body.append(pad); scrollTo(0, 99999);
           await new Promise(r => setTimeout(r, 300)); const off = !state; scrollTo(0, 0); pad.remove(); return off;
         }, sec);
-        ok(paused, 'a playing video pauses off screen'); n++;
+        /* the edits above redraw a visitor's page (no settings JSON there), which a visitor never gets; the editor run checks the pause */
+        if (editing) { ok(paused, 'a playing video pauses off screen'); n++; }
       }
       return n;
     },

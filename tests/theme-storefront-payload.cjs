@@ -96,7 +96,7 @@ const GUARD = {
   'media-live-benefits.js': "if (root.hasAttribute('data-mlb-settings')) derive(root, st, false);",
   'live-features-b.js': "if (!st.el.hasAttribute('data-fb-settings')) return;",
   'live-testimonials.js': "if (!st.el.hasAttribute('data-lt-settings') && !st.el.hasAttribute('data-tm-settings')) return;",
-  'live-page-popups.js': "if (root.hasAttribute('data-pg-settings')) derive(root, st, false);",
+  'live-page-popups.js': "if (printed(root)) derive(root, st, false);",
   'live-product-extras.js': "!st.el.hasAttribute('data-rp-settings')) return;",
   'live-cart-search.js': "if (root.hasAttribute('data-lcs-settings')) derive(root, st, false);",
   'live-products-a.js': "if (root.hasAttribute('data-pa-settings')) derive(root, st, false);",

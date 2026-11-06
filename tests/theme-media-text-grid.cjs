@@ -460,8 +460,8 @@ async function testSection(browser, name, cfg) {
     const added = t.rendered[0].section.blocks[t.rendered[0].section.blocks.length - 1].id;
     const addedLoc = page.locator(`#shopify-section-${uid} [data-tg-block="${added}"]`);
     ok(await addedLoc.count() === 1, tag + ' added block rendered');
-    ok(await page.evaluate(() => [MateriaTextGrid.size(), MateriaTextGrid.listeners()].join()) === '1,1', tag + ' no duplicate roots/listeners');
-    if (cfg.added.type === 'thumb_image') { await t.emit({image: IMG}, added); ok(await addedLoc.locator('img').getAttribute('src') === IMG.url, tag + ' added block live'); }
+    ok(await page.evaluate(() => [MateriaTextGrid.size(), MateriaTextGrid.listeners()].join()) === (editing ? '1,1' : '0,0'), tag + ' no duplicate roots/listeners (a visitor\'s page has no settings: none set up)');
+    if (cfg.added.type === 'thumb_image') { await t.emit({image: IMG}, added); ok(String(await addedLoc.locator('img').first().getAttribute('src')).split('?')[0] === IMG.url.split('?')[0], tag + ' added block live'); }
     else { const key = cfg.added.type === 'feature' ? 'label' : 'heading'; await t.emit({[key]: 'Edited live'}, added); ok((await addedLoc.locator(cfg.addedSel).textContent()).trim() === 'Edited live', tag + ' added block live'); }
 
     /* 13. Overflow, targets, errors */
