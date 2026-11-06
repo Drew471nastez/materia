@@ -97,6 +97,50 @@ They are the theme's first-paint painters or behaviour, not builder-only.
 | announcement-pro-4.js | 18,419 | no | countdown and close | timers, `IntersectionObserver` |
 | announcement-three-colors.js | 4,170 | no | first paint of the top bar's colours | page: top-bar differs |
 
+## Each section links its own runtime
+
+Every file in the two "kept" tables above except `hero-image-one.js` (40
+files) used to be a `<script defer>` in the layout's `<head>`, so every page
+ran all of them whether it had their sections or not. Each is now linked by
+the sections that use it, as the first lines of the section's file
+(`<script src="{{ 'x.js' | asset_url }}" defer="defer"></script>`), the way
+the theme's own sections link theirs; a page runs only what its sections
+need.
+
+- **Which sections.** A runtime goes in a section when the section's markup
+  (or a snippet it renders) carries a root the runtime's `scan()` looks for:
+  `[data-faq-root]` for live-faq.js, `[data-pa-root]` for live-products-a.js,
+  `announcement-rotator-v2` for live-header.js, and so on
+  (`ROOTS` in `tests/theme-scripts-per-page.cjs`). Dependencies come with
+  it, in the old order: Hero Product 1 and 3 and the marketing sections also
+  link hero-product-two.js (its icon helper), Hero Product 1 also
+  hero-product-one.js. Products set links live-products-d.js inside its
+  `{% if slides > 0 %}`, since it draws nothing without slides.
+- **Global, still in the layout:** swiper, motion, utils.js, global.js,
+  cart-drawer-safety.js, section-links.js, product-counters.js,
+  product-block-runtime.js, product-dialogs.js (quick view and the product
+  dialogs open on any page), drift.js, photoswipe-init.js, hero-image-one.js
+  (the painter API, `MateriaHeroImageOne`, that nearly every runtime calls),
+  and `snippets/scripts-tag` (theme.js and the rest).
+- **Twice on a page.** A type placed twice, or two types sharing a runtime,
+  link it twice; the second copy returns at once, because every one of the
+  40 files starts with `if (window.Materia…) return;` and sets that object
+  synchronously in the same run.
+- **Order.** Deferred scripts run in document order after parsing, so the
+  head's (utils, global, hero-image-one) still run first, then each runtime
+  ahead of its section's own deferred script (live-product-extras.js before
+  shopable-video-sticky.js), then `scripts-tag` at the end of the body.
+- **Builder.** A section the builder adds or redraws is inserted without
+  running its script tags, so the builder loader below lists the 40 as `S`
+  and loads them with the page (or, in a canvas with no builder signal, on
+  the first live event, skipping those the page already linked) ahead of the
+  nine builder-only files.
+
+`tests/theme-scripts-per-page.cjs` checks the saved pages (the runtimes each
+requests, each requested exactly when its root is on the page, a section
+placed twice set up once); `tests/theme-builder-scripts-lazy.cjs` checks the
+builder side.
+
 ## Globals
 
 None of the nine builder-only files defines anything the storefront reads.

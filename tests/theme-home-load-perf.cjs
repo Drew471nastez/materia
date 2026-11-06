@@ -1,10 +1,13 @@
 /* Run: node tests/theme-home-load-perf.cjs
    Home page load work (sections/hero-*, promo/marketing, slideshow, text,
    before/after, announcement; snippets/localization-controls):
-   - The section runtimes and their styles are printed once, by
-     layout/theme.storelib's <head>; no section prints its own copy again (a
-     classic script printed seven times ran its top level seven times, and each
-     repeated <link> added the same sheet to style matching again).
+   - The section styles are printed once, by layout/theme.storelib's <head>;
+     no section prints its own copy again (each repeated <link> added the same
+     sheet to style matching again). The section runtimes are named once in
+     the layout (hero-image-one.js as a tag, the others in the builder
+     loader's list S) and each section links only the runtimes of list S, at
+     most once per file; a type placed twice links it twice and the second
+     copy returns at its window.Materia* guard.
    - The country/language picker styles are one cached file linked once, not
      2.5 KB of <style> each time a picker is drawn.
    - Every wave type's outlines live in text-section-controls.js, not as 58 KB
@@ -28,7 +31,8 @@ const RUNTIMES = ['hero-image-one', 'hero-product-two', 'hero-product-one', 'her
   'announcement-pro-4', 'testimonial-quote'];
 const layout = read('layout/theme.storelib');
 
-/* Static: once in the layout, never again in a section, block or snippet. */
+/* Static: once in the layout; a section links only a runtime of the builder loader's list S, once. */
+const loaderS = (() => { const s = layout.indexOf('var S = ['); return [...layout.slice(s, layout.indexOf('];', s)).matchAll(/'([\w-]+)\.js' \| asset_url \| json/g)].map(m => m[1]); })();
 for (const name of RUNTIMES) {
   const js = fs.existsSync(`shopify/assets/${name}.js`), css = fs.existsSync(`shopify/assets/${name}.css`);
   if (js) assert.equal((layout.match(new RegExp(`'${name}\\.js' \\| asset_url`, 'g')) || []).length, 1, `layout loads ${name}.js once`);
@@ -36,7 +40,11 @@ for (const name of RUNTIMES) {
 }
 for (const dir of ['sections', 'blocks', 'snippets']) for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.storelib'))) {
   const src = clean(read(`${dir}/${f}`)).replace(/\{%-?\s*comment\s*-?%\}[\s\S]*?\{%-?\s*endcomment\s*-?%\}/g, '');
-  for (const name of RUNTIMES) assert(!new RegExp(`'${name}\\.(js|css)' \\| asset_url`).test(src), `${dir}/${f} prints ${name} again (the layout already loads it)`);
+  for (const name of RUNTIMES) {
+    assert(!new RegExp(`'${name}\\.css' \\| asset_url`).test(src), `${dir}/${f} prints ${name}.css again (the layout already links it)`);
+    const n = (src.match(new RegExp(`'${name}\\.js' \\| asset_url`, 'g')) || []).length;
+    assert(n === 0 || (loaderS.includes(name) && dir === 'sections' && n === 1), `${dir}/${f} links ${name}.js ${n} times (only a section, once, and only a runtime of list S)`);
+  }
 }
 checks++;
 
@@ -72,12 +80,13 @@ const PAINTERS = /\/(hero-image-one|hero-product-two|hero-product-one|hero-produ
       const section = {id: `${name}-${id}`, settings: {...defaults(schema), ...(preset?.settings || {})}, blocks};
       const c = {...ctx, section};
       const html = await e.parseAndRender(clean(raw), c, {globals: c});
-      assert(!/<script[^>]+src=[^>]+(hero-(image|product|pro-scrolling)|marketing-|text-section|before-after|slideshow-)/.test(html), `${name} prints no runtime <script src>`);
+      const linked = [...html.matchAll(/<script[^>]+src="[^"]*\/([\w-]+)\.js"/g)].map(m => m[1]).filter(n => RUNTIMES.includes(n));
+      assert(linked.every(n => loaderS.includes(n)), `${name} links only section runtimes of list S (${linked.join(', ')})`);
       body += `<div class="shopify-section" id="shopify-section-${section.id}">${html}</div><div style="height:400px"></div>`;
     }
   }
   checks++;
-  const tags = layout.split('\n').filter(l => /['"](hero-image-one|hero-product-(one|two|three)|marketing-sections|before-after-controls|text-section-controls|scroll-text-reveal|slideshow-live)\.(js|css)['"]/.test(l)).join('\n');
+  const tags = layout.split('\n').filter(l => !/\| json/.test(l) && /['"](hero-image-one|hero-product-(one|two|three)|marketing-sections|before-after-controls|text-section-controls|scroll-text-reveal|slideshow-live)\.(js|css)['"]/.test(l)).join('\n');
   const head = await e.parseAndRender(tags, {});
 
   const browser = await chromium.launch({executablePath: '/usr/bin/chromium', args: ['--no-sandbox']});
@@ -113,9 +122,9 @@ const PAINTERS = /\/(hero-image-one|hero-product-two|hero-product-one|hero-produ
       assert(forced.batch.length <= 4, `the batched width and space-scale reads force at most a few passes (${forced.batch.join(', ')})`);
       checks += 2;
 
-      // Each layout runtime ran once. hero-benefits.js stays with its section (it is
-      // not on every page); a second copy returns at its window.MateriaHeroBenefits guard.
-      assert.deepEqual(await p.evaluate(() => [...document.scripts].map(s => s.src.split('/').pop()).filter(Boolean).filter((n, i, a) => a.indexOf(n) !== i && n !== 'hero-benefits.js')), [], 'no script runs twice');
+      // Each layout script is on the page once. A section runtime is linked by each copy of its
+      // section (two of each here); the second copy returns at its window.Materia* guard.
+      assert.deepEqual(await p.evaluate(S => [...document.scripts].map(s => s.src.split('/').pop()).filter(Boolean).filter((n, i, a) => a.indexOf(n) !== i && !S.includes(n.replace(/\.js$/, ''))), loaderS), [], 'no layout script runs twice');
       assert.equal(await p.locator('[data-marketing-section]').count(), 6);
       checks++;
 
