@@ -301,7 +301,8 @@ const {chromium} = require('playwright');
           await ctx.close();
           return {open, png};
         };
-        const a = await opened(before, {assetOverlay}), b = await opened(after, {block: ['minicart.css']});
+        /* today's drawer with minicart.css loaded against the same drawer while it is still loading: what the non-blocking load must keep (the files compared with ${BASE} have changed on purpose since, e.g. product-card.css and the header) */
+        const a = await opened(after, {}), b = await opened(after, {block: ['minicart.css']});
         ok(a.open && b.open, `home @${width}: the cart drawer opens`);
         ok(a.png.equals(b.png), `home @${width}: the drawer opened with minicart.css still loading looks as before`);
       }
