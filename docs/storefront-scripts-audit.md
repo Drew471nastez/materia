@@ -179,7 +179,7 @@ storage and the screenshot alone is printed in the builder only.
 | mlb-settings, -defaults, -block-defaults | media-live-benefits.js | dual-image-with-text, image-and-video-text, image-text-benefits, image-with-text-benefits |
 | fb-settings, fb-bs, fb-spec, fb-bspec | live-features-b.js | the six comparison sections |
 | tm-settings, lt-settings | live-testimonials.js | testimonials, testimonial-video, comunitysldier, reviews2, testimon4, testimonials3 |
-| pg-settings | live-page-popups.js | the eight page popups |
+| pg-settings | live-page-popups.js | the eight page popups (Back To Top Pro prints no settings and is still painted live) |
 | rp-settings | live-product-extras.js | related-products |
 | lcs-settings | live-cart-search.js | main-cart-items, main-search |
 | pa-settings | live-products-a.js | featured-product, product-info-box, product-information-tab |

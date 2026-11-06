@@ -79,7 +79,7 @@ async function mount(browser, name, {width = 1366, height = 900, editing = true,
   const builderOnly = async uid => {
     if (!gated.has(uid)) {
       const r = rendered.find(x => x.section.id === uid);
-      const html = (await render(name, {editing: true, theme, globals, uid, settings: r.section.settings, blocks: r.section.blocks.map(b => ({type: b.type, settings: b.settings}))})).html;
+      const html = (await render(name, {editing: true, theme, globals: globals.request ? {...globals, request: {...globals.request, design_mode: true}} : globals, uid, settings: r.section.settings, blocks: r.section.blocks.map(b => ({type: b.type, settings: b.settings}))})).html;
       const re = /\sdata-[a-z0-9-]+-settings=|\sdata-pib-own=/;
       gated.set(uid, re.test(html) && !re.test(r.html));
     }
