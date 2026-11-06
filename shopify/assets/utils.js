@@ -88,6 +88,237 @@ if (!Object.hasOwn) {
   resilient.__materiaResilient = true;
   window.fetch = resilient;
 })();
+/* The cart a page shows, kept in step with the cart itself. A page that comes
+   back from the back/forward cache, or a prerendered page the shopper opens,
+   was drawn with the cart as it was then; Storelib's head script compares the
+   live count with window.Shopify.storelibCartAtDraw and reloads the page when
+   they differ, so after "add to cart, then Back" the page loaded twice. Here
+   that number is the last live count this browser saw (the page's own drawn
+   count at load, the answer to every cart change and every read of /cart.js,
+   in any tab), and the returning page redraws its cart in place instead: the
+   count bubbles, the drawer, the free-shipping bar and the cart events the
+   rest of the theme listens to. Normal page loads send nothing; a change whose
+   answer has no count is followed by one read of /cart.js (unless the theme
+   reads it anyway), and a returning page reuses Storelib's own read, adding
+   one sections request only when the cart did change. Off in the builder. */
+(() => {
+  const html = document.documentElement;
+  if (window.__materiaCartSync || (window.Shopify && window.Shopify.designMode) || html.classList.contains("shopify-design-mode")) return;
+  window.__materiaCartSync = true;
+  const script = document.currentScript;
+  const KEY = "materia:cart-count";
+  const MAX_AGE = 14 * 864e5;
+  const now = () => Date.now();
+  const timeOrigin = Math.round(performance.timeOrigin || now() - performance.now());
+  const LOCALE = "(?:[a-z]{2}(?:-[a-z]{2,4})?/)?";
+  const CHANGE = new RegExp("^/" + LOCALE + "cart/(?:add|change|update|clear)(?:\\.js|\\.json)?/?$", "i");
+  const READ = new RegExp("^/" + LOCALE + "cart\\.js(?:on)?$", "i");
+  const cartBase = () => String((window.routes && window.routes.cart_url) || "/cart").replace(/\/$/, "");
+  const cartJs = () => window.fetch(cartBase() + ".js", { credentials: "same-origin", headers: { Accept: "application/json" } });
+
+  /* The record: {count, at, changedAt}. localStorage so every tab shares it;
+     sessionStorage, then memory, where storage is refused. */
+  let memory = null;
+  const stores = [];
+  try { stores.push(window.localStorage); } catch (_) {}
+  try { stores.push(window.sessionStorage); } catch (_) {}
+  const read = () => {
+    let saved = null;
+    for (const store of stores) {
+      try { const value = JSON.parse(store.getItem(KEY)); if (value && typeof value.count === "number") { saved = value; break; } } catch (_) {}
+    }
+    if (memory && (!saved || memory.at > saved.at)) saved = memory;
+    return saved && now() - saved.at < MAX_AGE ? saved : null;
+  };
+  const save = record => {
+    memory = record;
+    for (const store of stores) { try { store.setItem(KEY, JSON.stringify(record)); break; } catch (_) {} }
+    return record;
+  };
+  // An older observation never overwrites a newer one (another tab, a slow answer).
+  const write = (count, at, changed) => {
+    const previous = read();
+    if (previous && previous.at > at) return previous;
+    return save({ count, at, changedAt: changed || !previous || previous.count !== count ? at : previous.changedAt });
+  };
+  const touch = at => {
+    const previous = read();
+    save({ count: previous ? previous.count : null, at: previous ? Math.max(previous.at, at) : at, changedAt: at });
+  };
+
+  /* What this page shows: drawn with the page, then after its own changes. */
+  let pageCount = null;
+  let pageAt = timeOrigin;
+  const drawnCount = () => {
+    const attr = script && script.getAttribute("data-cart-count");
+    if (attr != null && attr.trim() !== "" && isFinite(attr)) return Number(attr);
+    const config = window.flashingBrowseTab;
+    if (config && typeof config.cartCount === "number") return config.cartCount;
+    const bubble = document.querySelector(".cart-count:not(.cart-count-drawer)");
+    const own = bubble ? [...bubble.childNodes].filter(node => node.nodeType === 3).map(node => node.nodeValue).join("") : "";
+    const value = parseInt(own, 10);
+    return isFinite(value) ? value : null;
+  };
+  const atLoad = () => {
+    const count = drawnCount();
+    if (count == null) return;
+    pageCount = count;
+    write(count, timeOrigin, false);
+  };
+  if (script && script.hasAttribute("data-cart-count")) atLoad();
+  else if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", atLoad, { once: true });
+  else atLoad();
+
+  /* Storelib reads window.Shopify.storelibCartAtDraw: the last live count. */
+  let assigned;
+  const getter = () => {
+    const record = read();
+    if (record && typeof record.count === "number") return record.count;
+    return typeof assigned === "number" ? assigned : undefined;
+  };
+  const setter = value => { assigned = value; };
+  const expose = () => {
+    const target = window.Shopify || (window.Shopify = {});
+    if (typeof target !== "object" && typeof target !== "function") return;
+    const current = Object.getOwnPropertyDescriptor(target, "storelibCartAtDraw");
+    if (current && (current.get === getter || !current.configurable)) return;
+    if (current && typeof current.value === "number") assigned = current.value;
+    try { Object.defineProperty(target, "storelibCartAtDraw", { configurable: true, enumerable: false, get: getter, set: setter }); } catch (_) {}
+  };
+  expose();
+
+  /* Every same-origin cart change and read goes through here. */
+  let pending = 0;
+  let verifyTimer = 0;
+  let reading = null;
+  const seen = (cart, at) => {
+    if (!cart || typeof cart.item_count !== "number") return;
+    const count = Number(cart.item_count);
+    if (pending && at >= pending) {
+      pending = 0; clearTimeout(verifyTimer);
+      write(count, at, true);
+      pageCount = count; pageAt = Math.max(pageAt, at);
+    } else write(count, at, false);
+  };
+  const changed = data => {
+    const at = now();
+    if (data && typeof data.item_count === "number") {
+      write(Number(data.item_count), at, true);
+      pageCount = Number(data.item_count); pageAt = at;
+      return;
+    }
+    // The answer (an added line) has no count: read the cart once, unless the theme does.
+    touch(at); pending = at; pageAt = at;
+    clearTimeout(verifyTimer);
+    verifyTimer = setTimeout(() => { if (pending) cartJs().catch(() => {}); }, 400);
+  };
+  const previous = window.fetch;
+  if (typeof previous === "function") {
+    const classify = (input, init) => {
+      try {
+        const isRequest = typeof Request === "function" && input instanceof Request;
+        const url = new URL(isRequest ? input.url : String(input), location.href);
+        if (url.origin !== location.origin) return null;
+        const method = String((init && init.method) || (isRequest ? input.method : "GET")).toUpperCase();
+        if (method === "POST" && CHANGE.test(url.pathname)) return "change";
+        if (method === "GET" && READ.test(url.pathname)) return "read";
+      } catch (_) {}
+      return null;
+    };
+    const synced = function (input, init) {
+      const kind = classify(input, init);
+      const result = previous.apply(window, arguments);
+      if (!kind) return result;
+      const at = now();
+      if (kind === "change") {
+        return result.then(response => {
+          try {
+            if (response && response.ok) {
+              response.clone().json()
+                .then(data => { if (!data || !(Number(data.status) >= 400)) changed(data); })
+                .catch(() => changed(null));
+            }
+          } catch (_) { changed(null); }
+          return response;
+        });
+      }
+      // A read is recorded before its caller sees it, so Storelib's own check
+      // compares the live count with itself. A body that never ends does not
+      // hold the caller more than a few seconds.
+      const job = result.then(response => {
+        if (!response || !response.ok) return null;
+        return Promise.race([
+          response.clone().json().then(cart => { seen(cart, at); return cart; }),
+          new Promise(resolve => setTimeout(() => resolve(null), 3000)),
+        ]);
+      }).catch(() => null);
+      reading = { started: performance.now(), job };
+      return job.then(() => result);
+    };
+    synced.__materiaResilient = previous.__materiaResilient;
+    synced.__materiaCartSync = true;
+    window.fetch = synced;
+  }
+
+  /* A returning page draws the live cart in place. */
+  const counts = count => {
+    document.querySelectorAll(".cart-count").forEach(el => {
+      const text = el.classList.contains("cart-count-drawer") ? `(${count})` : (count > 100 ? "~" : String(count));
+      if (el.textContent.trim() !== text) el.innerHTML = text;
+      el.classList.remove("hidden");
+    });
+    document.querySelectorAll("[data-storelib-cart-count]").forEach(el => { if (el.textContent !== String(count)) el.textContent = String(count); });
+  };
+  const drawer = async cart => {
+    const target = document.getElementById("minicart-form");
+    if (!target) return;
+    const box = target.closest("cart-notification") || document.querySelector("cart-notification");
+    let ids = ["minicart-form"];
+    try { if (box && typeof box.getSectionsToRender === "function") ids = box.getSectionsToRender().map(section => section.id); } catch (_) {}
+    const response = await window.fetch(cartBase() + "?sections=" + encodeURIComponent(ids.join(",")), { credentials: "same-origin", headers: { Accept: "application/json" } });
+    if (!response.ok) return;
+    const sections = await response.json();
+    if (!sections || !sections["minicart-form"]) return;
+    if (box && typeof box.applyCartState === "function") { await box.applyCartState(Object.assign({}, cart, { sections })); return; }
+    const fresh = new DOMParser().parseFromString(sections["minicart-form"], "text/html").getElementById("minicart-form");
+    if (!fresh) return;
+    if (!(typeof window.materiaPatchDrawerCart === "function" && window.materiaPatchDrawerCart(target, fresh))) target.innerHTML = fresh.innerHTML;
+    try { if (box && typeof box.cartAction === "function") box.cartAction(); } catch (_) {}
+  };
+  const paint = async cart => {
+    pageCount = Number(cart.item_count); pageAt = now();
+    // The cart page's lines, totals and checkout come from the server: draw it again.
+    if (document.getElementById("main-cart-items")) { location.reload(); return; }
+    counts(pageCount);
+    try { document.querySelector("header-total-price")?.updateTotal?.(cart); } catch (_) {}
+    try { document.querySelector("free-ship-progress-bar")?.init?.(cart.total_price); } catch (_) {}
+    try { await drawer(cart); } catch (_) {}
+    try { window.cdaTick?.(); } catch (_) {}
+    const detail = { source: "materia-cart-sync", cart, data: cart };
+    document.dispatchEvent(new CustomEvent("cart:updated", { detail }));
+    document.dispatchEvent(new CustomEvent("cart:refresh", { detail }));
+  };
+  const live = since => {
+    if (reading && reading.started >= since - 1000) return reading.job;
+    return cartJs().then(response => (response.ok ? response.json() : null)).catch(() => null);
+  };
+  let restoring = null;
+  const restore = event => {
+    expose();
+    if (restoring) return restoring;
+    const since = event && event.timeStamp > 0 ? Math.min(event.timeStamp, performance.now()) : performance.now();
+    restoring = Promise.resolve(live(since)).then(cart => {
+      if (!cart || typeof cart.item_count !== "number") return;
+      const record = read();
+      const stale = pageCount == null || Number(cart.item_count) !== pageCount || (record && record.changedAt > pageAt);
+      if (stale) return paint(cart);
+    }).catch(() => {}).finally(() => { restoring = null; });
+    return restoring;
+  };
+  window.addEventListener("pageshow", event => { if (event.persisted) restore(event); });
+  if (document.prerendering) document.addEventListener("prerenderingchange", restore, { once: true });
+  window.materiaCartSync = { refresh: () => restore(), record: read };
+})();
 function getCookie(cname) {
   let name = cname + "=";
   let decodedCookie = decodeURIComponent(document.cookie);

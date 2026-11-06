@@ -12,6 +12,11 @@
    - request.design_mode (and window.Shopify.designMode): they are written as
      deferred scripts while the page parses, and run before DOMContentLoaded,
      in the list's order, as the old tags did.
+   The loader's second list (S) is every section runtime that the sections
+   link themselves: a visitor gets only those of the sections on the page
+   (here none), the builder gets all of them with the page, and a canvas with
+   no signal gets them on its first live event, before the events are given
+   again, except those its sections already linked.
    Renders the real layout with tests/theme-r6-footer-lib.cjs (footer group,
    mobile navigation bar) and serves shopify/assets.
 
@@ -27,8 +32,10 @@ const layout = fs.readFileSync(path.join(root, 'layout/theme.storelib'), 'utf8')
 const at = layout.indexOf('Builder-only live preview.');
 assert(at > 0, 'layout/theme has the builder-only loader');
 const loader = layout.slice(layout.indexOf('<script>', at), layout.indexOf('</script>', at));
-const LAZY = [...loader.matchAll(/'([\w-]+\.js)' \| asset_url \| json/g)].map(m => m[1]);
+const listOf = name => { const s = loader.indexOf(`var ${name} = [`); assert(s > 0, `the loader has list ${name}`); return [...loader.slice(s, loader.indexOf('];', s)).matchAll(/'([\w-]+\.js)' \| asset_url \| json/g)].map(m => m[1]); };
+const LAZY = listOf('L'), SECTION = listOf('S');
 assert(LAZY.length >= 5, 'the loader lists the builder-only controllers');
+assert(SECTION.length >= 30, 'the loader lists the section runtimes');
 let checks = 0;
 
 /* Static: each listed controller is only in the loader, never also a <script src> tag. */
@@ -36,6 +43,13 @@ for (const name of LAZY) {
   assert(fs.existsSync(path.join(root, 'shopify/assets', name)), `${name} exists`);
   assert.equal(layout.split(`'${name}' | asset_url`).length - 1, 1, `${name} appears once in the layout (the loader's list)`);
   assert(!new RegExp(`<script[^>]+'${name.replace('.', '\\.')}'`).test(layout), `${name} has no <script src> tag of its own`);
+}
+/* Static: each section runtime has no tag of its own in the layout and is linked by at least one section. */
+const sectionFiles = fs.readdirSync(path.join(root, 'sections')).map(f => fs.readFileSync(path.join(root, 'sections', f), 'utf8'));
+for (const name of SECTION) {
+  assert(!LAZY.includes(name), `${name} is in one list only`);
+  assert.equal(layout.split(`'${name}' | asset_url`).length - 1, 1, `${name} appears once in the layout (the loader's list S)`);
+  assert(sectionFiles.some(t => t.includes(`<script src="{{ '${name}' | asset_url }}" defer="defer"></script>`)), `${name} is linked by a section`);
 }
 const head = layout.slice(0, layout.indexOf('</head>'));
 assert(head.includes(loader), 'the loader is in <head>, before any section');
@@ -87,7 +101,8 @@ const footerPadding = p => p.evaluate(() => [...document.querySelectorAll('#shop
     for (const width of [375, 1366]) {
       const t = await open(browser, {design_mode: false}, {width});
       assert.deepEqual(lazyLoaded(t.requested), [], `${width}: a visitor requests none of ${LAZY.join(', ')}`);
-      assert(t.requested.includes('live-countdown.js') && t.requested.includes('global.js'), 'the storefront runtimes still load');
+      assert.deepEqual(SECTION.filter(n => t.requested.includes(n)), [], `${width}: nor a section runtime no section on this page links`);
+      assert(t.requested.includes('global.js') && t.requested.includes('hero-image-one.js'), 'the global runtimes still load');
       assert.equal(await t.p.evaluate(() => !!window.MateriaLiveFooter), false, 'no builder controller ran');
       assert.equal(await t.p.evaluate(() => document.documentElement.classList.contains('shopify-design-mode')), false, 'not marked as the builder');
       await t.p.waitForTimeout(400);
@@ -111,6 +126,7 @@ const footerPadding = p => p.evaluate(() => [...document.querySelectorAll('#shop
       });
       await t.p.waitForTimeout(200);
       assert.deepEqual(lazyLoaded(t.requested), LAZY, 'the first live event requests every controller');
+      assert.deepEqual(SECTION.filter(n => !t.requested.includes(n)), [], 'and every section runtime, for a section the canvas adds');
       assert.deepEqual(await t.p.evaluate(() => window.__seen), [], 'held: no listener has seen them while the controllers load');
       release();
       await t.p.waitForFunction(() => window.__seen.length >= 3 && window.MateriaLiveFooter);
@@ -124,6 +140,8 @@ const footerPadding = p => p.evaluate(() => [...document.querySelectorAll('#shop
       const order = await t.p.evaluate(() => [...document.scripts].map(s => s.src.split('/').pop()).filter(Boolean));
       assert.deepEqual(order.filter(n => LAZY.includes(n)), LAZY, 'added in the list order');
       assert((await footerPadding(t.p)).includes('77px'), 'the replayed change lands: the footer is painted at 77px');
+      assert(await t.p.evaluate(() => !!(window.MateriaCountdown && window.MateriaFaq && window.MateriaTextSections)), 'the section runtimes ran');
+      assert.deepEqual(await t.p.evaluate(S => S.filter(n => [...document.scripts].filter(s => s.src.endsWith('/' + n)).length !== 1), SECTION), [], 'each section runtime is added once');
       assert(await t.p.evaluate(() => document.documentElement.classList.contains('shopify-design-mode')), 'the page is marked as the builder');
       /* after loading, an event goes straight through, once */
       await t.p.evaluate(() => document.dispatchEvent(new CustomEvent('storelib:settings-change', {detail: {section: 'footer', settings: {padding_top: 31}, live: true}})));
@@ -137,13 +155,16 @@ const footerPadding = p => p.evaluate(() => [...document.querySelectorAll('#shop
     console.log('ok the first live event loads them in order and replays the held events once each, in order');
 
     /* ---------- the builder: request.design_mode, and window.Shopify.designMode ---------- */
-    const DCL = () => document.addEventListener('DOMContentLoaded', () => { window.__dcl = [...document.scripts].filter(s => s.src).map(s => s.src.split('/').pop()); window.__dclFooter = !!window.MateriaLiveFooter; });
+    const DCL = () => document.addEventListener('DOMContentLoaded', () => { window.__dcl = [...document.scripts].filter(s => s.src).map(s => s.src.split('/').pop()); window.__dclFooter = !!window.MateriaLiveFooter; window.__dclSections = !!(window.MateriaCountdown && window.MateriaFaq && window.MateriaTextSections && window.MateriaAnnouncementThreeColors); });
     for (const [label, opts, init] of [['request.design_mode', {design_mode: true}, DCL], ['window.Shopify.designMode', {design_mode: false}, `window.Shopify = {designMode: true}; (${DCL})();`]]) {
       const page = await open(browser, opts, {init});
       assert.deepEqual(lazyLoaded(page.requested), LAZY, `${label}: every controller is requested at once`);
+      assert.deepEqual(SECTION.filter(n => !page.requested.includes(n)), [], `${label}: and every section runtime`);
       const dcl = await page.p.evaluate(() => window.__dcl);
       assert.deepEqual(dcl.filter(n => LAZY.includes(n)), LAZY, `${label}: written as scripts while parsing, in order`);
+      assert.deepEqual(dcl.filter(n => SECTION.includes(n)), SECTION, `${label}: the section runtimes too, in order`);
       assert.equal(await page.p.evaluate(() => window.__dclFooter), true, `${label}: they ran before DOMContentLoaded, like the deferred tags`);
+      assert.equal(await page.p.evaluate(() => window.__dclSections), true, `${label}: the section runtimes too`);
       const deferred = await page.p.evaluate(names => names.map(n => [...document.scripts].find(s => s.src.endsWith('/' + n))?.defer), LAZY);
       assert(deferred.every(Boolean), `${label}: each is a deferred script`);
       const before = await footerPadding(page.p);
@@ -156,5 +177,5 @@ const footerPadding = p => p.evaluate(() => [...document.querySelectorAll('#shop
       console.log(`ok ${label}: loaded at once, in order, before DOMContentLoaded`);
     }
   } finally { await browser.close(); }
-  console.log(`theme-builder-scripts-lazy: ${checks} checks passed (${LAZY.length} controllers, ${bytes} bytes no longer loaded for visitors)`);
+  console.log(`theme-builder-scripts-lazy: ${checks} checks passed (${LAZY.length} controllers, ${bytes} bytes no longer loaded for visitors; ${SECTION.length} section runtimes loaded with the page in the builder)`);
 })().catch(e => { console.error(e); process.exit(1); });
