@@ -262,6 +262,7 @@ if (!Object.hasOwn) {
 
   /* A returning page draws the live cart in place. */
   const counts = count => {
+    try { localStorage.setItem("materia__cart-count", String(Number(count) || 0)); } catch (_) {}
     document.querySelectorAll(".cart-count").forEach(el => {
       const text = el.classList.contains("cart-count-drawer") ? `(${count})` : (count > 100 ? "~" : String(count));
       if (el.textContent.trim() !== text) el.innerHTML = text;

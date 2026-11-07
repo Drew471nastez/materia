@@ -37,6 +37,8 @@
       node = node && node.closest('.h-count');
       if (!node) continue;
       var now = node.textContent.trim();
+      /* The cart's number is kept so the next page shows it before it is painted (layout). */
+      if (node.classList.contains('cart-count') && /^[0-9]+$/.test(now)) { try { localStorage.setItem('materia__cart-count', now); } catch (e) {} }
       if (seen.get(node) !== now) bump(node);
       seen.set(node, now);
     }

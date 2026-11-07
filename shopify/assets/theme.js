@@ -9055,17 +9055,12 @@ class SlideWithThumbs extends HTMLElement {
     super();
     this.globalSlide = null;
     this.thumbnailSlide = null;
-    // The thumbnail strip is joined to the gallery in an idle task after the gallery is built
-    // (start()), so a thumbnail tapped in between did nothing and had to be tapped again. A tap
-    // that began before the strip was joined joins it now and shows that thumbnail's picture.
-    this.addEventListener("pointerdown", () => {
-      const main = this.globalSlide;
-      this._thumbsReady = !!(this.thumbnailSlide && main && !main.destroyed && main.thumbs && main.thumbs.swiper === this.thumbnailSlide);
-    }, true);
+    // A thumbnail click always shows its picture. Swiper counted a click whose pointer moved a few
+    // pixels while pressed (a quick click) as a drag of the strip and dropped it, and a thumbnail
+    // tapped before the strip was joined to the gallery (it joins in an idle task, start()) did
+    // nothing; both needed a second click. Swiper's own tap still slides first when it sees the
+    // click, so this then finds the gallery already there and does nothing.
     this.addEventListener("click", (event) => {
-      const ready = this._thumbsReady;
-      this._thumbsReady = undefined;
-      if (ready) return;
       const thumb = event.target && event.target.closest ? event.target.closest(".thumbnail-slide .swiper-slide") : null;
       if (!thumb || !this.contains(thumb)) return;
       const strip = thumb.closest(".thumbnail-slide");
@@ -9073,8 +9068,10 @@ class SlideWithThumbs extends HTMLElement {
       if (index < 0) return;
       const main = this.ensureStarted();
       if (!main || main.destroyed) return;
-      this.connectThumbs();
-      if (main.params && main.params.loop) main.slideToLoop(index);
+      if (!this.thumbnailSlide) this.connectThumbs();
+      const loop = !!(main.params && main.params.loop);
+      if ((loop ? main.realIndex : main.activeIndex) === index) return;
+      if (loop) main.slideToLoop(index);
       else main.slideTo(index);
     });
     this.init();
@@ -9267,6 +9264,11 @@ class SlideWithThumbs extends HTMLElement {
       watchSlidesProgress: true,
       // What Swiper's thumbs module sets when it connects the strip.
       slideToClickedSlide: false,
+      // A quick click moves the pointer a little: only a real drag scrolls the strip, and a click
+      // is never swallowed (the gallery's click handler shows the picture).
+      threshold: 10,
+      preventClicks: false,
+      preventClicksPropagation: false,
       watchOverflow: watchOverflow,
       breakpoints: {
         768: {
