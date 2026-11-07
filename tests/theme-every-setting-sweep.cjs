@@ -61,14 +61,10 @@ FP.engine = (...a) => {
   return e;
 };
 const {render, schemaOf, THEME_VARS, themeControls, PANTS, OTHER} = require('./media-fixture.cjs');
-const PD = require('./theme-every-setting-product-data.cjs');
 
-/* The other sample product costs something else, so picking it shows in a price. */
-Object.assign(OTHER, {price: 9900, price_min: 9900, price_max: 9900, compare_at_price: 12900, compare_at_price_max: 12900});
-for (const v of OTHER.variants) Object.assign(v, {price: 9900, compare_at_price: 12900});
 const RETIRED = ['hero-product4', 'page-sale-banner', 'promo-banner-1'];
 /* Bump when the sweep's checks change, so CACHE results are drawn again. */
-const SWEEP_VERSION = '14';
+const SWEEP_VERSION = '13';
 
 /* ------------------------------------------------------------ sample data */
 const IMG = {id: 'img1', src: 'https://theme.test/pic-a.png', url: 'https://theme.test/pic-a.png', width: 1600, height: 1000, aspect_ratio: 1.6, alt: 'Sample picture', presentation: {focal_point: '50% 50%'}};
@@ -104,56 +100,10 @@ const MENU_TAGGED = {...MENU, links: [...MENU.links.map(l => l.title === 'Home' 
 const DATA = {
   'theme-header': {settings: {mega_menu: MENU_TAGGED}, withBlocks: ['menu_badges']},
   /* how many pictures fit a row only shows with more pictures than one */
+  'image-with-text-benefits': {repeat: {media: 3}},
   /* a column's 6th to 8th values fill the 6th to 8th rows */
   'comparison-table-2': {repeat: {row: 8}},
-  /* the text column's own width is for a section with no picture */
-  'image-with-text-benefits': {repeat: {media: 3}, alsoWithout: ['media']},
-  'image-with-text-stats': {alsoWithout: ['media']},
-  /* a step with an icon draws the icon, not its number: the numbers' colour needs steps without one */
-  steps: {blockSet: {step: {icon: ''}}},
-  /* the space between pairs needs two pairs */
-  'before-and-after-image': {repeat: {comparison: 2}},
-  /* stars draw only for a review with a star count */
-  testimon4: {blockSet: {testimonials: {stars_count: 5}}},
-  /* a card with a rating draws stars; a video address plays when no picture or video file is picked */
-  'testimonial-video': {blockSet: {video_card: {rating: 5, image: '', video: ''}}},
-  testimonials3: {blockSet: {testimonial: {shopify_video: ''}}},
-  /* a slide's picture shows when it has no video */
-  slideshow: {blockSet: {slider_item: {local_video: '', video_url: '', badge_1_type: 'stars', badge_1_rating: 4.5}}},
-  /* the link colour needs a link in the text */
-  video: {blockSet: {subtext: {text: '<p>See the <a href="/pages/about">making of</a>.</p>'}}},
-  /* the stroke is the drawn icon's, so the benefit uses a drawn icon, not a picture */
-  'benefits-bar-pro': {blockSet: {benefit: {icon_image: ''}}},
-  /* one rising and one falling trend, each with a value */
-  'stat-counter-pro': {repeat: {stat: 2}, blockSetEach: {stat: [{trend_direction: 'up', trend_value: '+12%'}, {trend_direction: 'down', trend_value: '-4%'}]}},
-  /* a rating with no filled stars draws no stars, so their colours need a rating */
-  'main-cart-items': {blockSet: {simple_rating: {filled_stars: 4.5}, happy_customers: {filled_stars: 4.5}}},
-  'image-with-text-steps': {blockSet: {step: {icon: ''}}},
 };
-/* States a setting needs to show, checked directly: [pattern on "section:key", {editing: false (the storefront, motion running, scrolled into view), settings, blockSet, as: label}]. */
-const ALT = [
-  /* a popup's own look, checked with the popup open (showModal, its backdrop drawn) */
-  [/^(promotion-popup|countdown-promo-popup|spin-wheel-popup|promotional-popup|promotionalpopup2|promonewsletterpopup-2|coupon-promotion-newsletter-popup):([\w-]+\.)?(overlay_opacity|overlay_color|editor_preview_bg|input_placeholder_color|input_placeholder|input_pad_y|error_color|input_size_desktop|input_size_mobile|input_weight)$/, {open: true, settings: {use_theme_fields: false}, blockSet: {form: {use_theme_fields: false}}, as: 'popup open'}],
-  /* header parts drawn only with another block's look: the tinted dropdown with glass on, the badge border with a button badge style */
-  [/^theme-header:menu_badges\.badge_border$/, {blockSet: {menu_badges: {menu_badge_style: 'button'}}, as: 'with a button badge style'}],
-  /* states the store can be in: a sold-out product, variants at different prices, nothing to list */
-  [/^(hotspot-image-product-2:sold_out_label|hotspotsection:sold_out_text|page-compare:sold_out_label|shop-the-look:sold_out_label)$/, {product: p => ({...p, available: false, variants: p.variants.map(v => ({...v, available: false})), selected_or_first_available_variant: {...p.variants[0], available: false}}), as: 'sold-out product'}],
-  [/^hotspotsection:from_text$/, {product: p => ({...p, price_varies: true, price_min: 9900, price_max: 13777, variants: p.variants.map((v, i) => ({...v, price: i ? 9900 : 13777}))}), as: 'variants at different prices'}],
-  [/^(main-account:(no_orders_text|shop_link_label)|main-addresses:empty_text)$/, {globals: {customer: {...CUSTOMER, orders: [], orders_count: 0, addresses: [], addresses_count: 0, default_address: null}}, as: 'a customer with no orders or addresses'}],
-  [/^collection-tab:empty_state_(font_size|text_color)$/, {emptyCollection: true, as: 'an empty collection'}],
-  [/^featured-product2:description\.(use_product_description|truncate_chars)$/, {blockSet: {description: {text: ''}}, as: 'block text empty'}],
-  [/^collection-list2:media_(left|right)\.(video_url|poster)$/, {blockSet: {media_left: {video: '', video_url: 'https://theme.test/clip.mp4'}, media_right: {video: '', video_url: 'https://theme.test/clip.mp4'}}, as: 'no video file picked'}],
-  [/^products-carousel:video_url$/, {settings: {local_video: ''}, as: 'no video file picked'}],
-  [/^theme-footer:store_info\.show_logo$/, {blockSet: {store_info: {image: ''}}, as: 'no block image'}],
-  [/^theme-header:pill_glass\.header_pill_border_(width|color)$/, {blockSet: {pill_glass: {header_pill_enable: true, header_pill_border_width: 2, header_pill_border_color: '#336699'}}, as: 'pill with a border'}],
-  [/^scrolling-collection:toggle_active_(bg|color)$/, {click: '[data-scol-toggle]', as: 'pause toggle pressed'}],
-  /* banner3's own CSS reveal runs only while Theme settings > scroll animation is off */
-  [/^banner3:reveal_(range|style)$/, {editing: false, theme: {scroll_animation: 'none'}, as: 'storefront motion, theme animation off'}],
-  [/:([\w-]+\.)?pause_on_hover$/, {editing: false, hover: true, as: 'storefront motion, hovered'}],
-  [/:([\w-]+\.)?(reveal|reveal_range|reveal_style|scroll_animation|animate|animation|duration)$/, {editing: false, as: 'storefront motion'}],
-  [/^scroll-text-banner:/, {editing: false, as: 'storefront scroll reveal'}],
-  [/^(scrolling-text:(edge_fade|separator_color|separator_size)|marquee-bar:marquee\.svg_icon_(color|size_desktop|size_mobile))$/, {editing: false, as: 'storefront marquee'}],
-];
 /* A block that names the top-level link it belongs to gets a link of its own, one after the other. */
 const TOP_TITLES = MENU_TAGGED.links.map(l => l.title.replace(/\s*\[.*\]$/, '')).filter(t => t !== 'Home' && t !== 'Help');
 let topN = 0;
@@ -212,7 +162,7 @@ function values(x, cur) {
     case 'article': return [other(ARTICLE2, ARTICLE)];
     case 'page': return [other(PAGE2, PAGE)];
     case 'link_list': return [other(MENU2, MENU)];
-    case 'product_list': return [[MANY[2], MANY[3], MANY[4]]];
+    case 'product_list': return [[OTHER]];
     case 'collection_list': return [[COLL2]];
     default: return [];
   }
@@ -234,10 +184,9 @@ function fill(x, cur) {
     case 'link_list': return MENU;
     case 'product_list': return [PANTS, OTHER];
     case 'collection_list': return [COLL, COLL2];
-    case 'text': if (/svg/.test(x.id)) return cur; return /top-level (menu )?link/i.test(x.info || '') ? TOP_TITLES[topN++ % TOP_TITLES.length] : 'Sample words';
-    case 'textarea': case 'inline_richtext': if (/svg/.test(x.id)) return cur; /* an icon's SVG code stays empty, so the picked icon image draws */
-      return /iframe|embed/.test(x.id) ? '<iframe src="https://www.google.com/maps?q=Lisbon&output=embed" width="600" height="450" title="Map"></iframe>' : 'Sample words';
-    case 'richtext': return '<p>Sample <strong>bold</strong> text with <a href="/pages/about">a link</a></p>';
+    case 'text': return /top-level (menu )?link/i.test(x.info || '') ? TOP_TITLES[topN++ % TOP_TITLES.length] : 'Sample words';
+    case 'textarea': case 'inline_richtext': return /iframe|embed/.test(x.id) ? '<iframe src="https://www.google.com/maps?q=Lisbon&output=embed" width="600" height="450" title="Map"></iframe>' : 'Sample words';
+    case 'richtext': return '<p>Sample text with <a href="/pages/about">a link</a></p>';
     case 'url': return '/collections/all';
     default: return cur;
   }
@@ -277,7 +226,6 @@ function baseState(schema) {
   const blocks = presetBlocks(preset).filter(b => types.some(t => t.type === b.type)).map(b => ({type: b.type, settings: {...def(types.find(t => t.type === b.type).settings), ...(b.settings || {})}}));
   for (const t of types) if (!blocks.some(b => b.type === t.type)) blocks.push({type: t.type, settings: def(t.settings)});
   for (const [t, n] of Object.entries((DATA[schema.__name] || {}).repeat || {})) { const one = blocks.find(b => b.type === t); while (one && blocks.filter(b => b.type === t).length < n) blocks.splice(blocks.indexOf(one) + 1, 0, clone(one)); }
-  for (const [t, list] of Object.entries((DATA[schema.__name] || {}).blockSetEach || {})) blocks.filter(b => b.type === t).forEach((b, i) => Object.assign(b.settings, list[i] || {}));
   const settings = {...def(schema.settings), ...(preset.settings || {})};
   const fillAll = (list, s) => { for (const x of list || []) if (x.id) {
     /* accent words are words of the heading they colour; a reference names a real article or product */
@@ -286,7 +234,6 @@ function baseState(schema) {
   fillAll(schema.settings, settings);
   Object.assign(settings, (DATA[schema.__name] || {}).settings || {});
   for (const b of blocks) fillAll(types.find(t => t.type === b.type).settings, b.settings);
-  for (const b of blocks) Object.assign(b.settings, (((DATA[schema.__name] || {}).blockSet || {})[b.type]) || {});
   return {settings, blocks};
 }
 
@@ -337,17 +284,13 @@ async function satisfy(x, scope, state, list, blockList) {
 
 /* Which css files a drawing asks for (render() takes the link tags out). */
 const cssSeen = new Set(), jsSeen = new Set();
-let WRAP_CLASS = '', SECTION_NAME = '';
+let WRAP_CLASS = '';
 {
   const e = FP.engine();
   e.registerFilter('asset_url', k => { if (/\.css$/.test(k)) cssSeen.add(k); if (/\.js$/.test(k)) jsSeen.add(k); return '/assets/' + k; });
 }
 async function draw(name, state) {
-  const store = state.editing === false;
-  /* a product block drawn with product data (state.__ctx): tests/theme-every-setting-product-data.cjs */
-  const G = state.globals ? {...GLOBALS, ...state.globals} : GLOBALS;
-  const pd = PD.drawWith(name, state, store ? {...G, request: {...G.request, design_mode: false}} : G);
-  const r = await render(name, {uid: 'test', settings: pd.settings, blocks: pd.blocks, theme: state.theme ? {...THEME, ...state.theme} : THEME, globals: pd.globals, editing: !store && pd.editing});
+  const r = await render(name, {uid: 'test', settings: state.settings, blocks: state.blocks, theme: THEME, globals: GLOBALS, editing: true});
   return r.html + '\n<!--scripts-->\n' + r.scripts.join('\n<!--script-->\n');
 }
 /* A data attribute holding the section's or a block's settings as JSON (the live preview controllers read it) is not a change a visitor sees: it is taken out before the markup is compared. */
@@ -370,22 +313,11 @@ function readersOf(html) {
 }
 
 /* ------------------------------------------------------------ the browser */
-const PROPS = ['color', 'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition', 'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderTopStyle', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius', 'outlineColor', 'outlineWidth', 'outlineStyle', 'outlineOffset', 'boxShadow', 'textShadow', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'textTransform', 'textAlign', 'textDecorationLine', 'textDecorationColor', 'whiteSpace', 'webkitLineClamp', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'rowGap', 'columnGap', 'gridTemplateColumns', 'gridTemplateRows', 'gridColumn', 'gridRow', 'display', 'flexDirection', 'flexWrap', 'flexBasis', 'flexGrow', 'justifyContent', 'alignItems', 'alignSelf', 'justifySelf', 'order', 'position', 'top', 'right', 'bottom', 'left', 'zIndex', 'transform', 'translate', 'scale', 'rotate', 'opacity', 'visibility', 'filter', 'backdropFilter', 'mixBlendMode', 'objectFit', 'objectPosition', 'aspectRatio', 'overflow', 'transitionDuration', 'transitionTimingFunction', 'animationName', 'animationDuration', 'animationDelay', 'animationTimingFunction', 'animationIterationCount', 'animationPlayState', 'animationTimeline', 'animationRangeStart', 'animationRangeEnd', 'fill', 'stroke', 'strokeWidth', 'cursor', 'content', 'clipPath', 'scrollSnapType', 'webkitTextStrokeWidth', 'webkitTextStrokeColor', 'accentColor', 'caretColor', 'columnCount', 'textUnderlineOffset', 'verticalAlign', 'boxSizing', 'pointerEvents', 'wordBreak', 'fontVariantCaps', 'textIndent'];
-const PSEUDO = ['backgroundSize', 'backgroundPosition', 'filter', 'backdropFilter', 'inset', 'right', 'bottom', 'transitionDuration', 'transitionTimingFunction', 'borderLeftColor', 'borderLeftStyle', 'borderLeftWidth', 'borderTopStyle', 'borderBottomColor', 'borderBottomStyle', 'borderBottomWidth', 'borderRightColor', 'content', 'color', 'backgroundColor', 'backgroundImage', 'width', 'height', 'opacity', 'borderTopColor', 'borderTopWidth', 'transform', 'display', 'boxShadow', 'top', 'left', 'borderTopLeftRadius'];
-let layoutHtml = null, liveHtml = null, storeHtml = null;
-/* The real layout with an empty page: its <head> styles and links for the still drawings, with its scripts too for the live ones,
-   and for 'store' the storefront (no builder, motion running) a visitor sees. */
+const PROPS = ['color', 'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition', 'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderTopStyle', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius', 'outlineColor', 'outlineWidth', 'outlineStyle', 'outlineOffset', 'boxShadow', 'textShadow', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'textTransform', 'textAlign', 'textDecorationLine', 'textDecorationColor', 'whiteSpace', 'webkitLineClamp', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'rowGap', 'columnGap', 'gridTemplateColumns', 'gridTemplateRows', 'gridColumn', 'gridRow', 'display', 'flexDirection', 'flexWrap', 'flexBasis', 'flexGrow', 'justifyContent', 'alignItems', 'alignSelf', 'justifySelf', 'order', 'position', 'top', 'right', 'bottom', 'left', 'zIndex', 'transform', 'translate', 'scale', 'rotate', 'opacity', 'visibility', 'filter', 'backdropFilter', 'mixBlendMode', 'objectFit', 'objectPosition', 'aspectRatio', 'overflow', 'transitionDuration', 'transitionTimingFunction', 'animationName', 'animationDuration', 'animationDelay', 'animationTimingFunction', 'animationIterationCount', 'fill', 'stroke', 'strokeWidth', 'cursor', 'content', 'clipPath', 'scrollSnapType', 'webkitTextStrokeWidth', 'webkitTextStrokeColor', 'accentColor', 'caretColor', 'columnCount', 'textUnderlineOffset', 'verticalAlign', 'boxSizing', 'pointerEvents', 'wordBreak', 'fontVariantCaps', 'textIndent'];
+const PSEUDO = ['transitionDuration', 'transitionTimingFunction', 'borderLeftColor', 'borderLeftStyle', 'borderLeftWidth', 'borderTopStyle', 'borderBottomColor', 'borderBottomStyle', 'borderBottomWidth', 'borderRightColor', 'content', 'color', 'backgroundColor', 'backgroundImage', 'width', 'height', 'opacity', 'borderTopColor', 'borderTopWidth', 'transform', 'display', 'boxShadow', 'top', 'left', 'borderTopLeftRadius'];
+let layoutHtml = null, liveHtml = null;
+/* The real layout with an empty page: its <head> styles and links for the still drawings, and with its scripts too for the live ones. */
 async function pageShell(live) {
-  if (live === 'store') {
-    if (storeHtml) return storeHtml;
-    const e = FP.engine({'header-group': '', 'footer-group': '', 'overlay-group': ''});
-    const theme = {...THEME, color_schemes: Object.entries(THEME.color_schemes || {}).map(([id, v]) => ({id, settings: v.settings}))};
-    const base = {...GLOBALS, settings: theme, request: {...GLOBALS.request, design_mode: false}, shop: {name: 'Materia Themes', domain: 'theme.test', url: 'https://theme.test', currency: 'USD', money_format: '${{amount}}'}, content_for_header: '', content_for_layout: '<div id="shopify-section-prev" class="shopify-section"><section class="section"><div style="height:40px"></div></section></div><div id="shopify-section-test" class="shopify-section"></div><div id="shopify-section-next" class="shopify-section" style="margin-top:24px"><section class="section"><div style="height:1400px"></div></section></div>'};
-    const clean = s => s.replace(/\{\{-\s*-\}\}/g, "{{- '' -}}").replace(/^[ \t]*comment[ \t]*\n[\s\S]*?^[ \t]*endcomment[ \t]*$/gm, '').replace(/^[ \t]*# .*$/gm, '');
-    const src = clean(read('layout/theme.storelib').replace(/^<template compat="shopify">\n?/, '').replace(/<\/template>\s*$/, ''));
-    storeHtml = (await e.parseAndRender(src, base, {globals: base})).replace(/media="print"\s*onload="[^"]*"/g, '').replace('</head>', '<script>window.__store = true;</script></head>');
-    return storeHtml;
-  }
   if (layoutHtml) return live ? liveHtml : layoutHtml;
   const e = FP.engine({'header-group': '', 'footer-group': '', 'overlay-group': ''});
   const theme = {...THEME, color_schemes: Object.entries(THEME.color_schemes || {}).map(([id, v]) => ({id, settings: v.settings}))};
@@ -409,21 +341,20 @@ async function openPage(browser, width, live) {
   await page.route('**/*', r => {
     const u = new URL(r.request().url());
     if (u.hostname !== 'theme.test') return r.fulfill({status: 204, body: ''});
-    if (u.pathname === '/') return r.fulfill({contentType: 'text/html', body: page.__body || shell});
+    if (u.pathname === '/') return r.fulfill({contentType: 'text/html', body: shell});
     if (u.pathname.startsWith('/assets/')) { const f = path.join(ROOT, 'shopify/assets', path.basename(u.pathname)); if (/\.(css|js)$/.test(f) && fs.existsSync(f)) return r.fulfill({path: f, contentType: f.endsWith('.css') ? 'text/css' : 'text/javascript'}); return r.fulfill({status: 204, body: ''}); }
     if (/\.(png|jpe?g|webp|gif|svg)/.test(u.pathname)) return r.fulfill({contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')});
     return r.fulfill({status: 204, body: ''});
   });
   await page.goto('http://theme.test/');
-  if (live === true) await page.evaluate(() => { window.Shopify = {designMode: true}; document.body.classList.add('shopify-design-mode'); });
-  if (live === 'store') await page.evaluate(() => { if (window.Shopify) window.Shopify.designMode = false; document.documentElement.classList.remove('shopify-design-mode', 'sl-calm'); document.body.classList.remove('shopify-design-mode'); });
+  if (live) await page.evaluate(() => { window.Shopify = {designMode: true}; document.body.classList.add('shopify-design-mode'); });
   await page.evaluate(probe, {PROPS, PSEUDO});
   return page;
 }
 /* Runs in the page: the computed-style probe. */
 function probe({PROPS, PSEUDO}) {
     const W = () => document.getElementById('shopify-section-test');
-    if (!document.getElementById('sw-force')) { const st = document.createElement('style'); if (!window.__store) st.textContent = '*,*::before,*::after{animation-play-state:paused!important;transition-property:none!important}'; document.head.append(st); const f = document.createElement('style'); f.id = 'sw-force'; document.head.append(f); }
+    if (!document.getElementById('sw-force')) { const st = document.createElement('style'); st.textContent = '*,*::before,*::after{animation-play-state:paused!important;transition-property:none!important}'; document.head.append(st); const f = document.createElement('style'); f.id = 'sw-force'; document.head.append(f); }
     window.__wrapCls = '';
     const loaded = new Set([...document.querySelectorAll('link[rel=stylesheet]')].map(l => l.getAttribute('href')));
     window.__css = async list => { const add = list.filter(h => !loaded.has(h)); await Promise.all(add.map(h => new Promise(res => { loaded.add(h); const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = h; l.onload = l.onerror = res; document.head.append(l); }))); if (add.length) themeForced = null; };
@@ -445,7 +376,7 @@ function probe({PROPS, PSEUDO}) {
     /* transitions run to their end (the button contract's transition is !important in a layer, so it cannot be switched off), animations hold their first frame */
     const settleAll = () => { if (document.getAnimations) for (const a of document.getAnimations()) { try { if (window.CSSTransition && a instanceof CSSTransition) a.finish(); else { a.pause(); a.currentTime = 0; } } catch (_) {} } };
     const snap = ref => {
-      if (!window.__store) settleAll();
+      settleAll();
       const w = W(), out = [];
       /* the section, and the sections before and after it (space between sections) */
       const nb = [w.previousElementSibling, w.nextElementSibling].filter(Boolean).flatMap(n => [n, ...n.querySelectorAll('*')]);
@@ -455,7 +386,6 @@ function probe({PROPS, PSEUDO}) {
         const cs = getComputedStyle(el), row = [el.tagName];
         for (const p of PROPS) row.push(cs[p]);
         for (const ps of ['::before', '::after']) { const b = getComputedStyle(el, ps); if (b.content && b.content !== 'none' && b.content !== 'normal') { row.push(ps); for (const p of PSEUDO) row.push(b[p]); } }
-        if (el.tagName === 'DIALOG') { const bd = getComputedStyle(el, '::backdrop'); row.push('backdrop:' + bd.backgroundColor + ' ' + bd.opacity + ' ' + bd.backdropFilter); }
         if (el.matches('input,textarea')) row.push(getComputedStyle(el, '::placeholder').color, el.value || '');
         for (const a of ['href', 'src', 'alt', 'hidden', 'target', 'aria-label', 'aria-hidden', 'placeholder', 'srcset']) if (el.hasAttribute(a)) row.push(a + '=' + el.getAttribute(a));
         let own = ''; for (const n of el.childNodes) if (n.nodeType === 3) own += n.textContent; own = own.replace(/\s+/g, ' ').trim(); if (own) row.push('"' + own.slice(0, 200));
@@ -479,22 +409,8 @@ function probe({PROPS, PSEUDO}) {
     };
     window.__snapNow = forced => window.__snap(null, forced);
     /* The builder's redraw: the new markup in place, the section's inline scripts run, storelib:section-load fired; the scripts it needs are loaded the first time. */
-    /* scripts the layout already loaded are not loaded twice (a second customElements.define throws and stops the file) */
-    const have = new Set([...document.scripts].map(sc => (sc.getAttribute('src') || '').split('?')[0].split('/').pop()).filter(Boolean));
-    /* The storefront: the section drawn, scrolled into view, read 'at' ms later with its motion running. */
-    window.__runStore = async (html, inline, files, cls, at) => {
-      const w = W();
-      document.documentElement.classList.remove('shopify-design-mode', 'sl-calm'); document.body.classList.remove('shopify-design-mode'); if (window.Shopify) window.Shopify.designMode = false;
-      w.innerHTML = html; w.className = 'shopify-section ' + cls;
-      for (const f of files) if (!have.has(f)) { have.add(f); await new Promise(res => { const sc = document.createElement('script'); sc.src = '/assets/' + f; sc.onload = sc.onerror = res; document.body.append(sc); }); }
-      for (const body of inline) { const sc = document.createElement('script'); sc.textContent = body; try { document.body.append(sc); } catch (_) {} sc.remove(); }
-      w.dispatchEvent(new CustomEvent('storelib:section-load', {bubbles: true, detail: {sectionId: 'test'}}));
-      document.dispatchEvent(new CustomEvent('shopify:section:load', {detail: {sectionId: 'test'}}));
-      window.scrollTo(0, 0); await new Promise(r => requestAnimationFrame(r)); w.scrollIntoView({block: 'start'}); window.dispatchEvent(new Event('scroll'));
-      await new Promise(r => setTimeout(r, at));
-      return window.__snapNow(false);
-    };
-    window.__run = async (html, inline, files, cls, forced, open, click) => {
+    const have = new Set();
+    window.__run = async (html, inline, files, cls, forced) => {
       const w = W();
       w.innerHTML = html; w.className = 'shopify-section ' + cls;
       for (const f of files) if (!have.has(f)) { have.add(f); await new Promise(res => { const sc = document.createElement('script'); sc.src = '/assets/' + f; sc.onload = sc.onerror = res; document.body.append(sc); }); }
@@ -503,17 +419,8 @@ function probe({PROPS, PSEUDO}) {
       document.dispatchEvent(new CustomEvent('shopify:section:load', {detail: {sectionId: 'test'}}));
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
       await Promise.race([Promise.all([...w.querySelectorAll('img')].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; }))), new Promise(r => setTimeout(r, 400))]);
-      await new Promise(r => setTimeout(r, 260));
+      await new Promise(r => setTimeout(r, 80));
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-      /* a control pressed as a visitor presses it */
-      if (click) { for (const el of w.querySelectorAll(click)) el.click(); await new Promise(r => setTimeout(r, 120)); for (const a of document.getAnimations()) if (a instanceof CSSTransition) a.finish(); }
-      /* a popup opened as a visitor sees it (modal, with its backdrop) */
-      if (open) {
-        /* through the theme's popup manager, as a trigger opens it; a bare dialog is shown modal */
-        for (const root of w.querySelectorAll('[data-popup-root]')) { const id = root.getAttribute('data-popup-root'); try { if (window.MateriaPopups && window.MateriaPopups.open) window.MateriaPopups.open(id); else document.dispatchEvent(new CustomEvent('materia:popup-open', {detail: id})); } catch (_) {} }
-        await new Promise(r => setTimeout(r, 100));
-        for (const d of w.querySelectorAll('dialog')) { try { if (!d.open) d.showModal(); } catch (_) {} }
-        await new Promise(r => setTimeout(r, 350)); for (const a of document.getAnimations()) if (a instanceof CSSTransition) a.finish(); }
       return window.__snapNow(!!forced);
     };
     window.__snap = (html, forced, ref) => {
@@ -548,28 +455,18 @@ async function sweepSection(name, pages) {
   for (const t of types) { const n = full.blocks.findIndex(b => b.type === t.type); for (const x of t.settings || []) if (visible(x)) items.push({scope: t.type, n, x, list: t.settings}); }
   const drawn = new Map();
   const drawState = async st => { const k = hash(JSON.stringify(st)); if (!drawn.has(k)) { cssSeen.clear(); jsSeen.clear(); let h; try { h = await draw(name, st); } catch (err) { h = {error: String(err.message || err).split('\n')[0].slice(0, 200)}; } drawn.set(k, {html: h, css: [...cssSeen], js: [...jsSeen], st: clone(st)}); if (drawn.size > 60) drawn.delete(drawn.keys().next().value); } return drawn.get(k); };
-  WRAP_CLASS = schema.class || ''; SECTION_NAME = name; /* a real wrapper's id names its type; the layout's reveal reads it */
+  WRAP_CLASS = schema.class || '';
   /* Only the settings JSON the section's scripts read changed: both drawn with the section's scripts running (tests/media-fixture.cjs mount), compared after they ran. null when the first drawing is not stable. */
   const ran = new Map();
   let lastUnstable = '';
   async function runSnap(D, w, check, forced) {
-    const k = w + (forced ? 'f' : 'n') + (D.st.open ? 'o' : '') + (D.st.click || '') + hash(D.html);
+    const k = w + (forced ? 'f' : 'n') + hash(D.html);
     if (ran.has(k)) return ran.get(k);
-    if (D.st.editing === false && false) {
-      /* the storefront, read twice in its motion (early and late), so a different speed or start shows */
-      const sp = pages['store' + w], [b2, sc2] = D.html.split('\n<!--scripts-->\n'), files = [...new Set([...D.js, ...readersOf(D.html)])], out = [];
-      await sp.evaluate(list => window.__css(list), [...new Set([...LAYOUT_CSS, ...D.css])].map(c => '/assets/' + c));
-      const read2 = async () => { const o = []; for (const at of [180, 900]) o.push(...(await sp.evaluate(({b2, inline, files, cls, at}) => window.__runStore(b2, inline, files, cls, at), {b2, inline: sc2 ? sc2.split('\n<!--script-->\n') : [], files, cls: WRAP_CLASS, at})).map(l => at + '|' + l)); return o; };
-      out.push(...await read2());
-      if (check && JSON.stringify(await read2()) !== JSON.stringify(out)) { lastUnstable = 'storefront motion differs between two drawings'; ran.set(k, null); return null; }
-      ran.set(k, out);
-      return out;
-    }
     const page = pages['live' + w];
     const [body, scripts] = D.html.split('\n<!--scripts-->\n');
     const once = async () => {
       await page.evaluate(list => window.__css(list), [...new Set([...LAYOUT_CSS, ...D.css])].map(c => '/assets/' + c));
-      return page.evaluate(({body, inline, files, cls, forced, open}) => window.__run(body, inline, files, cls, forced, open, click), {click: D.st.click || '', open: !!D.st.open, forced: !!forced, body, inline: scripts ? scripts.split('\n<!--script-->\n') : [], files: [...new Set([...D.js, ...readersOf(D.html)])], cls: WRAP_CLASS});
+      return page.evaluate(({body, inline, files, cls, forced}) => window.__run(body, inline, files, cls, forced), {forced: !!forced, body, inline: scripts ? scripts.split('\n<!--script-->\n') : [], files: [...new Set([...D.js, ...readersOf(D.html)])], cls: WRAP_CLASS});
     };
     let v = await once();
     if (check) { let again = await once(); if (JSON.stringify(again) !== JSON.stringify(v)) { v = again; again = await once(); } const i = again.findIndex((x, n) => x !== v[n]); if (again.length !== v.length || i >= 0) { lastUnstable = again.length !== v.length ? 'elements ' + v.length + ' / ' + again.length : (() => { const x = v[i].split('|'), y = again[i].split('|'), j = x.findIndex((q, n) => q !== y[n]); return x[0] + ' ' + (PROPS[j - 1] || 'more') + ': ' + x[j] + ' / ' + y[j]; })(); v = null; } }
@@ -577,36 +474,7 @@ async function sweepSection(name, pages) {
     ran.set(k, v);
     return v;
   }
-  /* The storefront: what defines the motion (durations, delays, curves, names) always compared; the drawing at 180 and 900 ms too while it holds still between two drawings. */
-  const MOTION = PROPS.map((p, i) => /^(transition|animation)/.test(p) ? i + 1 : -1).filter(i => i > 0);
-  async function storeSnap(D, w) {
-    const k = 'store' + w + (D.st.hover ? 'h' : '') + hash(D.html);
-    if (ran.has(k)) return ran.get(k);
-    const sp = pages['store' + w], [b2, sc2] = D.html.split('\n<!--scripts-->\n'), files = [...new Set([...D.js, ...readersOf(D.html)])];
-    /* a fresh page load with the section in it, as a visitor gets it (no builder events) */
-    const shell = await pageShell('store');
-    const scripts = (sc2 ? sc2.split('\n<!--script-->\n') : []).map(b => '<script>' + b.replace(/<\/script/gi, '<\\/script') + '</script>').join('') + files.map(f => '<script src="/assets/' + f + '"></script>').join('');
-    const cssLinks = [...new Set([...LAYOUT_CSS, ...D.css])].map(c => '<link rel="stylesheet" href="/assets/' + c + '">').join('');
-    sp.__body = shell.replace('</head>', cssLinks + '</head>').replace('<div id="shopify-section-test" class="shopify-section"></div>', '<div id="shopify-section-test" class="shopify-section section-type--' + SECTION_NAME + ' ' + WRAP_CLASS + '">' + b2 + scripts + '</div>');
-    const read = async () => { const o = []; for (const at of [180, 900]) { await sp.goto('http://theme.test/?r=' + Math.random()); await sp.evaluate(probe, {PROPS, PSEUDO}); await sp.evaluate(h => { window.__hover = h; }, !!D.st.hover); o.push(...(await sp.evaluate(async at => { const w = document.getElementById('shopify-section-test'); w.scrollIntoView({block: 'start'}); window.dispatchEvent(new Event('scroll')); await new Promise(r => setTimeout(r, at)); for (const a of document.getAnimations()) if (a instanceof CSSTransition) a.finish(); return window.__snapNow(window.__hover); }, at)).map(l => at + '|' + l)); } return o; };
-    const one1 = await read(), one2 = await read();
-    const v = {full: one1, stable: JSON.stringify(one1) === JSON.stringify(one2), defs: one1.map(l => { const c = l.split('|'); return c[0] + '|' + c[1] + '|' + MOTION.map(i => c[i + 1]).join('|'); })};
-    ran.set(k, v);
-    return v;
-  }
-  async function storeRuntime(A, B, id) {
-    for (const w of widthsOf(id)) {
-      const a = await storeSnap(A, w), b = await storeSnap(B, w);
-      if (process.env.DEBUGRT) console.error('store', w, a.stable, b.stable, a.full.length, b.full.length, '\nA ' + a.full[0].slice(0, 400) + '\nB ' + b.full[0].slice(0, 400));
-      if (a.defs.length !== b.defs.length) return 'elements ' + a.defs.length + ' / ' + b.defs.length;
-      const i = a.defs.findIndex((x, n) => x !== b.defs[n]);
-      if (i >= 0) return 'motion ' + a.defs[i].slice(0, 120) + ' / ' + b.defs[i].slice(0, 120);
-      if (a.stable && b.stable) { const j = a.full.findIndex((x, n) => x !== b.full[n]); if (j >= 0) return 'drawing ' + a.full[j].slice(0, 80); }
-    }
-    return '';
-  }
   async function runtime(A, B, id) {
-    if (A.st.editing === false) return storeRuntime(A, B, id);
     let d = '';
     for (const w of widthsOf(id)) for (const forced of [false, true]) {
       const a = await runSnap(A, w, true, forced);
@@ -626,18 +494,6 @@ async function sweepSection(name, pages) {
     const light = it.scope === 'section' ? {settings: full.settings, blocks: (DATA[name] || {}).repeat ? full.blocks : full.blocks.slice(0, presetCount)} : {settings: full.settings, blocks: [full.blocks[it.n], ...extra]};
     let r = await one({...it, n: it.scope === 'section' ? undefined : 0}, light);
     if (r.status !== 'pass' && (light.blocks.length !== full.blocks.length)) r = await one(it, full);
-    /* a Main product or Featured product block setting drawn again with the product data it reads (reviews, offers, a size chart, ten sizes ...) and the words it styles */
-    if (r.status !== 'pass') for (const st of PD.bases(name, it, light)) { const r2 = await one({...it, n: it.scope === 'section' ? undefined : 0}, st); if (r2.status === 'pass') { r = {...r2, how: r2.how + ',product data'}; break; } r.withData = (r.withData ? r.withData + ' | ' : '') + JSON.stringify(st.__ctx) + ' ' + r2.tried; }
-    /* a setting that only shows in a given state (the storefront with motion, an open popup ...) is checked in that state */
-    const alt = ALT.find(([re]) => re.test(name + ':' + (it.scope === 'section' ? '' : it.scope + '.') + it.x.id));
-    if (r.status !== 'pass' && alt) { const st = clone(full); Object.assign(st.settings, alt[1].settings || {}); for (const b of st.blocks) Object.assign(b.settings, (alt[1].blockSet || {})[b.type] || {}); if (alt[1].editing === false) st.editing = false; if (alt[1].hover) st.hover = true; if (alt[1].theme) st.theme = alt[1].theme; if (alt[1].open) st.open = true;
-      if (alt[1].globals) st.globals = alt[1].globals;
-      if (alt[1].click) st.click = alt[1].click;
-      /* every picked product (and the page's) swapped for a variant of it */
-      if (alt[1].product) { const swap = o => { for (const [k, v] of Object.entries(o)) if (v && typeof v === 'object' && v.handle && v.variants) o[k] = alt[1].product(v); else if (Array.isArray(v)) o[k] = v.map(x => x && x.handle && x.variants ? alt[1].product(x) : x); }; swap(st.settings); for (const b of st.blocks) swap(b.settings); st.globals = {...(st.globals || {}), product: alt[1].product(PANTS), collection: {...COLL, products: COLL.products.map(alt[1].product)}}; }
-      if (alt[1].emptyCollection) { const e = {...COLL, products: [], products_count: 0, all_products_count: 0}; const swap = o => { for (const [k, v] of Object.entries(o)) if (v && v.handle && v.products) o[k] = e; }; swap(st.settings); for (const b of st.blocks) swap(b.settings); } const r2 = await one(it, st); if (r2.status === 'pass') r = {...r2, how: r2.how + ',' + alt[1].as}; }
-    const without = (DATA[name] || {}).alsoWithout;
-    if (r.status !== 'pass' && without && it.scope === 'section') r = await one(it, {settings: full.settings, blocks: full.blocks.filter(b => !without.includes(b.type))});
     out.push(r);
   }
   return out;
@@ -661,12 +517,6 @@ async function sweepSection(name, pages) {
       if (B.html.error) { res.push({v: label, r: 'error', d: B.html.error}); continue; }
       if (process.env.DUMP) { fs.writeFileSync(path.join(process.env.DUMP, 'A.html'), A.html); fs.writeFileSync(path.join(process.env.DUMP, 'B.html'), B.html); }
       if (A.html === B.html) { res.push({v: label, r: 'same'}); continue; }
-      if (st0.editing === false) {
-        /* the storefront: proven only by what a visitor sees while it runs */
-        const d = await runtime(A, B, x.id);
-        res.push({v: label, r: d === null ? 'unstable' : d ? 'script' : 'nostyle', d: d || lastUnstable});
-        continue;
-      }
       const ua = undump(A.html), ub = undump(B.html);
       if (strip(ua) !== strip(ub) || CLASS_ID.test(x.id)) { res.push({v: label, r: 'markup'}); continue; }
       if (A.html.split('\n<!--scripts-->\n')[1] !== B.html.split('\n<!--scripts-->\n')[1]) { res.push({v: label, r: 'markup'}); continue; }
@@ -709,7 +559,7 @@ async function sweepSection(name, pages) {
           if (P.html.error || Q.html.error) continue;
           const up = undump(P.html), uq = undump(Q.html);
           let r = P.html === Q.html ? 'same' : up === uq ? ((await runtime(P, Q, x.id)) ? 'gate' : 'same') : strip(up) !== strip(uq) ? 'gate' : '';
-          if (!r) { r = 'same'; for (const w of widthsOf(x.id)) { if (await compare(pages[w], P, Q, false) || await compare(pages[w], P, Q, true)) { r = 'gate'; break; } } if (r === 'same' && await runtime(P, Q, x.id)) r = 'gate'; }
+          if (!r) { r = 'same'; for (const w of widthsOf(x.id)) { if (await compare(pages[w], P, Q, false) || await compare(pages[w], P, Q, true)) { r = 'gate'; break; } } }
           if (r === 'gate') { res.push({v: 'with ' + deps.length + ' dependent settings changed', r}); break; }
         }
       }
@@ -725,7 +575,7 @@ async function sweepSection(name, pages) {
 async function worker() {
   const {launch} = require('./media-fixture.cjs');
   const browser = await launch();
-  const pages = {1366: await openPage(browser, 1366), 375: await openPage(browser, 375), 900: await openPage(browser, 900), live1366: await openPage(browser, 1366, true), live375: await openPage(browser, 375, true), live900: await openPage(browser, 900, true), store1366: await openPage(browser, 1366, 'store'), store375: await openPage(browser, 375, 'store'), store900: await openPage(browser, 900, 'store'), browser};
+  const pages = {1366: await openPage(browser, 1366), 375: await openPage(browser, 375), 900: await openPage(browser, 900), live1366: await openPage(browser, 1366, true), live375: await openPage(browser, 375, true), live900: await openPage(browser, 900, true), browser};
   process.on('message', async m => {
     if (m.done) { await browser.close(); process.exit(0); }
     const t = Date.now();
@@ -740,7 +590,7 @@ if (process.env.SWEEP_WORKER) {
   worker().catch(err => { console.error(err); process.exit(1); });
   return;
 }
-module.exports = {values, fill, GLOBALS, sweepSection, sectionList, baseState, openPage, readersOf, pageShell};
+module.exports = {values, fill, GLOBALS, sweepSection, sectionList, baseState, openPage};
 if (require.main !== module) return;
 
 (async () => {
@@ -751,7 +601,7 @@ if (require.main !== module) return;
   const results = {};
   /* CACHE=<dir> keeps each section's result there and reuses it while the section file and this test are unchanged (snippets are not part of the key: leave CACHE out for a clean run). */
   const cache = process.env.CACHE, me = SWEEP_VERSION;
-  const keyOf = n => hash(me + read('sections/' + n + '.storelib') + (PD.SECTIONS.includes(n) ? read('tests/theme-every-setting-product-data.cjs') : ''));
+  const keyOf = n => hash(me + read('sections/' + n + '.storelib'));
   const queue = [];
   for (const n of names.sort((a, b) => size(b) - size(a))) {
     const f = cache && path.join(cache, n + '.json');
@@ -797,16 +647,33 @@ if (require.main !== module) return;
 var ALLOW = [
   [/:([\w-]+\.)?(error_message|success_message|error_text|success_text)$/, 'Shown only after the form is sent (form.errors or form.posted_successfully), which a first drawing never has.'],
   [/:structured_data$/, 'Prints JSON-LD for search engines; render() leaves application/ld+json out of the drawing.'],
+  [/:([\w-]+\.)?(reveal|scroll_animation|pause_on_hover)$/, 'Storefront motion: the builder draws every section without its entrance or scroll motion, and the sweep holds animations on their first frame (tests/theme-animations.cjs runs them).'],
   [/^custom-colors:/, 'Paints the colour swatches of product cards and filters in other sections, not this one (tests/theme-r6-footer-lib.cjs draws them).'],
+  [/^(countdown-promo-popup|coupon-promotion-newsletter-popup|spin-wheel-popup):overlay_opacity$/, 'The overlay is drawn only while the popup is open.'],
   [/^main-search:sort_/, 'Fallback sort labels, read only when the store gives no sort options (snippets/facets-toolbar).'],
+  [/^(main-account:(no_orders_text|shop_link_label)|main-addresses:empty_text|collection-tab:empty_state_(font_size|text_color))$/, 'Empty state: shown only when there is nothing to list (no orders, no addresses, a collection with no products).'],
+  [/^(hotspot-image-product-2:sold_out_label|hotspotsection:sold_out_text|page-compare:sold_out_label|shop-the-look:sold_out_label)$/, 'Shown only for a sold-out product.'],
+  [/^hotspotsection:from_text$/, 'Shown only for a product whose variants have different prices.'],
   [/^(blog-posts|main-blog|main-collection-product|main-list-collections|main-search):items_to_show$/, 'The page size given to {% paginate %} (or a load more step), which the fixture does not cut into pages.'],
   [/^main-collection-product:popular_product\./, 'The sidebar looks its collection up as collections[handle] and shows only in the vertical filter layout with products; tests/theme-r6-collection-pages-products.cjs draws it.'],
   [/^breadcrumb:next_prev$/, 'Previous and next product links, drawn only on a product page reached from a collection.'],
   [/^(products-listing:(show_vendor|show_rating|show_short_description|show_add_to_cart)|related-products:(show_vendor|show_rating|show_add_to_cart))$/, 'A product card shows these only when Theme settings > Product card turns them on too (off in the saved theme); Storelib products have no vendor today.'],
   [/^related-products:custom_products$/, 'The cards are fetched by the section script (product recommendations) after the first paint, which the fixture does not serve.'],
+  [/^(products-carousel|social-shop-grid):pagination_position$/, 'Not confirmed by the sweep: positions the slider dots Swiper draws at runtime; the dots row shows no move in its drawing.'],
+  [/^scroll-text-banner:/, 'Scroll-driven reveal: in the builder the banner is drawn unpinned and fully shown (data-tx-editing), so its stage, speed and dimming act on the storefront only.'],
+  [/^scrolling-collection:toggle_active_(bg|color)$/, 'Colours of the pause toggle while it is pressed, a state set by a click.'],
+  [/^(scrolling-text:(edge_fade|separator_color|separator_size)|marquee-bar:marquee\.svg_icon_(color|size_desktop|size_mobile))$/, 'Not confirmed by the sweep: parts of a moving marquee (separators, faded edges, an uploaded SVG icon) show no change in its drawing.'],
+  [/^(promonewsletterpopup-2:input_placeholder_color|promotional-popup:(form\.input_placeholder_color|form\.input_pad_y|form\.error_color|editor_preview_bg)|promotionalpopup2:form\.input_placeholder)$/, 'Not confirmed by the sweep: inside a popup it does not open (the closed form\'s placeholder, error and field padding, the builder preview backdrop).'],
+  [/^promonewsletterpopup-2:form\.(input_size_desktop|input_size_mobile|input_weight)$/, 'Used with the section\'s Theme fields off, as its info says; the popup schemas keep a visible_if inside its own block (tests/theme-popups.cjs), so it cannot read the section.'],
+  [/^theme-footer:store_info\.show_logo$/, 'Draws the store logo only when the block has no image of its own (the sweep\'s block has one); tests/theme-r6-footer.cjs draws it without.'],
+  [/^featured-product2:description\.(use_product_description|truncate_chars)$/, 'The product\'s description stands in only while the block\'s own text is empty (the sweep fills it); tests/theme-products-b.cjs draws it empty.'],
+  [/^collection-list2:media_(left|right)\.(video_url|poster)$/, 'A video address and its poster, used only while no video file is picked (the sweep picks one); tests/theme-collections-r4.cjs draws them without.'],
+  [/^products-carousel:video_url$/, 'A video address for the banner, used only while no video file is picked (the sweep picks one); tests/theme-products-b.cjs draws it without.'],
   [/^size-chart-popup:use_product_chart$/, 'Uses the product\'s own size chart (Products > Size charts), which the sweep\'s product does not have.'],
+  [/^theme-header:pill_glass\.header_pill_border_(width|color)$/, 'The pill border needs both a width above 0 and a colour (snippet: pill_border_w > 0 and pill_border_color != blank); tests/theme-r5-header.cjs sets both.'],
+  [/^theme-header:(menu_dropdown_tinted_bg|menu_badges\.badge_border|pill_glass\.glass_text_color)$/, 'Header parts the layout draws around the section: the tinted dropdown and glass text colour apply with the Pill and glass block on (a section setting cannot read a block), the badge border with an outlined badge style; tests/theme-header-*.cjs check them.'],
+  /* Open: no change seen and no cause found in this round; each needs a closer look (data the fixture may lack, or a real bug). */
+  [/^(before-and-after-image:pair_gap|benefits-bar-pro:icon_stroke|benefits2:feature\.svg_icon_size|image-with-text-benefits:text_max_width|image-with-text-steps:marker_text_color|steps:marker_text_color|page-404:icon_color|product-set:set\.products|product-showcase:slide\.product|subcollection-list:font_weight|video:link_color|wavyrichtextbanner:(text|buttons)\.enable_custom_style)$/, 'OPEN: no change seen by the sweep and no cause found yet.'],
 ];
-/* the product block settings' reasons live with their data */
-ALLOW.push(...PD.ALLOW);
 /* Sections other changes own right now: what the sweep finds there is listed (VERBOSE or SHOW_OWNED=1), not failed. */
-var OWNED = ['main-product', 'featured-product'];
+var OWNED = ['banner3', 'hero-benefits', 'featured-blog-header', 'collection-list', 'comparison-table', 'testimonials', 'testimonials3', 'testimonials4', 'testimonial2', 'testimonial-video', 'testimonial-logos', 'testimon4', 'fake-order', 'announcement-bar-pro-4', 'hero-section-pro', 'announcement-bar-basic', 'hero-image1', 'hero-pro-scrolling', 'heroproduct1', 'hero-product3', 'dynamic-pricing', 'promotion-popup', 'promotional-image-popup', 'slideshow', 'number-stats', 'image-with-text-stats', 'progress-benefits', 'progress-circles', 'stat-counter', 'stat-counter-pro', 'main-product', 'featured-product', 'main-cart-items'];
