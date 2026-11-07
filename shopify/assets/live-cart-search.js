@@ -338,7 +338,8 @@
   }
   function paint(root, st) {
     if (st.raw !== root.dataset.lcsSettings) { st.raw = root.dataset.lcsSettings; st.s = {...parse(st.raw), ...st.live}; }
-    derive(root, st, false);
+    /* the settings are printed in the builder only (request.design_mode): without them nothing is painted here and the builder's redraw shows each change */
+    if (root.hasAttribute('data-lcs-settings')) derive(root, st, false);
   }
   function drop(root, st) {
     cancelAnimationFrame(st.frame);
@@ -352,7 +353,7 @@
     const st = {root, type, live: {}, liveBlocks: new Map(), s: parse(root.dataset.lcsSettings), raw: root.dataset.lcsSettings, blocks: new Map(), rawBlocks: new WeakMap(), last: new Map(), firstScheme: first ? first.slice(6) : ''};
     st.schedule = () => { if (!st.frame) st.frame = requestAnimationFrame(() => { st.frame = 0; if (root.isConnected) paint(root, st); }); };
     roots.set(root, st);
-    derive(root, st, true);
+    if (root.hasAttribute('data-lcs-settings')) derive(root, st, true);
     root.dataset.lcsReady = '';
   }
   function scan() {

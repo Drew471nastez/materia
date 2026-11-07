@@ -166,7 +166,9 @@ async function run(browser, type, width, editing) {
   let cur = {settings: full(schema.settings, t.section.settings), blocks: t.section.blocks.map(b => ({type: b.type, id: b.id, settings: full(((schema.blocks || []).find(q => q.type === b.type) || {settings: []}).settings, b.settings)}))};
   const redrawWith = async st => { await t.redraw({settings: st.settings, blocks: st.blocks.map(b => ({type: b.type, settings: b.settings}))}); await t.page.addStyleTag({content: '*,*::before,*::after{transition:none!important;animation:none!important}'}); await settle(t, editing); };
   const audit = () => t.page.evaluate(() => { const r = document.querySelector('#shopify-section-test [data-pg-root]'); return r ? MateriaPagePopups.audit(r) : ['no root']; });
-  const a0 = await audit();
+  /* a visitor's page carries no settings JSON (request.design_mode only): no live paint to compare there, only the redraws */
+  const printed = editing || await t.page.evaluate(() => !!document.querySelector('#shopify-section-test [data-pg-settings]'));
+  const a0 = printed ? await audit() : [];
   ok(!a0.length, tag + ' the controller reads the first paint as drawn: ' + a0.slice(0, 5).join('; '));
   const baseFp = await fingerprint(t);
   const cases = [];
@@ -196,12 +198,11 @@ async function run(browser, type, width, editing) {
     const next = JSON.parse(JSON.stringify(start));
     if (c.block) next.blocks.find(b => b.id === c.block).settings[c.id] = c.v; else next.settings[c.id] = c.v;
     const before = await fingerprint(t);
-    await t.emit({[c.id]: c.v}, c.block);
-    await settle(t, editing, false);
-    const live = await fingerprint(t);
+    if (printed) { await t.emit({[c.id]: c.v}, c.block); await settle(t, editing, false); }
+    const live = printed ? await fingerprint(t) : null;
     await redrawWith(next);
     const drawn = await fingerprint(t);
-    const d = diff(live, drawn);
+    const d = printed ? diff(live, drawn) : [];
     ok(!d.length, label + ': live is the same as the redraw\n   ' + explain(live, drawn, d));
     if (width < 768 && PHONE_SIZE[type] === c.id && typeof c.v === 'number') {
       const sizes = await t.page.evaluate(() => [...document.querySelectorAll('#shopify-section-test input[type="email"]')].filter(i => i.getClientRects().length).map(i => getComputedStyle(i).fontSize));
@@ -212,7 +213,7 @@ async function run(browser, type, width, editing) {
     else checks++;
     /* back to the base, live (the next case starts from a live state) */
     const back = c.block ? start.blocks.find(b => b.id === c.block).settings[c.id] : start.settings[c.id];
-    await t.emit({[c.id]: back === undefined ? null : back}, c.block);
+    if (printed) await t.emit({[c.id]: back === undefined ? null : back}, c.block);
     await redrawWith(cur);
   }
   const now = await fingerprint(t);

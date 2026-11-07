@@ -73,28 +73,31 @@ const shape = page => page.evaluate(() => {
         return r;
       };
       const first = await check('first paint');
-      /* live: a tall shape puts the text over the picture, back to 16:9 brings the panel back */
-      await t.emit({article_image_ratio_mobile: '2-3'}); await settle(t.page);
-      const tall = await read(t.page);
-      ok(['label', 'title', 'button'].every(k => tall[k].over), `${where}: a tall picture holds the text over it, live`);
-      const r2 = await mount(browser, NAME, {width: 375, editing, settings: {...BASE, color_scheme: scheme, article_image_ratio_mobile: '2-3'}, blocks: WITH, assets: [CTRL]}); await settle(r2.page);
-      eq(await read(r2.page), tall, `${where}: tall shape live equals redraw`);
-      await r2.page.close();
-      await t.emit({article_image_ratio_mobile: '16-9'}); await settle(t.page);
-      eq(await read(t.page), first, `${where}: back to 16:9 live`);
-      for (const ratio of ['1-1', '4-3', '3-2', '2-1', '21-9']) {
-        await t.emit({article_image_ratio_mobile: ratio}); await settle(t.page);
-        const r = await read(t.page);
-        ok(['label', 'title', 'text', 'button'].every(k => r[k].below && r[k].ratio >= 4.5), `${where}: ${ratio} picture, the text reads in its panel`);
+      /* live edits come from the builder, where the settings are printed (request.design_mode) */
+      if (editing) {
+        /* live: a tall shape puts the text over the picture, back to 16:9 brings the panel back */
+        await t.emit({article_image_ratio_mobile: '2-3'}); await settle(t.page);
+        const tall = await read(t.page);
+        ok(['label', 'title', 'button'].every(k => tall[k].over), `${where}: a tall picture holds the text over it, live`);
+        const r2 = await mount(browser, NAME, {width: 375, editing, settings: {...BASE, color_scheme: scheme, article_image_ratio_mobile: '2-3'}, blocks: WITH, assets: [CTRL]}); await settle(r2.page);
+        eq(await read(r2.page), tall, `${where}: tall shape live equals redraw`);
+        await r2.page.close();
+        await t.emit({article_image_ratio_mobile: '16-9'}); await settle(t.page);
+        eq(await read(t.page), first, `${where}: back to 16:9 live`);
+        for (const ratio of ['1-1', '4-3', '3-2', '2-1', '21-9']) {
+          await t.emit({article_image_ratio_mobile: ratio}); await settle(t.page);
+          const r = await read(t.page);
+          ok(['label', 'title', 'text', 'button'].every(k => r[k].below && r[k].ratio >= 4.5), `${where}: ${ratio} picture, the text reads in its panel`);
+        }
+        await t.emit({article_image_ratio_mobile: '16-9'}); await settle(t.page);
+        /* the creator's own colours still reach the panel */
+        await t.emit({enable_custom_style: true, featured_title_text_color: '#aa1133', description_maintext_color: '#1133aa'}); await settle(t.page);
+        const own = await read(t.page);
+        ok(own.title.color === 'rgb(170, 17, 51)' && own.text.color === 'rgb(17, 51, 170)' && own.label.color === 'rgb(17, 51, 170)', `${where}: custom text colours apply in the panel live`);
+        const r3 = await mount(browser, NAME, {width: 375, editing, settings: {...BASE, color_scheme: scheme, enable_custom_style: true, featured_title_text_color: '#aa1133', description_maintext_color: '#1133aa'}, blocks: WITH, assets: [CTRL]}); await settle(r3.page);
+        eq(await read(r3.page), own, `${where}: custom colours live equal redraw`);
+        await r3.page.close();
       }
-      await t.emit({article_image_ratio_mobile: '16-9'}); await settle(t.page);
-      /* the creator's own colours still reach the panel */
-      await t.emit({enable_custom_style: true, featured_title_text_color: '#aa1133', description_maintext_color: '#1133aa'}); await settle(t.page);
-      const own = await read(t.page);
-      ok(own.title.color === 'rgb(170, 17, 51)' && own.text.color === 'rgb(17, 51, 170)' && own.label.color === 'rgb(17, 51, 170)', `${where}: custom text colours apply in the panel live`);
-      const r3 = await mount(browser, NAME, {width: 375, editing, settings: {...BASE, color_scheme: scheme, enable_custom_style: true, featured_title_text_color: '#aa1133', description_maintext_color: '#1133aa'}, blocks: WITH, assets: [CTRL]}); await settle(r3.page);
-      eq(await read(r3.page), own, `${where}: custom colours live equal redraw`);
-      await r3.page.close();
       eq(t.errors, [], where + ': no errors');
       await t.page.close();
     }

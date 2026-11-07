@@ -91,7 +91,8 @@ const FP = () => {
   };
 };
 const fp = (t, uid = 'test') => t.page.evaluate(u => window.__fp(u), uid);
-const audit = (t, uid = 'test') => t.page.evaluate(u => window.MateriaFeaturesA.audit(document.querySelector('#shopify-section-' + u + ' [data-fa]')), uid);
+/* a visitor's markup carries no settings JSON (request.design_mode only): nothing to derive from */
+const audit = (t, uid = 'test') => t.page.evaluate(u => { const r = document.querySelector('#shopify-section-' + u + ' [data-fa]'); return r.hasAttribute('data-fa-settings') ? window.MateriaFeaturesA.audit(r) : []; }, uid);
 const diff = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
 const diffDetail = (a, b) => diff(a, b).slice(0, 4).map(k => k + ': ' + (a[k] && b[k] ? Object.keys({...a[k], ...b[k]}).filter(p => JSON.stringify(a[k][p]) !== JSON.stringify(b[k][p])).map(p => p + ' ' + JSON.stringify(a[k][p]) + ' -> ' + JSON.stringify(b[k][p])).join('; ') : a[k] ? 'removed' : 'added')).join(' | ');
 const widthOf = (id, cfg) => (cfg.only && cfg.only[id]) || (/(^|_)mobile(_|$)|_m$|mobile/.test(id) ? 375 : /(^|_)desktop(_|$)|_d$|desktop/.test(id) ? 1366 : 0);

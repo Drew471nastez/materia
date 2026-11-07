@@ -4645,8 +4645,13 @@ if (!customElements.get("product-form-bundle")) {
             elementMessage.textContent = errorMessage;
             showToast(elementErrorMessage.innerHTML, 3000, "modal-error");
           })
-          .catch((e) => {
-            throw e;
+          .catch(() => {
+            // The message's own section did not arrive (offline, slow): the
+            // words still show, in a plain toast.
+            if (!errorMessage || typeof showToast !== "function") return;
+            const text = document.createElement("span");
+            text.textContent = errorMessage;
+            showToast(text.outerHTML, 3000, "modal-error");
           });
       }
     }
@@ -4755,6 +4760,7 @@ class ButtonSubmitBundle extends HTMLElement {
       sections_url: window.location.pathname,
     };
 
+    let answered = false;
     fetch(`${routes?.cart_add_url}`, {
       method: "POST",
       headers: {
@@ -4765,6 +4771,7 @@ class ButtonSubmitBundle extends HTMLElement {
     })
       .then((response) => response.json())
       .then((response) => {
+        answered = true;
         if (response.status) {
           this.handleErrorMessagePopup(response.message || response.description);
           return;
@@ -4788,7 +4795,8 @@ class ButtonSubmitBundle extends HTMLElement {
         }
       })
       .catch((error) => {
-        throw error;
+        console.error(error);
+        if (!answered) this.handleErrorMessagePopup(window.cartStrings?.error || "There was an error while updating your cart. Please try again.");
       })
       .finally(() => {
         this.resetButton();
@@ -4901,8 +4909,11 @@ class ButtonSubmitBundle extends HTMLElement {
         elementMessage.textContent = errorMessage;
         showToast(elementErrorMessage.innerHTML, 3000, "modal-error");
       })
-      .catch((e) => {
-        throw e;
+      .catch(() => {
+        if (!errorMessage || typeof showToast !== "function") return;
+        const text = document.createElement("span");
+        text.textContent = errorMessage;
+        showToast(text.outerHTML, 3000, "modal-error");
       });
   }
 
@@ -5015,12 +5026,16 @@ if (!customElements.get("product-form-quick-edit")) {
           .then((response) => {
             return response.text();
           })
-          .catch((e) => {
-            throw e;
-          })
-          .finally(() => {
-            this.addCartAdd();
-          });
+          .then(
+            () => this.addCartAdd(),
+            () => {
+              // The old line was not taken out (no connection): adding the
+              // new one would put both in the cart. Nothing changes.
+              this.submitButton.removeAttribute("disabled");
+              this.submitButton.classList.remove("loading");
+              this.updateMessageQuickErrors(window.cartStrings?.error || "There was an error while updating your cart. Please try again.");
+            }
+          );
       }
 
       addCartAdd() {
@@ -5037,6 +5052,7 @@ if (!customElements.get("product-form-quick-edit")) {
           this.cart.setActiveElement(document.activeElement);
         }
         config.body = formData;
+        let answered = false;
         fetch(`${routes?.cart_add_url}`, config)
           .then((response) => {
             return response.text();
@@ -5073,6 +5089,7 @@ if (!customElements.get("product-form-quick-edit")) {
                 throw error;
               });
             const parsedState = JSON.parse(state);
+            answered = true;
             if (!parsedState.errors) {
               this.cart.getSectionsToRender().forEach((section) => {
                 const elementToReplace = document.getElementById(section.id);
@@ -5097,7 +5114,10 @@ if (!customElements.get("product-form-quick-edit")) {
             }
           })
           .catch((e) => {
-            throw e;
+            console.error(e);
+            if (answered) return;
+            this.submitButton.classList.remove("loading");
+            this.updateMessageQuickErrors(window.cartStrings?.error || "There was an error while updating your cart. Please try again.");
           })
           .finally(() => {
             BlsLazyloadImg.init();
@@ -5134,7 +5154,8 @@ if (!customElements.get("product-form-quick-edit")) {
       }
 
       updateMessageQuickErrors(message) {
-        this.querySelector(".cart-item__error-text").textContent = message;
+        const text = this.querySelector(".cart-item__error-text");
+        if (text) text.textContent = message;
       }
     }
   );
@@ -8050,9 +8071,11 @@ if (!customElements.get("product-form")) {
         }
         config.body = formData;
 
+        let answered = false;
         fetch(`${routes.cart_add_url}`, config)
           .then((response) => response.json())
           .then((response) => {
+            answered = true;
             if (response.status) {
               publish(PUB_SUB_EVENTS.cartError, {
                 source: "product-form",
@@ -8259,6 +8282,12 @@ if (!customElements.get("product-form")) {
           })
           .catch((e) => {
             console.error(e);
+            // No answer from the cart (connection lost, timed out, or a page
+            // instead of JSON): say so by the button, which is free again.
+            if (answered) return;
+            const message = window.cartStrings?.error || "There was an error while updating your cart. Please try again.";
+            this.handleErrorMessage(message);
+            if (this.productItem || this.hideErrors) this.handleErrorMessagePopup(message);
           })
           .finally(() => {
             this.cart?.removeAttribute("aria-busy");
@@ -8327,8 +8356,13 @@ if (!customElements.get("product-form")) {
             elementMessage.textContent = errorMessage;
             showToast(elementErrorMessage.innerHTML, 3000, "modal-error");
           })
-          .catch((e) => {
-            throw e;
+          .catch(() => {
+            // The message's own section did not arrive (offline, slow): the
+            // words still show, in a plain toast.
+            if (!errorMessage || typeof showToast !== "function") return;
+            const text = document.createElement("span");
+            text.textContent = errorMessage;
+            showToast(text.outerHTML, 3000, "modal-error");
           });
       }
     }

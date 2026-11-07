@@ -140,6 +140,8 @@
         console.warn("[wishlist] could not load the saved products", error);
         self.setLoading(false);
         self.showEmpty(!self.cards().length);
+        // The saved list is still there: draw it when the connection is back.
+        window.addEventListener("online", function () { if (run === self.request) self.render(); }, { once: true });
       });
   };
 

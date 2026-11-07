@@ -280,10 +280,12 @@ class CartItems extends HTMLElement {
       sections_url: window.location.pathname,
     });
 
+    let answered = false;
     fetch(`${routes.cart_change_url}`, { ...fetchConfig(), ...{ body } })
       .then((response) => response.text())
       .then((state) => {
         const parsedState = JSON.parse(state);
+        answered = true;
         
         if (parsedState.errors) {
           this.updateMessageErrors(line, parsedState.errors, target);
@@ -305,6 +307,8 @@ class CartItems extends HTMLElement {
       .catch((e) => {
         console.error(e);
         this.disableLoading();
+        // No answer from the cart: the field goes back to what the cart holds, and says why.
+        if (!answered && target?.dataset) this.updateMessageErrors(line, window.cartStrings?.error || "There was an error while updating your cart. Please try again.", target);
       })
       .finally(() => {
         BlsLazyloadImg.init();

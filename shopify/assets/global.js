@@ -1250,8 +1250,12 @@ function handleErrorMessagePopup(errorMessage = false) {
       elementMessage.textContent = errorMessage;
       showToast(elementErrorMessage.innerHTML, 5000, "modal-error");
     })
-    .catch((e) => {
-      throw e;
+    .catch(() => {
+      // Offline or slow: the message still shows, in a plain toast.
+      if (!errorMessage) return;
+      const text = document.createElement("span");
+      text.textContent = errorMessage;
+      showToast(text.outerHTML, 5000, "modal-error");
     });
 }
 

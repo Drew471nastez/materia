@@ -64,7 +64,7 @@ const {render, schemaOf, THEME_VARS, themeControls, PANTS, OTHER} = require('./m
 
 const RETIRED = ['hero-product4', 'page-sale-banner', 'promo-banner-1'];
 /* Bump when the sweep's checks change, so CACHE results are drawn again. */
-const SWEEP_VERSION = '13';
+const SWEEP_VERSION = '14';
 
 /* ------------------------------------------------------------ sample data */
 const IMG = {id: 'img1', src: 'https://theme.test/pic-a.png', url: 'https://theme.test/pic-a.png', width: 1600, height: 1000, aspect_ratio: 1.6, alt: 'Sample picture', presentation: {focal_point: '50% 50%'}};
@@ -97,13 +97,63 @@ const MENU = {handle: 'main-menu', title: 'Main menu', links: [link('Home', '/')
 /* The header reads a badge from a tag in a link's title ([hot], [new] ...): one link for each. */
 const MENU_TAGGED = {...MENU, links: [...MENU.links.map(l => l.title === 'Home' || l.links.length ? l : {...l, links: [link('Our story', '/pages/story'), link('Stores', '/pages/stores')]}), link('Help', '/pages/help', [link('Shipping', '/pages/shipping'), link('Returns', '/pages/returns')]), ...['hot', 'new', 'sale', 'popular', 'custom_1', 'custom_2'].map(k => link('Tagged ' + k + ' [' + k + ']', '/collections/' + k, [link('First ' + k, '/collections/' + k + '-1'), link('Second ' + k, '/collections/' + k + '-2')]))]};
 /* Per section data the base drawing needs beyond the defaults. */
+const RICH = {...PANTS, metafields: {reviews: {rating: {value: {rating: 4.6, scale_min: 1, scale_max: 5}}, rating_count: {value: 128}}, custom: {sold_count: {value: 34}, size_table: {value: 'Size | Hip\nS | 90\nM | 96'}, countdown_timer: {value: '2027-06-30T23:59:00+00:00'}}}};
+/* and eleven colours (Sand, the eleventh, sold out and named with no CSS colour), so Variant selector pro's colour overrides 3 to 10, its sold out badge, Hide sold out and its text chips show; and products in its more_colors field */
+(() => {
+  const COLOURS = ['Black', 'Beige', 'Red', 'Blue', 'Green', 'Grey', 'White', 'Navy', 'Olive', 'Ivory', 'Sand'];
+  const extra = COLOURS.flatMap(c => ['S', 'M'].map(size => [size, c])).filter(([size, c]) => !PANTS.variants.some(v => v.option1 === size && v.option2 === c))
+    .map(([size, c]) => ({...PANTS.variants[0], id: `pants-down-${size}-${c}`.toLowerCase(), title: `${size} / ${c}`, option1: size, option2: c, options: [size, c], available: c !== 'Sand', featured_media: null, featured_image: null, url: `/products/pants-down?variant=pants-down-${size}-${c}`.toLowerCase()}));
+  Object.assign(RICH, {variants: [...PANTS.variants, ...extra], options_with_values: [PANTS.options_with_values[0], {...PANTS.options_with_values[1], values: COLOURS}]});
+  Object.assign(RICH.metafields.custom, {more_colors: {value: [OTHER, MANY[3]]}});
+})();
+/* a product with fewer left, so Stock pulse's own product shows another count */
+const FEW = {...OTHER, id: 'few-tee-id', handle: 'few-tee', variants: OTHER.variants.map(v => ({...v, inventory_quantity: 3})), selected_or_first_available_variant: {...OTHER.variants[0], inventory_quantity: 3}};
+/* what the product blocks' settings act on: a rating, more avatars and pills, a border, every info row, the theme's own icons (no pasted SVG) */
+const PAGE_BLOCKS = {happy_customers: {filled_stars: 4.5, avatar_count: 6}, simple_rating: {filled_stars: 3.5}, lod_rating_badge: {rating: 4.5}, social_proof_inline: {rating: 4},
+  benefits_pills: {pill4_enable: true, pill5_enable: true, pill6_enable: true, pill_border_style: 'solid', pill_border_width: 2}, benefits_tab: {tab5_enable: true, tab6_enable: true, container_border_style: 'solid', container_border_width: 2},
+  delivery_pills: {pill_border_width: 2}, divider_pro: {width: 50}, infotables: {max_width: 480, row2_enable: true, row3_enable: true}, vertical_benefits: {item1_svg: '', item2_svg: '', item3_svg: ''},
+  modern_collapsible_row: {icon_svg_custom: ''}, short_description: {custom_text: ''}, stock_pulse_notice: {ref_product: FEW, auto_qty: true},
+  product_reviews: {manual_review_rating: 4.5, manual_review_count: 12}, sold_counter: {sold: 34, hours: 24}};
+const SOLD = {...OTHER, id: 'sold-tee-id', handle: 'sold-tee', title: 'Sold Tee', url: '/products/sold-tee', available: false, variants: OTHER.variants.map(v => ({...v, id: 'sold-' + v.id, available: false})), selected_or_first_available_variant: {...OTHER.variants[0], id: 'sold-' + OTHER.variants[0].id, available: false}};
+/* and the switches their other settings hang on, on (a visible_if here is one simple comparison, tests/theme-product-blocks.cjs): Variant selector pro's custom style, the upsell's option picker, Quantity offer's tier 4, both buy button icons, and Pair with's main button choice */
+const OFFER_BLOCKS = {upsell_pro: {manual_product_1: MANY[3], manual_product_2: MANY[5], manual_product_3: SOLD, manual_product_4: PANTS, manual_product_5: '', manual_product_6: '', show_variant_selector: true}, bundle: {product_1: MANY[3]},
+  variant_selector_pro: {enable_vsp_custom: true}, quantity_offer: {tier_4_enable: true}, buy_buttons: {atc_icon_enable: true, buy_icon_enable: true}, pair_with_upsell: {purchase_action: 'both'}};
 const DATA = {
   'theme-header': {settings: {mega_menu: MENU_TAGGED}, withBlocks: ['menu_badges']},
   /* how many pictures fit a row only shows with more pictures than one */
-  'image-with-text-benefits': {repeat: {media: 3}},
+  'image-with-text-benefits': {repeat: {media: 3}, without: {text_max_width: ['media']}},
+  /* an image effect that shows at rest (Parallax moves the picture only as the page scrolls, and the drawing is at the top), on a first slide with no video (a slide's video takes the place of its picture) and a part-filled star badge */
+  'slideshow': {settings: {image_effect: 'zoom_out'}, blocks: {slider_item: [{local_video: '', video_url: '', badge_1_type: 'stars', badge_1_rating: 4.5}]}},
+  /* a testimonial with a rating (0, the default, shows no stars), so the star icon and size show */
+  'testimon4': {blocks: {testimonials: {stars_count: 4.5}}},
+  'testimonial-video': {blocks: {video_card: {rating: 4.5}}},
+  /* the gap between pairs shows from the second pair */
+  'before-and-after-image': {repeat: {comparison: 2}},
+  /* the first benefit keeps its library icon (an SVG, which the icon thickness strokes) instead of a picked picture */
+  'benefits-bar-pro': {blocks: {benefit: [{icon_image: ''}]}},
+  /* the first step has no icon of its own, so it shows the marker style (a step's icon replaces its number) */
+  'steps': {blocks: {step: [{icon: ''}]}}, 'image-with-text-steps': {blocks: {step: [{icon: ''}]}},
+  /* a set leads with the page's product, so the sample set holds two others (the sweep's other list, Other Tee alone, is then a different set) */
+  'product-set': {blocks: {set: {products: [OTHER, MANY[2]]}}},
+  /* the first slide leaves its heading and link to the picked product (the two samples cost the same, so the price alone does not change) */
+  'product-showcase': {blocks: {slide: [{heading: '', button_link: ''}]}},
+  /* the text holds a link, which the link colour paints */
+  'video': {blocks: {subtext: {text: 'A short film of the product in use, <a href="/pages/about">start to finish</a>.'}}},
+  /* a stat with a rising and one with a falling trend, so the trend colours show */
+  'stat-counter-pro': {blocks: {stat: [{trend_direction: 'up', trend_value: '+12%'}, {trend_direction: 'down', trend_value: '-3%'}]}},
+  /* the text's width is the one it takes when the section has no picture or video */
+  'image-with-text-stats': {without: {text_max_width: ['media']}},
   /* a column's 6th to 8th values fill the 6th to 8th rows */
   'comparison-table-2': {repeat: {row: 8}},
+  /* the theme's own check icon (its mark cut out in the highlight colour) draws while no check image or SVG is given */
+  'comparison-table': {settings: {table_icon_check: '', table_icon_check_svg: ''}},
+  /* the two sample products cost the same: the picked one starts as a product at other prices (still on sale, so the struck price shows), so picking another shows */
+  'dynamic-pricing': {settings: {product: (() => { const v = {...PANTS.variants[0], id: 'v-plain', price: 9900, compare_at_price: 12900}; return {...PANTS, id: 'p-plain', handle: 'plain-pants', price: 9900, compare_at_price: 12900, compare_at_price_max: 12900, variants: [v], selected_or_first_available_variant: v, first_available_variant: v}; })()}},
+  /* the product page's offer blocks: products other than the page's own (two to sell, one sold out), so the cards, the bundle lines and their limits draw */
+  'main-product': {blocks: OFFER_BLOCKS}, 'featured-product': {blocks: OFFER_BLOCKS},
 };
+/* The product page's own product, given a rating, a sold count and a size table of its own (sample data, never in a default), and its blocks' typed counts (DATA globals: what the drawing reads beside the section). */
+for (const n of ['main-product', 'featured-product']) { const d = DATA[n] = DATA[n] || {}; d.globals = {product: RICH, ...(d.globals || {})}; if (n === 'featured-product') d.settings = {product: RICH, ...(d.settings || {})}; d.blocks = {...PAGE_BLOCKS, ...(d.blocks || {})}; }
 /* A block that names the top-level link it belongs to gets a link of its own, one after the other. */
 const TOP_TITLES = MENU_TAGGED.links.map(l => l.title.replace(/\s*\[.*\]$/, '')).filter(t => t !== 'Home' && t !== 'Help');
 let topN = 0;
@@ -131,6 +181,10 @@ const GLOBALS = {
   routes: {all_products_collection_url: '/collections/all', cart_add_url: '/cart/add', cart_url: '/cart', cart_change_url: '/cart/change', root_url: '/', account_url: '/account', account_login_url: '/account/login', account_logout_url: '/account/logout', account_register_url: '/account/register', account_addresses_url: '/account/addresses', search_url: '/search', predictive_search_url: '/search/suggest', product_recommendations_url: '/recommendations/products', collections_url: '/collections'},
 };
 
+/* SVG markup for a setting that takes a pasted icon (an id naming svg, not its size or colour). */
+const SVG_ID = /(^|_)svg($|_)(?!.*(size|color|colour|width|height|stroke|gap))/;
+const SVG_A = '<svg viewBox="0 0 24 24" width="24" height="24"><path d="M4 12h16" stroke="currentColor" stroke-width="2"></path></svg>';
+const SVG_B = '<svg viewBox="0 0 24 24" width="24" height="24"><circle cx="12" cy="12" r="8" fill="currentColor"></circle></svg>';
 /* A value to change a setting to, given what it holds now. */
 function values(x, cur) {
   const idOf = o => o && (o.id || o.handle || o.src); const other = (a, b) => cur && (cur === a || idOf(cur) === idOf(a)) ? b : a;
@@ -143,6 +197,8 @@ function values(x, cur) {
     case 'color_scheme': { const ids = Object.keys((JSON.parse(read('config/settings.json')).shopify || {}).color_schemes || {}); return [ids.find(i => i !== cur && i !== 'default') || ids[0]]; }
     case 'text': case 'textarea': {
       if (/(^|_)css$/.test(x.id)) return ['#shopify-section-test .sweep-none, #shopify-section-test > * { outline: 3px solid #ab12cd; }', 'outline: 3px solid #ab12cd; background: #ab12cd;'];
+      /* an icon pasted as SVG markup is drawn only when it is an <svg> */
+      if (SVG_ID.test(x.id)) return [cur === SVG_A ? SVG_B : SVG_A];
       const w = [cur === 'Edited words' ? 'Other words' : 'Edited words'];
       /* a length, a ratio or a shadow typed as words */
       if (/width|height|size|gap|radius|ratio|shadow|spacing|offset/.test(x.id)) w.push('640', '640px', '2/1', '2:1', '0 6px 18px #ab12cd');
@@ -172,6 +228,7 @@ function fill(x, cur) {
   const empty = cur === undefined || cur === null || cur === '';
   if (typeof cur === 'string' && cur && /^(product|collection|blog|article|page|link_list)$/.test(x.type)) return {product: PANTS, collection: COLL, blog: BLOG, article: ARTICLE, page: PAGE, link_list: MENU}[x.type];
   if (!empty && !(Array.isArray(cur) && !cur.length)) return cur;
+  if ((x.type === 'text' || x.type === 'textarea') && SVG_ID.test(x.id)) return SVG_A;
   switch (x.type) {
     case 'image_picker': return IMG;
     case 'video': return VIDEO;
@@ -185,7 +242,10 @@ function fill(x, cur) {
     case 'product_list': return [PANTS, OTHER];
     case 'collection_list': return [COLL, COLL2];
     case 'text': return /top-level (menu )?link/i.test(x.info || '') ? TOP_TITLES[topN++ % TOP_TITLES.length] : 'Sample words';
-    case 'textarea': case 'inline_richtext': return /iframe|embed/.test(x.id) ? '<iframe src="https://www.google.com/maps?q=Lisbon&output=embed" width="600" height="450" title="Map"></iframe>' : 'Sample words';
+    /* a table typed as rows (its placeholder shows them: cells split by |, one row a line) */
+    case 'textarea': if (/\|/.test(x.placeholder || '') && /\n/.test(x.placeholder)) return x.placeholder;
+    // falls through
+    case 'inline_richtext': return /iframe|embed/.test(x.id) ? '<iframe src="https://www.google.com/maps?q=Lisbon&output=embed" width="600" height="450" title="Map"></iframe>' : 'Sample words';
     case 'richtext': return '<p>Sample text with <a href="/pages/about">a link</a></p>';
     case 'url': return '/collections/all';
     default: return cur;
@@ -234,6 +294,8 @@ function baseState(schema) {
   fillAll(schema.settings, settings);
   Object.assign(settings, (DATA[schema.__name] || {}).settings || {});
   for (const b of blocks) fillAll(types.find(t => t.type === b.type).settings, b.settings);
+  /* DATA blocks: settings for every block of a type, or a list of them, one for each block of that type in order */
+  for (const b of blocks) { const d = ((DATA[schema.__name] || {}).blocks || {})[b.type]; Object.assign(b.settings, (Array.isArray(d) ? d[blocks.filter(y => y.type === b.type).indexOf(b)] : d) || {}); }
   return {settings, blocks};
 }
 
@@ -290,7 +352,7 @@ let WRAP_CLASS = '';
   e.registerFilter('asset_url', k => { if (/\.css$/.test(k)) cssSeen.add(k); if (/\.js$/.test(k)) jsSeen.add(k); return '/assets/' + k; });
 }
 async function draw(name, state) {
-  const r = await render(name, {uid: 'test', settings: state.settings, blocks: state.blocks, theme: THEME, globals: GLOBALS, editing: true});
+  const r = await render(name, {uid: 'test', settings: state.settings, blocks: state.blocks, theme: THEME, globals: {...GLOBALS, ...((DATA[name] || {}).globals || {})}, editing: true});
   return r.html + '\n<!--scripts-->\n' + r.scripts.join('\n<!--script-->\n');
 }
 /* A data attribute holding the section's or a block's settings as JSON (the live preview controllers read it) is not a change a visitor sees: it is taken out before the markup is compared. */
@@ -313,8 +375,8 @@ function readersOf(html) {
 }
 
 /* ------------------------------------------------------------ the browser */
-const PROPS = ['color', 'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition', 'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderTopStyle', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius', 'outlineColor', 'outlineWidth', 'outlineStyle', 'outlineOffset', 'boxShadow', 'textShadow', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'textTransform', 'textAlign', 'textDecorationLine', 'textDecorationColor', 'whiteSpace', 'webkitLineClamp', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'rowGap', 'columnGap', 'gridTemplateColumns', 'gridTemplateRows', 'gridColumn', 'gridRow', 'display', 'flexDirection', 'flexWrap', 'flexBasis', 'flexGrow', 'justifyContent', 'alignItems', 'alignSelf', 'justifySelf', 'order', 'position', 'top', 'right', 'bottom', 'left', 'zIndex', 'transform', 'translate', 'scale', 'rotate', 'opacity', 'visibility', 'filter', 'backdropFilter', 'mixBlendMode', 'objectFit', 'objectPosition', 'aspectRatio', 'overflow', 'transitionDuration', 'transitionTimingFunction', 'animationName', 'animationDuration', 'animationDelay', 'animationTimingFunction', 'animationIterationCount', 'fill', 'stroke', 'strokeWidth', 'cursor', 'content', 'clipPath', 'scrollSnapType', 'webkitTextStrokeWidth', 'webkitTextStrokeColor', 'accentColor', 'caretColor', 'columnCount', 'textUnderlineOffset', 'verticalAlign', 'boxSizing', 'pointerEvents', 'wordBreak', 'fontVariantCaps', 'textIndent'];
-const PSEUDO = ['transitionDuration', 'transitionTimingFunction', 'borderLeftColor', 'borderLeftStyle', 'borderLeftWidth', 'borderTopStyle', 'borderBottomColor', 'borderBottomStyle', 'borderBottomWidth', 'borderRightColor', 'content', 'color', 'backgroundColor', 'backgroundImage', 'width', 'height', 'opacity', 'borderTopColor', 'borderTopWidth', 'transform', 'display', 'boxShadow', 'top', 'left', 'borderTopLeftRadius'];
+const PROPS = ['color', 'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition', 'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderTopStyle', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius', 'outlineColor', 'outlineWidth', 'outlineStyle', 'outlineOffset', 'boxShadow', 'textShadow', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'textTransform', 'textAlign', 'textDecorationLine', 'textDecorationColor', 'textDecorationThickness', 'whiteSpace', 'webkitLineClamp', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'rowGap', 'columnGap', 'gridTemplateColumns', 'gridTemplateRows', 'gridColumn', 'gridRow', 'display', 'flexDirection', 'flexWrap', 'flexBasis', 'flexGrow', 'justifyContent', 'alignItems', 'alignSelf', 'justifySelf', 'order', 'position', 'top', 'right', 'bottom', 'left', 'zIndex', 'transform', 'translate', 'scale', 'rotate', 'opacity', 'visibility', 'filter', 'backdropFilter', 'mixBlendMode', 'objectFit', 'objectPosition', 'aspectRatio', 'overflow', 'transitionDuration', 'transitionTimingFunction', 'animationName', 'animationDuration', 'animationDelay', 'animationTimingFunction', 'animationIterationCount', 'fill', 'stroke', 'strokeWidth', 'cursor', 'content', 'clipPath', 'scrollSnapType', 'webkitTextStrokeWidth', 'webkitTextStrokeColor', 'accentColor', 'caretColor', 'columnCount', 'textUnderlineOffset', 'verticalAlign', 'boxSizing', 'pointerEvents', 'wordBreak', 'fontVariantCaps', 'textIndent'];
+const PSEUDO = ['transitionDuration', 'transitionTimingFunction', 'borderLeftColor', 'borderLeftStyle', 'borderLeftWidth', 'borderTopStyle', 'borderBottomColor', 'borderBottomStyle', 'borderBottomWidth', 'borderRightColor', 'content', 'color', 'backgroundColor', 'backgroundImage', 'width', 'height', 'opacity', 'borderTopColor', 'borderTopWidth', 'transform', 'display', 'boxShadow', 'top', 'left', 'borderTopLeftRadius', 'filter', 'backgroundSize'];
 let layoutHtml = null, liveHtml = null;
 /* The real layout with an empty page: its <head> styles and links for the still drawings, and with its scripts too for the live ones. */
 async function pageShell(live) {
@@ -494,6 +556,9 @@ async function sweepSection(name, pages) {
     const light = it.scope === 'section' ? {settings: full.settings, blocks: (DATA[name] || {}).repeat ? full.blocks : full.blocks.slice(0, presetCount)} : {settings: full.settings, blocks: [full.blocks[it.n], ...extra]};
     let r = await one({...it, n: it.scope === 'section' ? undefined : 0}, light);
     if (r.status !== 'pass' && (light.blocks.length !== full.blocks.length)) r = await one(it, full);
+    /* a setting that acts only while the section has no block of some type (DATA without: {id: [types]}): drawn once more without them */
+    const without = it.scope === 'section' && ((DATA[name] || {}).without || {})[it.x.id];
+    if (r.status !== 'pass' && without) r = await one(it, {settings: full.settings, blocks: full.blocks.filter(b => !without.includes(b.type))});
     out.push(r);
   }
   return out;
@@ -655,6 +720,7 @@ var ALLOW = [
   [/^(hotspot-image-product-2:sold_out_label|hotspotsection:sold_out_text|page-compare:sold_out_label|shop-the-look:sold_out_label)$/, 'Shown only for a sold-out product.'],
   [/^hotspotsection:from_text$/, 'Shown only for a product whose variants have different prices.'],
   [/^(blog-posts|main-blog|main-collection-product|main-list-collections|main-search):items_to_show$/, 'The page size given to {% paginate %} (or a load more step), which the fixture does not cut into pages.'],
+  [/^main-blog:blog_select$/, 'A blog handle typed as text (the builder has no blog picker): the sweep\'s words name no blog, so the blog being read shows; tests/theme-r6-collection-pages-blog.cjs types a real handle.'],
   [/^main-collection-product:popular_product\./, 'The sidebar looks its collection up as collections[handle] and shows only in the vertical filter layout with products; tests/theme-r6-collection-pages-products.cjs draws it.'],
   [/^breadcrumb:next_prev$/, 'Previous and next product links, drawn only on a product page reached from a collection.'],
   [/^(products-listing:(show_vendor|show_rating|show_short_description|show_add_to_cart)|related-products:(show_vendor|show_rating|show_add_to_cart))$/, 'A product card shows these only when Theme settings > Product card turns them on too (off in the saved theme); Storelib products have no vendor today.'],
@@ -665,6 +731,8 @@ var ALLOW = [
   [/^(scrolling-text:(edge_fade|separator_color|separator_size)|marquee-bar:marquee\.svg_icon_(color|size_desktop|size_mobile))$/, 'Not confirmed by the sweep: parts of a moving marquee (separators, faded edges, an uploaded SVG icon) show no change in its drawing.'],
   [/^(promonewsletterpopup-2:input_placeholder_color|promotional-popup:(form\.input_placeholder_color|form\.input_pad_y|form\.error_color|editor_preview_bg)|promotionalpopup2:form\.input_placeholder)$/, 'Not confirmed by the sweep: inside a popup it does not open (the closed form\'s placeholder, error and field padding, the builder preview backdrop).'],
   [/^promonewsletterpopup-2:form\.(input_size_desktop|input_size_mobile|input_weight)$/, 'Used with the section\'s Theme fields off, as its info says; the popup schemas keep a visible_if inside its own block (tests/theme-popups.cjs), so it cannot read the section.'],
+  [/^newsletter:success_duration$/, 'How long the thank-you shows after the form is sent (data-state="done"), which a first drawing never has.'],
+  [/^theme-footer:enable_country_selector$/, 'The country selector appears only when the store sells in more than one country; the fixture store has none (available_countries is empty).'],
   [/^theme-footer:store_info\.show_logo$/, 'Draws the store logo only when the block has no image of its own (the sweep\'s block has one); tests/theme-r6-footer.cjs draws it without.'],
   [/^featured-product2:description\.(use_product_description|truncate_chars)$/, 'The product\'s description stands in only while the block\'s own text is empty (the sweep fills it); tests/theme-products-b.cjs draws it empty.'],
   [/^collection-list2:media_(left|right)\.(video_url|poster)$/, 'A video address and its poster, used only while no video file is picked (the sweep picks one); tests/theme-collections-r4.cjs draws them without.'],
@@ -672,8 +740,16 @@ var ALLOW = [
   [/^size-chart-popup:use_product_chart$/, 'Uses the product\'s own size chart (Products > Size charts), which the sweep\'s product does not have.'],
   [/^theme-header:pill_glass\.header_pill_border_(width|color)$/, 'The pill border needs both a width above 0 and a colour (snippet: pill_border_w > 0 and pill_border_color != blank); tests/theme-r5-header.cjs sets both.'],
   [/^theme-header:(menu_dropdown_tinted_bg|menu_badges\.badge_border|pill_glass\.glass_text_color)$/, 'Header parts the layout draws around the section: the tinted dropdown and glass text colour apply with the Pill and glass block on (a section setting cannot read a block), the badge border with an outlined badge style; tests/theme-header-*.cjs check them.'],
-  /* Open: no change seen and no cause found in this round; each needs a closer look (data the fixture may lack, or a real bug). */
-  [/^(before-and-after-image:pair_gap|benefits-bar-pro:icon_stroke|benefits2:feature\.svg_icon_size|image-with-text-benefits:text_max_width|image-with-text-steps:marker_text_color|steps:marker_text_color|page-404:icon_color|product-set:set\.products|product-showcase:slide\.product|subcollection-list:font_weight|video:link_color|wavyrichtextbanner:(text|buttons)\.enable_custom_style)$/, 'OPEN: no change seen by the sweep and no cause found yet.'],
+  [/^(main-product|featured-product):size_guide\.size_guide_page$/, 'The page is the last fallback, read only while the block has no Size rows and no text (the sweep fills both), and a visible_if here can name only one setting.'],
+  [/^(main-product|featured-product):quantity_offer\.(tier_source|custom_picker_(height|radius|width|bg|text|border))$/, 'The store\'s own quantity breaks (Products > Upsells and bundles, in product.metafields.storelib.offers, drawn by product-offers.js) and the option picker drawn with them; the sweep\'s product has none, so the tiers below draw either way. tests/theme-quantity-tier-image-updates.cjs draws both sources; the picker is the one tests/theme-sheet-controls-round6.cjs sizes for a Storelib offer.'],
+  [/^(main-product|featured-product):(pair_with_upsell\.btn_(bg|text)_added|product_addon\.active_border_color)$/, 'Storefront state: the colours of a card once its product is added (.is-added) or ticked (.is-active), set by the block\'s script after a click.'],
+  [/^(main-product|featured-product):buy_buttons\.show_gift_card_recipient$/, 'The recipient form is drawn only for a gift card product (product.gift_card?); the sweep\'s product is not one.'],
+  [/^(main-product|featured-product):product_grouped\.heading$/, 'Drawn only for a product with a product_grouped field, which also takes the buy buttons\' place (the sweep\'s product keeps them); tests/theme-r6-product-block-data.cjs draws it with a grouped product.'],
+  [/^(main-product|featured-product):variant_selector_pro\.thumb_max_size$/, 'A cap on the picture size: it shows only below the picture size (80px), and the sweep tries the largest cap (200px) from 0.'],
+  [/^banner3:reveal_range$/, 'Where the scroll-driven reveal ends (animation-range on a view() timeline): storefront motion, which the sweep holds on its first frame.'],
+  [/^(progress-benefits|progress-circles|stat-counter|stat-counter-pro):(animate|duration)$/, 'Storefront motion: the numbers count up (and the rings fill) once on the live store; the builder and reduced motion draw the final values, as the setting\'s info says.'],
+  [/^slideshow:slider_item\.slider_effect$/, 'Text entrance motion: its animation plays only on the slide the slider script marks as entering (data-content="enter"), and the sweep holds motion still; the live check sees it only some runs.'],
+  [/^promotion-popup:(overlay_opacity|overlay_color)$/, 'The dialog\'s ::backdrop, drawn only while the popup is open as a modal.'],
 ];
 /* Sections other changes own right now: what the sweep finds there is listed (VERBOSE or SHOW_OWNED=1), not failed. */
-var OWNED = ['banner3', 'hero-benefits', 'featured-blog-header', 'collection-list', 'comparison-table', 'testimonials', 'testimonials3', 'testimonials4', 'testimonial2', 'testimonial-video', 'testimonial-logos', 'testimon4', 'fake-order', 'announcement-bar-pro-4', 'hero-section-pro', 'announcement-bar-basic', 'hero-image1', 'hero-pro-scrolling', 'heroproduct1', 'hero-product3', 'dynamic-pricing', 'promotion-popup', 'promotional-image-popup', 'slideshow', 'number-stats', 'image-with-text-stats', 'progress-benefits', 'progress-circles', 'stat-counter', 'stat-counter-pro', 'main-product', 'featured-product', 'main-cart-items'];
+var OWNED = [];

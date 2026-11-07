@@ -119,7 +119,8 @@ async function addFp(page) {
   });
 }
 const fp = (t, uid = 'test') => t.page.evaluate(u => window.__fp(u), uid);
-const audit = (t, uid = 'test') => t.page.evaluate(u => window.MateriaMediaBenefits.audit(document.querySelector('#shopify-section-' + u + ' [data-mlb-root]')), uid);
+/* a visitor's markup carries no settings JSON (request.design_mode only): nothing to derive from */
+const audit = (t, uid = 'test') => t.page.evaluate(u => { const r = document.querySelector('#shopify-section-' + u + ' [data-mlb-root]'); return r.hasAttribute('data-mlb-settings') ? window.MateriaMediaBenefits.audit(r) : []; }, uid);
 const diff = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
 const SPACING = '.shopify-section{padding-top:7px;padding-bottom:7px}';
 
@@ -298,7 +299,14 @@ async function video(browser, name) {
     eq(await v.count(), 1, name + ' video drawn');
     await t.page.evaluate(() => { document.querySelector('video').__mark = 1; });
     await t.emit({content_gap: 40, padding_top_mobile: 8});
-    ok(await t.page.evaluate(() => document.querySelector('video').__mark === 1), name + ' video element kept on unrelated edits');
+    {
+      /* a live edit keeps the video element: in the builder, where the settings are printed (request.design_mode) */
+      const e = await mount(browser, name, {width: 375, editing: true, settings, blocks, assets: [ASSET], reducedMotion});
+      await e.page.evaluate(() => { document.querySelector('video').__mark = 1; });
+      await e.emit({content_gap: 40, padding_top_mobile: 8});
+      ok(await e.page.evaluate(() => document.querySelector('video').__mark === 1), name + ' video element kept on unrelated edits');
+      await e.page.close();
+    }
     const st = await v.evaluate(el => ({auto: el.hasAttribute('autoplay'), controls: el.controls, visible: el.getBoundingClientRect().height > 0}));
     if (reducedMotion === 'reduce') { ok(!st.auto && st.controls, name + ' reduced motion: no autoplay, controls shown'); }
     ok(st.visible, name + ' video visible');

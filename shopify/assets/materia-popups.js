@@ -405,7 +405,12 @@
   }
   function queueInset() { if (!insetFrame) insetFrame = requestAnimationFrame(measureInset); }
   window.addEventListener('resize', queueInset, { passive: true });
-  window.addEventListener('scroll', queueInset, { passive: true });
+  // A scroll only matters once it has settled: the sticky Add to cart says
+  // when it shows with a class on <html> (watched below), and the phone bar
+  // does not move with the page. Measured on every scroll frame, the bars'
+  // boxes forced a style and layout pass in the middle of each frame.
+  var insetScroll = 0;
+  window.addEventListener('scroll', function () { clearTimeout(insetScroll); insetScroll = setTimeout(queueInset, 150); }, { passive: true });
   document.addEventListener('materia:consent', function () { setTimeout(queueInset, 450); });
   try {
     new MutationObserver(queueInset).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['data-open', 'hidden'] });

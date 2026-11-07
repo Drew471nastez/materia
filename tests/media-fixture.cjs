@@ -74,12 +74,31 @@ async function mount(browser, name, {width = 1366, height = 900, editing = true,
   if (inlineScripts) for (const r of rendered) for (const body of r.scripts) await page.addScriptTag({content: body}).catch(e => errors.push('inline script: ' + e.message));
   await page.waitForTimeout(150);
   const first = rendered[0];
+  /* true when the section prints its settings JSON in the builder only, and this page (a visitor's) has none */
+  const gated = new Map();
+  const builderOnly = async uid => {
+    if (!gated.has(uid)) {
+      const r = rendered.find(x => x.section.id === uid);
+      const html = (await render(name, {editing: true, theme, globals: globals.request ? {...globals, request: {...globals.request, design_mode: true}} : globals, uid, settings: r.section.settings, blocks: r.section.blocks.map(b => ({type: b.type, settings: b.settings}))})).html;
+      const re = /\sdata-[a-z0-9-]+-settings=|\sdata-pib-own=/;
+      gated.set(uid, re.test(html) && !re.test(r.html));
+    }
+    return gated.get(uid);
+  };
   const api = {
     page, errors, rendered, schema: first.schema, section: first.section,
     root: sel => page.locator('#shopify-section-' + first.section.id + (sel ? ' ' + sel : '')),
     blockId: (type, n = 0, uid = first.section.id) => rendered.find(r => r.section.id === uid).section.blocks.filter(b => b.type === type)[n]?.id,
-    /* Live editor event, as the Storelib canvas sends it. */
-    emit: async (settings, block, uid = first.section.id, live = true) => { await page.evaluate(({settings, block, uid, live}) => document.dispatchEvent(new CustomEvent('storelib:settings-change', {detail: {section: uid, settings, block, live}})), {settings, block, uid, live}); await page.waitForTimeout(70); },
+    /* Live editor event, as the Storelib canvas sends it. A section drawn without request.design_mode
+       carries no settings JSON for the live controllers (they paint nothing then), so there the
+       change reaches the page the way the builder shows it in such a canvas: the section is drawn again. */
+    emit: async (settings, block, uid = first.section.id, live = true) => {
+      if (!editing && await builderOnly(uid)) {
+        const prev = rendered.find(r => r.section.id === uid);
+        await api.redraw({uid, settings: block ? {} : settings, blocks: prev.section.blocks.map(b => ({type: b.type, settings: b.id === block ? {...b.settings, ...settings} : b.settings}))});
+        return;
+      }
+      await page.evaluate(({settings, block, uid, live}) => document.dispatchEvent(new CustomEvent('storelib:settings-change', {detail: {section: uid, settings, block, live}})), {settings, block, uid, live}); await page.waitForTimeout(70); },
     css: (sel, prop, uid = first.section.id) => page.locator('#shopify-section-' + uid + ' ' + sel).first().evaluate((el, k) => getComputedStyle(el)[k], prop),
     noOverflow: () => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
     /* Re-render with new settings and swap the section in place, then fire storelib:section-load like the builder. */

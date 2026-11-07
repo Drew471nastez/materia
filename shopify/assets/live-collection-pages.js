@@ -126,9 +126,18 @@
         const h = el.querySelector('.heading-title');
         if (!h) continue;
         if (touched) text(h, String(b.page_title || '').trim() ? b.page_title : h.dataset.lcpFallback || '');
-        swap(h, SIZES, b.header_size === 'small' ? 'h3' : b.header_size === 'large' ? 'h1-size' : '');
         blockFont(h, b);
-        prop(h, 'font-size', b.header_size === 'medium' ? num(b.heading_font_size, 34) + 'px' : '');
+        if (kind === 'page') {
+          /* Page heading: h2 by default, h3 small, h1 large, h2 at the chosen size for Custom. */
+          const want = b.header_size === 'small' ? ['h3'] : b.header_size === 'large' ? ['h1', 'h1-size'] : b.header_size === 'medium' ? ['h2', 'is-custom-size'] : ['h2'];
+          for (const c of ['h1', 'h2', 'h3', 'h1-size', 'is-custom-size']) if (!want.includes(c) && h.classList.contains(c)) h.classList.remove(c);
+          for (const c of want) if (!h.classList.contains(c)) h.classList.add(c);
+          prop(h, 'font-size', '');
+          prop(h, '--ph-size', b.header_size === 'medium' ? num(b.heading_font_size, 34) + 'px' : '');
+        } else {
+          swap(h, SIZES, b.header_size === 'small' ? 'h3' : b.header_size === 'large' ? 'h1-size' : '');
+          prop(h, 'font-size', b.header_size === 'medium' ? num(b.heading_font_size, 34) + 'px' : '');
+        }
         if (kind === 'page') {
           prop(h, 'margin-bottom', num(b.vertical_gap) + 'px');
           prop(h, 'color', bool(b.enable_heading_color) ? color(b.heading_color, 'var(--color-heading)') : '');
@@ -137,7 +146,8 @@
         blockFont(el, b);
         if (kind === 'page') {
           prop(el, 'color', bool(b.enable_custom_style) ? color(b.description_color, 'var(--color-text)') : 'var(--color-text)');
-          prop(el, 'font-size', num(b.description_font_size, 15) + 'px');
+          prop(el, 'font-size', '');
+          prop(el, '--ph-desc-size', num(b.description_font_size, 15) + 'px');
           if (touched) {
             const has = !!String(b.description || '').replace(/<[^>]*>/g, '').trim();
             if (has) { show(el, true); rich(el, b.description, st.cache); }
@@ -152,17 +162,15 @@
   T['page-heading'] = heading('page');
   T['main-collection-heading'] = heading('collection');
 
-  /* ---------- Blog posts page (main-blog) ---------- */
-  const RATIO = {square: '1/1', landscape: '4/3', portrait: '3/4'};
-  /* The grid sums sections/main-blog prints on #blog-articles. */
-  function gridVars(el, s, rowGap) {
-    if (!el) return;
-    const d = num(s.items_per_row, 4), m = num(s.items_per_row_mobile, 1), gap = num(s.column_gap, 30);
-    setVar(el, '--col-desktop', String(d)); setVar(el, '--col-number', String(m));
-    setVar(el, '--col-tablet', String(d > 3 ? 3 : d)); setVar(el, '--col-mobile', String(m));
-    setVar(el, '--col-gap', (gap < 15 ? gap : 15) + 'px'); setVar(el, '--col-gap-desktop', gap + 'px');
-    if (rowGap) setVar(el, '--row-gap', rowGap);
-  }
+  /* ---------- Blog posts page (main-blog) ----------
+     The cards sections/main-blog draws itself (.mb-card): the root carries the
+     spacing, alignment, picture corners, badge and font variables, the grid
+     (#blog-articles) the columns, gaps, shape, title size, excerpt lines and
+     the custom colours, and its classes the layout, hover and button styles.
+     Which posts, how many, pagination, and showing the category, date,
+     excerpt or Read more change which elements exist and wait for the redraw. */
+  const RATIO = {square: '1 / 1', landscape: '4 / 3', portrait: '3 / 4'};
+  const BTN_KINDS = ['primary', 'outline', 'secondary', 'underline'];
   function fonts(root, s, headVar, bodyVar) {
     const on = bool(s.enable_custom_fonts);
     attr(root, 'data-own-font', on);
@@ -170,9 +178,16 @@
     setVar(root, bodyVar, on ? font(s.body_font) : '');
   }
   T['main-blog'] = (root, st) => {
-    const s = st.s, custom = bool(s.enable_custom_style), align = s.content_alignment || 'center';
+    const s = st.s, custom = bool(s.enable_custom_style), align = s.content_alignment || 'left';
+    const C = v => custom ? color(v, '') : '';
     scheme(root, s);
     width(root.firstElementChild, s.section_width);
+    setVar(root, '--mb-align', align);
+    setVar(root, '--mb-img-radius', num(s.image_radius, 8) + 'px');
+    setVar(root, '--mb-pt', num(s.padding_top, 0) + 'px');
+    setVar(root, '--mb-pb', num(s.padding_bottom, 64) + 'px');
+    setVar(root, '--mb-pt-m', num(s.padding_top_mobile, 0) + 'px');
+    setVar(root, '--mb-pb-m', num(s.padding_bottom_mobile, 48) + 'px');
     setVar(root, '--section-mt', num(s.margin_top) + 'px');
     setVar(root, '--section-mb', num(s.margin_bottom) + 'px');
     setVar(root, '--badge-vertical-position', num(s.badge_vertical_position) + 'px');
@@ -183,15 +198,62 @@
     setVar(root, '--badge-radius', num(s.badge_border_radius) + 'px');
     setVar(root, '--badge-bg', custom ? color(s.badge_background_color, 'var(--color-primary)') : 'var(--color-primary)');
     setVar(root, '--badge-color', custom ? color(s.badge_text_color, 'var(--btn-primary-color)') : 'var(--btn-primary-color)');
-    for (const b of root.querySelectorAll('[data-mbl-badge]')) text(b, s.badge_text);
+    for (const b of root.querySelectorAll('[data-mbl-badge]')) { text(b, s.badge_text); b.hidden = !String(s.badge_text || '').trim(); }
     fonts(root, s, '--mbl-heading-font', '--mbl-body-font');
-    gridVars(root.querySelector('#blog-articles'), s);
-    for (const el of root.querySelectorAll('.blog-posts-info, .blog-posts-category')) swapPrefix(el, 'text-', align);
-    for (const el of root.querySelectorAll('.blog-posts-bottom')) swapPrefix(el, 'justify-content-', align);
-    for (const el of root.querySelectorAll('.blog-posts-readmore')) swap(el, ['btn-primary', 'btn-secondary'], 'btn-' + (s.readmore_type || 'primary'));
-    let ratio = RATIO[s.image_ratio] || '3/2';
-    if (s.image_ratio === 'custom' && String(s.custom_ratio || '').trim()) ratio = String(s.custom_ratio).replace(':', '/');
-    if (s.image_ratio !== 'adapt') for (const el of root.querySelectorAll('.blog-posts-image > a')) setVar(el, '--aspect-ratio', ratio);
+
+    const grid = root.querySelector('#blog-articles');
+    if (grid) {
+      const d = num(s.items_per_row, 4), m = num(s.items_per_row_mobile, 1), gap = num(s.column_gap, 30);
+      setVar(grid, '--col-desktop', String(d)); setVar(grid, '--col-number', String(m));
+      setVar(grid, '--col-tablet', String(d > 3 ? 3 : d)); setVar(grid, '--col-mobile', String(m));
+      setVar(grid, '--col-gap', (gap < 15 ? gap : 15) + 'px'); setVar(grid, '--col-gap-desktop', gap + 'px');
+      setVar(grid, '--row-gap', num(s.row_gap, 48) + 'px');
+      let ratio = RATIO[s.image_ratio] || 'auto';
+      if (s.image_ratio === 'custom') ratio = (String(s.custom_ratio || '').trim() || '16:10').split(':').join(' / ');
+      setVar(grid, '--mb-ratio', ratio);
+      setVar(grid, '--mb-title-size', num(s.title_size, 22) + 'px');
+      setVar(grid, '--mb-lines', String(num(s.excerpt_lines, 2)));
+      setVar(grid, '--mb-title', C(s.title_color));
+      setVar(grid, '--mb-meta', C(s.meta_color));
+      setVar(grid, '--mb-excerpt', C(s.excerpt_color));
+      const btnCustom = custom && bool(s.button_custom_colors);
+      const B = v => btnCustom ? color(v, '') : '';
+      setVar(grid, '--mbl-link', B(s.button_bg) || 'var(--mb-title, currentColor)');
+      setVar(grid, '--mbl-link-hover', B(s.button_hover_text) || 'var(--mbl-link)');
+      const layout = s.layout === 'list' ? 'list' : 'grid';
+      swap(grid, ['mb-list--grid', 'mb-list--list'], 'mb-list--' + layout);
+      attr(grid.parentElement, 'style', layout === 'list', '--col-width: 48.5%;');
+      swapPrefix(grid, 'mb-align--', align);
+      swapPrefix(grid, 'mb-hover--', s.hover_effect || 'lift_zoom');
+      swapPrefix(grid, 'mb-btn-hover--', s.button_hover || 'theme');
+      swapPrefix(grid, 'mb-title-hover--', s.title_hover || 'underline');
+      swapPrefix(grid, 'mb-link-line--', s.readmore_line || 'style');
+      grid.classList.toggle('mb-btn-full', bool(s.button_full_width));
+      grid.classList.toggle('mb-enter', bool(s.card_entrance));
+      for (const a of grid.querySelectorAll('.mb-card__media')) a.classList.toggle('mb-card__media--adapt', s.image_ratio === 'adapt');
+
+      const kind = BTN_KINDS.includes(s.readmore_type) ? s.readmore_type : 'primary';
+      const theme = kind === 'primary' ? 'primary' : kind === 'outline' ? 'secondary' : '';
+      const label = String(s.readmore_text || '').trim() ? s.readmore_text : 'Read article';
+      /* The same values snippets/button-overrides prints for the theme button. */
+      const bg = B(s.button_bg), hbg = B(s.button_hover_bg);
+      const over = {'--mb-bg': bg, '--mb-text': B(s.button_text), '--mb-border': bg, '--mb-hover-bg': hbg, '--mb-hover-text': B(s.button_hover_text), '--mb-hover-border': hbg};
+      for (const a of grid.querySelectorAll('a.mb-btn')) {
+        swap(a, BTN_KINDS.map(k => 'mb-btn--' + k), 'mb-btn--' + kind);
+        for (const c of [...a.classList]) if (/^mb-btn-(size|shape)--/.test(c)) a.classList.remove(c);
+        if (theme) { a.classList.add('mb-btn-size--' + (s.button_size || 'medium')); a.classList.add('mb-btn-shape--' + (s.button_shape || 'theme')); }
+        attr(a, 'data-theme-button', !!theme, theme);
+        attr(a, 'data-sl-button', !!theme);
+        const hover = {lift: 'lift', grow: 'scale'}[s.button_hover] || '';
+        attr(a, 'data-button-hover', !!(theme && hover), hover);
+        for (const [k, v] of Object.entries(over)) setVar(a, k, theme ? v : '');
+        if (!a.getAttribute('style')) a.removeAttribute('style');
+        text(a.querySelector('.mb-btn__label'), label);
+        attr(a, 'aria-label', true, label + ': ' + (a.dataset.mblTitle || ''));
+        const arrow = a.querySelector('.mb-btn__arrow');
+        if (arrow) arrow.hidden = !bool(s.button_arrow);
+      }
+    }
     const empty = root.querySelector('[data-main-blog-empty]');
     if (empty) {
       attr(empty, 'data-align', true, align);
@@ -380,7 +442,8 @@
   }
   function scan() {
     for (const [root, st] of S) if (!root.isConnected) st.dispose();
-    document.querySelectorAll('[data-lcp][data-lcp-id]').forEach(root => init(root));
+    /* the settings are printed in the builder only (request.design_mode): without them the builder's redraw shows each change */
+    document.querySelectorAll('[data-lcp][data-lcp-id][data-lcp-settings]').forEach(root => init(root));
   }
   document.addEventListener('storelib:settings-change', e => {
     const d = e.detail || {}, id = sectionOf(d), block = blockOf(d);

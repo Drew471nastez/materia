@@ -15,6 +15,16 @@ const markup=section.slice(0,section.indexOf('</template>'));
 const schema=JSON.parse(section.slice(section.indexOf('<schema>')+8,section.indexOf('</schema>'))).shopify;
 const inlineScripts=[...markup.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(s=>s.includes("swiper-{{ section.id }}"))
   .map(s=>s.replace(/\{\{ section.id \}\}/g,'fx').replace(/\{%[\s\S]*?%\}/g,''));
+/* The section draws its slide changes itself (its "Slide change" <style>, keyed on the root's data-ss-change):
+   the slider runs only slide or fade. Its Liquid captures are expanded here as the section prints them. */
+const changeCSS=effect=>{
+  const start=markup.indexOf('{%- capture chr -%}'),end=markup.indexOf('</style>',markup.indexOf('Slide change: one timing'));
+  let src=markup.slice(start,end).replace(/\{%-?\s*comment\s*-?%\}[\s\S]*?\{%-?\s*endcomment\s*-?%\}/g,'');
+  const vars={'section.id':'fx',ss_speed:['slide','slide_push','coverflow'].includes(effect)?750:effect==='fade'?800:900};
+  const fill=t=>t.replace(/\{\{\s*([\w.]+)\s*\}\}/g,(m,k)=>k in vars?String(vars[k]):m);
+  src=src.replace(/\{%-?\s*capture (\w+)\s*-?%\}([\s\S]*?)\{%-?\s*endcapture\s*-?%\}/g,(m,k,v)=>{vars[k]=fill(v);return '';});
+  return fill(src.replace(/^[\s\S]*?<style>/,'')).replace(/\{%[\s\S]*?%\}/g,'');
+};
 const CSS=['swiper-bundle.min.css','critical.css','theme.css','banner.css','slideshow.css','theme-button-contract.css'].map(f=>read('shopify/assets/'+f));
 const JS=['swiper-bundle.min.js','motion.min.js','global.js'].map(f=>read('shopify/assets/'+f));
 const COLORS=['#c43c3c','#3c78c4','#3cab5f','#c49a3c','#7a3cc4','#3cc4b8'];
@@ -42,7 +52,7 @@ ${dots?'<div class="swiper-pagination flex flex-wrap px-15 lh-1 bottom-30 justif
 </slide-section>`;
 };
 const pageHTML=opts=>`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>:root{--color-background:#ffffff;--color-heading:#111111;--color-text:#222222;--body-font:Arial;--icon-btn-size:44px}body{margin:0}#fx .swiper-slide .sec__inner{height:${opts.height||360}px}</style></head>
-<body class="index" data-scroll-animation="slide_in" data-btn-hover="none"><div id="shopify-section-fx" class="shopify-section scroll-trigger slide_in"><div id="fx" class="section gradient slideshow ${opts.effect||'slide'}" data-id="fx"><div class="full_width">${sliderHTML(opts)}</div></div></div><div style="height:2400px"></div></body></html>`;
+<body class="index" data-scroll-animation="slide_in" data-btn-hover="none"><div id="shopify-section-fx" class="shopify-section scroll-trigger slide_in"><div id="fx" class="section gradient slideshow ${opts.effect||'slide'}" data-id="fx" data-ss-change="${opts.effect||'slide'}"><div class="full_width">${sliderHTML(opts)}</div></div></div><div style="height:2400px"></div></body></html>`;
 
 let browser=null;
 (async()=>{
@@ -65,6 +75,7 @@ let browser=null;
     const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(['error','warning'].includes(m.type()))errors.push(m.text())});
     log('open',JSON.stringify(opts));await page.setContent(pageHTML(opts));log('content');
     for(const c of CSS)await page.addStyleTag({content:c});
+    await page.addStyleTag({content:changeCSS(opts.effect||'slide')});
     for(const j of JS)await page.addScriptTag({content:j});
     for(const s of inlineScripts)await page.addScriptTag({content:s});
     await page.evaluate(()=>{
@@ -121,7 +132,9 @@ let browser=null;
     assert(gap<300,`${label}: frame gap ${gap|0}ms`);
     if(bleed)assert(Math.max(...frames.map(f=>f.bleed))<0.02,`${label}: background shows through`);
     // The words of the slide leaving stay while it moves away.
-    frames.filter(f=>f.moving||f.dragging).forEach(f=>{if(from!==to)assert(f.slides[from].ho>0.99,`${label}: words of ${from} vanished mid-change`);});
+    /* Coverflow dims the slide turning away (the section's .sec__inner goes to 0.55): its words stay, dimmed. */
+    const keep=label.startsWith('coverflow')?0.5:0.99;
+    frames.filter(f=>f.moving||f.dragging).forEach(f=>{if(from!==to)assert(f.slides[from].ho>keep,`${label}: words of ${from} vanished mid-change`);});
     // The words of the slide arriving appear once and never dip.
     const trace=frames.map(f=>f.slides[to].ho);
     for(let i=1;i<trace.length;i++)assert(trace[i]>=trace[i-1]-0.02,`${label}: words of ${to} flashed (${trace[i-1].toFixed(2)} to ${trace[i].toFixed(2)})`);

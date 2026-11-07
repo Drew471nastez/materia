@@ -14,18 +14,15 @@ if (!customElements.get('pickup-availability')) customElements.define('pickup-av
     this.setAttribute('aria-busy', 'true');
     try {
       const rootUrl = (this.dataset.rootUrl || '/').replace(/\/?$/, '/');
-      const response = await fetch(rootUrl + 'variants/' + encodeURIComponent(variantId) + '/?section_id=pickup-availability', {signal:controller.signal});
+      const response = await fetch(rootUrl + 'variants/' + encodeURIComponent(variantId) + '?section_id=pickup-availability', {signal:controller.signal});
       if (!response.ok) throw new Error('Pickup availability unavailable');
       const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
       if (controller !== this.request || !this.isConnected) return;
       this.renderPreview(doc);
     } catch (error) {
       if (controller !== this.request || error.name === 'AbortError' || !this.isConnected) return;
+      /* No pickup information to show (Storelib has no store pickup section, and the builder does not answer it): show nothing rather than an error. */
       this.replaceChildren(); this.removeAttribute('available');
-      if (this.errorHtml) {
-        this.append(this.errorHtml.cloneNode(true));
-        this.querySelector('button')?.addEventListener('click', () => this.fetchAvailability(this.dataset.variantId), {once:true});
-      }
     } finally {
       if (controller === this.request) this.removeAttribute('aria-busy');
     }

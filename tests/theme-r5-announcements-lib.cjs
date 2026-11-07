@@ -86,7 +86,7 @@ async function run(spec) {
   let checks = 0;
   /* the runtime under test: live-announcements.js, or a section's own (spec.assets, spec.audit, spec.roots as page functions) */
   const ASSETS = spec.assets || ['live-announcements.js'];
-  const AUDIT = spec.audit || (() => [...document.querySelectorAll('[data-an-root]')].flatMap(r => window.MateriaAnnouncements.audit(r)));
+  const AUDIT = spec.audit || (() => [...document.querySelectorAll('[data-an-root][data-an-settings]')].flatMap(r => window.MateriaAnnouncements.audit(r)));
   const ROOTS = spec.roots || (() => window.MateriaAnnouncements.roots.size);
   const ok = (cond, msg) => { assert.ok(cond, msg); checks++; };
   const eq = (a, b, msg) => { assert.deepEqual(a, b, msg); checks++; };

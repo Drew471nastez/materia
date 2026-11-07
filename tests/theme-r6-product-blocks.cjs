@@ -115,8 +115,8 @@ const declared = (type, s) => Object.fromEntries(Object.entries(s).filter(([k]) 
         eq(a.own, [], tag + ': theme first, no own attributes');
         if (!['countdown_timer', 'countdown_badge', 'infotables', 'lod_testimonials_block', 'upsell_pro', 'benefits_pills', 'bundle', 'quantity_offer'].includes(t) && a.texts.length && base[bid].texts.length) eq(base[bid].texts, a.texts, tag + ': the custom styling switch alone changes nothing');
         eq(d.own, ['data-own-font', 'data-own-weight', 'data-own-size'], tag + ': custom fonts mark the block in the first paint');
-        eq(live.own, d.own, tag + ': and live');
-        eq(live.texts, d.texts, tag + ': live is the redrawn result');
+        /* live in the builder; a visitor's page has no data-pib-own, so the block is drawn again from the page instead */
+        if (design) { eq(live.own, d.own, tag + ': and live'); eq(live.texts, d.texts, tag + ': live is the redrawn result'); }
         if (!a.texts.length) continue; /* nothing drawn without data here */
         const wantFont = /Courier New|Georgia/;
         if (!d.texts.some(x => wantFont.test(x))) fails.push(tag + ': no text in the picked font ' + JSON.stringify(d.texts.slice(0, 4)));
@@ -129,7 +129,7 @@ const declared = (type, s) => Object.fromEntries(Object.entries(s).filter(([k]) 
       eq(await sig(p, 'b_text_2'), base.b_text_2, `${label} ${width}: a second Text block is left as it was`);
       for (const b of blocks) await L.emit(p, {section: id, block: b.id, settings: declared(b.type, {own_text_color: '', own_heading_color: '', enable_custom_fonts: false}), live: false});
       await p.waitForTimeout(50);
-      for (const b of blocks) eq(await sig(p, b.id), base[b.id], `${label} ${width} ${b.type}: switched off live, the values before are back`);
+      if (design) for (const b of blocks) eq(await sig(p, b.id), base[b.id], `${label} ${width} ${b.type}: switched off live, the values before are back`);
       ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${label} ${width}: no sideways scroll`);
       eq(p.errors, [], `${label} ${width}: no page errors`);
       await ctx.close();

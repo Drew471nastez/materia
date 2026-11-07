@@ -120,8 +120,8 @@ async function sweep(browser, name, opts) {
 /* The page as it prints, with and without the controller: the same look. */
 async function firstPaint(browser, name, {settings = {}, blocks, globals = {}, sig, label = ''} = {}) {
   for (const width of [375, 1366]) for (const editing of [true, false]) {
-    const a = await mount(browser, name, {width, editing, settings, blocks, globals, assets: []}); await settle(a.page); const s1 = await sig(a.page); await a.page.close();
-    const b = await mount(browser, name, {width, editing, settings, blocks, globals, assets: [CTRL]}); await frames(b.page); await settle(b.page); const s2 = await sig(b.page);
+    const a = await mount(browser, name, {width, editing, settings, blocks, globals, assets: []}); await a.page.mouse.move(width - 1, 1); await settle(a.page); const s1 = await sig(a.page); await a.page.close();
+    const b = await mount(browser, name, {width, editing, settings, blocks, globals, assets: [CTRL]}); /* the pointer off to the right edge, so a left-aligned link is never read in its hover colour */ await b.page.mouse.move(width - 1, 1); await frames(b.page); await settle(b.page); const s2 = await sig(b.page);
     eq(diff(s1, s2), [], name + ' first paint equals hydrated ' + label + width + (editing ? ' editor' : ' storefront'));
     ok(await b.noOverflow(), name + ' no sideways scroll ' + label + width);
     eq(b.errors, [], name + ' no errors ' + label + width);
@@ -146,8 +146,8 @@ async function twoInstances(browser, name, {settings = {}, blocks, globals = {},
 
 /* Saved instances: the file at c098384 and the working file, with the saved settings (plus the toggles the lead sets), look the same.
    inst: {settings, blocks: [{type, settings}], toggles: {section settings}, blockToggles: {type: settings}} */
-async function saved(browser, name, {inst, globals = {}, look, label = '', assets = [], widths = [375, 1366]}) {
-  let oldRaw; try { oldRaw = execSync('git show ' + BEFORE + ':sections/' + name + '.storelib', {cwd: ROOT, encoding: 'utf8'}); } catch (_) { return; }
+async function saved(browser, name, {inst, globals = {}, look, label = '', assets = [], widths = [375, 1366], ref = BEFORE}) {
+  let oldRaw; try { oldRaw = execSync('git show ' + ref + ':sections/' + name + '.storelib', {cwd: ROOT, encoding: 'utf8'}); } catch (_) { return; }
   const newRaw = fs.readFileSync(path.join(ROOT, 'sections/' + name + '.storelib'), 'utf8'), controls = await themeControls();
   const fill = (raw, toggles) => {
     const s = JSON.parse(raw.split('<schema>')[1].split('</schema>')[0]).shopify, d = l => Object.fromEntries((l || []).filter(x => x.id && x.default !== undefined).map(x => [x.id, x.default]));

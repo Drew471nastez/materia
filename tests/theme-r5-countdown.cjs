@@ -549,8 +549,7 @@ function statics(name) {
   /* the date rule the section documents is the controller's */
   const own = tpl.match(/function calendarOk\(s\)\{[^\n]*?\}(?=\n)/), ctl = read('shopify/assets/' + ASSET).match(/function calendarOk\(s\)\{[^\n]*?\}(?=\n)/);
   if (own) eq(own[0], ctl[0], name + ' date rule matches live-countdown.js');
-  /* no saved instance uses it */
-  for (const f of fs.readdirSync(path.join(__dirname, '../templates')).map(f => 'templates/' + f).concat(fs.readdirSync(path.join(__dirname, '../sections')).filter(f => f.endsWith('.json')).map(f => 'sections/' + f))) ok(!read(f).includes('"type": "' + name + '"') && !read(f).includes('"type":"' + name + '"'), name + ' not saved in ' + f);
+  /* a saved instance is fine: the creator now uses these on pages (home.json has a Countdown Timer Flip) */
 }
 
 (async () => {

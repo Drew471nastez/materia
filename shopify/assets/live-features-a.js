@@ -195,7 +195,8 @@
   }
   function paint(root, st) {
     if (st.raw !== root.dataset.faSettings) { st.raw = root.dataset.faSettings; st.s = {...parse(st.raw), ...st.live}; }
-    derive(root, st, false);
+    /* the settings are printed in the builder only (request.design_mode): without them nothing is painted here and the builder's redraw shows each change */
+    if (root.hasAttribute('data-fa-settings')) derive(root, st, false);
     const type = TYPES[root.dataset.fa];
     if (type && type.refresh) type.refresh(st);
   }
@@ -216,7 +217,7 @@
     st.io = new IntersectionObserver(es => { for (const e of es) st.visible = e.isIntersecting; if (type.refresh) type.refresh(st); });
     st.io.observe(root);
     roots.set(root, st);
-    derive(root, st, true);
+    if (root.hasAttribute('data-fa-settings')) derive(root, st, true);
     if (type.setup) type.setup(st);
     root.dataset.faReady = '';
   }

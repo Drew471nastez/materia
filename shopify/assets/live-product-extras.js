@@ -171,6 +171,8 @@
     if (d.block ?? d.blockId ?? d.block_id) return; /* the floating video's block (product, poster, video) is drawn by the builder's redraw */
     let st = find(id);
     if (!st) { scan(); st = find(id); if (!st) return; }
+    /* Related products' settings are printed in the builder only (request.design_mode): without them the builder's redraw shows each change */
+    if (st.kind.sel === '[data-rp-root]' && !st.el.hasAttribute('data-rp-settings')) return;
     st.kind.merge(st, d.settings);
     schedule(st);
     if (st.kind.sel === '[data-svs-root]' && 'action_close' in d.settings) requestAnimationFrame(() => st.el.update && st.el.update());

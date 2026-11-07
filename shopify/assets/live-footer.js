@@ -143,7 +143,16 @@
         const inner = el.querySelector('.newsletter-inner');
         if (inner && bk('content_width')) { put(inner, '~text-center', b.content_width === '100%'); put(inner, '~mx-auto', b.content_width === '100%'); }
       }
-      if (type === 'payment_badges' && bk('alignment')) put(el, '!justify-content', b.alignment === 'left' ? 'flex-start' : b.alignment === 'center' ? 'center' : 'flex-end');
+      if (type === 'payment_badges') {
+        /* the same justify-content, margins and --pb-width (Badges area width) the markup writes */
+        if (bk('alignment')) {
+          const a = b.alignment || 'right';
+          put(el, '!justify-content', a === 'left' ? 'flex-start' : a === 'center' ? 'center' : 'flex-end');
+          put(el, '!margin-left', a === 'left' ? '' : 'auto');
+          put(el, '!margin-right', a === 'center' ? 'auto' : '');
+        }
+        if (bk('content_width')) put(el, '--pb-width', b.content_width || '');
+      }
     }
   }
 

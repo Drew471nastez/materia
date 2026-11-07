@@ -153,7 +153,8 @@
   function init(el) {
     const st = {el, id: el.dataset.fbSection || '', s: parse(el.dataset.fbSettings), spec: parse(el.dataset.fbSpec), bspec: parse(el.dataset.fbBspec), blocks: new Map(), last: new Map(), frame: 0, cleanup: [], refresh: []};
     for (const b of el.querySelectorAll('[data-fb-bs]')) st.blocks.set(b.dataset.fbBlock, {type: b.dataset.fbType, s: parse(b.dataset.fbBs)});
-    for (const [e, key, v] of derive(st)) { let m = st.last.get(e); if (!m) st.last.set(e, m = new Map()); m.set(key, v); }
+    /* the settings are printed in the builder only (request.design_mode): without them nothing is painted here and the builder's redraw shows each change */
+    if (el.hasAttribute('data-fb-settings')) for (const [e, key, v] of derive(st)) { let m = st.last.get(e); if (!m) st.last.set(e, m = new Map()); m.set(key, v); }
     for (const sc of el.querySelectorAll('[data-fb-scroll]')) scroller(st, sc);
     roots.set(el, st);
   }
@@ -168,6 +169,7 @@
     if (!id || !d.settings || typeof d.settings !== 'object') return;
     let st = find(id);
     if (!st) { scan(); st = find(id); if (!st) return; }
+    if (!st.el.hasAttribute('data-fb-settings')) return;
     const bid = sid(d.block ?? d.blockId ?? d.block_id);
     if (bid) { const b = st.blocks.get(bid); if (!b) return; Object.assign(b.s, d.settings); }
     else Object.assign(st.s, d.settings);

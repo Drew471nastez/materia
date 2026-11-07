@@ -17,12 +17,20 @@
    5. First paint equals the hydrated paint; autoplay waits off screen and is
       off under reduced motion; two instances stay independent; a redraw sets
       up once.
+   5b. With blocks (the blog page's Subheading, Heading and Text): every block
+      setting and the settings that reach the blocks (Custom heading size,
+      Heading size, Gap between heading blocks) look different after a redraw,
+      and the same change sent live looks like the redraw.
    6. The saved instances (templates/blog.json, templates/article.json) look as
       they did at HEAD, with enable_custom_style on (their View all colours).
+      The blog page's instance, made again with blocks in the builder (0674ef4),
+      is compared with that commit.
 
    LIQUIDJS=<path to liquidjs> LIVE=0 node tests/theme-r5-blog-slideshow-blog.cjs */
 const fs = require('fs'), path = require('path'), {execSync} = require('child_process'), assert = require('assert/strict');
-const {launch, mount, render, schemaOf, schemaProblems, themeControls, THEME_VARS} = require('./media-fixture.cjs');
+const {launch, mount: mountWith, render, schemaOf, schemaProblems, themeControls, THEME_VARS} = require('./media-fixture.cjs');
+/* The heading without blocks unless blocks are given (the preset's Heading and Text blocks are checked in blocks()). */
+const mount = (browser, name, o = {}) => mountWith(browser, name, o.instances ? o : {blocks: [], ...o});
 const {engine} = require('./theme-featured-product-round5.cjs');
 const ROOT = path.join(__dirname, '..');
 /* The sections as they were before round 5 (the commit before the round's work in progress), or HEAD. */
@@ -67,6 +75,8 @@ async function sig(page, uid = 'test') {
       swiper: sw && !sw.destroyed ? {loop: !!sw.params.loop, autoplay: !!(sw.params.autoplay && sw.params.autoplay.enabled), delay: sw.params.autoplay?.delay || 0, progress: sw.params.pagination?.type} : null,
       pag: vis(R.querySelector('.swiper-pagination')) && {...cs(R.querySelector('.swiper-pagination'), ['justifyContent']), style: slider.dataset.paginationStyle, bullet: cs(R.querySelector('.swiper-pagination-bullet, .swiper-pagination-progressbar-fill'), ['width', 'borderTopLeftRadius'])},
       reveal: slider?.classList.contains('reveal_on_scroll'),
+      sub: cs(R.querySelector('.section__header-sub'), T.concat(['textTransform', 'opacity'])), subT: R.querySelector('.section__header-sub')?.textContent.trim(),
+      blocks: cs(R.querySelector('.bp-head-blocks'), ['rowGap']), dw: cs(R.querySelector('.section__header-des'), ['maxWidth', 'marginTop']), hm: cs(R.querySelector('.section__header-heading'), ['marginBottom']),
     };
     return JSON.parse(JSON.stringify(out));
   }, uid);
@@ -218,14 +228,61 @@ async function lifecycle(browser) {
   await rm.page.close();
 }
 
+/* The blog page's blocks, as templates/blog.json saves them. */
+const SAVED_BLOCKS = (() => { const sec = JSON.parse(fs.readFileSync(path.join(ROOT, 'templates/blog.json'), 'utf8')).sections['blog-posts-1793646112970']; return sec.block_order.map(id => ({type: sec.blocks[id].type, settings: sec.blocks[id].settings})); })();
+const BVALUES = {color: ['#ab12cd'], text: ['Edited words'], inline_richtext: ['Edited <em>heading</em>'], richtext: ['<p>Edited <em>text</em></p>']};
+async function blocks(browser) {
+  const {schema} = schemaOf('blog-posts'), fails = [];
+  const bdef = t => Object.fromEntries((schema.blocks.find(b => b.type === t).settings || []).filter(x => x.id).map(x => [x.id, x.default]));
+  const base = SAVED_BLOCKS.map(b => ({type: b.type, settings: {...bdef(b.type), ...b.settings}}));
+  const SEC = {heading_subtext_gap: [30], enable_custom_heading_size: [false], heading_font_size: [41]};
+  const RESET = {...Object.fromEntries(schema.settings.filter(x => x.id).map(x => [x.id, x.default])), ...BASE};
+  for (const width of [375, 1366]) {
+    const L = await mountWith(browser, 'blog-posts', {width, assets: A, settings: BASE, globals: G, blocks: base});
+    const R = await mountWith(browser, 'blog-posts', {width, assets: A, settings: BASE, globals: G, blocks: base});
+    const cases = [];
+    for (const [id, vals] of Object.entries(SEC)) for (const v of vals) cases.push({id, v});
+    base.forEach((b, i) => { for (const x of schema.blocks.find(t => t.type === b.type).settings) {
+      if (!x.id || x.hidden) continue;
+      const cur = b.settings[x.id];
+      const vals = x.type === 'select' ? x.options.map(o => o.value).filter(v => v !== cur) : x.type === 'range' ? [cur === x.max ? x.min : x.max] : BVALUES[x.type] || [];
+      for (const v of vals) cases.push({i, id: x.id, v, pre: x.id === 'custom_size' ? {size: 'custom'} : {}});
+    } });
+    for (const c of cases) {
+      const tag = (c.i == null ? '' : base[c.i].type + '.') + c.id + '=' + JSON.stringify(c.v).slice(0, 24) + '@' + width;
+      if (width === 375 && c.id === 'max_width' && c.v === 'full') continue; /* phone: Medium (640px) is already the full column */
+      const bl = extra => base.map((b, i) => i === c.i ? {type: b.type, settings: {...b.settings, ...(c.pre || {}), ...extra}} : b);
+      await L.redraw({settings: RESET, blocks: bl({})}); await frames(L.page); await L.page.waitForTimeout(80);
+      const before = await sig(L.page);
+      await R.redraw({settings: c.i == null ? {...RESET, [c.id]: c.v} : RESET, blocks: bl(c.i == null ? {} : {[c.id]: c.v})}); await frames(R.page); await R.page.waitForTimeout(80);
+      const redrawn = await sig(R.page);
+      if (!diff(before, redrawn).length) fails.push(tag + ': no visible change after a redraw');
+      if (c.i == null) await L.emit({[c.id]: c.v}); else await L.emit({[c.id]: c.v}, L.rendered[0].section.blocks[c.i].id);
+      await frames(L.page); await L.page.waitForTimeout(150);
+      const d = diff(await sig(L.page), redrawn);
+      if (d.length) fails.push(tag + ': live differs from redraw: ' + d.slice(0, 4).join(' | '));
+      checks++;
+    }
+    eq(L.errors.concat(R.errors), [], 'no errors with blocks');
+    await L.page.close(); await R.page.close();
+  }
+  if (fails.length) console.log(fails.join('\n'));
+  eq(fails, [], 'every block setting live and after a redraw');
+}
+
 async function saved(browser) {
-  let oldRaw; try { oldRaw = execSync('git show ' + BEFORE + ':sections/blog-posts.storelib', {cwd: ROOT, encoding: 'utf8'}); } catch (_) { return; }
   const newRaw = fs.readFileSync(path.join(ROOT, 'sections/blog-posts.storelib'), 'utf8'), controls = await themeControls();
-  for (const [tpl, key] of [['blog', 'blog_posts_bbcDiC'], ['article', 'blog_posts_bRcpan']]) {
+  /* The blog page's instance was made again in the builder with the creator's
+     Subheading, Heading and Text blocks (Storelib AI's redesign, 0674ef4), so
+     it is compared with that commit; the article page's with BEFORE. */
+  for (const [tpl, key, ref] of [['blog', 'blog-posts-1793646112970', '0674ef4'], ['article', 'blog_posts_bRcpan', BEFORE]]) {
+    let oldRaw; try { oldRaw = execSync('git show ' + ref + ':sections/blog-posts.storelib', {cwd: ROOT, encoding: 'utf8'}); } catch (_) { continue; }
     const sec = JSON.parse(fs.readFileSync(path.join(ROOT, 'templates', tpl + '.json'), 'utf8')).sections[key];
-    const fill = (raw, toggles) => { const s = JSON.parse(raw.split('<schema>')[1].split('</schema>')[0]).shopify, d = l => Object.fromEntries((l || []).filter(x => x.id && x.default !== undefined).map(x => [x.id, x.default])); return {id: 'S', settings: {...d(s.settings), ...sec.settings, ...(toggles ? {enable_custom_style: true} : {})}, blocks: []}; };
+    const fill = (raw, toggles) => { const s = JSON.parse(raw.split('<schema>')[1].split('</schema>')[0]).shopify, d = l => Object.fromEntries((l || []).filter(x => x.id && x.default !== undefined).map(x => [x.id, x.default]));
+      const blocks = (sec.block_order || []).map(id => ({id, type: sec.blocks[id].type, shopify_attributes: '', settings: {...d((s.blocks || []).find(x => x.type === sec.blocks[id].type)?.settings), ...sec.blocks[id].settings}}));
+      return {id: 'S', settings: {...d(s.settings), ...sec.settings, ...(toggles ? {enable_custom_style: true} : {})}, blocks}; };
     /* the saved blog by its handle: posts in Liquid as the old file read them (blogs[handle]) */
-    const globals = {blogs: {[sec.settings.blog]: {...BLOG, handle: sec.settings.blog, url: '/blogs/' + sec.settings.blog}}};
+    const globals = sec.settings.blog ? {blogs: {[sec.settings.blog]: {...BLOG, handle: sec.settings.blog, url: '/blogs/' + sec.settings.blog}}} : {blogs: {}, blog: BLOG} /* no blog picked: the blog being read */;
     const html = async (raw, toggles) => { const e = engine(); e.registerFilter('script_tag', () => ''); const ctx = {section: fill(raw, toggles), settings: {scroll_animation: 'none'}, request: {design_mode: false}, ...globals}; return (await e.parseAndRender(raw.split('<schema>')[0].replace(/^<template compat="shopify">/, '').replace(/<\/template>\s*$/, ''), ctx, {globals: ctx})).replace(/<script\b[\s\S]*?<\/script>/g, '').replace(/<link\b[^>]*>/g, ''); };
     for (const width of [375, 1366]) {
       const look = async (h, js) => {
@@ -240,6 +297,7 @@ async function saved(browser) {
         const r = await page.evaluate(() => {
           const W = document.getElementById('shopify-section-S'), cs = (el, p) => el ? p.map(k => getComputedStyle(el)[k]) : null, h = W.querySelector('h2'), v = W.querySelector('.btn_view-all');
           return {root: cs(W.querySelector('.section'), ['backgroundColor', 'paddingTop']), h: [h.textContent.trim(), ...cs(h, ['color', 'fontSize', 'fontWeight', 'textAlign']), Math.round(h.getBoundingClientRect().top), Math.round(h.getBoundingClientRect().height)],
+            sub: W.querySelector('.section__header-sub') && [W.querySelector('.section__header-sub').textContent.trim(), ...cs(W.querySelector('.section__header-sub'), ['color', 'fontSize', 'fontWeight', 'textTransform', 'letterSpacing'])],
             des: W.querySelector('.section__header-des') && [W.querySelector('.section__header-des').textContent.trim(), ...cs(W.querySelector('.section__header-des'), ['color', 'fontSize'])],
             v: v && [v.textContent.trim(), ...cs(v, ['backgroundColor', 'color', 'borderTopLeftRadius', 'paddingLeft']), Math.round(v.getBoundingClientRect().left)],
             cards: [...W.querySelectorAll('.swiper-slide')].slice(0, 3).map(s => { const r = s.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width), Math.round(r.height), s.querySelector('.blog-posts-title')?.textContent.trim()]; }),
@@ -265,7 +323,8 @@ async function saved(browser) {
     if (!only.length || only.includes('theme')) await themeFirst(browser);
     if (!only.length || only.includes('life')) await lifecycle(browser);
     if (!only.length || only.includes('saved')) await saved(browser);
-    if (!only.length || !['content', 'theme', 'life', 'saved'].includes(only[0])) await controls(browser);
+    if (!only.length || only.includes('blocks')) await blocks(browser);
+    if (!only.length || !['content', 'theme', 'life', 'saved', 'blocks'].includes(only[0])) await controls(browser);
   } finally { await browser.close(); }
   console.log(checks + ' blog posts round 5 checks passed');
 })().catch(e => { console.error(e); process.exit(1); });

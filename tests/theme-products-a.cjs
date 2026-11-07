@@ -34,7 +34,7 @@ const text = (t, sel, uid = 'test') => t.page.evaluate(([sel, uid]) => { const e
 const rect = (t, sel, uid = 'test') => t.page.evaluate(([sel, uid]) => { const el = document.querySelector('#shopify-section-' + uid + ' ' + sel); if (!el) return null; const r = el.getBoundingClientRect(); return {x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height)}; }, [sel, uid]);
 const shown = (t, sel, uid = 'test') => t.page.evaluate(([sel, uid]) => { const el = document.querySelector('#shopify-section-' + uid + ' ' + sel); return !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden'; }, [sel, uid]);
 const count = (t, sel, uid = 'test') => t.page.evaluate(([sel, uid]) => document.querySelectorAll('#shopify-section-' + uid + ' ' + sel).length, [sel, uid]);
-const audit = t => t.page.evaluate(() => [...document.querySelectorAll('[data-pa-root]')].flatMap(r => window.MateriaProductsA ? window.MateriaProductsA.audit(r) : []));
+const audit = t => t.page.evaluate(() => [...document.querySelectorAll('[data-pa-root][data-pa-settings]')].flatMap(r => window.MateriaProductsA ? window.MateriaProductsA.audit(r) : []));
 /* A probe that only shows a rule's effect when the element exists: a test element is added inside the root. */
 const injected = (cls, rootSel) => async t => t.page.evaluate(([cls, rootSel]) => { const root = document.querySelector('#shopify-section-test ' + rootSel); let el = root.querySelector('[data-probe="' + cls + '"]'); if (!el) { el = document.createElement('div'); el.className = cls; el.dataset.probe = cls; el.textContent = 'x'; root.append(el); } return getComputedStyle(el).display; }, [cls, rootSel]);
 

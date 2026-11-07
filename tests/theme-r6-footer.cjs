@@ -104,8 +104,8 @@ const B_LIVE = {
   link_list: new Set(['heading', 'content_width']),
   newsletter: new Set(['heading', 'description', 'email_placeholder', 'button_label', 'note', 'success_text', 'error_text', 'content_width']),
   store_info: new Set(['store_heading', 'store_description', 'top_offset', 'content_width']),
-  payment_badges: new Set(['alignment']),
-  custom_liquid: new Set([]),
+  payment_badges: new Set(['alignment', 'content_width']),
+  custom_liquid: new Set(['content_width']),
 };
 const B_PARTIAL = new Set(['store_heading', 'store_description', 'note']);
 const B_QUIET = {375: new Set(['content_width', 'top_offset', 'alignment']), 1366: new Set([])};

@@ -99,7 +99,7 @@ async function run(spec) {
       await t.page.waitForTimeout(80);
       const where = name + ' ' + width + (editing ? ' editor' : ' storefront');
       eq(t.errors, [], where + ' errors');
-      eq(await t.page.evaluate(() => [...document.querySelectorAll('[data-lg-root]')].flatMap(r => window.MateriaLogos.audit(r))), [], where + ' markup = controller');
+      eq(await t.page.evaluate(() => [...document.querySelectorAll('[data-lg-root][data-lg-settings]')].flatMap(r => window.MateriaLogos.audit(r))), [], where + ' markup = controller'); /* a visitor gets no settings JSON (request.design_mode only), except Brand info */
       ok(await t.noOverflow(), where + ' no horizontal overflow');
       eq(await t.css('[data-lg-root]', 'backgroundColor'), 'rgb(24, 32, 40)', where + ' scheme background');
       if (heading) { eq(await t.css(heading, 'color'), 'rgb(255, 255, 255)', where + ' heading colour'); ok(/Georgia/.test(await t.css(heading, 'fontFamily')), where + ' heading font'); }

@@ -327,7 +327,12 @@
   // their submission handler, validation, captcha, or server confirmation.
   document.addEventListener('submit', event => {
     const form = event.target;
-    if (!form.matches('form.newsletter-form, form.footer__newsletter, form[data-storelib-form="subscribe"], form:has(input[name="contact[email]"])')) return;
+    // :has() only where the browser reads it (Safari 15.4+, Firefox 121+); a
+    // newsletter form's action names /contact in the browsers before.
+    let subscribe;
+    try { subscribe = form.matches('form.newsletter-form, form.footer__newsletter, form[data-storelib-form="subscribe"], form:has(input[name="contact[email]"])'); }
+    catch (_) { subscribe = form.matches('form.newsletter-form, form.footer__newsletter, form[data-storelib-form="subscribe"]') || (form.matches('form[action*="/contact"]') && !!form.querySelector('input[name="contact[email]"]')); }
+    if (!subscribe) return;
     if (form.getAttribute('aria-busy') === 'true') { event.preventDefault(); return; }
     const button = event.submitter || form.querySelector('[type="submit"]');
     form.setAttribute('aria-busy', 'true');

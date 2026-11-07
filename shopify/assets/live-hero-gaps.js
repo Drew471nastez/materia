@@ -195,6 +195,8 @@
   function drop(root, st) { cancelAnimationFrame(st.frame); roots.delete(root); }
   function add(root) {
     if (!TYPES[root.dataset.hg]) return;
+    /* the settings are printed in the builder only (request.design_mode): without them the builder's redraw shows each change */
+    if (!root.hasAttribute('data-hg-settings')) return;
     const st = {root, live: {}, liveBlocks: new Map(), s: parse(root.dataset.hgSettings), raw: root.dataset.hgSettings, blocks: new Map(), rawBlocks: new Map(), last: new Map(), frame: 0};
     st.schedule = () => { if (!st.frame) st.frame = requestAnimationFrame(() => { st.frame = 0; if (root.isConnected) paint(root, st); }); };
     roots.set(root, st);

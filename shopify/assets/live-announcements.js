@@ -294,7 +294,8 @@
     },
     init(root, st) {
       const id = root.dataset.anSection;
-      closer(root, st, {local: 'announcementBarClosedUntil:' + id, session: 'announcementBarClosed:' + id, days: () => st.s.close_persistence_days});
+      /* outside the builder the section prints only data-an-close-days, not its settings */
+      closer(root, st, {local: 'announcementBarClosedUntil:' + id, session: 'announcementBarClosed:' + id, days: () => root.hasAttribute('data-an-settings') ? st.s.close_persistence_days : root.dataset.anCloseDays});
     },
   };
 
@@ -481,7 +482,8 @@
   }
   function paint(root, st) {
     if (st.raw !== root.dataset.anSettings) { st.raw = root.dataset.anSettings; st.s = {...st.defaults, ...parse(st.raw), ...st.live}; }
-    derive(root, st, false);
+    /* the settings are printed in the builder only (request.design_mode): without them nothing is painted here and the builder's redraw shows each change */
+    if (root.hasAttribute('data-an-settings')) derive(root, st, false);
     const type = TYPES[root.dataset.anRoot];
     if (type.after) type.after(root, st);
   }
@@ -503,7 +505,7 @@
     st.io = new IntersectionObserver(es => { for (const e of es) st.visible = e.isIntersecting; if (type.visibility) type.visibility(root, st); });
     st.io.observe(root);
     roots.set(root, st);
-    derive(root, st, true);
+    if (root.hasAttribute('data-an-settings')) derive(root, st, true);
     if (type.init) type.init(root, st);
     st.schedule();
     root.dataset.anReady = '';

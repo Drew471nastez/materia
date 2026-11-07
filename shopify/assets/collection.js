@@ -1057,7 +1057,7 @@ eventCollectionShopify.init();
       if (sort && this.contains(sort)) {
         event.preventDefault();
         const panel = sort.closest('[popover]');
-        if (panel && panel.matches(':popover-open')) panel.hidePopover();
+        try { if (panel && panel.matches(':popover-open')) panel.hidePopover(); } catch (error) {}
         if (sort.getAttribute('aria-current') === 'true') return;
         const url = new URL(this._pendingHref || location.href);
         url.searchParams.set('sort_by', sort.dataset.facetsSort);
@@ -1459,7 +1459,7 @@ eventCollectionShopify.init();
       dismiss: (sheet) => {
         // Already off screen: close without the slide out, then reset.
         sheet.classList.add('is-drag-closed');
-        sheet.hidePopover();
+        try { sheet.hidePopover(); } catch (error) {}
         sheet.style.removeProperty('--sheet-pull');
       },
     });

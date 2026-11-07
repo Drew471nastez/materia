@@ -36,7 +36,7 @@ run({
       eq(await t.page.locator('[data-tlg-panel="' + id0 + '"] .tlg__quote-text').textContent(), 'Edited quote', where + ' quote live');
       eq(await t.page.locator('[data-tlg-panel="' + id0 + '"] .tlg__author').isVisible(), false, where + ' empty author hidden');
       await t.emit({logo_height: 40, inactive_opacity: 50, quote_size_d: 30});
-      eq(await img.evaluate(el => el.isConnected), true, where + ' logo kept for unrelated edits');
+      if (editing) eq(await img.evaluate(el => el.isConnected), true, where + ' logo kept for unrelated edits');
       /* quote font and custom fonts win under the theme priority, live and after a redraw */
       for (const mode of ['live', 'redraw']) {
         const apply = async sec => { if (mode === 'live') await t.emit(sec); else await t.redraw({settings: sec}); };
@@ -62,6 +62,8 @@ run({
     /* autoplay: storefront only, per instance, off screen paused, one timer after redraws */
     {
       const t = await mount(browser, 'testimonial-logos', {width: 1366, editing: false, assets: ['live-logos.js'], instances: [{uid: 'a', settings: {autoplay: true, autoplay_interval: 3, transition_speed: 150}, blocks: three()}, {uid: 'b', settings: {autoplay: false}, blocks: three()}]});
+      /* the pointer rests outside the rows (a pointer over them holds the autoplay) */
+      await t.page.mouse.move(1300, 890); await t.page.evaluate(() => document.querySelectorAll('[data-lg-root]').forEach(r => r.dispatchEvent(new PointerEvent('pointerleave'))));
       await t.page.waitForTimeout(3500);
       eq(await t.page.locator('#shopify-section-a [data-tlg-panel]:not([hidden]) .tlg__author').textContent(), 'Source 1', 'testimonial-logos autoplay moves on');
       eq(await t.page.locator('#shopify-section-b [data-tlg-panel]:not([hidden]) .tlg__author').textContent(), 'Source 0', 'testimonial-logos other instance stays');

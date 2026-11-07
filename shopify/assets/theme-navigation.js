@@ -3,6 +3,39 @@
 (() => {
   if (window.__materiaNavigation) return;
   window.__materiaNavigation = true;
+  /* A thin bar across the top from the moment a link to another page of the site is clicked until
+     that page is shown, so a click on a slow connection is seen to have landed. Storelib keeps the
+     old page painted until the next one has arrived; the bar is drawn on the compositor (transform
+     only), never covers or dims the page, and goes when the page is left, restored (Back), or after
+     12 s if the navigation never happened. Not in the builder. */
+  const inBuilder = () => document.documentElement.classList.contains('shopify-design-mode') || !!window.Shopify?.designMode;
+  let bar = null, barTimer = 0;
+  const hideBar = () => { clearTimeout(barTimer); if (bar) { bar.remove(); bar = null; } };
+  const showBar = () => {
+    if (bar || inBuilder()) return;
+    bar = document.createElement('div');
+    bar.setAttribute('aria-hidden', 'true');
+    bar.className = 'materia-nav-bar';
+    bar.style.cssText = 'position:fixed;top:0;left:0;right:0;height:2px;z-index:2147483646;pointer-events:none;background:var(--color-primary,currentColor);transform-origin:0 50%;transform:scaleX(0);will-change:transform';
+    document.documentElement.appendChild(bar);
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) bar.style.transform = 'scaleX(.6)';
+    else bar.animate?.([{transform: 'scaleX(0)'}, {transform: 'scaleX(.35)', offset: .15}, {transform: 'scaleX(.9)'}], {duration: 9000, easing: 'cubic-bezier(.1,.6,.2,1)', fill: 'forwards'});
+    barTimer = setTimeout(hideBar, 12000);
+  };
+  document.addEventListener('click', event => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const anchor = event.target.closest?.('a[href]');
+    if (!anchor || (anchor.target && anchor.target !== '_self') || anchor.hasAttribute('download')) return;
+    let url;
+    try { url = new URL(anchor.href, location.href); } catch (_) { return; }
+    if (url.origin !== location.origin || !/^https?:$/.test(url.protocol)) return;
+    if (url.pathname === location.pathname && url.search === location.search) return;
+    /* only when nothing else took the click (a drawer, a quick view, a filter handled in place) */
+    setTimeout(() => { if (!event.defaultPrevented) showBar(); }, 0);
+  });
+  addEventListener('pageshow', hideBar);
+  addEventListener('pagehide', hideBar);
   // On-demand diagnostics only: no telemetry, fetch, storage or URL query data.
   // Run materiaNavigationTiming() on the affected published page.
   window.materiaNavigationTiming = () => {
@@ -58,13 +91,16 @@
   // browsers get a plain prefetch on hover (mouse only: a tap is already the
   // click) or keyboard focus.
   const speculation = !!(window.HTMLScriptElement && HTMLScriptElement.supports && HTMLScriptElement.supports('speculationrules'));
-  const skip = /\/(cart|checkout|account|search|apps|api)(\/|$)|logout|add-to-cart|\/add(\/|$)/i;
+  const skip = /\/(cart|checkout|account|search|apps|api|admin|builder)(\/|$)|logout|add-to-cart|\/add(\/|$)/i;
+  // A query that changes something (adds to the cart, signs out, removes or
+  // clears a thing) is never fetched early: fetching it would do it.
+  const acts = /[?&](add-to-cart|add|action|logout|remove|delete|clear|return_to|checkout)(=|&|$)/i;
   const warmed = new Set();
   const eligible = anchor => {
     if (!anchor || anchor.target || anchor.hasAttribute('download') || anchor.hasAttribute('data-no-prefetch') || anchor.relList.contains('nofollow')) return null;
     let url;
     try { url = new URL(anchor.href, location.href); } catch { return null; }
-    if (url.origin !== location.origin || url.pathname === location.pathname || skip.test(url.pathname)) return null;
+    if (url.origin !== location.origin || url.pathname === location.pathname || skip.test(url.pathname) || acts.test(url.search) || navigator.onLine === false) return null;
     url.hash = '';
     if (warmed.has(url.href) || warmed.size >= 12) return null;
     return url;
@@ -136,5 +172,6 @@
     clearTimeout(hoverTimer);
     if (anchor) hoverTimer = setTimeout(() => warm(anchor), 65);
   }, {passive: true});
-  document.addEventListener('focusin', event => warm(event.target.closest?.('a[href]')));
+    document.addEventListener('focusin', event => warm(event.target.closest?.('a[href]')));
+
 })();

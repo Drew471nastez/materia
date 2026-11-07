@@ -1,4 +1,7 @@
-/* Pointer/scroll effects initialize AFTER markup and survive builder redraws. */
+/* Pointer/scroll effects initialize AFTER markup and survive builder redraws.
+   Idle on this theme's slideshow: sections/slideshow.storelib now draws its image effects itself (data-ss-fx,
+   --fx-mx/--fx-my, --fx-py) and no longer prints data-slideshow-pointer, so nothing here finds a root. Kept
+   because layout/theme.storelib still links it; it does nothing without a [data-slideshow-pointer] element. */
 (() => {
   if(window.MateriaSlideshowPointer)return;
   const states=new Map(),reduced=matchMedia('(prefers-reduced-motion:reduce)'),fine=matchMedia('(hover:hover) and (pointer:fine)');

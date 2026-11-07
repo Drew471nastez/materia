@@ -89,13 +89,14 @@
         if ('title_font_size_desktop' in s) out.push(`@media (min-width: 1024px) { #MainProduct-${id} .product-detail__information .product-detail__title { font-size: ${num(s.title_font_size_desktop, 24)}px !important; } }`);
       } else if (b.type === 'price') {
         const P = `#MainProduct-${id} #price-${id}`;
-        const cur = `:is(.price-regular, .price-regular *, .price-item--last, .price-item:not(.compare-price):not(.price-item--compare))`;
+        /* the sale price only: a compare-at price inside it keeps its own size, as the page's rules give it */
+        const cur = `:is(.price-regular, .price-regular *, .price-item--last, .price-item:not(.compare-price):not(.price-item--compare)):not(.compare-price, .compare-price *, .price-item--compare, .price-item--compare *, s, s *, del, del *)`;
         const was = `:is(.compare-price, .compare-price *, .price-item--compare, .price-item--compare *, s, s *, del, del *)`;
-        if ('price_font_size_mobile' in s) out.push(`${P}, ${P} ${cur} { font-size: ${num(s.price_font_size_mobile, 18)}px !important; }`);
-        if ('price_font_weight' in s) out.push(`${P}, ${P} ${cur} { font-weight: ${num(s.price_font_weight, 600)} !important; }`);
+        if ('price_font_size_mobile' in s) out.push(`${P} ${cur} { font-size: ${num(s.price_font_size_mobile, 18)}px !important; }`);
+        if ('price_font_weight' in s) out.push(`${P} ${cur} { font-weight: ${num(s.price_font_weight, 600)} !important; }`);
         if ('compare_font_size_mobile' in s) out.push(`${P} ${was} { font-size: ${num(s.compare_font_size_mobile, 14)}px !important; }`);
         if ('compare_font_weight' in s) out.push(`${P} ${was} { font-weight: ${num(s.compare_font_weight, 400)} !important; }`);
-        if ('price_font_size_desktop' in s) out.push(`@media (min-width: 1024px) { ${P}, ${P} ${cur} { font-size: ${num(s.price_font_size_desktop, 20)}px !important; } }`);
+        if ('price_font_size_desktop' in s) out.push(`@media (min-width: 1024px) { ${P} ${cur} { font-size: ${num(s.price_font_size_desktop, 20)}px !important; } }`);
         if ('compare_font_size_desktop' in s) out.push(`@media (min-width: 1024px) { ${P} ${was} { font-size: ${num(s.compare_font_size_desktop, 16)}px !important; } }`);
       }
     }
@@ -222,9 +223,13 @@
     if (!el) return;
     const keys = Object.keys(d.settings), type = el.getAttribute('data-pib-type');
     /* Anything else this block draws: the block is drawn again from the page as the builder has it now. */
-    const painted = k => OWN_KEYS.includes(k) || (SLIDING[type] && SLIDING[type].has(k));
+    /* title and price sizes are painted live only where the section paints them (Main product); elsewhere (Featured product) the block is drawn again */
+    const slides = !!sec.querySelector('[data-mp-root]');
+    const painted = k => OWN_KEYS.includes(k) || (slides && SLIDING[type] && SLIDING[type].has(k));
     if (keys.some(k => !painted(k))) refetch(sec, bid);
     if (!keys.some(k => OWN_KEYS.includes(k))) return;
+    /* data-pib-own is printed in the builder only (request.design_mode): without it the block is drawn again from the page */
+    if (!el.hasAttribute('data-pib-own')) { refetch(sec, bid); return; }
     let st = blockStates.get(el);
     if (!st) { st = {s: parse(el.getAttribute('data-pib-own'))}; blockStates.set(el, st); }
     Object.assign(st.s, d.settings);

@@ -15,13 +15,15 @@
    5. First paint equals the hydrated paint; two instances independent.
    6. The saved instance (templates/blog.json main) looks as it did, with
       enable_custom_style on (its badge colours), with posts and without.
+      Since the creator's builder redesign (0674ef4, cards drawn by the
+      section itself as .mb-card) the look is compared with that commit.
 
    LIQUIDJS=<path to liquidjs> node tests/theme-r6-collection-pages-blog.cjs [content|theme|life|saved|sweep|empty] */
 const L = require('./theme-r6-collection-pages-lib.cjs');
 const {ok, eq, frames, settle, counter} = L;
 const NAME = 'main-blog';
 const only = process.argv.slice(2);
-const post = i => ({id: 100 + i, title: 'Post number ' + i, handle: 'news/post-' + i, url: '/blogs/news/post-' + i, author: 'Writer ' + i, published_at: '2026-0' + i + '-02', content: '<p>Body of post ' + i + ' with enough words to read.</p>', image: {url: 'https://theme.test/p' + i + '.png', src: 'https://theme.test/p' + i + '.png', width: 1200, height: 800, aspect_ratio: 1.5, alt: 'Picture ' + i}});
+const post = i => ({id: 100 + i, title: 'Post number ' + i, handle: 'news/post-' + i, url: '/blogs/news/post-' + i, author: 'Writer ' + i, published_at: '2026-0' + i + '-02', content: '<p>Body of post ' + i + ' with enough words to read.</p>', tags: ['Studio'], image: {url: 'https://theme.test/p' + i + '.png', src: 'https://theme.test/p' + i + '.png', width: 1200, height: 800, aspect_ratio: 1.5, alt: 'Picture ' + i}});
 const BLOG = {id: 7, title: 'News', handle: 'news', url: '/blogs/news', articles: [1, 2, 3, 4, 5].map(post), articles_count: 5};
 const POSTS = {template: 'blog', blog: BLOG, blogs: {news: BLOG}};
 const NONE = {template: 'blog', blog: {title: 'Blog', handle: 'blog', url: '/blogs/blog', articles: [], articles_count: 0}, blogs: {}};
@@ -32,17 +34,21 @@ const sig = page => page.evaluate(() => {
   if (!R) return null;
   const cs = (el, p) => el ? Object.fromEntries(p.map(k => [k, getComputedStyle(el)[k]])) : null;
   const vis = el => el && !el.hidden && getComputedStyle(el).display !== 'none' ? el : null;
-  const grid = R.querySelector('#blog-articles'), cards = [...R.querySelectorAll('.blog-posts-item')], badge = R.querySelector('.article-badge');
+  const grid = R.querySelector('#blog-articles'), cards = [...R.querySelectorAll('.mb-card')], badge = R.querySelector('.mb-badge'), btn = R.querySelector('a.mb-btn');
   const e = R.querySelector('[data-main-blog-empty]');
   return {
-    cls: [...R.classList].sort().join(' '), inner: R.firstElementChild.className, root: cs(R, ['backgroundColor', 'marginTop', 'marginBottom']),
-    own: R.hasAttribute('data-own-font'),
+    cls: [...R.classList].sort().join(' '), inner: R.firstElementChild.className, root: cs(R, ['backgroundColor', 'marginTop', 'marginBottom', 'paddingTop', 'paddingBottom']),
+    own: R.hasAttribute('data-own-font'), grid: grid && [...grid.classList].sort().join(' '),
     cols: grid && [...new Set(cards.map(c => Math.round(c.getBoundingClientRect().top)))].length, w: cards[0] && Math.round(cards[0].getBoundingClientRect().width), x2: cards[1] && Math.round(cards[1].getBoundingClientRect().left),
-    img: cs(R.querySelector('.blog-posts-image > a'), ['aspectRatio']) && Math.round(R.querySelector('.blog-posts-image > a').getBoundingClientRect().height),
-    title: cs(R.querySelector('.blog-posts-title a'), ['fontFamily', 'color']), text: cs(R.querySelector('.blog-posts-content'), ['fontFamily']),
-    info: cs(R.querySelector('.blog-posts-info'), ['textAlign']), bottom: cs(R.querySelector('.blog-posts-bottom'), ['justifyContent']),
-    more: R.querySelector('.blog-posts-readmore')?.className.replace(/\s+/g, ' ').trim(), date: !!R.querySelector('.blog-posts-date'), excerpt: !!R.querySelector('.blog-posts-content'),
-    badge: badge && {t: badge.textContent.trim(), at: badge.parentElement.textContent.includes('Post number 2'), ...cs(badge, ['backgroundColor', 'color', 'top', 'left', 'width', 'height', 'fontSize', 'borderTopLeftRadius'])},
+    tops: cards.map(c => Math.round(c.getBoundingClientRect().top)), anim: cards[0] && getComputedStyle(cards[0]).animationName,
+    img: cs(R.querySelector('.mb-card__media'), ['aspectRatio', 'borderTopLeftRadius']) && [getComputedStyle(R.querySelector('.mb-card__media')).aspectRatio, Math.round(R.querySelector('.mb-card__media').getBoundingClientRect().height), getComputedStyle(R.querySelector('.mb-card__media')).borderTopLeftRadius],
+    title: cs(R.querySelector('.mb-card__title a'), ['fontFamily', 'color', 'fontSize']), text: cs(R.querySelector('.mb-card__excerpt'), ['fontFamily', 'color', 'webkitLineClamp']),
+    meta: cs(R.querySelector('.mb-card__meta'), ['color']), metaText: R.querySelector('.mb-card__meta')?.textContent.trim(),
+    info: cs(R.querySelector('.mb-card'), ['textAlign']), bottom: cs(R.querySelector('.mb-card__body'), ['alignItems']),
+    more: btn && [btn.className.replace(/\s+/g, ' ').trim(), btn.getAttribute('data-theme-button'), btn.textContent.trim(), btn.getAttribute('aria-label'), !!vis(btn.querySelector('.mb-btn__arrow')), ...Object.values(cs(btn, ['color', 'backgroundColor', 'borderTopLeftRadius', 'minHeight', 'width']))],
+    hover: btn && ['--mb-hover-bg', '--mb-hover-text', '--mb-hover-border', '--mbl-link-hover'].map(p => getComputedStyle(btn).getPropertyValue(p).trim()),
+    date: !!R.querySelector('.mb-card__date'), excerpt: !!R.querySelector('.mb-card__excerpt'),
+    badge: badge && {t: badge.textContent.trim(), shown: !!vis(badge), at: badge.closest('.mb-card').textContent.includes('Post number 2'), ...cs(badge, ['backgroundColor', 'color', 'top', 'left', 'minWidth', 'height', 'fontSize', 'borderTopLeftRadius'])},
     empty: e && {align: cs(e, ['alignItems', 'textAlign']), h: vis(e.querySelector('h2')) && [e.querySelector('h2').textContent.trim(), getComputedStyle(e.querySelector('h2')).fontFamily], p: vis(e.querySelector('.main-blog-empty__text')) && [e.querySelector('.main-blog-empty__text').innerHTML.trim(), getComputedStyle(e.querySelector('.main-blog-empty__text p') || e).fontFamily], a: vis(e.querySelector('a')) && [e.querySelector('a').textContent.trim(), e.querySelector('a').getAttribute('href'), getComputedStyle(e.querySelector('a')).backgroundColor]},
   };
 });
@@ -51,13 +57,16 @@ async function content(browser) {
   for (const editing of [true, false]) {
     const r = await L.render(NAME, {editing, settings: {}, globals: NONE});
     ok(/data-main-blog-empty/.test(r.html) && /No posts yet/.test(r.html) && /href="\/collections\/all"[^>]*data-theme-button="primary"/.test(r.html), 'no posts: the note and a theme button ' + (editing ? 'editor' : 'storefront'));
-    ok(!/blog-posts-item|Lorem|ipsum|We can&#39;t find|We can't find/.test(r.html), 'no posts: nothing made up, no old message');
+    ok(!/class="mb-card"|blog-posts-item|Lorem|ipsum|We can&#39;t find|We can't find/.test(r.html), 'no posts: nothing made up, no old message');
   }
   const r = await L.render(NAME, {editing: false, settings: BASE, globals: POSTS});
-  eq([...r.html.matchAll(/class="no-underline heading-color">\s*([^<]*?)\s*<\/a>/g)].map(m => m[1]).join('|'), 'Post number 1|Post number 2|Post number 3|Post number 4|Post number 5', 'the blog\'s own posts');
+  eq([...r.html.matchAll(/class="mb-card__title"><a [^>]*><span>([^<]*)<\/span>/g)].map(m => m[1]).join('|'), 'Post number 1|Post number 2|Post number 3|Post number 4|Post number 5', 'the blog\'s own posts');
   ok(!/data-main-blog-empty/.test(r.html), 'posts: no empty note');
   const c = await L.render(NAME, {editing: false, settings: {...BASE, blog_select: ''}, globals: POSTS});
   ok(/Post number 1/.test(c.html), 'no blog picked: the blog being read');
+  const J = {...BLOG, id: 8, title: 'Journal', handle: 'journal', url: '/blogs/journal', articles: [post(9)], articles_count: 1};
+  const j = await L.render(NAME, {editing: false, settings: {...BASE, blog_select: 'journal'}, globals: {...POSTS, blogs: {news: BLOG, journal: J}}});
+  ok(/Post number 9/.test(j.html) && !/Post number 1</.test(j.html), 'a typed blog handle: that blog\'s posts');
   for (const width of [375, 1366]) {
     const t = await L.mount(browser, NAME, {width, assets: [L.CTRL], globals: NONE});
     const box = await t.root('.main-blog-empty__action').boundingBox();
@@ -71,7 +80,7 @@ async function content(browser) {
 async function themeFirst(browser) {
   for (const width of [375, 1366]) for (const editing of [true, false]) {
     const t = await L.mount(browser, NAME, {width, editing, assets: [L.CTRL], settings: BASE, globals: POSTS});
-    const read = async () => (await settle(t.page), {bg: await t.css('[data-lcp]', 'backgroundColor'), tf: await t.css('.blog-posts-title a', 'fontFamily'), tc: await t.css('.blog-posts-content', 'fontFamily'), bb: await t.css('.article-badge', 'backgroundColor'), bt: await t.css('.article-badge', 'color')});
+    const read = async () => (await settle(t.page), {bg: await t.css('[data-lcp]', 'backgroundColor'), tf: await t.css('.mb-card__title a', 'fontFamily'), tc: await t.css('.mb-card__excerpt', 'fontFamily'), bb: await t.css('.mb-badge', 'backgroundColor'), bt: await t.css('.mb-badge', 'color')});
     const theme = await read();
     eq([theme.bg, theme.tf, theme.tc, theme.bb, theme.bt], ['rgb(24, 32, 40)', 'Georgia', 'Arial', 'rgb(51, 102, 153)', 'rgb(255, 255, 255)'], 'theme first ' + width);
     await t.redraw({settings: {...BASE, badge_background_color: '#ff0000'}}); await frames(t.page);
@@ -94,14 +103,14 @@ async function themeFirst(browser) {
 const look = page => page.evaluate(() => {
   const W = document.getElementById('shopify-section-S'), R = W.querySelector('.sec__blog-list');
   const cs = (el, p) => el ? p.map(k => getComputedStyle(el)[k]) : null, r = el => { if (!el) return null; const b = el.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)]; };
-  const badge = R.querySelector('.article-badge');
-  return {root: [...cs(R, ['backgroundColor', 'marginTop', 'paddingTop'])], cards: [...R.querySelectorAll('.blog-posts-item')].map(c => [...r(c), c.querySelector('.blog-posts-title')?.textContent.trim()]),
-    title: cs(R.querySelector('.blog-posts-title a'), ['color', 'fontFamily', 'fontSize']), more: cs(R.querySelector('.blog-posts-readmore'), ['color', 'fontSize']),
+  const badge = R.querySelector('.mb-badge');
+  return {root: [...cs(R, ['backgroundColor', 'marginTop', 'paddingTop'])], cards: [...R.querySelectorAll('.mb-card')].map(c => [...r(c), c.querySelector('.mb-card__title')?.textContent.trim()]),
+    title: cs(R.querySelector('.mb-card__title a'), ['color', 'fontFamily', 'fontSize']), more: cs(R.querySelector('a.mb-btn'), ['color', 'fontSize']),
     badge: badge && [badge.textContent.trim(), ...cs(badge, ['backgroundColor', 'color', 'borderTopLeftRadius', 'fontSize']), ...r(badge)]};
 });
 
 (async () => {
-  L.schemaChecks(NAME, ['General', 'Content', 'Layout', 'Media', 'Badge', 'Appearance', 'Typography', 'Desktop spacing', 'Mobile']);
+  L.schemaChecks(NAME, ['General', 'Content', 'Layout', 'Media', 'Badge', 'Appearance', 'Buttons', 'Typography', 'Animation', 'Desktop spacing', 'Mobile']);
   const browser = await L.launch();
   try {
     if (!only.length || only.includes('content')) await content(browser);
@@ -109,19 +118,23 @@ const look = page => page.evaluate(() => {
     if (!only.length || only.includes('life')) {
       for (const [settings, globals] of [[BASE, POSTS], [{...BASE, enable_custom_style: true, badge_background_color: '#ee1122', enable_custom_fonts: true, heading_font: L.FONT, body_font: L.MONO, content_alignment: 'right', image_ratio: 'portrait'}, POSTS], [{}, NONE], [{content_alignment: 'left', enable_custom_fonts: true, heading_font: L.FONT}, NONE]])
         await L.firstPaint(browser, NAME, {settings, globals, sig});
-      await L.twoInstances(browser, NAME, {settings: BASE, globals: POSTS, edit: {items_per_row: 2, badge_text: 'Only b'}, read: (t, uid) => t.page.evaluate(uid => { const R = document.querySelector('#shopify-section-' + uid); return [R.querySelector('.article-badge').textContent.trim(), Math.round(R.querySelector('.blog-posts-item').getBoundingClientRect().width)]; }, uid)});
+      await L.twoInstances(browser, NAME, {settings: BASE, globals: POSTS, edit: {items_per_row: 2, badge_text: 'Only b'}, read: (t, uid) => t.page.evaluate(uid => { const R = document.querySelector('#shopify-section-' + uid); return [R.querySelector('.mb-badge').textContent.trim(), Math.round(R.querySelector('.mb-card').getBoundingClientRect().width)]; }, uid)});
     }
     if (!only.length || only.includes('saved')) {
       const sec = JSON.parse(L.read('templates/blog.json')).sections.main;
-      const BL = {...BLOG, handle: sec.settings.blog_select, url: '/blogs/' + sec.settings.blog_select, articles: BLOG.articles.map((a, i) => i === 1 ? {...a, handle: sec.settings.blog_post_badge_reference} : a)};
-      await L.saved(browser, NAME, {inst: {settings: sec.settings, toggles: {enable_custom_style: true}}, globals: {template: 'blog', blog: BL, blogs: {[sec.settings.blog_select]: BL}}, look, label: 'templates/blog.json main (posts)'});
+      const BL = {...BLOG, handle: sec.settings.blog_select, url: '/blogs/' + sec.settings.blog_select, articles: BLOG.articles.map((a, i) => i === 1 ? {...a, handle: sec.settings.blog_post_badge_reference.split('/').pop()} : a)}; /* the bare post handle, which 0674ef4 matches against the last part of the setting */
+      await L.saved(browser, NAME, {inst: {settings: sec.settings, toggles: {enable_custom_style: true}}, globals: {template: 'blog', blog: BL, blogs: {[sec.settings.blog_select]: BL}}, look, ref: '0674ef4', label: 'templates/blog.json main (posts)'});
     }
     if (!only.length || only.includes('sweep')) await L.sweep(browser, NAME, {base: BASE, globals: POSTS, sig,
       skip: new Set(['empty_heading', 'empty_text', 'empty_button_label', 'empty_button_url']),
-      pre: {badge_background_color: {enable_custom_style: true}, badge_text_color: {enable_custom_style: true}, heading_font: {enable_custom_fonts: true, heading_font: L.MONO, body_font: L.MONO}, body_font: {enable_custom_fonts: true, heading_font: L.MONO, body_font: L.MONO}, enable_custom_fonts: {heading_font: L.FONT, body_font: L.MONO}, custom_ratio: {image_ratio: 'custom'}, margin_top: {reset_spacing: false}, margin_bottom: {reset_spacing: false}, readmore_type: {show_readmore: true}},
+      pre: {badge_background_color: {enable_custom_style: true}, badge_text_color: {enable_custom_style: true}, heading_font: {enable_custom_fonts: true, heading_font: L.MONO, body_font: L.MONO}, body_font: {enable_custom_fonts: true, heading_font: L.MONO, body_font: L.MONO}, enable_custom_fonts: {heading_font: L.FONT, body_font: L.MONO}, custom_ratio: {image_ratio: 'custom'}, margin_top: {reset_spacing: false}, margin_bottom: {reset_spacing: false}, readmore_type: {show_readmore: true},
+        title_color: {enable_custom_style: true}, meta_color: {enable_custom_style: true}, excerpt_color: {enable_custom_style: true},
+        button_custom_colors: {enable_custom_style: true, button_bg: '#123456', button_text: '#fedcba'},
+        button_bg: {enable_custom_style: true, button_custom_colors: true}, button_text: {enable_custom_style: true, button_custom_colors: true}, button_hover_bg: {enable_custom_style: true, button_custom_colors: true}, button_hover_text: {enable_custom_style: true, button_custom_colors: true, readmore_type: 'secondary'},
+        readmore_line: {readmore_type: 'underline'}},
       values: {custom_ratio: ['2:1'], blog_select: [''], blog_post_badge_reference: ['news/post-3']},
-      structural: new Set(['reset_spacing', 'blog_select', 'show_date', 'show_excerpt', 'show_readmore', 'layout', 'items_to_show', 'pagination', 'button_show_more', 'image_ratio:adapt', 'blog_post_badge_reference']),
-      same: {all: new Set(['enable_custom_style', 'blog_select', 'button_show_more', 'pagination', 'reset_spacing', 'items_to_show', 'section_width:stretch_width']), 375: new Set(['items_per_row', 'column_gap', 'layout', 'section_width:container', 'section_width:fluid_container', 'section_width:full_width']), 1366: new Set(['items_per_row_mobile'])}, lenientSame: true});
+      structural: new Set(['reset_spacing', 'blog_select', 'show_category', 'show_date', 'show_excerpt', 'show_readmore', 'layout', 'items_to_show', 'pagination', 'button_show_more', 'image_ratio:adapt', 'blog_post_badge_reference']),
+      same: {all: new Set(['enable_custom_style', 'blog_select', 'button_show_more', 'pagination', 'reset_spacing', 'items_to_show', 'section_width:stretch_width']), 375: new Set(['items_per_row', 'column_gap', 'layout', 'section_width:container', 'section_width:fluid_container', 'section_width:full_width', 'padding_top', 'padding_bottom']), 1366: new Set(['items_per_row_mobile', 'padding_top_mobile', 'padding_bottom_mobile'])}, lenientSame: true});
     if (!only.length || only.includes('empty')) await L.sweep(browser, NAME, {globals: NONE, sig, only: ['empty_heading', 'empty_text', 'empty_button_label', 'empty_button_url', 'content_alignment', 'color_scheme', 'enable_custom_fonts', 'heading_font', 'body_font'],
       pre: {heading_font: {enable_custom_fonts: true, heading_font: L.MONO, body_font: L.MONO}, body_font: {enable_custom_fonts: true, heading_font: L.MONO, body_font: L.MONO}, enable_custom_fonts: {heading_font: L.FONT, body_font: L.MONO}},
       values: {empty_heading: ['Edited words', ''], empty_text: ['<p>Edited <em>text</em></p>', ''], empty_button_label: ['Edited words', '']}});

@@ -119,14 +119,15 @@ async function everyControl(browser, width, editing, seen) {
       const change = {[x.id]: v}, sNext = scope < 0 ? {...sBase, ...change} : sBase, bNext = clone(bBase); if (scope >= 0) Object.assign(bNext[scope].settings, change);
       await t.redraw({settings: sNext, blocks: bNext});
       const f1 = await fp(t);
-      eq(await audit(t), [], `${key}=${JSON.stringify(v)} at ${width}: redrawn markup equals the derived paint`);
+      /* the settings JSON is printed in the builder only: a visitor's markup has nothing to derive from */
+      if (editing) eq(await audit(t), [], `${key}=${JSON.stringify(v)} at ${width}: redrawn markup equals the derived paint`);
       const d = diff(f0, f1);
       if (d.length && (!w || w === width)) entry.changed = true;
       if (w && w !== width) ok(!d.length, `${key} (${w}px setting) leaves ${width} alone: ${diffDetail(f0, f1)}`);
       const wk = width + (editing ? 'e' : 's');
       (entry.opts[JSON.stringify(v)] = entry.opts[JSON.stringify(v)] || {})[wk] = JSON.stringify(f1);
       (entry.opts[JSON.stringify(cur)] = entry.opts[JSON.stringify(cur)] || {})[wk] = JSON.stringify(f0);
-      if (editing || STOREFRONT.includes(x.id)) {
+      if (editing) {
         await t.redraw({settings: sBase, blocks: bBase});
         await t.emit(change, scope < 0 ? undefined : t.blockId(btype));
         await frames(t);
@@ -146,7 +147,8 @@ async function basics(browser, width, editing) {
   await frames(b);
   const fa = await fp(a), fb = await fp(b);
   ok(!diff(fa, fb).length, `${width} ${editing ? 'editor' : 'storefront'}: first paint equals hydrated paint: ${diffDetail(fa, fb)}`);
-  eq(await audit(b), [], `${width}: markup equals derived paint`);
+  if (editing) eq(await audit(b), [], `${width}: markup equals derived paint`);
+  else ok(!(await b.page.evaluate(() => !!document.querySelector('[data-hg-settings]'))), `${width}: a visitor gets no settings JSON`);
   ok(await b.noOverflow(), `${width}: no sideways scroll`);
   const tap = await b.page.locator('.rm-hero__btn').boundingBox();
   ok(tap.height >= 44, `${width}: button is a 44px target`);

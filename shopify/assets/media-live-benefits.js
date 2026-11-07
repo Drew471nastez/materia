@@ -355,7 +355,8 @@
   }
   function paint(root, st) {
     if (st.raw !== root.dataset.mlbSettings) { st.raw = root.dataset.mlbSettings; st.s = {...st.defaults, ...parse(st.raw), ...st.live}; }
-    derive(root, st, false);
+    /* the settings are printed in the builder only (request.design_mode): without them nothing is painted here and the builder's redraw shows each change */
+    if (root.hasAttribute('data-mlb-settings')) derive(root, st, false);
     const grid = root.querySelector('.iwb__media-grid');
     if (grid) { grid.tabIndex = grid.dataset.layout === 'carousel' ? 0 : -1; if (grid.dataset.layout !== 'carousel') grid.removeAttribute('tabindex'); }
     videos(root, st);
@@ -377,7 +378,7 @@
     st.io = new IntersectionObserver(es => { for (const e of es) st.visible = e.isIntersecting; videos(root, st); });
     st.io.observe(root);
     roots.set(root, st);
-    derive(root, st, true);
+    if (root.hasAttribute('data-mlb-settings')) derive(root, st, true);
     carousel(root, st);
     st.schedule();
     root.dataset.mlbReady = '';

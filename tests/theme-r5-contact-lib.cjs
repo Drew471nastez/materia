@@ -70,7 +70,7 @@ function snapshot(page, uid) {
 }
 const diff = (a, b) => { if (!a || !b) return 'missing'; if (a.length !== b.length) return 'element count ' + a.length + ' vs ' + b.length; const i = a.findIndex((x, k) => x !== b[k]); return i < 0 ? '' : '#' + i + '\n  ' + a[i].slice(0, 900) + '\n  ' + b[i].slice(0, 900); };
 const same = (a, b) => diff(a, b) === '';
-const audit = (page, uid) => page.evaluate(uid => { const r = document.querySelector('#shopify-section-' + uid + ' [data-ct-root]'); return r ? window.MateriaContact.audit(r) : ['no root']; }, uid);
+const audit = (page, uid) => page.evaluate(uid => { const r = document.querySelector('#shopify-section-' + uid + ' [data-ct-root]'); return r ? (r.hasAttribute('data-ct-settings') ? window.MateriaContact.audit(r) : []) : ['no root']; }, uid);
 const css = (page, uid, sel, prop, pseudo) => page.evaluate(({uid, sel, prop, pseudo}) => { const el = document.querySelector('#shopify-section-' + uid + ' ' + sel); return el ? getComputedStyle(el, pseudo || null)[prop] : null; }, {uid, sel, prop, pseudo});
 
 /* ---------- schema helpers ---------- */

@@ -500,7 +500,8 @@
   }
   function paint(root, st) {
     if (st.raw !== root.dataset.sdSettings) { st.raw = root.dataset.sdSettings; st.s = {...parse(st.raw), ...st.live}; }
-    derive(root, st, false);
+    /* the settings are printed in the builder only (request.design_mode): without them nothing is painted here and the builder's redraw shows each change */
+    if (root.hasAttribute('data-sd-settings')) derive(root, st, false);
     if (st.type.after) st.type.after(root, st);
   }
   function drop(root, st) {
@@ -517,7 +518,7 @@
     st.schedule = () => { if (!st.frame) st.frame = requestAnimationFrame(() => { st.frame = 0; if (root.isConnected) paint(root, st); }); };
     st.mq.addEventListener('change', st.schedule);
     roots.set(root, st);
-    derive(root, st, true);
+    if (root.hasAttribute('data-sd-settings')) derive(root, st, true);
     if (type.init) type.init(root, st);
     root.dataset.sdReady = '';
   }

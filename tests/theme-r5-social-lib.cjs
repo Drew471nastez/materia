@@ -17,7 +17,7 @@ const assert = require('assert/strict');
 const {launch, mount, schemaProblems, schemaOf} = require('./media-fixture.cjs');
 const ROOT = '[data-sd-root]';
 let ASSETS = ['live-social-dividers.js'];
-const auditAll = page => page.evaluate(() => [...document.querySelectorAll('[data-sd-root]')].flatMap(r => window.MateriaSocialDividers.audit(r)));
+const auditAll = page => page.evaluate(() => [...document.querySelectorAll('[data-sd-root][data-sd-settings]')].flatMap(r => window.MateriaSocialDividers.audit(r)));
 
 const IMG = {url: 'https://img.test/logo-a.png', src: 'https://img.test/logo-a.png', width: 300, height: 120, alt: 'Logo A'};
 const IMG2 = {url: 'https://img.test/logo-b.png', src: 'https://img.test/logo-b.png', width: 320, height: 100, alt: 'Logo B'};

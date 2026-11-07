@@ -451,7 +451,8 @@ async function testSection(browser, name, cfg) {
     const img = page.locator('#shopify-section-' + uid + ' img').first();
     const before = await img.evaluate(el => { el.dataset.mark = 'same'; return el.getAttribute('src'); });
     await t.emit({padding_top_desktop: 90, padding_top_mobile: 50, content_gap: 22, card_padding: 30});
-    ok(await img.evaluate(el => el.dataset.mark) === 'same' && await img.getAttribute('src') === before, tag + ' image node and src kept');
+    /* live in the builder; a visitor's page (no settings JSON) is drawn again instead */
+    if (editing) ok(await img.evaluate(el => el.dataset.mark) === 'same' && await img.getAttribute('src') === before, tag + ' image node and src kept');
 
     /* 9. Added block renders, is live-editable; redraws do not duplicate listeners. */
     const list = t.rendered[0].section.blocks.map(b => ({type: b.type, settings: b.settings})).concat([cfg.added]);
@@ -459,8 +460,8 @@ async function testSection(browser, name, cfg) {
     const added = t.rendered[0].section.blocks[t.rendered[0].section.blocks.length - 1].id;
     const addedLoc = page.locator(`#shopify-section-${uid} [data-tg-block="${added}"]`);
     ok(await addedLoc.count() === 1, tag + ' added block rendered');
-    ok(await page.evaluate(() => [MateriaTextGrid.size(), MateriaTextGrid.listeners()].join()) === '1,1', tag + ' no duplicate roots/listeners');
-    if (cfg.added.type === 'thumb_image') { await t.emit({image: IMG}, added); ok(await addedLoc.locator('img').getAttribute('src') === IMG.url, tag + ' added block live'); }
+    ok(await page.evaluate(() => [MateriaTextGrid.size(), MateriaTextGrid.listeners()].join()) === (editing ? '1,1' : '0,0'), tag + ' no duplicate roots/listeners (a visitor\'s page has no settings: none set up)');
+    if (cfg.added.type === 'thumb_image') { await t.emit({image: IMG}, added); ok(String(await addedLoc.locator('img').first().getAttribute('src')).split('?')[0] === IMG.url.split('?')[0], tag + ' added block live'); }
     else { const key = cfg.added.type === 'feature' ? 'label' : 'heading'; await t.emit({[key]: 'Edited live'}, added); ok((await addedLoc.locator(cfg.addedSel).textContent()).trim() === 'Edited live', tag + ' added block live'); }
 
     /* 13. Overflow, targets, errors */

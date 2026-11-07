@@ -500,7 +500,8 @@
   }
   function paint(root, st) {
     if (st.raw !== root.dataset.lgSettings) { st.raw = root.dataset.lgSettings; st.s = {...st.defaults, ...parse(st.raw), ...st.live}; }
-    derive(root, st, false);
+    /* the settings are printed in the builder only (request.design_mode): without them nothing is painted here and the builder's redraw shows each change */
+    if (root.hasAttribute('data-lg-settings')) derive(root, st, false);
     const type = TYPES[root.dataset.lgRoot];
     if (type.after) type.after(root, st);
   }
@@ -520,7 +521,7 @@
     st.io = new IntersectionObserver(es => { for (const e of es) { st.visible = e.isIntersecting; if (e.isIntersecting) reveal(root, st, true); } if (type.visibility) type.visibility(root, st); });
     st.io.observe(root);
     roots.set(root, st);
-    derive(root, st, true);
+    if (root.hasAttribute('data-lg-settings')) derive(root, st, true);
     reveal(root, st, false);
     if (type.init) type.init(root, st);
     st.schedule();
