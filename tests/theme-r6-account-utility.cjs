@@ -53,10 +53,10 @@ const BLAUNCH = [{type: 'countdown', settings: {countdown_date: '2099-12-31'}}, 
     twoInstances: {padding_top: 90},
     blockEdit: ['heading', {heading: 'Only in a'}],
     extraBlock: ['heading', {heading: 'Another heading'}, {heading: 'Changed live'}],
-    theme: themeHead('h2', '.sec__content-des'),
-    priority: [fonts('h2', '.sec__content-des p'), colours('h2', '.sec__content-des'),
-      {name: 'heading weight', blocks: {heading: {custom_weight: true, font_weight: 'body_weight'}}, checks: [['h2', 'fontWeight', '400']], off: {blocks: {heading: {custom_weight: false, font_weight: 'heading_weight'}}}},
-      {name: 'uppercase heading', blocks: {heading: {uppercase: true}}, checks: [['h2', 'textTransform', 'uppercase']], off: {blocks: {heading: {uppercase: false}}}}],
+    theme: themeHead('h1', '.sec__content-des'),
+    priority: [fonts('h1', '.sec__content-des p'), colours('h1', '.sec__content-des'),
+      {name: 'heading weight', blocks: {heading: {custom_weight: true, font_weight: 'body_weight'}}, checks: [['h1', 'fontWeight', '400']], off: {blocks: {heading: {custom_weight: false, font_weight: 'heading_weight'}}}},
+      {name: 'uppercase heading', blocks: {heading: {uppercase: true}}, checks: [['h1', 'textTransform', 'uppercase']], off: {blocks: {heading: {uppercase: false}}}}],
     extra: async browser => {
       const t = await L.mount(browser, 'page-404', {assets: L.ASSETS, width: 375, editing: false, blocks: B404, globals: G});
       ok(await t.page.evaluate(() => document.querySelector('#shopify-section-test [data-ap-type=image]').hidden), 'page-404: an empty picture block draws nothing on the storefront');

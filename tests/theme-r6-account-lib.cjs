@@ -403,7 +403,7 @@ async function look(browser, html, width, {assets = [], js = false} = {}) {
     const P = ['color', 'backgroundColor', 'backgroundImage', 'fontFamily', 'fontWeight', 'fontSize', 'lineHeight', 'textAlign', 'borderTopLeftRadius', 'borderTopColor', 'boxShadow'];
     const list = [...W.querySelectorAll('h1, h2, h3, p, li, label, input, textarea, button, a, iframe, img, svg, section, .section, .rte, .pw-launch__countdown, .pw-launch__content, .section__header-des, .sec__content-subheading, .sec__content-des, .support_customer, .contact_form, .wishlist-page__empty, [data-wishlist-items]')].filter(e => { const r = e.getBoundingClientRect(); return r.width > 2 && r.height > 2 && getComputedStyle(e).visibility !== 'hidden'; });
     const own = e => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').replace(/\s+/g, ' ').trim();
-    return {height: Math.round(W.getBoundingClientRect().height), els: list.map(e => { const cs = getComputedStyle(e), b = e.getBoundingClientRect(); return [e.tagName, own(e) || e.getAttribute('placeholder') || '', ...P.map(p => cs[p]), Math.round(b.left), Math.round(b.top - top), Math.round(b.width), Math.round(b.height)].join('|'); })};
+    return {height: Math.round(W.getBoundingClientRect().height), els: list.map(e => { const cs = getComputedStyle(e), b = e.getBoundingClientRect(); return [/^H[1-6]$/.test(e.tagName) ? 'H' : e.tagName, own(e) || e.getAttribute('placeholder') || '', ...P.map(p => cs[p]), Math.round(b.left), Math.round(b.top - top), Math.round(b.width), Math.round(b.height)].join('|'); })};
   });
   await page.close();
   return r;
