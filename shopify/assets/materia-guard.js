@@ -299,7 +299,6 @@
     } catch (e) { finish("ok", false); }
   }
   function init(){
-    preload();
     // Always send the heartbeat so this store registers in your Stores tab — even inside the
     // theme editor and even before it is activated. But NEVER show the gate while the merchant
     // is customising in the editor (designMode); only a live, server-confirmed-unlicensed
@@ -307,6 +306,7 @@
     var design = !!(window.Shopify && window.Shopify.designMode);
     serverStatus(function(status){
       if (!design || status !== "blocked") { activated = true; return; }
+      preload(); // its logo is fetched only when the window is about to show, not on every page
       setTimeout(build, 300);
     });
   }
