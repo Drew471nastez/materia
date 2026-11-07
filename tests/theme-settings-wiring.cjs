@@ -37,8 +37,6 @@ const ALLOW = {
   show_cart_terms_page: 'Older duplicate of Shopping Cart > Checkout agreement (cart_page_enable_cart_terms); labelled "No effect".',
   field_font_size: 'Fields follow the body text size (layout: --input-font-size: var(--body-font-size)); labelled "no effect".',
   field_label_weight: 'Field labels follow the body weight since fields were unified with Typography; labelled "no effect".',
-  page_transition_style: 'Hidden ({{ false }}). Storelib owns page loading; since eb07ee0 (made with the creator) the next page always covers the old one in one short fade (snippets/speed-optimization.storelib), off under reduced motion.',
-  page_transition_duration: 'Hidden ({{ false }}) with Page change: the cover fade has one fixed time, 240ms, chosen in eb07ee0.',
   search_popup_height:'The search popup opens in the header bar at the header height (shopify/assets/search-type-default.css), so a vertical spacing has nothing to set; labelled "No effect".',
 };
 // CSS variables written from a setting that nothing reads, each with why.
