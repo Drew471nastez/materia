@@ -134,19 +134,45 @@
     content into the new route or interpolate two pages with different sizes.
     This is an atomic visual handoff, not a second navigation implementation.
   {%- endcomment -%}
+  {%- liquid
+    assign pt_style = settings.page_transition_style | default: 'fade'
+    assign pt_ms = settings.page_transition_duration | default: 260 | plus: 0
+    if pt_ms < 120
+      assign pt_ms = 120
+    endif
+    assign pt_out = pt_ms | divided_by: 2
+    assign pt_gap = pt_ms | divided_by: 3
+  -%}
   <style id="speed-page-landing">
-    /* One clean handoff: the old page stays painted until the new one is
-       ready, then the new one is there in the same frame. No fade between
-       them, so the two pages are never seen on top of each other (which read
-       as the page loading twice), and never a frame of bare background. */
+    /* The old page stays painted until the new one is ready (Storelib holds it), then a short
+       fade-through: the old page fades away first and the new one comes in as it goes, so the
+       two pages are never seen on top of each other (which read as the page loading twice) and
+       there is never a frame of bare background. The header stays where it is. Page change:
+       None is an instant swap. Off for visitors who ask for less motion. */
     html:root::view-transition { background: var(--color-background, Canvas); }
-    html:root::view-transition-group(root),
+    html:root::view-transition-group(root) { animation: none; mix-blend-mode: normal; }
+    {%- if pt_style == 'none' %}
     html:root::view-transition-old(root),
-    html:root::view-transition-new(root) {
-      animation: none;
-      mix-blend-mode: normal;
-    }
+    html:root::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
     html:root::view-transition-old(root) { opacity: 1; }
+    {%- else %}
+    @keyframes mt-page-out { to { opacity: 0; } }
+    @keyframes mt-page-in { from { opacity: 0;{% if pt_style == 'rise' %} transform: translate3d(0, 10px, 0);{% endif %} } }
+    @media (prefers-reduced-motion: no-preference) {
+      html:root::view-transition-old(root) { mix-blend-mode: normal; animation: mt-page-out {{ pt_out }}ms cubic-bezier(0.4, 0, 1, 1) both; }
+      html:root::view-transition-new(root) { mix-blend-mode: normal; animation: mt-page-in {{ pt_ms }}ms cubic-bezier(0.2, 0.7, 0.2, 1) {{ pt_gap }}ms both; }
+      /* The header is the same on every page: it stays put instead of fading with the page. */
+      html:active-view-transition .shopify-section.section-header { view-transition-name: mt-site-header; }
+      html:root::view-transition-group(mt-site-header),
+      html:root::view-transition-old(mt-site-header),
+      html:root::view-transition-new(mt-site-header) { animation: none; mix-blend-mode: normal; }
+      html:root::view-transition-old(mt-site-header) { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html:root::view-transition-old(root),
+      html:root::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+    }
+    {%- endif %}
   </style>
 {%- endif -%}
 
