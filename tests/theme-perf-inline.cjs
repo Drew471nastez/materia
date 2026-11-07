@@ -70,7 +70,7 @@ ok(['StorelibOverlayFade', 'StorelibPageshowUnlock', 'StorelibMenuLayer'].every(
 
 // 3. The page loads them: the layout renders the snippets that link the assets.
 const layout = read('layout/theme.storelib');
-ok(/\{%- render 'minicart' -%\}/.test(layout) && /\{% render 'materia-guard' %\}/.test(layout), 'layout renders minicart and materia-guard');
+ok(/\{%- render 'minicart' -%\}/.test(layout) && !/render 'materia-guard'/.test(layout), 'layout renders minicart and not the activation check');
 ok(/\{%- unless carrier -%\}\s*\{% render 'cart-drawer-presentation' %\}[\s\S]*?\{% render 'cart-drawer-sheets' %\}\s*\{%- endunless -%\}/.test(src.minicart), 'the drawer renders the snippets that load its assets (not the editor copy)');
 ok(src.presentation.includes("{{ 'cart-drawer.css' | asset_url | stylesheet_tag }}"), 'cart-drawer.css linked where the drawer styles were');
 ok(src.sheets.includes(`<script src="{{ 'cart-drawer.js' | asset_url }}" defer="defer"></script>`), 'cart-drawer.js deferred');

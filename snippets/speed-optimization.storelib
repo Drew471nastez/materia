@@ -200,8 +200,57 @@
      made is reused. */
   if (s.images && 'MutationObserver' in window && document.head) {
     var FONT_SHEET = /^https:\/\/fonts\.googleapis\.com\//;
+    /* Once a font sheet has loaded on this browser it is cached, so on the
+       next page it loads as a normal sheet, asked for with
+       display=fallback: a cached font has up to 100ms to arrive before text
+       is drawn, so the page paints in the real font with no swap. The
+       fallback version is fetched quietly after the first visit. */
+    var FONT_KEY = 'materia__fonts';
+    var seenFonts = {};
+    try { seenFonts = JSON.parse(localStorage.getItem(FONT_KEY) || '{}') || {}; } catch (e) { seenFonts = {}; }
+    var calmFont = function (href) { return href.replace(/([?&]display=)swap\b/, '$1fallback'); };
+    var rememberFonts = function () {
+      try {
+        var sheets = [];
+        var links = document.querySelectorAll('link[rel="stylesheet"]');
+        for (var a = 0; a < links.length; a++) {
+          var h = links[a].getAttribute('data-speed-font-href') || links[a].href;
+          if (FONT_SHEET.test(h) && sheets.indexOf(h) === -1) sheets.push(h);
+        }
+        if (!sheets.length) return;
+        for (var c = 0; c < sheets.length; c++) {
+          var calm = calmFont(sheets[c]);
+          if (calm !== sheets[c] && !document.querySelector('link[href="' + calm.replace(/"/g, '%22') + '"]')) {
+            var pf = document.createElement('link');
+            pf.rel = 'prefetch'; pf.as = 'style'; pf.href = calm;
+            document.head.appendChild(pf);
+          }
+        }
+        localStorage.setItem(FONT_KEY, JSON.stringify({ sheets: sheets }));
+      } catch (e) {}
+    };
+    var afterFonts = function () {
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { setTimeout(rememberFonts, 300); });
+      else setTimeout(rememberFonts, 300);
+    };
+    if (document.readyState === 'complete') afterFonts();
+    else window.addEventListener('load', afterFonts, { once: true });
+    var fontSeen = function (href) {
+      return !!(seenFonts.sheets && seenFonts.sheets.indexOf(href) !== -1);
+    };
     var freeFont = function (l) {
       if (l.nodeName !== 'LINK' || l.rel !== 'stylesheet' || l.hasAttribute('data-speed-font') || !FONT_SHEET.test(l.href)) return;
+      if (fontSeen(l.href)) {
+        var calm = calmFont(l.href);
+        if (calm === l.href) return;
+        var k = l.cloneNode(false);
+        k.setAttribute('data-speed-font', '');
+        k.setAttribute('data-speed-font-href', l.href);
+        k.href = calm;
+        l.parentNode.insertBefore(k, l);
+        l.parentNode.removeChild(l);
+        return;
+      }
       var media = l.getAttribute('media') || 'all';
       if (media === 'print') return;
       var n = l.cloneNode(false);
