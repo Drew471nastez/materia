@@ -9055,6 +9055,28 @@ class SlideWithThumbs extends HTMLElement {
     super();
     this.globalSlide = null;
     this.thumbnailSlide = null;
+    // The thumbnail strip is joined to the gallery in an idle task after the gallery is built
+    // (start()), so a thumbnail tapped in between did nothing and had to be tapped again. A tap
+    // that began before the strip was joined joins it now and shows that thumbnail's picture.
+    this.addEventListener("pointerdown", () => {
+      const main = this.globalSlide;
+      this._thumbsReady = !!(this.thumbnailSlide && main && !main.destroyed && main.thumbs && main.thumbs.swiper === this.thumbnailSlide);
+    }, true);
+    this.addEventListener("click", (event) => {
+      const ready = this._thumbsReady;
+      this._thumbsReady = undefined;
+      if (ready) return;
+      const thumb = event.target && event.target.closest ? event.target.closest(".thumbnail-slide .swiper-slide") : null;
+      if (!thumb || !this.contains(thumb)) return;
+      const strip = thumb.closest(".thumbnail-slide");
+      const index = Array.prototype.indexOf.call(strip.querySelectorAll(":scope > .swiper-wrapper > .swiper-slide"), thumb);
+      if (index < 0) return;
+      const main = this.ensureStarted();
+      if (!main || main.destroyed) return;
+      this.connectThumbs();
+      if (main.params && main.params.loop) main.slideToLoop(index);
+      else main.slideTo(index);
+    });
     this.init();
   }
   /* Built when it comes within a screen of the viewport (global.js), so a
