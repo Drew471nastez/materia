@@ -3,39 +3,8 @@
 (() => {
   if (window.__materiaNavigation) return;
   window.__materiaNavigation = true;
-  /* A thin bar across the top from the moment a link to another page of the site is clicked until
-     that page is shown, so a click on a slow connection is seen to have landed. Storelib keeps the
-     old page painted until the next one has arrived; the bar is drawn on the compositor (transform
-     only), never covers or dims the page, and goes when the page is left, restored (Back), or after
-     12 s if the navigation never happened. Not in the builder. */
-  const inBuilder = () => document.documentElement.classList.contains('shopify-design-mode') || !!window.Shopify?.designMode;
-  let bar = null, barTimer = 0;
-  const hideBar = () => { clearTimeout(barTimer); if (bar) { bar.remove(); bar = null; } };
-  const showBar = () => {
-    if (bar || inBuilder()) return;
-    bar = document.createElement('div');
-    bar.setAttribute('aria-hidden', 'true');
-    bar.className = 'materia-nav-bar';
-    bar.style.cssText = 'position:fixed;top:0;left:0;right:0;height:2px;z-index:2147483646;pointer-events:none;background:var(--color-primary,currentColor);transform-origin:0 50%;transform:scaleX(0);will-change:transform';
-    document.documentElement.appendChild(bar);
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    if (reduce) bar.style.transform = 'scaleX(.6)';
-    else bar.animate?.([{transform: 'scaleX(0)'}, {transform: 'scaleX(.35)', offset: .15}, {transform: 'scaleX(.9)'}], {duration: 9000, easing: 'cubic-bezier(.1,.6,.2,1)', fill: 'forwards'});
-    barTimer = setTimeout(hideBar, 12000);
-  };
-  document.addEventListener('click', event => {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const anchor = event.target.closest?.('a[href]');
-    if (!anchor || (anchor.target && anchor.target !== '_self') || anchor.hasAttribute('download')) return;
-    let url;
-    try { url = new URL(anchor.href, location.href); } catch (_) { return; }
-    if (url.origin !== location.origin || !/^https?:$/.test(url.protocol)) return;
-    if (url.pathname === location.pathname && url.search === location.search) return;
-    /* only when nothing else took the click (a drawer, a quick view, a filter handled in place) */
-    setTimeout(() => { if (!event.defaultPrevented) showBar(); }, 0);
-  });
-  addEventListener('pageshow', hideBar);
-  addEventListener('pagehide', hideBar);
+  /* No loading bar on a page change: the next page fades in by itself (page
+     transition settings), and links are fetched ahead, so it opens at once. */
   // On-demand diagnostics only: no telemetry, fetch, storage or URL query data.
   // Run materiaNavigationTiming() on the affected published page.
   window.materiaNavigationTiming = () => {
@@ -152,6 +121,15 @@
         const rect = anchor.getBoundingClientRect();
         if (!rect.width || !rect.height || rect.top >= innerHeight || urls.has(anchor.href)) continue;
         urls.add(anchor.href); picked.push(anchor); menu++;
+      }
+      // The phone's bottom bar (home, shop, wishlist): fetched ahead, so a
+      // tap there opens the page at once instead of waiting on the network.
+      // Cart and account are skipped by the rule above.
+      let bar = 0;
+      for (const anchor of document.querySelectorAll('mobile-navigation-bar a[href]')) {
+        if (bar === (limited ? 1 : 3)) break;
+        if (!anchor.getBoundingClientRect().height || urls.has(anchor.href)) continue;
+        urls.add(anchor.href); picked.push(anchor); bar++;
       }
       if (speculation) warmList(picked); else picked.forEach(warm);
     }, {timeout: 500});

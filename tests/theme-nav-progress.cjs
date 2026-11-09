@@ -1,8 +1,6 @@
 /* Run: node tests/theme-nav-progress.cjs
-   The thin bar shown from a click on a link to another page until that page is shown
-   (shopify/assets/theme-navigation.js): it appears for a normal same-site link, stays out of the
-   way (transform only, no pointer events), and is not drawn for a link something else handled
-   (preventDefault), a link to the same page, a new tab, or in the builder. */
+   No loading bar on a page change (shopify/assets/theme-navigation.js, removed at the creator's
+   request): nothing is drawn across the top for any link, a slow page, Back, or in the builder. */
 const {chromium} = require('playwright');
 const fs = require('fs'), path = require('path'), assert = require('assert/strict');
 const nav = fs.readFileSync(path.join(__dirname, '../shopify/assets/theme-navigation.js'), 'utf8');
@@ -29,10 +27,10 @@ const page = (title, extra = '') => `<!doctype html><html><head><title>${title}<
   await p.evaluate(() => { new MutationObserver(() => { const b = document.querySelector('.materia-nav-bar'); if (b) window.__barSeen(getComputedStyle(b).pointerEvents + ' ' + getComputedStyle(b).position); }).observe(document.documentElement, {childList: true}); });
   await p.click('#go', {noWaitAfter: true});
   await p.waitForFunction(() => document.title === 'Arrived', null, {timeout: 10000});
-  ok(seen === 'none fixed', 'the bar showed while the next page loaded, with no pointer events');
+  ok(seen === null, 'no bar while a slow page loads');
   ok(await bar() === null, 'the arriving page has no bar');
   await p.goBack(); await p.waitForTimeout(300); ok(await bar() === null, 'no bar after Back');
   seen = null; await p.goto('https://site.test/builder'); await p.waitForTimeout(200); await p.evaluate(() => { new MutationObserver(() => { const b = document.querySelector('.materia-nav-bar'); if (b) window.__barSeen('drawn'); }).observe(document.documentElement, {childList: true}); }); await p.click('#go', {noWaitAfter: true}); await p.waitForFunction(() => document.title === 'Arrived', null, {timeout: 10000}); ok(seen === null, 'no bar in the builder');
   await browser.close();
-  console.log(checks + ' navigation progress bar checks passed');
+  console.log(checks + ' no-loading-bar checks passed');
 })().catch(e => { console.error(e); process.exit(1); });

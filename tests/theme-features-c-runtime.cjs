@@ -120,8 +120,12 @@ async function howToUse(browser) {
 async function countUp(browser) {
   const nums = t => t.page.evaluate(() => [...document.querySelectorAll('.loudecoms-count-up')].map(e => e.textContent));
   const final = ['5,000', '500', '100'];
+  /* the preset has no numbers of its own (no invented stats), so the test gives them */
+  let n = 0;
+  const NUMS = [5000, 500, 100];
+  const blocks = schemaOf('number-stats').schema.presets[0].blocks.map(b => b.type === 'count_box' ? {...b, settings: {...b.settings, number: NUMS[n++]}} : b);
   /* the page: counts up once from 0 */
-  const t = await mount(browser, 'number-stats', {width: 1366, editing: false, assets: [ASSET]});
+  const t = await mount(browser, 'number-stats', {blocks, width: 1366, editing: false, assets: [ASSET]});
   await wait(t, 250);
   const mid = await nums(t);
   ok(mid.join() !== final.join(), 'number-stats counts on the page ' + mid);
@@ -129,7 +133,7 @@ async function countUp(browser) {
   eq(await nums(t), final, 'number-stats lands on the final numbers');
   await t.page.close();
   /* the editor and the library preview: final numbers, no count */
-  const e = await mount(browser, 'number-stats', {width: 375, editing: true, assets: [ASSET]});
+  const e = await mount(browser, 'number-stats', {blocks, width: 375, editing: true, assets: [ASSET]});
   eq(await nums(e), final, 'number-stats editor shows final numbers at once');
   await e.emit({number: 1234}, e.blockId('count_box')); await e.emit({enable_dot_spacer: true});
   eq(await nums(e), ['1.234', '500', '100'], 'number-stats edit shows the new final number');
@@ -140,12 +144,12 @@ async function countUp(browser) {
   eq(e.errors, [], 'number-stats editor errors');
   await e.page.close();
   /* reduced motion: final at once */
-  const r = await mount(browser, 'number-stats', {width: 1366, editing: false, reducedMotion: 'reduce', assets: [ASSET]});
+  const r = await mount(browser, 'number-stats', {blocks, width: 1366, editing: false, reducedMotion: 'reduce', assets: [ASSET]});
   await wait(r, 100);
   eq(await nums(r), final, 'number-stats reduced motion shows final numbers');
   await r.page.close();
   /* an edit while counting stops on the final numbers */
-  const c = await mount(browser, 'number-stats', {width: 1366, editing: false, assets: [ASSET]});
+  const c = await mount(browser, 'number-stats', {blocks, width: 1366, editing: false, assets: [ASSET]});
   await wait(c, 200);
   await c.emit({count_size: 60}); await wait(c, 100);
   eq(await nums(c), final, 'number-stats a live edit ends the count on the final numbers');
