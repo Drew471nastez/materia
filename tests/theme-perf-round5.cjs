@@ -4,7 +4,7 @@
 
    Static, on the repository files:
    - <head> holds the page only for the theme's first-paint styles: popup.css
-     and the review styles load without blocking (print swap, <noscript>
+     and the review styles load after the page (MateriaLateCss, <noscript>
      copy), every head script is deferred or a module, no @import in the
      head styles.
    - The font library: its stylesheet host is warmed up without crossorigin
@@ -71,7 +71,7 @@ const animationCss = read('shopify/assets/animation.css');
     'announcement-pro-4.css', 'before-after-controls.css', 'drift-basic.min.css', 'hero-image-one.css', 'hero-pro-scrolling.css', 'hero-product-three.css', 'hero-product-two.css', 'marketing-sections.css', 'testimonial-quote.css', 'text-section-controls.css'];
   for (const f of blocking) ok(allowed.includes(f), `head: ${f} is a blocking stylesheet; only first-paint styles may hold the page`);
   for (const f of ['popup.css', 'judgeme-reviews.css']) {
-    ok(new RegExp(`<link rel="stylesheet" href="\\{\\{ '${f.replace('.', '\\.')}' \\| asset_url \\}\\}" media="print" onload="this\\.media='all'">`).test(layout), `head: ${f} loads without blocking (print swap)`);
+    ok(new RegExp(`MateriaLateCss[\\s\\S]*\\{\\{ '${f.replace('.', '\\.')}' \\| asset_url \\| json \\}\\}`).test(layout), `head: ${f} is asked for after the page has loaded (MateriaLateCss)`);
     ok(new RegExp(`<noscript>\\{\\{ '${f.replace('.', '\\.')}' \\| asset_url \\| stylesheet_tag \\}\\}</noscript>`).test(layout), `head: ${f} has its <noscript> copy`);
   }
   for (const m of head.matchAll(/<script\b[^>]*\bsrc=[^>]*>/g)) ok(/\bdefer\b|\basync\b|type="module"/.test(m[0]), `head: <script src> is deferred (${m[0].slice(0, 80)})`);

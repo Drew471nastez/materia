@@ -119,6 +119,7 @@
     if (entry.root.hidden) entry.root.hidden = false;
     entry.root.setAttribute('aria-hidden', 'false');
     entry.root.setAttribute('data-popup-state', 'open');
+    try { window.MateriaLateCss && window.MateriaLateCss.now(); } catch (e) {}
     try { entry.open && entry.open({ instant: !!opts.instant || reduced(), preview: !!opts.preview }); } catch (e) { console.error(e); }
     if (entry.modal !== false) lockScroll();
     if (!opts.preview && entry.focus !== false) {
