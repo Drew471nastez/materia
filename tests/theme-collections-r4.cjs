@@ -131,6 +131,8 @@ const CFG = {
     blocks: () => [...presetBlocks('collection-list'), {type: 'button', settings: {text: 'View all', link: '/collections/all'}}],
     lifeBlocks: () => presetBlocks('collection-list'), assets: ['section-collection.css', 'pagination-styles.css'],
     desk: ['items_per_row', 'pagination_position'], mob: ['items_per_row_mobile'], bp: 768,
+    /* the dots show on phones too, so their position applies at every width */
+    anyWidth: ['pagination_position'],
     pre: {image_ratio: {custom_ratio: '2/1'}, design: {collection_information_position: 'overlay_image', show_product_count: true}}, preBlock: {},
     /* The card settings (shape, name position, design, count, arrow, description, name size, weight and alignment, the block's own name) and the width are live; the carousel's layout and a picked collection or picture wait for the redraw. */
     redraw: ['display_mode', 'items_per_row', 'column_gap', 'show_arrow', 'carousel_pagination', 'pagination_style', 'pagination_position', 'infinite', 'autoplay', 'autorotate_speed', 'reveal',
