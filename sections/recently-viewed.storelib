@@ -1,0 +1,633 @@
+<template compat="shopify">
+<script src="{{ 'live-r7-products.js' | asset_url }}" defer="defer"></script>
+{% render 'theme-type' %}
+{%- liquid
+  assign s = section.settings
+  assign sid = section.id
+  assign color_scheme = s.color_scheme.id | default: s.color_scheme | default: 'default-color-scheme'
+-%}
+{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+<style data-rs-bulletproof>
+  {%- if section.settings.reset_spacing -%}
+    /* reset_spacing: bulletproof override of ALL section spacing mechanisms */
+    #shopify-section-{{ section.id }},
+    #shopify-section-{{ section.id }} > .section,
+    #shopify-section-{{ section.id }} > section,
+    #shopify-section-{{ section.id }} > div,
+    #shopify-section-{{ section.id }} > div > .section {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #shopify-section-{{ section.id }} + .shopify-section,
+    #shopify-section-{{ section.id }} + section,
+    .shopify-section + #shopify-section-{{ section.id }} {
+      margin-top: 0 !important;
+    }
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- comment -%}
+  Materia Themes. Recently Viewed: the products this visitor opened last,
+  newest first, as the theme's own product cards (snippets/product-item), so
+  Theme settings > Product cards draw every card. The list is product ids in
+  the visitor's browser (localStorage "materia__recently-viewed-products",
+  the key the product page already writes), so the section is drawn hidden
+  and live-r7-products.js asks for the cards once:
+    /search?q=id:<id> OR id:<id>&type=product&section_id=recently-viewed
+  which answers this same section drawn with search.results. Nothing to
+  show, or no script: the section stays hidden and takes no space. In the
+  builder products from the store stand in, so the row can be styled.
+  The row is a native scroller (scroll snap): the finger moves it, the
+  arrows and the arrow keys call scrollBy.
+{%- endcomment -%}
+{{ 'r7-products.css' | asset_url | stylesheet_tag }}
+{%- liquid
+  assign section_width = s.section_width | default: 'fluid_container'
+  assign rv_limit = s.products_to_show | default: 8 | plus: 0
+  assign rv_cols = s.items_per_row | default: 5 | plus: 0
+  assign rv_cols_m = s.items_per_row_mobile | default: 2 | plus: 0
+  assign rv_gap = s.column_gap | default: 0 | plus: 0
+  assign rv_gap_m = rv_gap
+  if rv_gap_m > 15
+    assign rv_gap_m = 15
+  endif
+  assign rv_current = ''
+  if product.id != blank
+    assign rv_current = product.id | append: ''
+  endif
+  assign rv_terms = search.terms | append: '' | strip | slice: 0, 3
+  assign rv_state = 'wait'
+  if search.results != blank
+    if rv_terms == 'id:' or rv_terms == ''
+      assign rv_state = 'search'
+    endif
+  endif
+  if rv_state == 'wait' and request.design_mode
+    assign rv_state = 'sample'
+  endif
+  assign rv_count = 0
+  assign rv_has_heading = false
+  for block in section.blocks
+    if block.type == 'heading' and block.settings.text != blank
+      assign rv_has_heading = true
+    endif
+  endfor
+-%}
+{%- capture rv_cards -%}
+  {%- if rv_state == 'search' -%}
+    {%- for rv_product in search.results limit: 25 -%}
+      {%- if rv_product.id != blank -%}
+        {%- assign rv_count = rv_count | plus: 1 -%}
+        <li class="r7rv__item" data-rv-card data-rv-id="{{ rv_product.id }}">
+          {% render 'product-item',
+            card_product: rv_product,
+            section_id: sid,
+            container: section_width,
+            colunm: rv_cols,
+            colunm_mobile: rv_cols_m,
+            padding: rv_gap,
+            template_enable_action: true,
+            template_enable_product_vendor: true,
+            template_enable_rate: true,
+            template_enable_product_short_description: true,
+            template_enable_color_swatches: true,
+            template_enable_price: true,
+            template_enable_add_cart: true,
+            template_enable_product_badges: true,
+            scroll_animation: 'none',
+            indexFor: forloop.index
+          %}
+        </li>
+      {%- endif -%}
+    {%- endfor -%}
+  {%- elsif rv_state == 'sample' -%}
+    {%- for rv_product in collections.all.products limit: 13 -%}
+      {%- assign rv_pid = rv_product.id | append: '' -%}
+      {%- if rv_count < rv_limit and rv_pid != blank and rv_pid != rv_current -%}
+        {%- assign rv_count = rv_count | plus: 1 -%}
+        <li class="r7rv__item" data-rv-card data-rv-sample data-rv-id="{{ rv_product.id }}">
+          {% render 'product-item',
+            card_product: rv_product,
+            section_id: sid,
+            container: section_width,
+            colunm: rv_cols,
+            colunm_mobile: rv_cols_m,
+            padding: rv_gap,
+            template_enable_action: true,
+            template_enable_product_vendor: true,
+            template_enable_rate: true,
+            template_enable_product_short_description: true,
+            template_enable_color_swatches: true,
+            template_enable_price: true,
+            template_enable_add_cart: true,
+            template_enable_product_badges: true,
+            scroll_animation: 'none',
+            indexFor: forloop.index
+          %}
+        </li>
+      {%- endif -%}
+    {%- endfor -%}
+    {%- if rv_count == 0 -%}
+      {%- for i in (1..rv_limit) -%}
+        {%- assign rv_count = rv_count | plus: 1 -%}
+        <li class="r7rv__item" data-rv-card data-rv-sample>
+          {% render 'product-item',
+            section_id: sid,
+            container: section_width,
+            colunm: rv_cols,
+            colunm_mobile: rv_cols_m,
+            padding: rv_gap,
+            template_enable_action: true,
+            template_enable_product_vendor: true,
+            template_enable_rate: true,
+            template_enable_product_short_description: true,
+            template_enable_color_swatches: true,
+            template_enable_price: true,
+            template_enable_product_badges: true,
+            scroll_animation: 'none',
+            indexFor: forloop.index
+          %}
+        </li>
+      {%- endfor -%}
+    {%- endif -%}
+  {%- endif -%}
+{%- endcapture -%}
+{%- liquid
+  assign rv_over_d = false
+  assign rv_over_m = false
+  assign rv_f_d = 1
+  assign rv_f_m = 1
+  if rv_count > rv_cols
+    assign rv_over_d = true
+    assign rv_f_d = rv_cols | times: 1.0 | divided_by: rv_count
+  endif
+  if rv_count > rv_cols_m
+    assign rv_over_m = true
+    assign rv_f_m = rv_cols_m | plus: 0.15 | divided_by: rv_count
+  endif
+-%}
+{%- capture r7p_json -%}{"color_scheme":{{ color_scheme | json }},"section_width":{{ section_width | json }},"reset_spacing":{% if s.reset_spacing %}true{% else %}false{% endif %},"products_to_show":{{ rv_limit | json }},"header_alignment":{{ s.header_alignment | append: '' | json }},"header_spacing":{{ s.header_spacing | default: 0 | json }},"items_per_row":{{ rv_cols | json }},"column_gap":{{ rv_gap | json }},"show_arrows":{% if s.show_arrows %}true{% else %}false{% endif %},"show_progress":{% if s.show_progress %}true{% else %}false{% endif %},"enable_custom_style":{% if s.enable_custom_style %}true{% else %}false{% endif %},"section_bg_override":{{ s.section_bg_override | append: '' | json }},"arrow_color":{{ s.arrow_color | append: '' | json }},"enable_custom_fonts":{% if s.enable_custom_fonts %}true{% else %}false{% endif %},"heading_font":{"family":{{ s.heading_font.family | append: '' | json }},"fallback_families":{{ s.heading_font.fallback_families | append: '' | json }}},"body_font":{"family":{{ s.body_font.family | append: '' | json }},"fallback_families":{{ s.body_font.fallback_families | append: '' | json }}},"padding_top":{{ s.padding_top | default: 0 | json }},"padding_bottom":{{ s.padding_bottom | default: 0 | json }},"section_margin_top_desktop":{{ s.section_margin_top_desktop | default: 0 | json }},"section_margin_bottom_desktop":{{ s.section_margin_bottom_desktop | default: 0 | json }},"items_per_row_mobile":{{ rv_cols_m | json }},"section_margin_top_mobile":{{ s.section_margin_top_mobile | default: 0 | json }},"section_margin_bottom_mobile":{{ s.section_margin_bottom_mobile | default: 0 | json }}}{%- endcapture -%}
+<style>
+  #shopify-section-{{ sid }} { isolation: isolate; position: relative; }
+  #shopify-section-{{ sid }}, .shopify-section + #shopify-section-{{ sid }} {
+    margin-top: {{ s.section_margin_top_mobile | default: 0 }}px !important;
+    margin-bottom: {{ s.section_margin_bottom_mobile | default: 0 }}px !important;
+  }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }}, .shopify-section + #shopify-section-{{ sid }} {
+      margin-top: {{ s.section_margin_top_desktop | default: 0 }}px !important;
+      margin-bottom: {{ s.section_margin_bottom_desktop | default: 0 }}px !important;
+    }
+  }
+  /* Nothing viewed yet: the section takes no space at all. */
+  #shopify-section-{{ sid }}:has(> .r7rv[hidden]) { display: none !important; }
+  {%- if s.enable_custom_fonts -%}
+    {{ s.heading_font | font_face: font_display: 'swap' }}
+    {{ s.body_font | font_face: font_display: 'swap' }}
+  {%- endif -%}
+{% comment %}{% endcomment %}</style>
+<div
+  class="section r7p r7rv{% if s.padding_top < 30 %} pt-min{% endif %}{% if s.padding_bottom < 30 %} pb-min{% endif %} color-{{ color_scheme }} gradient{% if s.reset_spacing %} remove_spacing{% endif %}"
+  data-r7p-root="recently-viewed" data-r7p-section="{{ sid }}"{% if request.design_mode %} data-r7p-settings="{{ r7p_json | escape }}"{% endif %}
+  data-align="{{ s.header_alignment | default: 'left' }}" data-width="{{ section_width }}"
+  data-arrows="{% if s.show_arrows %}true{% else %}false{% endif %}" data-progress="{% if s.show_progress %}true{% else %}false{% endif %}"
+  data-over-d="{{ rv_over_d }}" data-over-m="{{ rv_over_m }}"
+  data-rv-state="{{ rv_state }}" data-rv-limit="{{ rv_limit }}" data-rv-cols="{{ rv_cols }}" data-rv-cols-m="{{ rv_cols_m }}" data-rv-current="{{ rv_current }}" data-rv-url="{{ routes.search_url | default: '/search' }}"
+  style="--section-pt: {{ s.padding_top | default: 0 }};--section-pb: {{ s.padding_bottom | default: 0 }};--r7p-hgap: {{ s.header_spacing | default: 0 }}px;--rv-cols: {{ rv_cols }};--rv-cols-m: {{ rv_cols_m }};--rv-gap: {{ rv_gap }}px;--rv-gap-m: {{ rv_gap_m }}px;--rv-f-d: {{ rv_f_d }};--rv-f-m: {{ rv_f_m }};{% if s.enable_custom_style %}--r7p-bg: {% render 'scheme-color', color: s.section_bg_override, fallback: 'var(--color-background)' %};--r7p-ink: {% render 'scheme-color', color: s.arrow_color, fallback: 'var(--color-heading)' %};{% endif %}{% if s.enable_custom_fonts and s.heading_font.family != blank %}--heading-font: {{ s.heading_font.family }}, {{ s.heading_font.fallback_families | default: 'sans-serif' }};{% endif %}{% if s.enable_custom_fonts and s.body_font.family != blank %}--body-font: {{ s.body_font.family }}, {{ s.body_font.fallback_families | default: 'sans-serif' }};{% endif %}"
+  {%- if rv_state == 'wait' %} hidden{% endif %}
+>
+  <div class="r7p-inner {{ section_width }}" data-r7p-width>
+    <div class="r7p-header" data-r7p-header>
+      <div class="r7p-header__text">
+        {%- for block in section.blocks -%}
+          {%- if block.type == 'eyebrow' or block.type == 'heading' or block.type == 'subheading' -%}
+            {%- render 'r7-products-text', block: block, sid: sid -%}
+          {%- endif -%}
+        {%- endfor -%}
+      </div>
+      <div class="r7rv__nav" data-r7p-nav>
+        <button type="button" class="r7rv__arrow r7rv__arrow--prev" data-r7p-prev aria-label="{{ 'accessibility.previous' | t }}" disabled>
+          <svg width="14" height="14" viewBox="0 0 12 12" fill="none" aria-hidden="true" focusable="false"><path d="M8 2 4 6l4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button type="button" class="r7rv__arrow r7rv__arrow--next" data-r7p-next aria-label="{{ 'accessibility.next' | t }}">
+          <svg width="14" height="14" viewBox="0 0 12 12" fill="none" aria-hidden="true" focusable="false"><path d="m4 2 4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </div>
+    <ul
+      class="r7rv__track" role="list" data-r7p-track tabindex="0"
+      {% if rv_has_heading %}aria-labelledby="r7p-heading-{{ sid }}"{% else %}aria-label="{{ 'templates.recently_viewed.recently_viewed_products' | t }}"{% endif %}
+      {%- if rv_state == 'wait' %} aria-busy="true"{% endif %}
+    >
+      {{- rv_cards -}}
+    </ul>
+    <div class="r7rv__progress" data-r7p-progress aria-hidden="true"><span class="r7rv__thumb"></span></div>
+  </div>
+</div>
+</template>
+
+<schema>
+{
+  "shopify": {
+    "name": "Recently Viewed",
+    "tag": "section",
+    "disabled_on": {
+      "groups": [
+        "header",
+        "footer",
+        "custom.overlay"
+      ]
+    },
+    "settings": [
+      {
+        "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Color scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "fluid_container",
+        "options": [
+          {
+            "value": "container",
+            "label": "Default"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove the theme's space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Content"
+      },
+      {
+        "type": "paragraph",
+        "content": "Shows the products a visitor opened last, newest first. It stays hidden until they have opened one. Here in the builder, products from your store stand in."
+      },
+      {
+        "type": "range",
+        "id": "products_to_show",
+        "label": "Products to show",
+        "min": 2,
+        "max": 12,
+        "step": 1,
+        "default": 8
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "header_alignment",
+        "label": "Header alignment",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "header_spacing",
+        "label": "Space below the header",
+        "min": 0,
+        "max": 80,
+        "step": 4,
+        "unit": "px",
+        "default": 32
+      },
+      {
+        "type": "range",
+        "id": "items_per_row",
+        "label": "Products per row (desktop)",
+        "min": 2,
+        "max": 6,
+        "step": 1,
+        "default": 5
+      },
+      {
+        "type": "range",
+        "id": "column_gap",
+        "label": "Gap between products",
+        "min": 0,
+        "max": 50,
+        "step": 5,
+        "unit": "px",
+        "default": 20,
+        "info": "15px at most on phones."
+      },
+      {
+        "type": "header",
+        "content": "Scrolling"
+      },
+      {
+        "type": "checkbox",
+        "id": "show_arrows",
+        "label": "Show arrows",
+        "default": true,
+        "info": "On screens 768px and wider, when there are more products than fit. Phones swipe."
+      },
+      {
+        "type": "checkbox",
+        "id": "show_progress",
+        "label": "Show scroll progress",
+        "default": true,
+        "info": "A thin line under the products, when there are more than fit."
+      },
+      {
+        "type": "header",
+        "content": "Appearance"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Enable custom styling",
+        "default": false
+      },
+      {
+        "type": "color",
+        "id": "section_bg_override",
+        "label": "Background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "arrow_color",
+        "label": "Arrows and progress",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Enable custom fonts",
+        "default": false
+      },
+      {
+        "type": "font_picker",
+        "id": "heading_font",
+        "label": "Heading font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Body font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "header",
+        "content": "Desktop spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top",
+        "label": "Top padding",
+        "default": 50,
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px",
+        "info": "A little less on phones."
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom",
+        "label": "Bottom padding",
+        "default": 50,
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "unit": "px"
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin (desktop)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin (desktop)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "range",
+        "id": "items_per_row_mobile",
+        "label": "Products per row (mobile)",
+        "min": 1,
+        "max": 3,
+        "step": 1,
+        "default": 2,
+        "info": "The next product peeks in at the edge."
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_mobile",
+        "label": "Top margin (mobile)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_mobile",
+        "label": "Bottom margin (mobile)",
+        "min": 0,
+        "max": 300,
+        "step": 4,
+        "default": 0
+      }
+    ],
+    "blocks": [
+      {
+        "type": "eyebrow",
+        "name": "Eyebrow",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Text",
+            "default": "For you"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "label": "Text size",
+            "min": 10,
+            "max": 24,
+            "step": 1,
+            "unit": "px",
+            "default": 13
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "inline_richtext",
+            "id": "text",
+            "label": "Heading",
+            "default": "Recently viewed"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "range",
+            "id": "size_desktop",
+            "label": "Size (desktop)",
+            "min": 16,
+            "max": 80,
+            "step": 1,
+            "unit": "px",
+            "default": 32
+          },
+          {
+            "type": "range",
+            "id": "size_mobile",
+            "label": "Size (mobile)",
+            "min": 14,
+            "max": 56,
+            "step": 1,
+            "unit": "px",
+            "default": 26
+          }
+        ]
+      },
+      {
+        "type": "subheading",
+        "name": "Subheading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "richtext",
+            "id": "text",
+            "label": "Text",
+            "default": "<p>Pick up where you left off.</p>"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "label": "Text size",
+            "min": 12,
+            "max": 28,
+            "step": 1,
+            "unit": "px",
+            "default": 16
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Recently Viewed",
+        "category": "Products",
+        "blocks": [
+          {
+            "type": "heading"
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>
