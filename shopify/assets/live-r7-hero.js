@@ -62,7 +62,7 @@
   };
   const WIDTHS = ['container', 'fluid_container', 'stretch_width', 'full_width'];
   const ALIGN = {center: 'center', right: 'right'}, ITEMS = {center: 'center', right: 'flex-end'};
-  const RATIO = {square: '1 / 1', landscape: '4 / 3'};
+  const RATIO = {portrait: '4 / 5', landscape: '4 / 3'};
 
   /* ---------- writers ---------- */
   function sanitise(el, html, st) {
@@ -209,7 +209,7 @@
       put(root, '@data-media-first', bool(s.mobile_image_first));
       put(root, '--hsm-fx', pct(s.image_position_x, 50));
       put(root, '--hsm-fy', pct(s.image_position_y, 50));
-      put(root, '--hsm-radius', own ? px(s.card_radius) : null);
+      put(root, '--hsm-radius', own ? px(s.image_radius) : null);
       picture(put, q('[data-r7h-image]'), s.image, s.image_alt, [1600, 1200]);
       put(q('[data-r7h-video]'), 'video', videoSrc(s) || null);
       textBlocks(c);
@@ -221,8 +221,8 @@
       const {root, s, put, q} = c, own = common(c, 'container');
       const tiles = c.blocks.filter(x => x.type === 'image');
       put(root, '@data-side', s.image_position === 'left' ? 'left' : 'right');
-      put(root, '--hcl-media', pct(s.media_width_desktop, 50));
-      put(root, '--hcl-ratio', RATIO[s.image_aspect_ratio] || '4 / 5');
+      put(root, '--hcl-media', pct(s.media_width_desktop, 45));
+      put(root, '--hcl-ratio', RATIO[s.image_aspect_ratio] || '1 / 1');
       put(root, '--hcl-gap', px(s.collage_gap));
       put(root, '--hcl-offset', px(s.collage_offset_desktop));
       put(root, '--hcl-tile-m', pct(s.tile_width_mobile, 75));

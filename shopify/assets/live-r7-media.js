@@ -315,7 +315,7 @@
       for (const old of box.querySelectorAll('.ivp__video, .ivp__frame')) { if (old.tagName === 'VIDEO') { old.pause(); old.removeAttribute('src'); old.load(); } old.remove(); }
       let el = null;
       if (src.kind === 'file') {
-        el = document.createElement('video'); el.className = 'ivp__video'; el.playsInline = true; el.setAttribute('playsinline', ''); el.preload = 'metadata';
+        el = document.createElement('video'); el.className = 'ivp__video'; el.playsInline = true; el.setAttribute('playsinline', ''); el.preload = d.poster ? 'none' : 'metadata';
         if (d.poster) el.poster = d.poster;
         if (d.title) { el.setAttribute('aria-label', d.title); el.title = d.title; }
         el.src = src.src;
@@ -378,7 +378,8 @@
     on(st, root, 'click', e => {
       const t = e.target;
       if (!t || !t.closest) return;
-      if (t.closest('[data-vp-play]')) { start(); return; }
+      /* the play button, or anywhere on the cover while nothing was started */
+      if (t.closest('[data-vp-play]') || (stage.dataset.state === 'idle' && playBtn && !playBtn.hidden && t.closest('[data-vp-stage]'))) { start(); return; }
       const clip = t.closest('[data-vp-clip]');
       if (clip) { select(items().indexOf(clip.closest('[data-vp-item]')), true); return; }
       if (t.closest('[data-vp-prev]')) page(-1);

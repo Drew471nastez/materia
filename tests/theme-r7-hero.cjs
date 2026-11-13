@@ -105,7 +105,7 @@ function valuesFor(x, cur) {
 }
 /* what a control needs beside its visible_if to show an effect */
 const PRE = {
-  enable_custom_style: {section_bg: '#13579b', card_radius: 24, image_radius: 30},
+  enable_custom_style: {section_bg: '#13579b', image_radius: 30},
   enable_custom_fonts: {heading_font: FONT_H, body_font: FONT_B},
   heading_font: {heading_font: FONT_H, body_font: FONT_B},
   body_font: {heading_font: FONT_H, body_font: FONT_B},
@@ -354,8 +354,10 @@ async function splitLayout(browser, width, editing) {
     eq((await box('.hsm__grid')).h, 900, `${where}: fills the screen height`);
     await t.redraw({settings: {full_height: false, section_width: 'container'}});
     const grid = await box('.hsm__grid');
-    ok(grid.x > 0 && grid.r < 1366 && grid.w <= 1300 + 30, `${where}: the default width keeps the split inside the page width (${JSON.stringify(grid)})`);
-    eq(await t.css('.hsm__grid', 'borderTopLeftRadius'), '8px', `${where}: inside the page width the corners take the theme radius`);
+    ok(grid.x > 0 && grid.r < 1366 && grid.w === Math.round(1366 * 0.9) - 30, `${where}: the default width keeps the split inside the page width, as the theme's container does (${JSON.stringify(grid)})`);
+    eq([await t.css('.hsm__media', 'borderTopLeftRadius'), await t.css('.hsm__media', 'borderBottomRightRadius')], ['8px', '8px'], `${where}: inside the page width the media takes the theme radius`);
+    await t.redraw({settings: {section_width: 'full_width'}});
+    eq(await t.css('.hsm__media', 'borderTopLeftRadius'), '0px', `${where}: at full width the media has square corners`);
   } else {
     ok(media.y === 0 && media.x === 0 && media.w === 375 && media.h === 320 && content.y === 320, `${where}: stacked, media first, edge to edge (${JSON.stringify(media)})`);
     await t.redraw({settings: {mobile_image_first: false}});
@@ -450,7 +452,7 @@ async function splitVideo(browser, width, reducedMotion) {
 const tiles = n => Array.from({length: n}, (_, i) => ({type: 'image', settings: {image: i % 2 ? IMG2 : IMG, alt: 'Picture ' + (i + 1)}}));
 async function collageDesktop(browser, editing) {
   const sec = SECTIONS.collage, where = `hero-collage 1366 ${editing ? 'builder' : 'storefront'}`, text = clone(schemaOf(sec.name).schema.presets[0].blocks).filter(b => b.type !== 'image');
-  const t = await mount(browser, sec.name, {width: 1366, editing, blocks: text.concat(tiles(3)), assets: [ASSET]});
+  const t = await mount(browser, sec.name, {width: 1366, editing, settings: {image_aspect_ratio: 'portrait', collage_offset_desktop: 40}, blocks: text.concat(tiles(3)), assets: [ASSET]});
   await prep(t);
   const boxes = () => t.page.locator('#shopify-section-test .hcl__tile').evaluateAll(els => els.map(e => { const r = e.getBoundingClientRect(); return {x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), b: Math.round(r.bottom)}; }));
   let b = await boxes();
@@ -503,7 +505,7 @@ async function collageScroller(browser, editing, reducedMotion) {
   const settle = async () => { let last = -1; for (let i = 0; i < 40; i++) { await t.page.waitForTimeout(60); const now = (await m()).left; if (now === last) break; last = now; } await frames(t); return m(); };
   let s = await m();
   eq(await t.page.locator(track).evaluate(e => { const cs = getComputedStyle(e); return [cs.overflowX, cs.scrollSnapType, cs.overscrollBehaviorX, cs.touchAction, cs.scrollbarWidth, getComputedStyle(e.querySelector('.hcl__tile')).scrollSnapAlign]; }), ['auto', 'x mandatory', 'contain', 'pan-x pan-y', 'none', 'start'], `${where}: a native scroller with snap that leaves the page's own scroll alone`);
-  ok(s.max > s.step * 2 && s.tile === Math.round(375 * 0.75) && s.prev && !s.next && s.tab === '0', `${where}: four pictures at 75% scroll, starting at the first (${JSON.stringify(s)})`);
+  ok(s.max > s.step * 2 && s.tile === Math.round((375 - 30) * 0.75) && s.prev && !s.next && s.tab === '0', `${where}: four pictures at 75% of the column scroll, starting at the first (${JSON.stringify(s)})`);
   ok(await t.page.locator('#shopify-section-test .hcl__tile').first().evaluate(e => Math.round(e.getBoundingClientRect().x)) === 15 && await t.page.locator(track).evaluate(e => Math.round(e.getBoundingClientRect().right)) === 375, `${where}: the row lines up with the text and runs to the screen edge`);
   /* touch-style: the finger leaves the row between two pictures, the row snaps to one */
   await t.page.locator(track).evaluate((e, x) => { e.scrollLeft = x; }, Math.round(s.step * 0.7));
@@ -554,6 +556,13 @@ async function collageScroller(browser, editing, reducedMotion) {
   ok(await t.page.locator('#shopify-section-test .hcl__nav').isHidden() && s.max <= 1 && s.tab === null && s.tile === s.w - 30, `${where}: one picture fills the row, with no arrows and no tab stop (${JSON.stringify(s)})`);
   await t.redraw({uid: 'test', settings: {mobile_image_first: true}, blocks: text.concat(tiles(3))});
   ok((await t.page.locator('#shopify-section-test .hcl__media').boundingBox()).y < (await t.page.locator('#shopify-section-test .hcl__content').boundingBox()).y, `${where}: pictures first on phones`);
+  /* right to left: next still means further along the row */
+  await t.page.evaluate(() => { document.documentElement.dir = 'rtl'; });
+  await t.redraw({uid: 'test', settings: {mobile_image_first: false}, blocks: text.concat(tiles(4))}); await frames(t);
+  await t.page.click('#shopify-section-test [data-r7h-next]');
+  s = await settle();
+  ok(Math.abs(Math.abs(await t.page.locator(track).evaluate(e => e.scrollLeft)) - s.step) <= 2 && !s.prev && !s.next, `${where}: right to left, the next arrow moves one picture along (${s.left})`);
+  await t.page.evaluate(() => { document.documentElement.dir = 'ltr'; });
   if (reducedMotion === 'reduce') ok(parseFloat(await t.css('.hcl__img', 'transitionDuration')) === 0 && await t.page.locator('#shopify-section-test .hcl__tile').first().isVisible(), `${where}: no motion, every picture shown`);
   ok(await t.noOverflow(), `${where}: no sideways scroll`);
   eq(t.errors, [], `${where}: no errors`);
@@ -586,6 +595,14 @@ async function collageScroller(browser, editing, reducedMotion) {
         ok(/Georgia/.test(await t.css('.r7h__heading', 'fontFamily')) && await t.css('.r7h__heading', 'fontWeight') === '700' && /Arial/.test(await t.css('.r7h__text p', 'fontFamily')) && await t.css(sec.root, 'backgroundColor') === 'rgb(24, 32, 40)', `${sec.name} ${width} priority off: still the theme's fonts and colours`);
         eq(await styleOf(t, '.r7h__cta'), await reference(t, 'primary'), `${sec.name} ${width} priority off: still the theme's button`);
         eq(t.errors, [], `${sec.name} ${width} priority off: no errors`);
+        await t.page.close();
+      }
+      /* Theme settings > Animations: the section takes the theme's reveal once, and nothing is hidden waiting for it */
+      for (const editing of [true, false]) {
+        const t = await mount(browser, sec.name, {width: 1366, editing, theme: {scroll_animation: 'fade_up'}, assets: [ASSET]});
+        await t.redraw(); await t.redraw();
+        eq(await t.page.evaluate(() => { const w = document.getElementById('shopify-section-test'), cs = getComputedStyle(w); return [w.className.split(' ').filter(c => c === 'scroll-trigger' || c === 'fade_up').join(' '), cs.opacity, cs.visibility]; }), ['scroll-trigger fade_up', '1', 'visible'], `${sec.name} ${editing ? 'builder' : 'storefront'}: the theme reveal class is added once and the content shows`);
+        eq(t.errors, [], `${sec.name} theme reveal: no errors`);
         await t.page.close();
       }
       const seen = {};
