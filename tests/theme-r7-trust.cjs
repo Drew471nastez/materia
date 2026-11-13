@@ -43,7 +43,7 @@ const PROBES = {
     const w = document.getElementById('shopify-section-' + uid), root = w.querySelector('.lw');
     if (!root) return {present: false};
     const cs = (el, k) => el ? getComputedStyle(el)[k] : null, r1 = n => Math.round(n * 2) / 2, top = root.getBoundingClientRect().top;
-    const box = el => { if (!el) return null; const r = el.getBoundingClientRect(); return {x: r1(r.x), y: r1(r.y - top), w: r1(r.width), h: r1(r.height)}; };
+    const box = el => { if (!el) return null; const r = el.getBoundingClientRect(); if (!r.width && !r.height) return null; return {x: r1(r.x), y: r1(r.y - top), w: r1(r.width), h: r1(r.height)}; };
     const h = root.querySelector('.lw__heading'), sub = root.querySelector('.lw__sub'), sp = sub && (sub.querySelector('p') || sub), grid = root.querySelector('.lw__grid'), items = [...root.querySelectorAll('.lw__item')];
     const tile = items[0] && items[0].querySelector('.lw__tile'), img = tile && tile.querySelector('img');
     return {present: true, display: cs(root, 'display'), scheme: [...root.classList].filter(c => c.startsWith('color-')).join(' '), spacing: root.classList.contains('remove_spacing'), width: root.dataset.width,
@@ -60,7 +60,7 @@ const PROBES = {
     const w = document.getElementById('shopify-section-' + uid), root = w.querySelector('.pm');
     if (!root) return {present: false};
     const cs = (el, k) => el ? getComputedStyle(el)[k] : null, r1 = n => Math.round(n * 2) / 2, top = root.getBoundingClientRect().top;
-    const box = el => { if (!el) return null; const r = el.getBoundingClientRect(); return {x: r1(r.x), y: r1(r.y - top), w: r1(r.width), h: r1(r.height)}; };
+    const box = el => { if (!el) return null; const r = el.getBoundingClientRect(); if (!r.width && !r.height) return null; return {x: r1(r.x), y: r1(r.y - top), w: r1(r.width), h: r1(r.height)}; };
     const h = root.querySelector('.pm__heading'), sub = root.querySelector('.pm__sub'), sp = sub && (sub.querySelector('p') || sub), list = root.querySelector('.pm__list'), items = [...root.querySelectorAll('.pm__item')];
     const item = it => { if (!it) return null; const a = it.querySelector('.pm__link'), img = it.querySelector('.pm__img'), name = it.querySelector('.pm__name'), t = it.querySelector('.pm__title'), d = it.querySelector('.pm__date'), m = it.querySelector('.pm__more');
       return {box: box(it), border: cs(it, 'borderBottomColor'), borderL: cs(it, 'borderLeftWidth'), bg: cs(it, 'backgroundColor'), radius: cs(it, 'borderTopLeftRadius'), tag: a.tagName, href: a.getAttribute('href'),
@@ -520,9 +520,9 @@ async function paint(browser, name, W, editing) {
   }
   /* nothing filled in: placeholders in the builder (the Add a section card), nothing on the storefront for an empty wall */
   const e = await render(name, {editing});
-  if (editing) ok(/lg__ph/.test(e.html) && !/<img/.test(e.html), tag + ': the first preset draws placeholders, no pictures');
+  if (editing) ok(/<svg class="lg__ph"/.test(e.html) && !/<img/.test(e.html), tag + ': the first preset draws placeholders, no pictures');
   else if (!m) ok(!/data-r7t=/.test(e.html), tag + ': a wall with no logos draws nothing on the storefront');
-  else ok(/data-r7t=/.test(e.html) && !/lg__ph/.test(e.html), tag + ': mentions with words draw on the storefront, with no placeholder');
+  else ok(/data-r7t=/.test(e.html) && !/<svg class="lg__ph"/.test(e.html), tag + ': mentions with words draw on the storefront, with no placeholder');
   const none = await render(name, {editing, blocks: [{type: 'heading'}]});
   eq(new RegExp(m ? 'Add a Mention block' : 'Add a Logo block').test(none.html), editing, tag + ': no item block says so in the builder only');
 }

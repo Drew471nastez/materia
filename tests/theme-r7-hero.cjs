@@ -580,8 +580,8 @@ async function collageScroller(browser, editing, reducedMotion) {
     ok(schema.name === sec.title && schema.name.length <= 25 && names.filter(n => n === schema.name).length === 1, sec.name + ': its name is its own');
     eq([schema.presets[0].name, schema.presets[0].category], [sec.title, 'Hero and banners'], sec.name + ': first preset');
     ok(raw.split('\n')[1] === `<script src="{{ '${ASSET}' | asset_url }}" defer="defer"></script>`, sec.name + ': line 2 links the controller');
-    const texts = JSON.stringify(schema).replace(/\\u2014/g, '—');
-    ok(!/—|\b(unlock|elevate|seamless|powerful|effortlessly|supercharge|transform)\b/i.test(texts), sec.name + ': plain copy');
+    const texts = JSON.stringify(schema), dash = String.fromCharCode(8212);
+    ok(!texts.includes(dash) && !/\\u2014/i.test(texts) && !/\b(unlock|elevate|seamless|powerful|effortlessly|supercharge|transform)\b/i.test(texts), sec.name + ': plain copy');
     for (const list of [schema.settings, ...schema.blocks.map(b => b.settings)]) for (const x of list.filter(y => y.type === 'range')) ok((x.max - x.min) / x.step <= 101 && x.default >= x.min && x.default <= x.max && Math.abs((x.default - x.min) / x.step - Math.round((x.default - x.min) / x.step)) < 1e-9, `${sec.name} ${x.id}: a range the builder can draw`);
     await headingLevel(sec);
   }
