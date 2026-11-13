@@ -1,0 +1,1000 @@
+<template compat="shopify">
+<script src="{{ 'live-r7-features.js' | asset_url }}" defer="defer"></script>
+{% render 'theme-type' %}
+{%- liquid
+  assign color_scheme = section.settings.color_scheme.id | default: section.settings.color_scheme | default: 'default-color-scheme'
+-%}
+{%- comment -%} Materia: connect this section to the theme-level animation settings (settings.scroll_animation / animation_duration / animation_delay). {%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+{%- comment -%}
+  Materia Themes. Feature Timeline.
+
+  A vertical timeline for a brand story, a process or what happens after an
+  order: a line with one marker for each item, and beside it a label, a
+  title, a text and an optional picture. Wide columns put the label across
+  the line from the text, alternating sides or all on one side; a phone (or
+  any column under 750px) shows one column with the line on the left.
+
+  On the live store the line and the markers fill as the page scrolls (CSS
+  scroll-driven animation, transform and opacity only). The builder, a
+  browser without animation-timeline and a visitor who asks for less motion
+  see the plain line with every marker drawn.
+
+  Colours follow the colour scheme until Enable custom styling is on, fonts
+  follow Theme settings until Enable custom fonts is on. The shared CSS is
+  snippets/r7-features-base, the header and button blocks are
+  snippets/r7-features-block, and builder edits are applied in place by
+  shopify/assets/live-r7-features.js.
+{%- endcomment -%}
+{%- liquid
+  assign st = section.settings
+  assign sid = section.id
+  assign items = section.blocks | where: 'type', 'item'
+  assign head_count = 0
+  assign button_count = 0
+  for block in section.blocks
+    case block.type
+      when 'eyebrow', 'heading', 'subheading'
+        assign head_count = head_count | plus: 1
+      when 'button'
+        assign button_count = button_count | plus: 1
+    endcase
+  endfor
+  assign spx = 'content_max_width,head_gap,item_gap_desktop,item_gap_mobile,marker_size,line_thickness,padding_top_desktop,padding_bottom_desktop,section_margin_top_desktop,section_margin_bottom_desktop,padding_top_mobile,padding_bottom_mobile,section_margin_top_mobile,section_margin_bottom_mobile'
+  assign sc = 'section_bg,line_color,marker_color,label_color,title_color,text_color'
+  assign sf = 'enable_custom_fonts:heading_font,enable_custom_fonts:body_font'
+  assign sa = 'section_width,show_section_on,reset_spacing,layout,text_align,marker_style,image_ratio,fill_on_scroll'
+  assign sa_list = sa | split: ','
+-%}
+{% render 'r7-features-base', sid: sid, st: st %}
+<style>
+  #shopify-section-{{ sid }} .ftl__head { margin: 0 0 var(--r7-head_gap); }
+  #shopify-section-{{ sid }} .ftl__head:not(:has(> :not([hidden]))) { display: none; }
+  #shopify-section-{{ sid }} .ftl__list {
+    --ftl-gap: var(--r7-item_gap_mobile); --ftl-ts: calc(var(--heading-font-scale, 1) * 20px); --ftl-first: calc(var(--ftl-ts) * var(--heading-line-height, 1.2));
+    --ftl-box: var(--r7-marker_size); --ftl-col: 16px;
+    list-style: none; margin: 0 auto 0 0; padding: 0; max-width: var(--r7-content_max_width); display: grid; grid-template-columns: minmax(0, 1fr); row-gap: var(--ftl-gap);
+  }
+  #shopify-section-{{ sid }} .ftl[data-text_align='center'] .ftl__list { margin-inline: auto; }
+  #shopify-section-{{ sid }} .ftl[data-marker_style='number'] .ftl__list { --ftl-box: calc(var(--r7-marker_size) + 14px); }
+  #shopify-section-{{ sid }} .ftl__item { position: relative; display: grid; grid-template-columns: var(--ftl-box) minmax(0, 1fr); grid-template-rows: auto auto 1fr; column-gap: var(--ftl-col); margin: 0; padding: 0; --ftl-mc: var(--r7-marker_color, var(--color-primary)); }
+  #shopify-section-{{ sid }} .ftl__rail { grid-column: 1; grid-row: 1 / span 3; position: relative; display: block; width: var(--ftl-box); }
+  #shopify-section-{{ sid }} .ftl__seg {
+    position: absolute; left: calc(50% - var(--r7-line_thickness) / 2); width: var(--r7-line_thickness); border-radius: 99px; overflow: clip; background: var(--r7-line_color, var(--color-border));
+    top: calc((var(--ftl-first) + var(--ftl-box)) / 2 + 6px); bottom: calc(6px - var(--ftl-gap) - (var(--ftl-first) - var(--ftl-box)) / 2);
+  }
+  #shopify-section-{{ sid }} .ftl__item:last-child .ftl__seg { display: none; }
+  #shopify-section-{{ sid }} .ftl__fill { display: none; position: absolute; inset: 0; background: var(--ftl-mc); transform: scaleY(0); transform-origin: 50% 0; }
+  #shopify-section-{{ sid }} .ftl__mk { display: block; width: var(--ftl-box); height: var(--ftl-box); margin-top: calc((var(--ftl-first) - var(--ftl-box)) / 2); }
+  #shopify-section-{{ sid }} .ftl__dot { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; border-radius: 50%; background: var(--ftl-mc); }
+  #shopify-section-{{ sid }} .ftl:is([data-marker_style='ring'], [data-marker_style='number']) .ftl__dot { background: transparent; border: max(2px, var(--r7-line_thickness)) solid var(--ftl-mc); }
+  #shopify-section-{{ sid }} .ftl__num { display: none; color: var(--color-heading); font-family: var(--r7-bf); font-size: 12px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+  #shopify-section-{{ sid }} .ftl[data-marker_style='number'] .ftl__num { display: block; }
+  #shopify-section-{{ sid }} .ftl__label {
+    grid-column: 2; grid-row: 1; display: block; min-width: 0; color: var(--r7-label_color, var(--color-text)); font-size: 12px; font-weight: 600; line-height: var(--ftl-first);
+    letter-spacing: 0.12em; text-transform: uppercase; overflow-wrap: anywhere;
+  }
+  #shopify-section-{{ sid }} .ftl__body { grid-column: 2; grid-row: 2; min-width: 0; }
+  #shopify-section-{{ sid }} .ftl__title {
+    margin: 0; color: var(--r7-title_color, var(--color-heading)); font-family: var(--r7-hf); font-size: var(--ftl-ts); font-weight: var(--heading-weight, 700);
+    line-height: var(--heading-line-height, 1.2); overflow-wrap: anywhere;
+  }
+  #shopify-section-{{ sid }} .ftl__text { margin: 8px 0 0; max-width: 52ch; color: var(--r7-text_color, var(--color-text)); font-size: var(--body-font-size, 16px); line-height: var(--body-line-height, 1.6); overflow-wrap: anywhere; }
+  #shopify-section-{{ sid }} .ftl__title[hidden] + .ftl__text { margin-top: 0; }
+  #shopify-section-{{ sid }} .ftl__text :is(p, ul, ol) { margin: 0 0 0.6em; line-height: inherit; }
+  #shopify-section-{{ sid }} .ftl__text :is(p, ul, ol):last-child { margin-bottom: 0; }
+  #shopify-section-{{ sid }} .ftl__text a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+  #shopify-section-{{ sid }} .ftl__text :is(strong, b) { color: var(--r7-text_color, var(--color-heading)); }
+  #shopify-section-{{ sid }} .ftl__media { grid-column: 2; grid-row: 3; margin: 16px 0 0; width: 100%; max-width: 440px; overflow: hidden; border-radius: var(--rounded-radius, 8px); }
+  #shopify-section-{{ sid }} .ftl__img { display: block; width: 100%; height: auto; object-fit: cover; }
+  #shopify-section-{{ sid }} .ftl[data-image_ratio='landscape'] .ftl__img { aspect-ratio: 3 / 2; }
+  #shopify-section-{{ sid }} .ftl[data-image_ratio='square'] .ftl__img { aspect-ratio: 1; }
+  #shopify-section-{{ sid }} .ftl__foot { display: flex; flex-wrap: wrap; gap: 12px; margin: 32px 0 0; }
+  #shopify-section-{{ sid }} .ftl[data-text_align='center'] .ftl__foot { justify-content: center; }
+  @container r7s (min-width: 750px) {
+    #shopify-section-{{ sid }} .ftl__list { --ftl-gap: var(--r7-item_gap_desktop); --ftl-ts: calc(var(--heading-font-scale, 1) * 22px); --ftl-col: 36px; }
+    #shopify-section-{{ sid }} .ftl__item { grid-template-columns: minmax(0, 1fr) var(--ftl-box) minmax(0, 1fr); grid-template-rows: auto 1fr; }
+    #shopify-section-{{ sid }} .ftl__rail { grid-column: 2; grid-row: 1 / span 2; }
+    #shopify-section-{{ sid }} .ftl__label {
+      grid-column: 1; grid-row: 1; text-align: right; font-family: var(--r7-hf); font-size: var(--ftl-ts); font-weight: var(--heading-weight, 700);
+      letter-spacing: var(--heading-letter-spacing, normal); text-transform: none;
+    }
+    #shopify-section-{{ sid }} .ftl__body { grid-column: 3; grid-row: 1 / span 2; }
+    #shopify-section-{{ sid }} .ftl__media { grid-column: 1; grid-row: 2; justify-self: end; }
+    #shopify-section-{{ sid }} .ftl__label[hidden] + .ftl__body + .ftl__media { margin-top: 0; }
+    #shopify-section-{{ sid }} .ftl[data-layout='alternate'] .ftl__item:nth-child(even) .ftl__label { grid-column: 3; text-align: left; }
+    #shopify-section-{{ sid }} .ftl[data-layout='alternate'] .ftl__item:nth-child(even) .ftl__body { grid-column: 1; text-align: right; }
+    #shopify-section-{{ sid }} .ftl[data-layout='alternate'] .ftl__item:nth-child(even) .ftl__text { margin-left: auto; }
+    #shopify-section-{{ sid }} .ftl[data-layout='alternate'] .ftl__item:nth-child(even) .ftl__media { grid-column: 3; justify-self: start; }
+    #shopify-section-{{ sid }} .ftl[data-layout='side'] .ftl__item { grid-template-columns: minmax(0, 0.34fr) var(--ftl-box) minmax(0, 1fr); grid-template-rows: auto auto; }
+    #shopify-section-{{ sid }} .ftl[data-layout='side'] .ftl__body { grid-row: 1; }
+    #shopify-section-{{ sid }} .ftl[data-layout='side'] .ftl__media { grid-column: 3; grid-row: 2; justify-self: start; margin-top: 16px; }
+    #shopify-section-{{ sid }} .ftl[data-layout='side'] .ftl__list:not(:has(.ftl__label:not([hidden]))) .ftl__item { grid-template-columns: var(--ftl-box) minmax(0, 1fr); }
+    #shopify-section-{{ sid }} .ftl[data-layout='side'] .ftl__list:not(:has(.ftl__label:not([hidden]))) .ftl__rail { grid-column: 1; }
+    #shopify-section-{{ sid }} .ftl[data-layout='side'] .ftl__list:not(:has(.ftl__label:not([hidden]))) :is(.ftl__body, .ftl__media) { grid-column: 2; }
+    #shopify-section-{{ sid }} .ftl__foot { margin-top: 40px; }
+  }
+  @keyframes r7-ftl-fill { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+  @keyframes r7-ftl-reach { from { opacity: 0.35; transform: scale(0.8); } to { opacity: 1; transform: none; } }
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      #shopify-section-{{ sid }} .ftl[data-fill_on_scroll='true']:not([data-r7f-editing]) .ftl__fill { display: block; animation: r7-ftl-fill linear both; animation-timeline: view(block 62% 38%); }
+      #shopify-section-{{ sid }} .ftl[data-fill_on_scroll='true']:not([data-r7f-editing]) .ftl__dot { animation: r7-ftl-reach linear both; animation-timeline: view(block 62% 38%); }
+    }
+  }
+{% comment %}{% endcomment %}</style>
+{%- capture spec -%}{"px":"{{ spx }}","c":"{{ sc }}","f":"{{ sf }}","a":"{{ sa }}","own":"font:enable_custom_fonts"}{%- endcapture -%}
+{%- capture bspec -%}{"eyebrow":{"c":"color","t":"text"},"heading":{"px":"size_desktop:px:size_enable,size_mobile:px:size_enable,line_height:n:size_enable,tracking:px:size_enable","c":"color","w":"weight:weight_enable","own":"size:size_enable,weight:weight_enable","r":"text"},"subheading":{"px":"size:px:size_enable","c":"color","r":"text"},"item":{"c":"marker_color,title_color","t":"label,title","r":"text","i":"image:image_alt"},"button":{"kind":"button"}}{%- endcapture -%}
+<div class="r7s ftl color-{{ color_scheme }} gradient" data-r7f="feature-timeline" data-r7f-section="{{ sid }}"{% if request.design_mode %} data-r7f-editing data-r7f-settings="{{ st | json | escape }}" data-r7f-spec="{{ spec | escape }}" data-r7f-bspec="{{ bspec | escape }}"{% endif %}{% for k in sa_list %} data-{{ k }}="{{ st[k] }}"{% endfor %}{% if st.enable_custom_fonts %} data-own-font{% endif %} style="{% render 'r7-features-vars', s: st, px: spx, c: sc, f: sf, gate: st.enable_custom_style %}">
+  <div class="r7s__inner">
+    {%- if head_count > 0 -%}
+      <header class="r7h ftl__head">
+        {%- for block in section.blocks -%}
+          {%- case block.type -%}
+            {%- when 'eyebrow', 'heading', 'subheading' -%}
+              {%- render 'r7-features-block', block: block -%}
+          {%- endcase -%}
+        {%- endfor -%}
+      </header>
+    {%- endif -%}
+    {%- if items.size > 0 -%}
+      <ol class="ftl__list">
+        {%- for block in items -%}
+          {%- assign bs = block.settings -%}
+          <li class="ftl__item" data-r7f-block="{{ block.id }}" data-r7f-type="item"{% if request.design_mode %} data-r7f-bs="{{ bs | json | escape }}"{% endif %} style="{% render 'r7-features-vars', s: bs, c: 'marker_color,title_color', gate: bs.enable_custom_style %}" {{ block.shopify_attributes }}>
+            <span class="ftl__rail" aria-hidden="true"><span class="ftl__seg"><span class="ftl__fill"></span></span><span class="ftl__mk"><span class="ftl__dot"><span class="ftl__num">{{ forloop.index }}</span></span></span></span>
+            <span class="ftl__label" data-r7f-bt="{{ block.id }}:label"{% if bs.label == blank %} hidden{% endif %}>{{ bs.label | escape }}</span>
+            <div class="ftl__body">
+              <h3 class="ftl__title" data-r7f-bt="{{ block.id }}:title"{% if bs.title == blank %} hidden{% endif %}>{{ bs.title | escape }}</h3>
+              <div class="ftl__text" data-r7f-bt="{{ block.id }}:text"{% if bs.text == blank %} hidden{% endif %}>{{ bs.text }}</div>
+            </div>
+            {%- if bs.image != blank or request.design_mode -%}
+              <div class="ftl__media" data-r7f-media{% if bs.image == blank %} hidden{% endif %}>
+                <img class="ftl__img" data-r7f-bi="{{ block.id }}:image"{% if bs.image != blank %} src="{{ bs.image | image_url: width: 900 }}" srcset="{{ bs.image | image_url: width: 480 }} 480w, {{ bs.image | image_url: width: 900 }} 900w, {{ bs.image | image_url: width: 1320 }} 1320w" sizes="(min-width: 768px) 440px, 84vw" width="{{ bs.image.width | default: 900 }}" height="{{ bs.image.height | default: 600 }}"{% endif %} alt="{{ bs.image_alt | default: bs.image.alt | escape }}" loading="lazy" decoding="async">
+              </div>
+            {%- endif -%}
+          </li>
+        {%- endfor -%}
+      </ol>
+    {%- endif -%}
+    {%- if button_count > 0 -%}
+      <div class="ftl__foot">
+        {%- for block in section.blocks -%}
+          {%- if block.type == 'button' -%}
+            {%- render 'r7-features-block', block: block -%}
+          {%- endif -%}
+        {%- endfor -%}
+      </div>
+    {%- endif -%}
+  </div>
+</div>
+</template>
+
+<schema>
+{
+  "shopify": {
+    "name": "Feature Timeline",
+    "settings": [
+      {
+        "type": "header",
+        "content": "General"
+      },
+      {
+        "type": "color_scheme",
+        "id": "color_scheme",
+        "label": "Colour scheme",
+        "default": "default-color-scheme"
+      },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "full_width",
+        "options": [
+          {
+            "value": "container",
+            "label": "Default"
+          },
+          {
+            "value": "fluid_container",
+            "label": "Fluid container"
+          },
+          {
+            "value": "stretch_width",
+            "label": "Stretched"
+          },
+          {
+            "value": "full_width",
+            "label": "Full width"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "show_section_on",
+        "label": "Show on",
+        "default": "all",
+        "options": [
+          {
+            "value": "all",
+            "label": "All Devices"
+          },
+          {
+            "value": "mobile",
+            "label": "Only Mobile"
+          },
+          {
+            "value": "desktop",
+            "label": "Only Desktop"
+          }
+        ]
+      },
+      {
+        "type": "checkbox",
+        "id": "reset_spacing",
+        "label": "Remove space between sections",
+        "default": true
+      },
+      {
+        "type": "header",
+        "content": "Layout"
+      },
+      {
+        "type": "select",
+        "id": "layout",
+        "label": "Desktop layout",
+        "default": "alternate",
+        "info": "A phone shows one column with the line on the left.",
+        "options": [
+          {
+            "value": "alternate",
+            "label": "Alternating"
+          },
+          {
+            "value": "side",
+            "label": "One side"
+          }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "text_align",
+        "label": "Alignment",
+        "default": "center",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Center"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "content_max_width",
+        "label": "Timeline width",
+        "min": 480,
+        "max": 1300,
+        "step": 20,
+        "unit": "px",
+        "default": 920
+      },
+      {
+        "type": "range",
+        "id": "head_gap",
+        "label": "Space below header",
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "unit": "px",
+        "default": 48
+      },
+      {
+        "type": "range",
+        "id": "item_gap_desktop",
+        "label": "Gap between items (desktop)",
+        "min": 16,
+        "max": 120,
+        "step": 4,
+        "unit": "px",
+        "default": 56
+      },
+      {
+        "type": "header",
+        "content": "Media"
+      },
+      {
+        "type": "select",
+        "id": "image_ratio",
+        "label": "Picture shape",
+        "default": "adapt",
+        "options": [
+          {
+            "value": "adapt",
+            "label": "Original"
+          },
+          {
+            "value": "landscape",
+            "label": "Landscape"
+          },
+          {
+            "value": "square",
+            "label": "Square"
+          }
+        ]
+      },
+      {
+        "type": "header",
+        "content": "Appearance"
+      },
+      {
+        "type": "select",
+        "id": "marker_style",
+        "label": "Marker",
+        "default": "dot",
+        "options": [
+          {
+            "value": "dot",
+            "label": "Dot"
+          },
+          {
+            "value": "ring",
+            "label": "Ring"
+          },
+          {
+            "value": "number",
+            "label": "Number"
+          }
+        ]
+      },
+      {
+        "type": "range",
+        "id": "marker_size",
+        "label": "Marker size",
+        "min": 8,
+        "max": 28,
+        "step": 1,
+        "unit": "px",
+        "default": 14
+      },
+      {
+        "type": "range",
+        "id": "line_thickness",
+        "label": "Line thickness",
+        "min": 1,
+        "max": 4,
+        "step": 1,
+        "unit": "px",
+        "default": 2
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_style",
+        "label": "Enable custom styling",
+        "default": false,
+        "info": "Off: colours follow the colour scheme."
+      },
+      {
+        "type": "color",
+        "id": "section_bg",
+        "label": "Background",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "line_color",
+        "label": "Line",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "marker_color",
+        "label": "Markers and line fill",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "label_color",
+        "label": "Label",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "title_color",
+        "label": "Title",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "color",
+        "id": "text_color",
+        "label": "Text",
+        "visible_if": "{{ section.settings.enable_custom_style }}"
+      },
+      {
+        "type": "header",
+        "content": "Typography"
+      },
+      {
+        "type": "checkbox",
+        "id": "enable_custom_fonts",
+        "label": "Enable custom fonts",
+        "default": false,
+        "info": "Off: fonts follow Theme settings > Typography."
+      },
+      {
+        "type": "font_picker",
+        "id": "heading_font",
+        "label": "Heading font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "font_picker",
+        "id": "body_font",
+        "label": "Body font",
+        "default": "assistant_n4",
+        "visible_if": "{{ section.settings.enable_custom_fonts }}"
+      },
+      {
+        "type": "header",
+        "content": "Animation"
+      },
+      {
+        "type": "checkbox",
+        "id": "fill_on_scroll",
+        "label": "Fill the line on scroll",
+        "default": true,
+        "info": "On the live store the line and markers fill as the visitor scrolls. The builder, browsers without scroll animations and visitors who ask for less motion see the plain line."
+      },
+      {
+        "type": "header",
+        "content": "Desktop spacing"
+      },
+      {
+        "type": "range",
+        "id": "padding_top_desktop",
+        "label": "Top padding",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 96
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_desktop",
+        "label": "Bottom padding",
+        "min": 0,
+        "max": 200,
+        "step": 4,
+        "unit": "px",
+        "default": 96
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_desktop",
+        "label": "Top margin (desktop)",
+        "min": -200,
+        "max": 300,
+        "step": 5,
+        "unit": "px",
+        "default": 0,
+        "visible_if": "{{ section.settings.reset_spacing == false }}"
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_desktop",
+        "label": "Bottom margin (desktop)",
+        "min": -200,
+        "max": 300,
+        "step": 5,
+        "unit": "px",
+        "default": 0,
+        "visible_if": "{{ section.settings.reset_spacing == false }}"
+      },
+      {
+        "type": "header",
+        "content": "Mobile"
+      },
+      {
+        "type": "range",
+        "id": "item_gap_mobile",
+        "label": "Gap between items (mobile)",
+        "min": 12,
+        "max": 80,
+        "step": 2,
+        "unit": "px",
+        "default": 36
+      },
+      {
+        "type": "range",
+        "id": "padding_top_mobile",
+        "label": "Top padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 56
+      },
+      {
+        "type": "range",
+        "id": "padding_bottom_mobile",
+        "label": "Bottom padding (mobile)",
+        "min": 0,
+        "max": 200,
+        "step": 2,
+        "unit": "px",
+        "default": 56
+      },
+      {
+        "type": "range",
+        "id": "section_margin_top_mobile",
+        "label": "Top margin (mobile)",
+        "min": -200,
+        "max": 300,
+        "step": 5,
+        "unit": "px",
+        "default": 0,
+        "visible_if": "{{ section.settings.reset_spacing == false }}"
+      },
+      {
+        "type": "range",
+        "id": "section_margin_bottom_mobile",
+        "label": "Bottom margin (mobile)",
+        "min": -200,
+        "max": 300,
+        "step": 5,
+        "unit": "px",
+        "default": 0,
+        "visible_if": "{{ section.settings.reset_spacing == false }}"
+      }
+    ],
+    "blocks": [
+      {
+        "type": "eyebrow",
+        "name": "Eyebrow",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "text",
+            "label": "Text",
+            "default": "Our story"
+          },
+          {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "inline_richtext",
+            "id": "text",
+            "label": "Heading",
+            "default": "Add a timeline heading"
+          },
+          {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "weight_enable",
+            "label": "Custom font weight",
+            "default": false
+          },
+          {
+            "type": "select",
+            "id": "weight",
+            "label": "Weight",
+            "default": "700",
+            "visible_if": "{{ block.settings.weight_enable }}",
+            "options": [
+              {
+                "value": "400",
+                "label": "Regular"
+              },
+              {
+                "value": "500",
+                "label": "Medium"
+              },
+              {
+                "value": "600",
+                "label": "Semibold"
+              },
+              {
+                "value": "700",
+                "label": "Bold"
+              },
+              {
+                "value": "800",
+                "label": "Extra bold"
+              }
+            ]
+          },
+          {
+            "type": "checkbox",
+            "id": "size_enable",
+            "label": "Custom size",
+            "default": false
+          },
+          {
+            "type": "range",
+            "id": "size_desktop",
+            "label": "Size (desktop)",
+            "min": 18,
+            "max": 80,
+            "step": 1,
+            "unit": "px",
+            "default": 40,
+            "visible_if": "{{ block.settings.size_enable }}"
+          },
+          {
+            "type": "range",
+            "id": "size_mobile",
+            "label": "Size (mobile)",
+            "min": 16,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 28,
+            "visible_if": "{{ block.settings.size_enable }}"
+          },
+          {
+            "type": "range",
+            "id": "line_height",
+            "label": "Line height",
+            "min": 0.9,
+            "max": 2,
+            "step": 0.1,
+            "default": 1.2,
+            "visible_if": "{{ block.settings.size_enable }}"
+          },
+          {
+            "type": "range",
+            "id": "tracking",
+            "label": "Letter spacing",
+            "min": -3,
+            "max": 7,
+            "step": 0.5,
+            "unit": "px",
+            "default": 0,
+            "visible_if": "{{ block.settings.size_enable }}"
+          }
+        ]
+      },
+      {
+        "type": "subheading",
+        "name": "Subheading",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "richtext",
+            "id": "text",
+            "label": "Text",
+            "default": "<p>Add a short line that says what this timeline covers.</p>"
+          },
+          {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Color",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "header",
+            "content": "Typography"
+          },
+          {
+            "type": "checkbox",
+            "id": "size_enable",
+            "label": "Custom size",
+            "default": false
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "label": "Size",
+            "min": 12,
+            "max": 24,
+            "step": 1,
+            "unit": "px",
+            "default": 17,
+            "visible_if": "{{ block.settings.size_enable }}"
+          }
+        ]
+      },
+      {
+        "type": "item",
+        "name": "Timeline item",
+        "settings": [
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Label",
+            "default": "Label",
+            "info": "A date, a year or a short step name."
+          },
+          {
+            "type": "text",
+            "id": "title",
+            "label": "Title",
+            "default": "Add a title"
+          },
+          {
+            "type": "richtext",
+            "id": "text",
+            "label": "Text",
+            "default": "<p>Add a short line about what happens at this point.</p>"
+          },
+          {
+            "type": "image_picker",
+            "id": "image",
+            "label": "Picture"
+          },
+          {
+            "type": "text",
+            "id": "image_alt",
+            "label": "Picture description",
+            "info": "Read aloud by screen readers. Leave empty for a decorative picture."
+          },
+          {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "marker_color",
+            "label": "Marker",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "title_color",
+            "label": "Title",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          }
+        ]
+      },
+      {
+        "type": "button",
+        "name": "Button",
+        "limit": 1,
+        "settings": [
+          {
+            "type": "text",
+            "id": "label",
+            "label": "Label",
+            "default": "Add a button label"
+          },
+          {
+            "type": "url",
+            "id": "link",
+            "label": "Link"
+          },
+          {
+            "type": "select",
+            "id": "style",
+            "label": "Style",
+            "default": "primary",
+            "options": [
+              {
+                "value": "primary",
+                "label": "Primary"
+              },
+              {
+                "value": "secondary",
+                "label": "Secondary"
+              },
+              {
+                "value": "link",
+                "label": "Link"
+              }
+            ]
+          },
+          {
+            "type": "header",
+            "content": "Appearance"
+          },
+          {
+            "type": "checkbox",
+            "id": "enable_custom_style",
+            "label": "Enable custom styling",
+            "default": false
+          },
+          {
+            "type": "color",
+            "id": "bg",
+            "label": "Background",
+            "visible_if": "{{ block.settings.enable_custom_style and block.settings.style != 'link' }}"
+          },
+          {
+            "type": "color",
+            "id": "color",
+            "label": "Text",
+            "visible_if": "{{ block.settings.enable_custom_style }}"
+          },
+          {
+            "type": "color",
+            "id": "bg_hover",
+            "label": "Background on hover",
+            "visible_if": "{{ block.settings.enable_custom_style and block.settings.style != 'link' }}"
+          },
+          {
+            "type": "header",
+            "content": "Shape"
+          },
+          {
+            "type": "checkbox",
+            "id": "use_theme_button",
+            "label": "Match theme button",
+            "default": true,
+            "visible_if": "{{ block.settings.style != 'link' }}"
+          },
+          {
+            "type": "range",
+            "id": "radius",
+            "label": "Corner radius",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "unit": "px",
+            "default": 100,
+            "visible_if": "{{ block.settings.style != 'link' and block.settings.use_theme_button == false }}"
+          },
+          {
+            "type": "range",
+            "id": "size",
+            "label": "Text size",
+            "min": 12,
+            "max": 22,
+            "step": 1,
+            "unit": "px",
+            "default": 16,
+            "visible_if": "{{ block.settings.style != 'link' and block.settings.use_theme_button == false }}"
+          },
+          {
+            "type": "range",
+            "id": "pad_x",
+            "label": "Side padding",
+            "min": 8,
+            "max": 60,
+            "step": 1,
+            "unit": "px",
+            "default": 28,
+            "visible_if": "{{ block.settings.style != 'link' and block.settings.use_theme_button == false }}"
+          },
+          {
+            "type": "range",
+            "id": "pad_y",
+            "label": "Top and bottom padding",
+            "min": 6,
+            "max": 28,
+            "step": 1,
+            "unit": "px",
+            "default": 14,
+            "visible_if": "{{ block.settings.style != 'link' and block.settings.use_theme_button == false }}"
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Feature Timeline",
+        "category": "Features",
+        "blocks": [
+          {
+            "type": "heading",
+            "settings": {
+              "text": "What happens after you order"
+            }
+          },
+          {
+            "type": "subheading",
+            "settings": {
+              "text": "<p>From checkout to your door, one step at a time.</p>"
+            }
+          },
+          {
+            "type": "item",
+            "settings": {
+              "label": "Right away",
+              "title": "Order confirmed",
+              "text": "<p>You get an order confirmation by email.</p>"
+            }
+          },
+          {
+            "type": "item",
+            "settings": {
+              "label": "Before shipping",
+              "title": "We pack your order",
+              "text": "<p>Add how long packing takes and how each order is checked.</p>"
+            }
+          },
+          {
+            "type": "item",
+            "settings": {
+              "label": "On the way",
+              "title": "Your order ships",
+              "text": "<p>Add your carrier and where the tracking link is sent.</p>"
+            }
+          },
+          {
+            "type": "item",
+            "settings": {
+              "label": "At your door",
+              "title": "Delivered",
+              "text": "<p>Add your delivery times and what to do if nobody is home.</p>"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+</schema>
