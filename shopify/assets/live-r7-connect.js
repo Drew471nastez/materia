@@ -163,7 +163,7 @@
     put(root, '--r7c-done', num(s.success_duration, 5) + 's');
     put(root, '--r7c-text', pick(o, s.text_color, 'var(--color-text)'));
     put(root, '@data-r7c-side', s.image_position || 'left');
-    put(root, '@data-r7c-ratio', s.image_ratio || 'portrait');
+    put(root, '@data-r7c-ratio', s.image_ratio || 'square');
     put(root, '@data-r7c-mimg', s.show_image_mobile === false || s.show_image_mobile === 'false' ? 'false' : 'true');
     put(root, '@data-r7c-form-layout', s.form_layout || 'horizontal');
     const img = q('[data-r7c-img]');

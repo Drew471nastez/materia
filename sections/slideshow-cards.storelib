@@ -1,0 +1,391 @@
+<template compat="shopify">
+<script src="{{ 'live-r7-stories.js' | asset_url }}" defer="defer"></script>
+{% render 'theme-type' %}
+{%- liquid
+  assign st = section.settings
+  assign sid = section.id
+  assign design = request.design_mode
+  assign color_scheme = st.color_scheme.id | default: st.color_scheme | default: 'default-color-scheme'
+-%}
+{%- comment -%}
+  Materia Themes. Card Slideshow: a row of large picture cards, each with a
+  title, a short line and a button, where the next card peeks in from the
+  side. The row is a native scroller: the finger, the trackpad and the Tab
+  key move it and it snaps to a card with no script. On a desktop pointer
+  44px arrows sit beside the heading, and dots under the row show where you
+  are. Optional autoplay moves one card at a time and waits off screen, in a
+  hidden tab, on hover, focus and touch, and under reduced motion. The arrows,
+  dots, keys, autoplay and live builder updates are in
+  shopify/assets/live-r7-stories.js.
+{%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+{%- liquid
+  assign cards = 0
+  assign track_label = ''
+  for block in section.blocks
+    if block.type == 'card'
+      assign cards = cards | plus: 1
+    elsif block.type == 'heading' and block.settings.heading != blank
+      assign track_label = block.settings.heading | strip_html | strip
+    endif
+  endfor
+  if track_label == blank
+    assign track_label = 'Cards'
+  endif
+  assign custom = st.enable_custom_style
+  assign style = st.card_style | default: 'overlay'
+-%}
+{%- if cards > 0 or design -%}
+<style data-r7s-space>#shopify-section-{{ sid }}{margin-top:{{ st.section_margin_top_mobile | default: 0 }}px;margin-bottom:{{ st.section_margin_bottom_mobile | default: 0 }}px}@media (min-width:768px){#shopify-section-{{ sid }}{margin-top:{{ st.section_margin_top_desktop | default: 0 }}px;margin-bottom:{{ st.section_margin_bottom_desktop | default: 0 }}px}}{% if st.reset_spacing %}#shopify-section-{{ sid }}{margin-top:0!important;margin-bottom:0!important}#shopify-section-{{ sid }} + .shopify-section{margin-top:0!important}{% endif %}{% comment %}{% endcomment %}</style>
+<style>
+  #shopify-section-{{ sid }} { isolation: isolate; position: relative; }
+  {%- if st.enable_custom_fonts -%}
+    {{ st.heading_font | font_face: font_display: 'swap' }}
+    {{ st.body_font | font_face: font_display: 'swap' }}
+  {%- endif %}
+  #shopify-section-{{ sid }} .sc {
+    --sc-edge: 1.5rem;
+    font-family: var(--body-font, inherit); color: var(--color-text); background: var(--color-background);
+    padding-top: calc(var(--sc-pt-m, 0) * 1px); padding-bottom: calc(var(--sc-pb-m, 0) * 1px);
+  }
+  #shopify-section-{{ sid }} .sc, #shopify-section-{{ sid }} .sc *, #shopify-section-{{ sid }} .sc *::before, #shopify-section-{{ sid }} .sc *::after { box-sizing: border-box; }
+  #shopify-section-{{ sid }} .sc__inner { width: 100%; margin-inline: auto; }
+  #shopify-section-{{ sid }} .sc [hidden] { display: none !important; }
+
+  /* Heading, with the arrows beside it on a desktop pointer */
+  #shopify-section-{{ sid }} .sc__header { display: flex; align-items: flex-end; justify-content: space-between; gap: 2rem; margin: 0 0 2rem; padding-inline: var(--sc-edge); }
+  #shopify-section-{{ sid }} .sc__heading {
+    margin: 0; min-width: 0; font-size: calc(var(--heading-font-scale, 1) * clamp(2.4rem, calc(2.4rem + 8 * var(--responsive-rate, 0px)), 3.2rem));
+    color: var(--sc-b-color, var(--color-heading)); text-wrap: balance; overflow-wrap: anywhere;
+  }
+  #shopify-section-{{ sid }} .sc__nav { display: none; flex: 0 0 auto; gap: .8rem; margin-inline-start: auto; }
+  #shopify-section-{{ sid }} .sc__arrow {
+    width: 44px; height: 44px; display: grid; place-items: center; padding: 0; margin: 0;
+    border: 1px solid var(--color-border); border-radius: 50%; background: var(--color-background); color: var(--color-heading);
+    cursor: pointer; transition: opacity .2s ease, transform .2s ease, border-color .2s ease; -webkit-tap-highlight-color: transparent;
+  }
+  #shopify-section-{{ sid }} .sc__arrow svg { width: 18px; height: 18px; display: block; }
+  #shopify-section-{{ sid }} .sc__arrow:dir(rtl) svg { transform: scaleX(-1); }
+  #shopify-section-{{ sid }} .sc__arrow[disabled] { opacity: .35; cursor: default; }
+  #shopify-section-{{ sid }} .sc__arrow:not([disabled]):active { transform: scale(.92); }
+  #shopify-section-{{ sid }} .sc__arrow:focus-visible { outline: 2px solid var(--color-heading); outline-offset: 2px; }
+  @media (hover: hover) { #shopify-section-{{ sid }} .sc__arrow:not([disabled]):hover { border-color: var(--color-heading); } }
+
+  /* The row: a native scroller, the next card peeking in at the edge */
+  #shopify-section-{{ sid }} .sc__track {
+    display: flex; gap: var(--sc-gap-m, 12px); margin: 0; padding: 0 var(--sc-edge); list-style: none;
+    overflow-x: auto; overflow-y: hidden;
+    scroll-snap-type: x mandatory; scroll-padding-inline: var(--sc-edge);
+    -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain;
+    scrollbar-width: none; touch-action: pan-x pan-y;
+  }
+  #shopify-section-{{ sid }} .sc__track::-webkit-scrollbar { display: none; }
+  #shopify-section-{{ sid }} .sc__track:focus-visible { outline: 2px solid var(--color-heading); outline-offset: -2px; }
+  #shopify-section-{{ sid }} .sc__card {
+    position: relative; flex: 0 0 var(--sc-w-m, 85%); width: var(--sc-w-m, 85%); min-width: 0; margin: 0; padding: 0;
+    scroll-snap-align: start; display: flex; flex-direction: column;
+    border-radius: var(--rounded-radius, 8px); overflow: hidden;
+    background: var(--sc-card-bg, transparent);
+  }
+  #shopify-section-{{ sid }} .sc__media {
+    position: relative; display: block; width: 100%; aspect-ratio: 4 / 5; overflow: hidden;
+    border-radius: var(--rounded-radius, 8px);
+    background: color-mix(in srgb, var(--color-text) 10%, var(--color-background));
+  }
+  #shopify-section-{{ sid }} .sc[data-ratio='square'] .sc__media { aspect-ratio: 1; }
+  #shopify-section-{{ sid }} .sc[data-ratio='landscape'] .sc__media { aspect-ratio: 4 / 3; }
+  #shopify-section-{{ sid }} .sc__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+  #shopify-section-{{ sid }} .sc__ph { position: absolute; inset: 0; width: 100%; height: 100%; display: block; color: var(--color-text); opacity: .28; }
+  #shopify-section-{{ sid }} .sc__shade { display: none; }
+  #shopify-section-{{ sid }} .sc__body { display: flex; flex-direction: column; align-items: flex-start; gap: .8rem; padding: 1.6rem 0 0; min-width: 0; }
+  #shopify-section-{{ sid }} .sc__title {
+    margin: 0; font-size: var(--sc-title-size, 2.2rem); line-height: 1.2; color: var(--sc-ink, var(--color-heading));
+    text-wrap: balance; overflow-wrap: anywhere;
+  }
+  #shopify-section-{{ sid }} .sc[data-heading-size='small'] { --sc-title-size: 1.8rem; }
+  #shopify-section-{{ sid }} .sc[data-heading-size='large'] { --sc-title-size: 2.6rem; }
+  #shopify-section-{{ sid }} .sc__text { margin: 0; font-size: 1.5rem; line-height: 1.5; color: var(--sc-ink, var(--color-text)); overflow-wrap: anywhere; }
+  #shopify-section-{{ sid }} .sc__text :is(p, span, strong, em, a) { color: inherit; }
+  #shopify-section-{{ sid }} .sc__btn { margin-top: .8rem; }
+  /* Card background, for text below the picture */
+  #shopify-section-{{ sid }} .sc[data-style='below'][data-card-bg] .sc__body { padding: 1.6rem 1.6rem 2rem; }
+
+  /* Text on the picture: a flat shade under white words */
+  #shopify-section-{{ sid }} .sc[data-style='overlay'] .sc__media { position: absolute; inset: 0; height: 100%; aspect-ratio: auto; }
+  #shopify-section-{{ sid }} .sc[data-style='overlay'] .sc__card { aspect-ratio: 4 / 5; justify-content: flex-end; background: color-mix(in srgb, var(--color-text) 10%, var(--color-background)); }
+  #shopify-section-{{ sid }} .sc[data-style='overlay'][data-ratio='square'] .sc__card { aspect-ratio: 1; }
+  #shopify-section-{{ sid }} .sc[data-style='overlay'][data-ratio='landscape'] .sc__card { aspect-ratio: 4 / 3; }
+  #shopify-section-{{ sid }} .sc[data-style='overlay'] .sc__shade { display: block; position: absolute; inset: 0; background: var(--sc-shade-color, #000000); opacity: var(--sc-shade, .3); pointer-events: none; }
+  #shopify-section-{{ sid }} .sc[data-style='overlay'] .sc__body { position: relative; padding: 2rem; }
+  #shopify-section-{{ sid }} .sc[data-style='overlay'] :is(.sc__title, .sc__text) { color: var(--sc-ink, #ffffff); }
+
+  /* Dots: where the row is; each a 44px target */
+  #shopify-section-{{ sid }} .sc__dots { display: flex; flex-wrap: wrap; justify-content: center; margin: .8rem 0 0; padding-inline: var(--sc-edge); min-height: 44px; }
+  #shopify-section-{{ sid }} .sc__dot { width: 44px; height: 44px; display: grid; place-items: center; padding: 0; margin: 0; border: 0; background: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  #shopify-section-{{ sid }} .sc__dot::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--color-border); transition: transform .25s ease, background-color .25s ease; }
+  #shopify-section-{{ sid }} .sc__dot[aria-current='true']::before { background: var(--color-heading); transform: scale(1.35); }
+  #shopify-section-{{ sid }} .sc__dot:active::before { transform: scale(.8); }
+  #shopify-section-{{ sid }} .sc__dot:focus-visible { outline: 2px solid var(--color-heading); outline-offset: -8px; border-radius: 50%; }
+  #shopify-section-{{ sid }} .sc[data-dots='false'] .sc__dots { display: none; }
+  #shopify-section-{{ sid }} .sc__empty { margin: 0; padding: 2.4rem var(--sc-edge); text-align: center; font-size: 1.4rem; }
+
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .sc { padding-top: calc(var(--sc-pt, 0) * 1px); padding-bottom: calc(var(--sc-pb, 0) * 1px); }
+    #shopify-section-{{ sid }} .sc[data-width='full_width'] { --sc-edge: 2rem; }
+    #shopify-section-{{ sid }} .sc__header { margin-bottom: 2.8rem; }
+    #shopify-section-{{ sid }} .sc__track { gap: var(--sc-gap, 20px); }
+    #shopify-section-{{ sid }} .sc__card { flex-basis: var(--sc-w, 42%); width: var(--sc-w, 42%); }
+    #shopify-section-{{ sid }} .sc { --sc-title-size: 2.6rem; }
+    #shopify-section-{{ sid }} .sc[data-heading-size='small'] { --sc-title-size: 2rem; }
+    #shopify-section-{{ sid }} .sc[data-heading-size='large'] { --sc-title-size: 3.4rem; }
+    #shopify-section-{{ sid }} .sc[data-style='overlay'] .sc__body { padding: 2.8rem; }
+    #shopify-section-{{ sid }} .sc__text { font-size: 1.6rem; }
+  }
+  /* Arrows on a desktop pointer; they keep their place and show once the row is wider than the page */
+  @media (min-width: 768px) and (hover: hover) {
+    #shopify-section-{{ sid }} .sc[data-arrows='true'] .sc__nav { display: flex; visibility: hidden; }
+    #shopify-section-{{ sid }} .sc[data-arrows='true'][data-over='true'] .sc__nav { visibility: visible; }
+  }
+  /* The header goes when it holds nothing: no heading words, and no arrows at this width */
+  #shopify-section-{{ sid }} .sc__header:not(:has(> .sc__heading:not([hidden]))) { display: none; }
+  @media (min-width: 768px) and (hover: hover) {
+    #shopify-section-{{ sid }} .sc[data-arrows='true'] .sc__header:has(> .sc__nav) { display: flex; }
+  }
+  @media (min-width: 1025px) {
+    #shopify-section-{{ sid }} .sc[data-width='container'] .sc__inner { width: 90%; }
+    #shopify-section-{{ sid }} .sc[data-width='fluid_container'] .sc__inner { width: 95%; }
+  }
+  @media (min-width: 1200px) {
+    #shopify-section-{{ sid }} .sc[data-width='container'] .sc__inner { max-width: calc(var(--page-width, 1300px) + 3rem); }
+    #shopify-section-{{ sid }} .sc[data-width='fluid_container'] .sc__inner { max-width: calc(var(--fluid-container-width, 1500px) + 3rem); }
+    #shopify-section-{{ sid }} .sc[data-width='stretch_width'] { --sc-edge: 3rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ sid }} :is(.sc__arrow, .sc__dot::before) { transition: none; }
+    #shopify-section-{{ sid }} .sc__arrow:not([disabled]):active, #shopify-section-{{ sid }} .sc__dot:active::before { transform: none; }
+    #shopify-section-{{ sid }} .sc__track { scroll-behavior: auto; }
+  }
+{% comment %}{% endcomment %}</style>
+{%- capture sc_vars -%}
+--sc-w: {{ st.card_width | default: 42 }}%;--sc-w-m: {{ st.card_width_mobile | default: 85 }}%;--sc-gap: {{ st.gap | default: 0 }}px;--sc-gap-m: {{ st.gap_mobile | default: 0 }}px;--sc-shade: {{ st.overlay_opacity | default: 0 | divided_by: 100.0 }};--sc-pt: {{ st.padding_top | default: 0 }};--sc-pb: {{ st.padding_bottom | default: 0 }};--sc-pt-m: {{ st.padding_top_mobile | default: 0 }};--sc-pb-m: {{ st.padding_bottom_mobile | default: 0 }};
+{%- if custom -%}
+  {%- capture sc_ink -%}{% render 'scheme-color', color: st.text_color, fallback: 'none' %}{%- endcapture -%}{%- assign sc_ink = sc_ink | strip -%}
+  {%- if sc_ink != 'none' -%}--sc-ink: {{ sc_ink }};{%- endif -%}
+  {%- capture sc_shade -%}{% render 'scheme-color', color: st.overlay_color, fallback: 'none' %}{%- endcapture -%}{%- assign sc_shade = sc_shade | strip -%}
+  {%- if sc_shade != 'none' -%}--sc-shade-color: {{ sc_shade }};{%- endif -%}
+{%- endif -%}
+{%- if st.enable_custom_fonts -%}{%- if st.heading_font.family != blank -%}--heading-font: {{ st.heading_font.family }}, {{ st.heading_font.fallback_families | default: 'sans-serif' }};{%- endif -%}{%- if st.body_font.family != blank -%}--body-font: {{ st.body_font.family }}, {{ st.body_font.fallback_families | default: 'sans-serif' }};{%- endif -%}{%- endif -%}
+{%- endcapture -%}
+{%- liquid
+  assign card_bg = 'none'
+  if custom and style == 'below'
+    capture card_bg
+      render 'scheme-color', color: st.card_bg, fallback: 'none'
+    endcapture
+    assign card_bg = card_bg | strip
+  endif
+  assign own_font = false
+  if st.enable_custom_fonts
+    if st.heading_font.family != blank or st.body_font.family != blank
+      assign own_font = true
+    endif
+  endif
+-%}
+{%- if design -%}
+{%- capture sc_json -%}{"color_scheme":{{ color_scheme | json }},"section_width":{{ st.section_width | append: '' | json }},"reset_spacing":{% if st.reset_spacing %}true{% else %}false{% endif %},"card_style":{{ st.card_style | append: '' | json }},"card_width":{{ st.card_width | default: 0 | json }},"gap":{{ st.gap | default: 0 | json }},"show_arrows":{% if st.show_arrows %}true{% else %}false{% endif %},"show_dots":{% if st.show_dots %}true{% else %}false{% endif %},"image_ratio":{{ st.image_ratio | append: '' | json }},"overlay_opacity":{{ st.overlay_opacity | default: 0 | json }},"enable_custom_style":{% if st.enable_custom_style %}true{% else %}false{% endif %},"text_color":{{ st.text_color | append: '' | json }},"overlay_color":{{ st.overlay_color | append: '' | json }},"card_bg":{{ st.card_bg | append: '' | json }},"heading_size":{{ st.heading_size | append: '' | json }},"enable_custom_fonts":{% if st.enable_custom_fonts %}true{% else %}false{% endif %},"heading_font":{"family":{{ st.heading_font.family | append: '' | json }},"fallback_families":{{ st.heading_font.fallback_families | append: '' | json }}},"body_font":{"family":{{ st.body_font.family | append: '' | json }},"fallback_families":{{ st.body_font.fallback_families | append: '' | json }}},"autoplay":{% if st.autoplay %}true{% else %}false{% endif %},"autorotate_speed":{{ st.autorotate_speed | default: 5 | json }},"padding_top":{{ st.padding_top | default: 0 | json }},"padding_bottom":{{ st.padding_bottom | default: 0 | json }},"section_margin_top_desktop":{{ st.section_margin_top_desktop | default: 0 | json }},"section_margin_bottom_desktop":{{ st.section_margin_bottom_desktop | default: 0 | json }},"card_width_mobile":{{ st.card_width_mobile | default: 0 | json }},"gap_mobile":{{ st.gap_mobile | default: 0 | json }},"padding_top_mobile":{{ st.padding_top_mobile | default: 0 | json }},"padding_bottom_mobile":{{ st.padding_bottom_mobile | default: 0 | json }},"section_margin_top_mobile":{{ st.section_margin_top_mobile | default: 0 | json }},"section_margin_bottom_mobile":{{ st.section_margin_bottom_mobile | default: 0 | json }}}{%- endcapture -%}
+{%- endif -%}
+<div class="sc color-{{ color_scheme }} gradient{% if st.reset_spacing %} remove_spacing{% endif %}" data-r7s="slideshow-cards" data-r7s-section="{{ sid }}"{% if design %} data-r7s-settings="{{ sc_json | escape }}"{% endif %} data-width="{{ st.section_width | default: 'fluid_container' }}" data-style="{{ style }}" data-ratio="{{ st.image_ratio | default: 'portrait' }}" data-heading-size="{{ st.heading_size | default: 'medium' }}" data-arrows="{% if st.show_arrows %}true{% else %}false{% endif %}" data-dots="{% if st.show_dots %}true{% else %}false{% endif %}" data-autoplay="{% if st.autoplay %}true{% else %}false{% endif %}" data-speed="{{ st.autorotate_speed | default: 5 }}"{% if card_bg != 'none' %} data-card-bg{% endif %}{% if own_font %} data-own-font{% endif %} style="{{ sc_vars | strip }}{% if card_bg != 'none' %}--sc-card-bg: {{ card_bg }};{% endif %}">
+  <div class="sc__inner">
+    <div class="sc__header">
+      {%- for block in section.blocks -%}
+        {%- if block.type == 'heading' -%}
+          {%- assign bs = block.settings -%}
+          <h2 class="sc__heading" data-r7s-block="{{ block.id }}" data-r7s-type="heading"{% if design %} data-r7s-settings="{% capture b_json %}{"heading":{{ bs.heading | append: '' | json }},"enable_custom_style":{% if bs.enable_custom_style %}true{% else %}false{% endif %},"color":{{ bs.color | append: '' | json }}}{% endcapture %}{{ b_json | escape }}"{% endif %} style="{% if bs.enable_custom_style %}--sc-b-color: {% render 'scheme-color', color: bs.color, fallback: 'var(--color-heading)' %};{% endif %}"{% if bs.heading == blank %} hidden{% endif %} {{ block.shopify_attributes }}>{{ bs.heading }}</h2>
+        {%- endif -%}
+      {%- endfor -%}
+      {%- if cards > 1 -%}
+      <div class="sc__nav">
+        <button type="button" class="sc__arrow" data-r7s-prev aria-label="{{ 'accessibility.previous' | t }}" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="15 5 8 12 15 19"/></svg></button>
+        <button type="button" class="sc__arrow" data-r7s-next aria-label="{{ 'accessibility.next' | t }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="9 5 16 12 9 19"/></svg></button>
+      </div>
+      {%- endif -%}
+    </div>
+    {%- if cards > 0 -%}
+    <ul class="sc__track" role="list" data-r7s-track tabindex="0" aria-label="{{ track_label | escape }}">
+      {%- assign n = 0 -%}
+      {%- for block in section.blocks -%}
+        {%- if block.type == 'card' -%}
+        {%- assign bs = block.settings -%}
+        {%- assign n = n | plus: 1 -%}
+        {%- assign label = bs.button_label | strip -%}
+        <li class="sc__card" data-r7s-block="{{ block.id }}" data-r7s-type="card" aria-label="{{ n }} / {{ cards }}"{% if design %} data-r7s-settings="{% capture b_json %}{"image":{% if bs.image != blank %}{{ bs.image | image_url: width: 1200 | json }}{% else %}""{% endif %},"heading":{{ bs.heading | append: '' | json }},"text":{{ bs.text | append: '' | json }},"button_label":{{ bs.button_label | append: '' | json }},"button_link":{{ bs.button_link | append: '' | json }}}{% endcapture %}{{ b_json | escape }}"{% endif %} {{ block.shopify_attributes }}>
+          <div class="sc__media">
+            {%- if bs.image != blank -%}
+              <img class="sc__img" src="{{ bs.image | image_url: width: 1200 }}" srcset="{{ bs.image | image_url: width: 480 }} 480w, {{ bs.image | image_url: width: 800 }} 800w, {{ bs.image | image_url: width: 1200 }} 1200w" sizes="(min-width: 768px) {{ st.card_width | default: 42 }}vw, {{ st.card_width_mobile | default: 85 }}vw" width="{{ bs.image.width | default: 1200 }}" height="{{ bs.image.height | default: 1500 }}" alt="{{ bs.image.alt | escape }}" loading="lazy" decoding="async">
+            {%- else -%}
+              <svg class="sc__ph" data-r7s-ph viewBox="0 0 120 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false"><circle cx="50" cy="62" r="6" fill="currentColor"/><path d="M34 92l18-21 11 12 8-7 17 16z" fill="currentColor"/></svg>
+            {%- endif -%}
+          </div>
+          <div class="sc__shade" aria-hidden="true"></div>
+          <div class="sc__body">
+            <h3 class="sc__title"{% if bs.heading == blank %} hidden{% endif %}>{{ bs.heading }}</h3>
+            <p class="sc__text"{% if bs.text == blank %} hidden{% endif %}>{{ bs.text }}</p>
+            {%- if bs.button_link != blank -%}
+              <a class="sc__btn" href="{{ bs.button_link }}" data-theme-button="primary" data-sl-button{% if label == blank %} hidden{% endif %}>{{ label | escape }}</a>
+            {%- else -%}
+              <button type="button" class="sc__btn" data-theme-button="primary" data-sl-button{% if label == blank %} hidden{% endif %}>{{ label | escape }}</button>
+            {%- endif -%}
+          </div>
+        </li>
+        {%- endif -%}
+      {%- endfor -%}
+    </ul>
+    {%- if cards > 1 -%}
+    <div class="sc__dots" data-r7s-dots>
+      {%- for i in (1..cards) -%}
+        <button type="button" class="sc__dot" data-r7s-dot="{{ forloop.index0 }}" aria-label="{{ i }} / {{ cards }}"{% if forloop.first %} aria-current="true"{% else %} aria-current="false"{% endif %}></button>
+      {%- endfor -%}
+    </div>
+    {%- endif -%}
+    {%- elsif design -%}
+      <p class="sc__empty">Add a Card block to show your first card.</p>
+    {%- endif -%}
+  </div>
+</div>
+{%- endif -%}
+</template>
+
+<schema>
+{
+  "shopify": {
+    "name": "Card Slideshow",
+    "settings": [
+      { "type": "header", "content": "General" },
+      { "type": "color_scheme", "id": "color_scheme", "label": "Colour scheme", "default": "default-color-scheme" },
+      {
+        "type": "select", "id": "section_width", "label": "Section width", "default": "fluid_container",
+        "options": [
+          { "value": "container", "label": "Default" },
+          { "value": "fluid_container", "label": "Fluid container" },
+          { "value": "stretch_width", "label": "Stretched" },
+          { "value": "full_width", "label": "Full width" }
+        ]
+      },
+      { "type": "checkbox", "id": "reset_spacing", "label": "Remove default space between sections", "default": true },
+
+      { "type": "header", "content": "Layout" },
+      {
+        "type": "select", "id": "card_style", "label": "Card text", "default": "overlay",
+        "options": [
+          { "value": "overlay", "label": "On picture" },
+          { "value": "below", "label": "Below" }
+        ]
+      },
+      { "type": "range", "id": "card_width", "label": "Card width (desktop)", "min": 25, "max": 90, "step": 1, "unit": "%", "default": 42, "info": "Part of the next card shows at the edge." },
+      { "type": "range", "id": "gap", "label": "Gap between cards (desktop)", "min": 0, "max": 48, "step": 2, "unit": "px", "default": 20 },
+      { "type": "checkbox", "id": "show_arrows", "label": "Show arrows", "default": true, "info": "On desktop, while the row is wider than the page. Phones swipe." },
+      { "type": "checkbox", "id": "show_dots", "label": "Show dots", "default": true },
+
+      { "type": "header", "content": "Images" },
+      {
+        "type": "select", "id": "image_ratio", "label": "Card shape", "default": "portrait",
+        "options": [
+          { "value": "portrait", "label": "Portrait" },
+          { "value": "square", "label": "Square" },
+          { "value": "landscape", "label": "Landscape" }
+        ]
+      },
+      { "type": "range", "id": "overlay_opacity", "label": "Shade over the picture", "min": 0, "max": 80, "step": 5, "unit": "%", "default": 30, "visible_if": "{{ section.settings.card_style == 'overlay' }}" },
+
+      { "type": "header", "content": "Appearance" },
+      { "type": "checkbox", "id": "enable_custom_style", "label": "Enable custom styling", "default": false, "info": "Off: colours follow the colour scheme." },
+      { "type": "color", "id": "text_color", "label": "Card text", "visible_if": "{{ section.settings.enable_custom_style }}" },
+      { "type": "color", "id": "overlay_color", "label": "Shade colour", "visible_if": "{{ section.settings.enable_custom_style and section.settings.card_style == 'overlay' }}" },
+      { "type": "color", "id": "card_bg", "label": "Card background", "visible_if": "{{ section.settings.enable_custom_style and section.settings.card_style == 'below' }}" },
+
+      { "type": "header", "content": "Typography" },
+      {
+        "type": "select", "id": "heading_size", "label": "Card title size", "default": "medium",
+        "options": [
+          { "value": "small", "label": "Small" },
+          { "value": "medium", "label": "Medium" },
+          { "value": "large", "label": "Large" }
+        ]
+      },
+      { "type": "checkbox", "id": "enable_custom_fonts", "label": "Enable custom fonts", "default": false },
+      { "type": "font_picker", "id": "heading_font", "label": "Heading and titles font", "default": "assistant_n4", "visible_if": "{{ section.settings.enable_custom_fonts }}" },
+      { "type": "font_picker", "id": "body_font", "label": "Text font", "default": "assistant_n4", "visible_if": "{{ section.settings.enable_custom_fonts }}" },
+
+      { "type": "header", "content": "Animation" },
+      { "type": "checkbox", "id": "autoplay", "label": "Autoplay", "default": false, "info": "Pauses on hover, on touch, off screen, in a hidden tab and when the visitor prefers reduced motion." },
+      { "type": "range", "id": "autorotate_speed", "label": "Change slide every", "max": 12, "min": 2, "step": 1, "unit": "s", "default": 5, "visible_if": "{{ section.settings.autoplay }}" },
+
+      { "type": "header", "content": "Desktop spacing" },
+      { "type": "range", "id": "padding_top", "label": "Top padding", "default": 0, "min": 0, "max": 100, "step": 1, "unit": "px" },
+      { "type": "range", "id": "padding_bottom", "label": "Bottom padding", "default": 0, "min": 0, "max": 100, "step": 1, "unit": "px" },
+      { "type": "range", "id": "section_margin_top_desktop", "label": "Top margin", "min": 0, "max": 300, "step": 4, "default": 0, "visible_if": "{{ section.settings.reset_spacing == false }}" },
+      { "type": "range", "id": "section_margin_bottom_desktop", "label": "Bottom margin", "min": 0, "max": 300, "step": 4, "default": 0, "visible_if": "{{ section.settings.reset_spacing == false }}" },
+
+      { "type": "header", "content": "Mobile" },
+      { "type": "range", "id": "card_width_mobile", "label": "Card width (mobile)", "min": 60, "max": 100, "step": 1, "unit": "%", "default": 85 },
+      { "type": "range", "id": "gap_mobile", "label": "Gap between cards (mobile)", "min": 0, "max": 32, "step": 2, "unit": "px", "default": 12 },
+      { "type": "range", "id": "padding_top_mobile", "label": "Top padding (mobile)", "default": 0, "min": 0, "max": 100, "step": 1, "unit": "px" },
+      { "type": "range", "id": "padding_bottom_mobile", "label": "Bottom padding (mobile)", "default": 0, "min": 0, "max": 100, "step": 1, "unit": "px" },
+      { "type": "range", "id": "section_margin_top_mobile", "label": "Top margin (mobile)", "min": 0, "max": 300, "step": 4, "default": 0, "visible_if": "{{ section.settings.reset_spacing == false }}" },
+      { "type": "range", "id": "section_margin_bottom_mobile", "label": "Bottom margin (mobile)", "min": 0, "max": 300, "step": 4, "default": 0, "visible_if": "{{ section.settings.reset_spacing == false }}" }
+    ],
+    "blocks": [
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          { "type": "inline_richtext", "id": "heading", "label": "Heading", "default": "Take a closer look" },
+          { "type": "header", "content": "Style" },
+          { "type": "checkbox", "id": "enable_custom_style", "label": "Enable custom styling", "default": false },
+          { "type": "color", "id": "color", "label": "Colour", "visible_if": "{{ block.settings.enable_custom_style }}" }
+        ]
+      },
+      {
+        "type": "card",
+        "name": "Card",
+        "settings": [
+          { "type": "image_picker", "id": "image", "label": "Picture", "info": "Its alt text is the picture's own." },
+          { "type": "inline_richtext", "id": "heading", "label": "Title", "default": "Add a card title" },
+          { "type": "inline_richtext", "id": "text", "label": "Line", "default": "Add a short line about this picture." },
+          { "type": "text", "id": "button_label", "label": "Button label", "default": "Shop now", "info": "Empty hides the button." },
+          { "type": "url", "id": "button_link", "label": "Button link" }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Card Slideshow",
+        "category": "Slideshows",
+        "settings": { "padding_top": 64, "padding_bottom": 64, "padding_top_mobile": 40, "padding_bottom_mobile": 40 },
+        "blocks": [
+          { "type": "heading" },
+          { "type": "card", "settings": { "heading": "New arrivals", "text": "The latest pieces, as they land." } },
+          { "type": "card", "settings": { "heading": "Everyday basics", "text": "The pieces you reach for most." } },
+          { "type": "card", "settings": { "heading": "Gift ideas", "text": "Something for someone else, or for you." } },
+          { "type": "card", "settings": { "heading": "Last sizes", "text": "Final pieces from past seasons." } }
+        ]
+      }
+    ]
+  }
+}
+</schema>
