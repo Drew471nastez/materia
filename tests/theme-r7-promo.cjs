@@ -140,8 +140,8 @@ const SECTION = {
   'announcement-code-bar': {
     ...MARGINS('acb'),
     color_scheme: {p: [['.acb', 'backgroundColor'], ['.acb__msg', 'color'], ['.acb__chip', 'color']], expect: 'rgb(250, 250, 250) | rgb(51, 51, 51) | rgb(16, 16, 16)'},
-    /* At 1366 Fluid container (1500px) and Full width are both the whole window. */
-    section_width: {at: 'd', p: [['.acb', '#w']], distinct: 3},
+    /* Measured in a 1700px window: below 1548px Fluid container (1500px) and Full width are both the whole window. */
+    section_width: {viewport: 1700, p: [['.acb', '#w']]},
     content_alignment: {p: [['.acb__row', 'justifyContent'], ['.acb__msg', '#x']], expect: /^flex-start \| (16|24)$/},
     show_separator_line: {p: [['.acb', 'borderBottomWidth']], expect: '1px'},
     enable_custom_style: {p: [['.acb', 'backgroundColor'], ['.acb__msg', 'color']], pre: {background_color: '#00ff00', text_color: '#0000ff'}, expect: 'rgb(0, 255, 0) | rgb(0, 0, 255)'},
@@ -160,7 +160,7 @@ const SECTION = {
   'countdown-product-drop': {
     ...MARGINS('pdc'),
     color_scheme: {p: [['.pdc', 'backgroundColor'], ['.pdc__heading', 'color'], ['.pdc__text p', 'color'], ['.pdc__num', 'color']], expect: 'rgb(250, 250, 250) | rgb(16, 16, 16) | rgb(51, 51, 51) | rgb(16, 16, 16)'},
-    section_width: {at: 'd', p: [['.pdc__inner', '#w'], ['.pdc__inner', 'paddingLeft']]},
+    section_width: {viewport: 1700, p: [['.pdc__inner', '#w'], ['.pdc__inner', 'paddingLeft']]},
     product: {redraw: true, p: [['.pdc__title', '#text'], ['.pdc__frame img', '@src'], ['.pdc__price', '#text']]},
     end_iso: {p: [['[data-r7p-unit="d"]', '#text']], value: LATER, expect: '09'},
     /* Each visitor's own clock and UTC+00:00 are the same moment here: the browser runs on UTC. */
@@ -263,6 +263,7 @@ async function control(t, width, editing, scope, x, spec, state) {
   const blockId = scope === 'section' ? undefined : 'test-b' + index;
   const withValue = v => scope === 'section' ? {settings: {...s0, [x.id]: v}, blocks: b0} : {settings: s0, blocks: b0.map((b, i) => i === index ? {type: b.type, settings: {...b.settings, [x.id]: v}} : b)};
   const apply = async v => { if (spec.redraw) await t.redraw(withValue(v)); else await t.emit({[x.id]: v}, blockId); await frames(t); };
+  if (spec.viewport) await t.page.setViewportSize({width: spec.viewport, height: 900});
   await t.redraw({settings: s0, blocks: b0}); await frames(t);
   const v0 = await read(t, spec.p);
   ok(!/missing/.test(v0), label + ' has its element', v0);
@@ -283,6 +284,7 @@ async function control(t, width, editing, scope, x, spec, state) {
   if (x.type === 'select' && spec.distinct !== false && atWidth(spec.at)) eq(seen.size, spec.distinct || values.length + 1, label + ': every option looks different');
   await apply(cur);
   eq(await read(t, spec.p), v0, label + ' set back restores what was there');
+  if (spec.viewport) await t.page.setViewportSize({width, height: 900});
 }
 
 async function everyControl(browser, name, width, editing) {
@@ -347,7 +349,8 @@ async function inheritance(browser, name, width, editing, priority) {
     eq(await css('.acb__link', 'color'), 'rgb(204, 204, 204)', 'link is the scheme text colour');
     ok(await tall('.acb__code'), 'the copy button is at least 44px tall');
     ok(await tall('.acb__link'), 'the link is at least 44px tall');
-    ok(await one(t, '.acb').evaluate(el => el.getBoundingClientRect().height <= 70), 'the bar stays slim', await one(t, '.acb').evaluate(el => el.getBoundingClientRect().height));
+    /* one line on a desktop; on a phone the code and link wrap under the message */
+    ok(await one(t, '.acb').evaluate(el => el.getBoundingClientRect().height <= (innerWidth < 768 ? 90 : 60)), 'the bar stays slim', await one(t, '.acb').evaluate(el => el.getBoundingClientRect().height));
     eq(await one(t, '.acb').evaluate(el => el.getAttribute('data-sticky-announcement')), 'false', 'the header stack sees the bar (data-sticky-announcement)');
   } else {
     eq(await css('.pdc', 'backgroundColor'), 'rgb(24, 32, 40)', 'background is the scheme background');
@@ -488,7 +491,7 @@ async function lifecycle(browser, name, width, editing) {
   if (editing) {
     await t.page.evaluate(() => document.querySelectorAll('.shopify-section [data-r7p-block], .shopify-section [data-r7p-block] *').forEach(el => { el.__kept = true; }));
     const before = await t.page.evaluate(() => document.querySelectorAll('.shopify-section [data-r7p-block], .shopify-section [data-r7p-block] *').length);
-    await t.emit(name === 'announcement-code-bar' ? {padding_top: 20, padding_top_mobile: 20, enable_custom_style: true, text_color: '#ff0000'} : {padding_top_desktop: 100, padding_top_mobile: 100, enable_custom_style: true, digit_color: '#ff0000'}); await frames(t);
+    await t.emit(name === 'announcement-code-bar' ? {padding_top: 20, padding_top_mobile: 20, enable_custom_style: true, background_color: '#ff0000'} : {padding_top_desktop: 100, padding_top_mobile: 100, enable_custom_style: true, digit_color: '#ff0000'}); await frames(t);
     eq(await t.page.evaluate(() => [...document.querySelectorAll('.shopify-section [data-r7p-block], .shopify-section [data-r7p-block] *')].filter(el => el.__kept).length), before, 'an unrelated edit keeps every node that was drawn');
     eq(await t.page.evaluate(() => document.getAnimations().length), 0, 'and starts no animation');
   }
@@ -535,6 +538,8 @@ const stubClipboard = (t, mode = 'ok') => t.page.evaluate(mode => {
   window.__copied = [];
   const clip = mode === 'ok' ? {writeText: v => { window.__copied.push(v); return Promise.resolve(); }} : undefined;
   Object.defineProperty(navigator, 'clipboard', {configurable: true, get: () => clip});
+  /* the fixture page is plain http; a real storefront is https */
+  Object.defineProperty(window, 'isSecureContext', {configurable: true, get: () => true});
   if (mode === 'none') document.execCommand = () => false;
 }, mode);
 
@@ -567,7 +572,7 @@ async function copying(browser, width, editing) {
     eq(await read(t, [['.acb__value', '#text'], ['.acb__code', '@data-empty']]), 'LIVE10 | null', 'a code typed live shows at once');
   } else {
     eq(await t.page.locator('#shopify-section-test .acb__code').count(), 0, 'visitors see no code button without a code');
-    eq(await t.css('.acb__msg', 'display'), 'inline', 'and still see the message');
+    eq(await t.css('.acb__msg', 'display'), 'block', 'and still see the message');
   }
   /* Long words on a phone. */
   await t.redraw({blocks: blocks.map(b => b.type === 'message' ? {type: 'message', settings: {...b.settings, text: 'Free delivery on every order placed before the end of the month, wherever you are, with this code at checkout'}} : b.type === 'code' ? {type: 'code', settings: {...b.settings, code: 'WELCOMEBACK2026'}} : b)}); await frames(t);
