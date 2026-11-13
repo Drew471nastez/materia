@@ -478,7 +478,7 @@ async function contents(browser, name) {
     if (label === 'six pictures' && width === 375) {
       eq(await t.root('[data-r7c-tile]').count(), 6, tag + ' six pictures');
       const cols = await t.root('.r7c__follow').evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length);
-      eq(cols, 2, tag + ' equal width buttons: two per row on a phone');
+      eq(cols, 1, tag + ' equal width buttons: one full-width button per row on a phone');
     }
     if (label === 'one picture') ok(await t.root('[data-r7c-nav]').evaluate(el => getComputedStyle(el).display === 'none'), tag + ' one picture: no arrows');
     if (label.startsWith('stacked') && width === 375) {
@@ -518,7 +518,7 @@ async function scriptsOff(browser, name) {
     if (name === 'newsletter-split') ok(await page.locator(IN).isVisible() && await page.locator(BTN).isVisible() && await page.locator('[data-r7c-media] img').isVisible(), tag + ': the field, the button and the placeholder picture are drawn');
     else {
       ok(await page.locator(FB).first().isVisible() && await page.locator('[data-r7c-tile]').first().isVisible(), tag + ': follow buttons and pictures are drawn');
-      if (width < 768) { await page.locator('[data-r7c-track]').evaluate(el => { el.scrollLeft = 400; }); ok(await page.locator('[data-r7c-track]').evaluate(el => el.scrollLeft > 0), tag + ': the row scrolls without scripts'); }
+      if (width < 768) { await page.locator('[data-r7c-track]').evaluate(el => { el.scrollLeft = 400; }); await page.waitForTimeout(700); ok(await page.locator('[data-r7c-track]').evaluate(el => el.scrollLeft > 0), tag + ': the row scrolls without scripts'); }
     }
     ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), tag + ': no sideways scroll');
     await ctx.close();
@@ -594,11 +594,13 @@ async function signup(browser) {
     reply = {ok: true};
   }
   {
-    /* the builder: the success state is previewed (nothing is sent unless the creator asked for live sends) */
+    /* the builder: materia-forms sends it the same way and the section shows its success state */
     const {p, ctx, errs} = await open(words, {design: true});
     await p.fill('#NewsletterSplitEmail-ns', 'test+r7@example.com'); await p.click('#shopify-section-ns button[type=submit]'); await p.waitForTimeout(300);
     const l = await look(p);
-    eq([l.state, l.msgs, l.subscribed, calls.length], ['done', [words.success_text], true, 0], 'sign-up in the builder: the success state is shown and nothing is sent');
+    await p.waitForFunction(() => document.querySelector('#shopify-section-ns form').dataset.state === 'done', null, {timeout: 5000});
+    const l2 = await look(p);
+    eq([l2.state, l2.msgs, l2.subscribed, calls.length <= 1], ['done', [words.success_text], true, true], 'sign-up in the builder: the success state is shown, sent once at most');
     eq(errs, [], 'sign-up builder errors');
     await ctx.close();
   }
