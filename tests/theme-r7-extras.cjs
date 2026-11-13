@@ -262,7 +262,7 @@ async function controls(browser, name, W, editing) {
     const drawn = await probe(t, name);
     eq(!!spec.ok(drawn, base), want, `${tag}: ${where} redrawn ${want ? 'changes its element' : 'leaves this width alone'} ` + (process.env.DEBUG ? JSON.stringify(drawn) : ''));
     if (live) eq(live, drawn, `${tag}: ${where} live equals the redraw`);
-    await t.redraw(block ? {blocks: blocksWith({})} : {settings: orig.settings}); await settle(t);
+    await t.redraw(block ? {blocks: blocksWith({})} : {settings: {...orig.settings, ...back}}); await settle(t);
     eq(await probe(t, name), base, `${tag}: ${where} back to the start after a redraw`);
   };
   const sec = cfg.section(W, editing), blk = cfg.block();
