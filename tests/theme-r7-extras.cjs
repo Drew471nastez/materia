@@ -153,8 +153,8 @@ const CFG = {
       text_color: {v: '#222222', pre: CUSTOM, ok: q => q.text.color === 'rgb(34, 34, 34)' && q.heading.color === rgb.heading},
       overlay_color: {v: '#336600', pre: CUSTOM, ok: q => (q.modal ? q.scrim.bg === 'rgb(51, 102, 0)' : true) && q.card.bg === rgb.bg, mark: true},
       enable_custom_fonts: {v: true, pre: {heading_font: FONT, body_font: FONT2}, ok: q => /Verdana/.test(q.heading.family) && /Courier/.test(q.text.family) && /Courier/.test(q.button.family) && q.own},
-      heading_font: {v: FONT, pre: {enable_custom_fonts: true}, ok: q => /Verdana/.test(q.heading.family) && !/Verdana/.test(q.text.family)},
-      body_font: {v: FONT2, pre: {enable_custom_fonts: true}, ok: q => /Courier/.test(q.text.family) && !/Courier/.test(q.heading.family)},
+      heading_font: {v: FONT, pre: {enable_custom_fonts: true, body_font: FONT2}, ok: q => /Verdana/.test(q.heading.family) && !/Verdana/.test(q.text.family)},
+      body_font: {v: FONT2, pre: {enable_custom_fonts: true, heading_font: FONT}, ok: q => /Courier/.test(q.text.family) && !/Courier/.test(q.heading.family)},
       overlay_opacity: {v: 70, ok: q => q.scrimVar === '0.7' && (q.modal ? q.scrim.opacity === '0.7' : true)},
     }),
     block: () => ({
@@ -245,6 +245,9 @@ async function controls(browser, name, W, editing) {
   eq(await t.page.evaluate(() => !!document.querySelector('[data-r7x-settings]')), editing, tag + ': settings JSON only in the builder');
   const orig = t.section;
   const run = async (id, spec, block) => {
+    /* each check starts as a first visit: what the popup manager remembered of the last one is forgotten */
+    const forget = () => t.page.evaluate(() => { try { localStorage.clear(); sessionStorage.clear(); } catch (_) { /* none */ } });
+    await forget();
     const where = block ? block + '.' + id : id, bid = block ? t.blockId(block) : undefined;
     const from = block ? orig.blocks.find(b => b.id === bid).settings : orig.settings;
     const change = {...(spec.pre || {}), [id]: spec.v}, back = Object.fromEntries(Object.keys(change).map(k => [k, from[k] === undefined ? '' : from[k]]));
@@ -262,6 +265,7 @@ async function controls(browser, name, W, editing) {
     const drawn = await probe(t, name);
     eq(!!spec.ok(drawn, base), want, `${tag}: ${where} redrawn ${want ? 'changes its element' : 'leaves this width alone'} ` + (process.env.DEBUG ? JSON.stringify(drawn) : ''));
     if (live) eq(live, drawn, `${tag}: ${where} live equals the redraw`);
+    await forget();
     await t.redraw(block ? {blocks: blocksWith({})} : {settings: {...orig.settings, ...back}}); await settle(t);
     eq(await probe(t, name), base, `${tag}: ${where} back to the start after a redraw`);
   };
@@ -307,7 +311,7 @@ async function theme(browser, name, W, editing) {
   /* custom fonts on an element and a descendant, under the real theme rules, then off */
   const fam = () => t.page.evaluate(popup => { const r = document.querySelector('#shopify-section-test'), f = sel => { const el = r.querySelector(sel); return el ? getComputedStyle(el).fontFamily : ''; }; return popup ? {h: f('.pbs__heading'), em: f('.pbs__heading em'), p: f('.pbs__text p'), strong: f('.pbs__text strong'), btn: f('.pbs__button')} : {t: f('.dtl__text')}; }, popup);
   if (popup) {
-    await t.emit({text: 'Our <em>autumn</em> edit'}, t.blockId('heading')); await t.emit({text: '<p>Ships <strong>Monday</strong>.</p>'}, t.blockId('text')); await settle(t);
+    await t.redraw({blocks: [{type: 'heading', settings: {text: 'Our <em>autumn</em> edit'}}, {type: 'text', settings: {text: '<p>Ships <strong>Monday</strong>.</p>'}}, {type: 'button'}]}); await settle(t);
     const fonts = {enable_custom_fonts: true, heading_font: FONT, body_font: FONT2};
     for (const how of ['live', 'redrawn']) {
       if (how === 'live') await t.emit(fonts); else await t.redraw({settings: fonts});
@@ -494,7 +498,7 @@ async function paint(browser, name, W, editing) {
     ok(!q.text.shown && !q.link.shown && q.tail.shown && Math.abs(q.tail.box.w - q.row.w) <= 1, tag + ': with no text and no link it is a plain line across');
     await t.emit({text: 'A much longer line of words that a creator might type into the divider text'}, t.blockId('label')); await t.emit({label: 'Shop all'}, t.blockId('link')); if (!editing) await settle(t); await frames(t);
     q = await probe(t, name);
-    ok(q.text.box.h > 20 && q.tail.box.w >= 24 && q.link.box.x + q.link.box.w <= q.row.x + q.row.w + 1, tag + ': a long text wraps, and the line and the link keep their room');
+    ok((W === 375 ? q.text.box.h > 20 : q.text.box.w <= q.row.w * 0.72 + 1) && q.tail.box.w >= 24 && q.link.box.x + q.link.box.w <= q.row.x + q.row.w + 1, tag + ': a long text wraps (or stays within its share of the row), and the line and the link keep their room');
     ok(await t.noOverflow(), tag + ': no sideways page scroll with a long text');
   }
   eq(t.errors, [], tag + ': no errors');

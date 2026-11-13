@@ -74,14 +74,14 @@
     else if (key === 'scheme') { for (const c of [...el.classList]) if (c.startsWith('color-')) el.classList.remove(c); if (v) el.classList.add('color-' + v); }
     else if (key === 'rich') { if (api() && api().rich) api().rich(el, v, st.rich); else el.textContent = plain(v).replace(/<[^>]*>/g, ''); }
     else if (key === 'img') {
-      /* One <img> in the picture box: a new address on the same element, so an unchanged picture never reloads. */
-      const {src, alt} = JSON.parse(v);
+      /* One <img> in the picture box, keyed on the picture's address alone: a new address on the same
+         element, so an unchanged picture (or a change of its description) never reloads it. */
       let img = el.querySelector('img');
-      if (!src) { if (img) img.remove(); return; }
-      if (!img) { img = document.createElement('img'); img.loading = 'lazy'; img.decoding = 'async'; img.width = 960; img.height = 540; el.append(img); }
-      if (img.getAttribute('src') !== src) { img.removeAttribute('srcset'); img.removeAttribute('sizes'); img.src = src; }
-      if (img.getAttribute('alt') !== alt) img.setAttribute('alt', alt);
+      if (!v) { if (img) img.remove(); return; }
+      if (!img) { img = document.createElement('img'); img.loading = 'lazy'; img.decoding = 'async'; img.width = 960; img.height = 540; img.alt = plain(st.s.image_alt); el.append(img); }
+      img.removeAttribute('srcset'); img.removeAttribute('sizes'); img.src = v;
     }
+    else if (key === 'alt') { const img = el.querySelector('img'); if (img && img.getAttribute('alt') !== v) img.setAttribute('alt', v); }
   }
 
   /* ---------- what the settings turn into ---------- */
@@ -145,7 +145,7 @@
       put(root, '@data-own-font', !!(hf || bf));
       put(root, '@data-pbs-config', JSON.stringify(popupConfig(s)));
       const media = root.querySelector('[data-pbs-media]'), src = picture(s.image);
-      if (media) { put(media, 'img', JSON.stringify({src, alt: plain(s.image_alt)})); put(media, 'hidden', !src); }
+      if (media) { put(media, 'img', src); put(media, 'alt', plain(s.image_alt)); put(media, 'hidden', !src); }
       for (const b of st.blocks.values()) {
         const {el, s: bs, type} = b, own = bool(bs.enable_custom_style);
         if (type === 'heading') {
@@ -237,6 +237,8 @@
         frequency: {mode: f.mode === 'every_visit' ? 'always' : f.mode || 'after_days', days: num(f.days, 1)},
         open, close,
       });
+      /* Redrawn with "Show in the builder" off: open again only while the section is selected. */
+      if (design && !c.preview && !p.api.entry.selected && p.api.isOpen()) p.api.hide({reason: 'deselect', instant: true});
     };
     /* Escape on the sheet, and a dialog the browser closed itself: the manager closes it, so it is remembered and the focus goes back. */
     dlg.addEventListener('cancel', e => { e.preventDefault(); if (p.api && p.api.isOpen()) p.api.hide({reason: 'escape'}); else close({instant: true}); }, sig);
