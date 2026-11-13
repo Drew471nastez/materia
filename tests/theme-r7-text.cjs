@@ -537,6 +537,32 @@ async function swipeRow(browser, editing) {
   await d.page.close();
 }
 
+/* A real finger: touch events sent through the browser, as a phone sends them. */
+async function finger(browser, editing) {
+  const name = 'text-columns', t = await mount(browser, name, {width: 375, height: 520, editing, assets: ASSETS, settings: {...baseSettings(name), mobile_layout: 'swipe'}, blocks: baseBlocks(name)});
+  await t.page.evaluate(() => { const d = document.createElement('div'); d.style.height = '1500px'; document.body.append(d); });
+  const cdp = await t.page.context().newCDPSession(t.page);
+  await cdp.send('Emulation.setTouchEmulationEnabled', {enabled: true, maxTouchPoints: 1});
+  const track = one(t, '[data-r7t-track]'), box = await track.boundingBox(), step = await track.evaluate(el => el.children[1].offsetLeft - el.children[0].offsetLeft);
+  const drag = async (dx, dy) => {
+    const x = box.x + 250, y = box.y + 60;
+    await cdp.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x, y}]});
+    for (let i = 1; i <= 10; i++) { await cdp.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: x + dx * i / 10, y: y + dy * i / 10}]}); await t.page.waitForTimeout(16); }
+    await cdp.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+    await t.page.waitForTimeout(900);
+  };
+  await drag(-200, 0);
+  const x = await track.evaluate(el => Math.round(el.scrollLeft));
+  ok(Math.abs(x - step) <= 2, 'a finger dragging sideways moves the row and it settles on the next column', x + ' / ' + step);
+  eq(await t.page.evaluate(() => Math.round(scrollY)), 0, 'while the page stays where it was');
+  eq(await one(t, '[data-r7t-prev]').isDisabled(), false, 'and the back arrow comes on');
+  await drag(0, -160);
+  ok(await t.page.evaluate(() => scrollY) > 60, 'a finger dragging up on the row scrolls the page: the row never holds it', await t.page.evaluate(() => scrollY));
+  eq(await track.evaluate(el => Math.round(el.scrollLeft)), x, 'and the row stays on its column');
+  eq(t.errors.join('; '), '', 'no errors');
+  await t.page.close();
+}
+
 /* The pinned heading: plain position: sticky under the sticky header, one column on a phone. */
 async function pinned(browser, editing) {
   const name = 'sticky-heading-text', settings = baseSettings(name);
@@ -622,7 +648,7 @@ async function tablet(browser, editing) {
         }
         where = name + ' 1366 priority off';
         if (editing) await inheritance(browser, name, 1366, true, 'off');
-        if (name === 'text-columns') { where = name + ' swipe row ' + (editing ? 'editor' : 'storefront'); await swipeRow(browser, editing); await tablet(browser, editing); }
+        if (name === 'text-columns') { where = name + ' swipe row ' + (editing ? 'editor' : 'storefront'); await swipeRow(browser, editing); await finger(browser, editing); await tablet(browser, editing); }
         if (name === 'sticky-heading-text') { where = name + ' pinned heading ' + (editing ? 'editor' : 'storefront'); await pinned(browser, editing); }
       }
     }
