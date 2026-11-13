@@ -225,13 +225,31 @@ if (!Object.hasOwn) {
       } catch (_) {}
       return null;
     };
+    /* One cart read at a time. After an add, the count refresh, the drawer and
+       the check above each asked for /cart.js on their own (three requests
+       for one answer). A read that starts while another is in flight, or just
+       landed, with no cart change in between, gets a copy of that answer. */
+    let flight = null;
+    let changeSeq = 0;
     const synced = function (input, init) {
       const kind = classify(input, init);
+      if (kind === "read") {
+        const shared = flight;
+        if (shared && shared.seq === changeSeq && (!shared.doneAt || performance.now() - shared.doneAt < 300)) {
+          const args = arguments;
+          return shared.ready.then(
+            () => (shared.pristine ? shared.pristine.clone() : previous.apply(window, args)),
+            () => previous.apply(window, args)
+          );
+        }
+      }
+      if (kind === "change") changeSeq++;
       const result = previous.apply(window, arguments);
       if (!kind) return result;
       const at = now();
       if (kind === "change") {
         return result.then(response => {
+          changeSeq++;
           try {
             if (response && response.ok) {
               response.clone().json()
@@ -253,6 +271,14 @@ if (!Object.hasOwn) {
         ]);
       }).catch(() => null);
       reading = { started: performance.now(), job };
+      const mine = { seq: changeSeq, pristine: null, doneAt: 0, ready: null };
+      mine.ready = result.then(response => {
+        try { if (response && response.ok) mine.pristine = response.clone(); } catch (_) {}
+        mine.doneAt = performance.now();
+        setTimeout(() => { if (flight === mine) flight = null; mine.pristine = null; }, 400);
+      });
+      mine.ready.catch(() => { if (flight === mine) flight = null; });
+      flight = mine;
       return job.then(() => result);
     };
     synced.__materiaResilient = previous.__materiaResilient;
