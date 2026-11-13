@@ -1,0 +1,413 @@
+<template compat="shopify">
+<script src="{{ 'live-r7-extras.js' | asset_url }}" defer="defer"></script>
+{% render 'theme-type' %}
+<script src="{{ 'materia-popups.js' | asset_url }}" defer="defer"></script>
+{%- comment -%}
+  Materia Themes. Bottom Sheet Popup: one short message with a button. On a
+  phone it is a sheet that slides up from the bottom over a dimmed page
+  (drag the handle down, tap the dimmed page, the close button or Escape to
+  close it); on a computer it is a small card in a corner of the screen
+  that leaves the page usable. Heading, Text and Button blocks, and an
+  optional picture.
+
+  It opens through the theme's popup manager (shopify/assets/materia-popups.js):
+  the triggers (on load, after a delay, on scroll, on exit intent, after
+  page views, from a link) and how often it comes back are the manager's,
+  and it waits its turn behind another popup or an open cookie banner.
+  shopify/assets/live-r7-extras.js registers it, opens the native <dialog>
+  (showModal() for the sheet, show() for the corner card), handles the drag
+  and gives the focus back on close. In the builder no trigger runs: with
+  "Show in the builder" on, the sheet or card is drawn in the page, never
+  over it; off, it shows while the section is selected.
+{%- endcomment -%}
+{%- liquid
+  assign st = section.settings
+  assign sid = section.id
+  assign design = request.design_mode
+  assign color_scheme = st.color_scheme.id | default: st.color_scheme | default: 'default-color-scheme'
+  assign preview = false
+  if design and st.editor_mode
+    assign preview = true
+  endif
+  assign custom = st.enable_custom_style
+  assign own_fonts = false
+  if st.enable_custom_fonts
+    if st.heading_font.family != blank or st.body_font.family != blank
+      assign own_fonts = true
+    endif
+  endif
+  assign img = st.image
+  assign b_heading = section.blocks | where: 'type', 'heading' | first
+  assign close_label = 'accessibility.close' | t
+-%}
+{%- capture pbs_config -%}
+{"trigger":{"mode":{{ st.open_mode | default: 'delay' | json }},"delay":{{ st.delay_s | default: 0 | json }},"scroll":{{ st.scroll_pct | default: 50 | json }},"views":{{ st.page_views | default: 2 | json }}},"frequency":{"mode":{{ st.after_dismiss | default: 'after_days' | json }},"days":{{ st.hide_days | default: 1 | json }}},"preview":{% if st.editor_mode %}true{% else %}false{% endif %}}
+{%- endcapture -%}
+{%- capture pbs_vars -%}
+--pbs-w: {{ st.card_width | default: 360 }}px; --pbs-scrim-o: {{ st.overlay_opacity | default: 0 | times: 0.01 }};
+{%- if custom -%}
+ --pbs-bg: {% render 'scheme-color', color: st.card_bg, fallback: 'var(--color-background)' %}; --pbs-text: {% render 'scheme-color', color: st.text_color, fallback: 'var(--color-text)' %}; --pbs-scrim: {% render 'scheme-color', color: st.overlay_color, fallback: 'rgb(0 0 0)' %};
+{%- endif -%}
+{%- render 'page-popup-fonts', st: st -%}
+{%- endcapture -%}
+{%- if own_fonts -%}
+<style>
+  {%- if st.heading_font.family != blank -%}{{ st.heading_font | font_face: font_display: 'swap' }}{%- endif -%}
+  {%- if st.body_font.family != blank -%}{{ st.body_font | font_face: font_display: 'swap' }}{%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- endif -%}
+<style>
+  #shopify-section-{{ sid }} { position: static; }
+  #shopify-section-{{ sid }} .pbs { font-family: var(--body-font, inherit); color: var(--pbs-text, var(--color-text)); }
+  #shopify-section-{{ sid }} .pbs *, #shopify-section-{{ sid }} .pbs *::before, #shopify-section-{{ sid }} .pbs *::after { box-sizing: border-box; }
+  #shopify-section-{{ sid }} .pbs [hidden] { display: none !important; }
+  #shopify-section-{{ sid }} .pbs__dialog {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    max-width: none;
+    max-height: none;
+    background: transparent;
+    color: inherit;
+    overflow: visible;
+  }
+  #shopify-section-{{ sid }} .pbs__dialog::backdrop { background: transparent; }
+  #shopify-section-{{ sid }} .pbs__scrim { display: none; }
+  #shopify-section-{{ sid }} .pbs__card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--pbs-bg, var(--color-background));
+    color: var(--pbs-text, var(--color-text));
+    border-radius: var(--rounded-radius, 8px);
+    box-shadow: 0 18px 48px rgb(0 0 0 / .18);
+    text-align: var(--pbs-align, start);
+    outline: none;
+  }
+  #shopify-section-{{ sid }} .pbs[data-align='center'] .pbs__card { --pbs-align: center; }
+  #shopify-section-{{ sid }} .pbs__grip { display: none; }
+  #shopify-section-{{ sid }} .pbs__close {
+    position: absolute;
+    top: 6px;
+    inset-inline-end: 6px;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--pbs-heading, var(--color-heading));
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #shopify-section-{{ sid }} .pbs__close::before { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: var(--pbs-bg, var(--color-background)); transition: transform .15s ease; }
+  #shopify-section-{{ sid }} .pbs__close svg { position: relative; width: 14px; height: 14px; }
+  #shopify-section-{{ sid }} .pbs__close:active::before { transform: scale(.88); }
+  #shopify-section-{{ sid }} .pbs__close:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+  #shopify-section-{{ sid }} .pbs__media { position: relative; flex: none; aspect-ratio: 16 / 9; overflow: hidden; background: color-mix(in srgb, var(--color-text) 8%, var(--color-background)); }
+  #shopify-section-{{ sid }} .pbs__media img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  #shopify-section-{{ sid }} .pbs__body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 22px 22px 24px;
+  }
+  #shopify-section-{{ sid }} .pbs[data-align='center'] .pbs__body { align-items: center; }
+  #shopify-section-{{ sid }} .pbs__media[hidden] + .pbs__body { padding-top: 24px; padding-inline-end: 56px; }
+  #shopify-section-{{ sid }} .pbs[data-align='center'] .pbs__media[hidden] + .pbs__body { padding-inline: 56px; }
+  #shopify-section-{{ sid }} .pbs__heading {
+    margin: 0;
+    max-width: 100%;
+    font-family: var(--heading-font, inherit);
+    font-size: var(--pbs-hs-m, 20px);
+    line-height: var(--heading-line-height, 1.2);
+    color: var(--pb-c, var(--color-heading));
+    overflow-wrap: break-word;
+    text-wrap: balance;
+  }
+  #shopify-section-{{ sid }} .pbs__text { max-width: 100%; font-size: 15px; line-height: var(--body-line-height, 1.5); color: var(--pb-c, var(--pbs-text, var(--color-text))); overflow-wrap: break-word; }
+  #shopify-section-{{ sid }} .pbs__text :is(p, li) { color: inherit; font-size: inherit; }
+  #shopify-section-{{ sid }} .pbs__text > :first-child { margin-top: 0; }
+  #shopify-section-{{ sid }} .pbs__text > :last-child { margin-bottom: 0; }
+  #shopify-section-{{ sid }} .pbs__text a { color: inherit; }
+  #shopify-section-{{ sid }} .pbs__button { margin-top: 8px; min-height: 44px; text-decoration: none; }
+
+  /* The sheet: a phone, opened with showModal() */
+  #shopify-section-{{ sid }} .pbs__dialog:modal {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: contain;
+  }
+  #shopify-section-{{ sid }} .pbs__dialog:modal .pbs__scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    background: var(--pbs-scrim, rgb(0 0 0));
+    opacity: var(--pbs-scrim-o, .4);
+    -webkit-tap-highlight-color: transparent;
+    animation: pbs-fade .3s ease backwards;
+  }
+  #shopify-section-{{ sid }} .pbs__dialog:modal .pbs__card {
+    position: absolute;
+    inset: auto 0 0;
+    max-height: calc(var(--sl-vh, 1vh) * 88);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: var(--rounded-radius, 8px) var(--rounded-radius, 8px) 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -8px 32px rgb(0 0 0 / .16);
+    animation: pbs-up .34s cubic-bezier(.2, .8, .2, 1) backwards;
+  }
+  #shopify-section-{{ sid }} :is(.pbs__dialog:modal, [data-pbs-design] .pbs__dialog[data-pbs-sheet]) .pbs__grip {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    flex: none;
+    height: 26px;
+    padding-top: 10px;
+    touch-action: pan-x;
+    cursor: grab;
+  }
+  #shopify-section-{{ sid }} .pbs__grip span { display: block; width: 40px; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--pbs-text, var(--color-text)) 35%, transparent); }
+  #shopify-section-{{ sid }} :is(.pbs__dialog:modal, [data-pbs-design] .pbs__dialog[data-pbs-sheet]) .pbs__media { margin: 4px 16px 0; border-radius: calc(var(--rounded-radius, 8px) * .75); }
+  #shopify-section-{{ sid }} :is(.pbs__dialog:modal, [data-pbs-design] .pbs__dialog[data-pbs-sheet]) .pbs__body { padding: 16px 20px 24px; }
+  #shopify-section-{{ sid }} :is(.pbs__dialog:modal, [data-pbs-design] .pbs__dialog[data-pbs-sheet]) .pbs__media[hidden] + .pbs__body { padding-top: 8px; padding-inline-end: 56px; }
+  #shopify-section-{{ sid }} .pbs[data-align='center'] :is(.pbs__dialog:modal, .pbs__dialog[data-pbs-sheet]) .pbs__media[hidden] + .pbs__body { padding-inline: 56px; }
+  #shopify-section-{{ sid }} :is(.pbs__dialog:modal, [data-pbs-design] .pbs__dialog[data-pbs-sheet]) .pbs__close { top: 2px; }
+  #shopify-section-{{ sid }} :is(.pbs__dialog:modal, [data-pbs-design] .pbs__dialog[data-pbs-sheet]) .pbs__button { align-self: stretch; }
+
+  /* The corner card: a computer, opened with show() */
+  #shopify-section-{{ sid }} .pbs:not([data-pbs-design]) .pbs__dialog[open]:not(:modal) {
+    position: fixed;
+    inset: auto 24px calc(24px + var(--materia-bottom-inset, 0px)) auto;
+    z-index: 2147483000;
+    width: min(var(--pbs-w, 360px), calc(100vw - 48px));
+    max-height: calc(var(--sl-vh, 1vh) * 100 - 48px);
+    animation: pbs-rise .3s cubic-bezier(.2, .8, .2, 1) backwards;
+  }
+  #shopify-section-{{ sid }} .pbs[data-corner='left']:not([data-pbs-design]) .pbs__dialog[open]:not(:modal) { inset: auto auto calc(24px + var(--materia-bottom-inset, 0px)) 24px; }
+  #shopify-section-{{ sid }} .pbs:not([data-pbs-design]) .pbs__dialog[open]:not(:modal) .pbs__card { max-height: inherit; overflow-y: auto; }
+
+  /* In the builder: drawn in the page, never over it */
+  #shopify-section-{{ sid }} .pbs[data-pbs-design] .pbs__dialog[open] {
+    position: relative;
+    inset: auto;
+    display: flex;
+    justify-content: flex-end;
+    width: auto;
+    padding: 24px;
+  }
+  #shopify-section-{{ sid }} .pbs[data-pbs-design][data-corner='left'] .pbs__dialog[open] { justify-content: flex-start; }
+  #shopify-section-{{ sid }} .pbs[data-pbs-design] .pbs__card { width: min(var(--pbs-w, 360px), 100%); }
+  #shopify-section-{{ sid }} .pbs[data-pbs-design] .pbs__dialog[data-pbs-sheet] { justify-content: center; padding: 24px 0 0; }
+  #shopify-section-{{ sid }} .pbs[data-pbs-design] .pbs__dialog[data-pbs-sheet] .pbs__card { width: 100%; max-width: 480px; border-radius: var(--rounded-radius, 8px) var(--rounded-radius, 8px) 0 0; box-shadow: 0 -8px 32px rgb(0 0 0 / .12); }
+
+  #shopify-section-{{ sid }} .pbs[data-closing] .pbs__scrim { opacity: 0; transition: opacity .22s ease; }
+  @keyframes pbs-up { from { transform: translateY(100%); } }
+  @keyframes pbs-fade { from { opacity: 0; } }
+  @keyframes pbs-rise { from { opacity: 0; transform: translateY(12px); } }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .pbs__heading { font-size: var(--pbs-hs, 22px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ sid }} .pbs__card, #shopify-section-{{ sid }} .pbs__scrim, #shopify-section-{{ sid }} .pbs__dialog { animation: none !important; transition: none !important; }
+    #shopify-section-{{ sid }} .pbs__close::before { transition: none; }
+  }
+{% comment %}{% endcomment %}</style>
+<div
+  class="pbs color-{{ color_scheme }}"
+  data-r7x="popup-bottom-sheet"
+  data-r7x-section="{{ sid }}"{% if design %}
+  data-r7x-settings="{{ st | json | escape }}"
+  data-pbs-design{% endif %}
+  data-popup-root="{{ sid }}"
+  data-pbs-config="{{ pbs_config | strip | escape }}"
+  data-corner="{{ st.corner | default: 'right' }}"
+  data-align="{{ st.text_align | default: 'left' }}"{% if own_fonts %}
+  data-own-font{% endif %}
+  style="{{ pbs_vars | strip | strip_newlines }}"
+  aria-hidden="{% if preview %}false{% else %}true{% endif %}"
+>
+  <dialog class="pbs__dialog" data-pbs-dialog{% if b_heading %} aria-labelledby="pbs-title-{{ sid }}"{% else %} aria-label="{{ st.image_alt | default: shop.name | escape }}"{% endif %}{% if preview %} open{% endif %}>
+    <div class="pbs__scrim" data-pbs-scrim aria-hidden="true"></div>
+    <div class="pbs__card" data-pbs-card tabindex="-1">
+      <div class="pbs__grip" data-pbs-grip aria-hidden="true"><span></span></div>
+      <button type="button" class="pbs__close" data-popup-close aria-label="{{ close_label | escape }}">
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+      <div class="pbs__media" data-pbs-media{% if img == blank %} hidden{% endif %}>
+        {%- if img != blank -%}
+          <img src="{{ img | image_url: width: 960 }}" srcset="{{ img | image_url: width: 480 }} 480w, {{ img | image_url: width: 960 }} 960w" sizes="(min-width: 768px) {{ st.card_width | default: 360 }}px, 100vw" alt="{{ st.image_alt | escape }}" width="{{ img.width | default: 960 }}" height="{{ img.height | default: 540 }}" loading="lazy" decoding="async">
+        {%- endif -%}
+      </div>
+      <div class="pbs__body">
+        {%- for block in section.blocks -%}
+          {%- assign bs = block.settings -%}
+          {%- capture b_color -%}{% if bs.enable_custom_style %}{% render 'scheme-color', color: bs.color, fallback: 'none' %}{% else %}none{% endif %}{%- endcapture -%}
+          {%- assign b_color = b_color | strip -%}
+          {%- case block.type -%}
+            {%- when 'heading' -%}
+              <h2 class="pbs__heading"{% if block.id == b_heading.id %} id="pbs-title-{{ sid }}"{% endif %} data-r7x-block="{{ block.id }}" data-r7x-type="heading"{% if design %} data-r7x-settings="{{ bs | json | escape }}"{% endif %}{% if bs.text == blank %} hidden{% endif %} style="--pbs-hs: {{ bs.size | default: 22 }}px; --pbs-hs-m: {{ bs.size_mobile | default: 20 }}px;{% if b_color != 'none' %} --pb-c: {{ b_color }};{% endif %}" {{ block.shopify_attributes }}>{{ bs.text }}</h2>
+            {%- when 'text' -%}
+              <div class="pbs__text" data-r7x-block="{{ block.id }}" data-r7x-type="text"{% if design %} data-r7x-settings="{{ bs | json | escape }}"{% endif %}{% if bs.text == blank %} hidden{% endif %}{% if b_color != 'none' %} style="--pb-c: {{ b_color }};"{% endif %} {{ block.shopify_attributes }}>{{ bs.text }}</div>
+            {%- when 'button' -%}
+              {%- assign b_kind = bs.style | default: 'primary' -%}
+              <a class="pbs__button btn-{{ b_kind }}" data-theme-button="{{ b_kind }}" data-sl-button data-pbs-cta data-r7x-block="{{ block.id }}" data-r7x-type="button"{% if design %} data-r7x-settings="{{ bs | json | escape }}"{% endif %} data-r7x-default-href="{{ routes.all_products_collection_url }}" href="{% if bs.link != blank %}{{ bs.link }}{% else %}{{ routes.all_products_collection_url }}{% endif %}"{% if bs.label == blank %} hidden{% endif %} {{ block.shopify_attributes }}>{{ bs.label | escape }}</a>
+          {%- endcase -%}
+        {%- endfor -%}
+      </div>
+    </div>
+  </dialog>
+</div>
+</template>
+
+<schema>
+{
+  "shopify": {
+    "name": "Bottom Sheet Popup",
+    "tag": "section",
+    "class": "section-popup-bottom-sheet",
+    "enabled_on": {
+      "groups": ["custom.overlay"]
+    },
+    "settings": [
+      { "type": "header", "content": "General" },
+      { "type": "color_scheme", "id": "color_scheme", "label": "Color scheme", "default": "default-color-scheme" },
+      { "type": "header", "content": "Trigger" },
+      {
+        "type": "select",
+        "id": "open_mode",
+        "label": "Opens",
+        "default": "delay",
+        "options": [
+          { "value": "immediate", "label": "On page load" },
+          { "value": "delay", "label": "After a delay" },
+          { "value": "scroll", "label": "On scroll" },
+          { "value": "exit", "label": "On exit intent" },
+          { "value": "pageviews", "label": "After page views" },
+          { "value": "manual", "label": "From a link" }
+        ],
+        "info": "From a link: any link to #open-popup opens it. Exit intent on a phone opens after the delay."
+      },
+      { "type": "range", "id": "delay_s", "label": "Delay", "min": 0, "max": 60, "step": 1, "unit": "s", "default": 5, "visible_if": "{{ section.settings.open_mode == 'delay' or section.settings.open_mode == 'exit' or section.settings.open_mode == 'pageviews' }}" },
+      { "type": "range", "id": "scroll_pct", "label": "Scrolled", "min": 10, "max": 100, "step": 5, "unit": "%", "default": 50, "visible_if": "{{ section.settings.open_mode == 'scroll' }}" },
+      { "type": "range", "id": "page_views", "label": "Page views", "min": 1, "max": 10, "step": 1, "default": 2, "visible_if": "{{ section.settings.open_mode == 'pageviews' }}" },
+      { "type": "header", "content": "Behaviour" },
+      {
+        "type": "select",
+        "id": "after_dismiss",
+        "label": "Show again",
+        "default": "after_days",
+        "options": [
+          { "value": "every_visit", "label": "Every visit" },
+          { "value": "after_days", "label": "After days" },
+          { "value": "never", "label": "Never" }
+        ]
+      },
+      { "type": "range", "id": "hide_days", "label": "Days", "min": 1, "max": 30, "step": 1, "unit": "d", "default": 1, "visible_if": "{{ section.settings.after_dismiss == 'after_days' }}" },
+      { "type": "checkbox", "id": "editor_mode", "label": "Show in the builder", "default": true, "info": "Draws it in the page while you edit. Off, it shows while the section is selected." },
+      { "type": "header", "content": "Layout" },
+      {
+        "type": "select",
+        "id": "corner",
+        "label": "Corner on computers",
+        "default": "right",
+        "options": [
+          { "value": "left", "label": "Left" },
+          { "value": "right", "label": "Right" }
+        ]
+      },
+      { "type": "range", "id": "card_width", "label": "Card width on computers", "min": 280, "max": 480, "step": 10, "unit": "px", "default": 360 },
+      {
+        "type": "select",
+        "id": "text_align",
+        "label": "Text alignment",
+        "default": "left",
+        "options": [
+          { "value": "left", "label": "Left" },
+          { "value": "center", "label": "Center" }
+        ]
+      },
+      { "type": "header", "content": "Media" },
+      { "type": "image_picker", "id": "image", "label": "Picture", "info": "Optional. Shown above the text, cropped to 16:9." },
+      { "type": "text", "id": "image_alt", "label": "Picture description", "info": "Read out by screen readers." },
+      { "type": "header", "content": "Appearance" },
+      { "type": "checkbox", "id": "enable_custom_style", "label": "Enable custom styling", "default": false, "info": "Off: colours follow the colour scheme." },
+      { "type": "color", "id": "card_bg", "label": "Background", "visible_if": "{{ section.settings.enable_custom_style }}" },
+      { "type": "color", "id": "text_color", "label": "Text", "visible_if": "{{ section.settings.enable_custom_style }}" },
+      { "type": "color", "id": "overlay_color", "label": "Dimmed page", "visible_if": "{{ section.settings.enable_custom_style }}" },
+      { "type": "header", "content": "Typography" },
+      { "type": "checkbox", "id": "enable_custom_fonts", "label": "Enable custom fonts", "default": false, "info": "Off: fonts follow Theme settings > Typography." },
+      { "type": "font_picker", "id": "heading_font", "label": "Heading font", "default": "assistant_n4", "visible_if": "{{ section.settings.enable_custom_fonts }}" },
+      { "type": "font_picker", "id": "body_font", "label": "Text font", "default": "assistant_n4", "visible_if": "{{ section.settings.enable_custom_fonts }}" },
+      { "type": "header", "content": "Mobile" },
+      { "type": "range", "id": "overlay_opacity", "label": "Dim the page behind the sheet", "min": 0, "max": 90, "step": 5, "unit": "%", "default": 40 }
+    ],
+    "blocks": [
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          { "type": "inline_richtext", "id": "text", "label": "Heading", "default": "See what is new in the shop" },
+          { "type": "header", "content": "Appearance" },
+          { "type": "checkbox", "id": "enable_custom_style", "label": "Enable custom styling", "default": false },
+          { "type": "color", "id": "color", "label": "Color", "visible_if": "{{ block.settings.enable_custom_style }}" },
+          { "type": "header", "content": "Typography" },
+          { "type": "range", "id": "size", "label": "Size (desktop)", "min": 16, "max": 40, "step": 1, "unit": "px", "default": 22 },
+          { "type": "range", "id": "size_mobile", "label": "Size (mobile)", "min": 16, "max": 36, "step": 1, "unit": "px", "default": 20 }
+        ]
+      },
+      {
+        "type": "text",
+        "name": "Text",
+        "limit": 1,
+        "settings": [
+          { "type": "richtext", "id": "text", "label": "Text", "default": "<p>Point visitors to one page: a new collection, a gift guide or your delivery dates.</p>" },
+          { "type": "header", "content": "Appearance" },
+          { "type": "checkbox", "id": "enable_custom_style", "label": "Enable custom styling", "default": false },
+          { "type": "color", "id": "color", "label": "Color", "visible_if": "{{ block.settings.enable_custom_style }}" }
+        ]
+      },
+      {
+        "type": "button",
+        "name": "Button",
+        "limit": 1,
+        "settings": [
+          { "type": "text", "id": "label", "label": "Button label", "default": "Shop all" },
+          { "type": "url", "id": "link", "label": "Button link", "info": "Empty: all products." },
+          {
+            "type": "select",
+            "id": "style",
+            "label": "Button style",
+            "default": "primary",
+            "options": [
+              { "value": "primary", "label": "Primary" },
+              { "value": "secondary", "label": "Secondary" }
+            ]
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Bottom Sheet Popup",
+        "category": "Promotional Popup",
+        "blocks": [
+          { "type": "heading" },
+          { "type": "text" },
+          { "type": "button" }
+        ]
+      }
+    ]
+  }
+}
+</schema>
