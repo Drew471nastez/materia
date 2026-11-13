@@ -151,11 +151,11 @@ const CFG = {
       enable_custom_style: {v: true, pre: {card_bg: '#abcdef', text_color: '#222222'}, ok: q => q.card.bg === 'rgb(171, 205, 239)' && q.text.color === 'rgb(34, 34, 34)'},
       card_bg: {v: '#abcdef', pre: CUSTOM, ok: q => q.card.bg === 'rgb(171, 205, 239)'},
       text_color: {v: '#222222', pre: CUSTOM, ok: q => q.text.color === 'rgb(34, 34, 34)' && q.heading.color === rgb.heading},
-      overlay_color: {v: '#336600', pre: CUSTOM, ok: q => (q.modal ? q.scrim.bg === 'rgb(51, 102, 0)' : true) && q.card.bg === rgb.bg, mark: true},
+      overlay_color: {v: '#336600', pre: CUSTOM, ok: q => (W === 375 ? q.scrim.display === 'block' && q.scrim.bg === 'rgb(51, 102, 0)' : q.scrim.display === 'none') && q.card.bg === rgb.bg},
       enable_custom_fonts: {v: true, pre: {heading_font: FONT, body_font: FONT2}, ok: q => /Verdana/.test(q.heading.family) && /Courier/.test(q.text.family) && /Courier/.test(q.button.family) && q.own},
       heading_font: {v: FONT, pre: {enable_custom_fonts: true, body_font: FONT2}, ok: q => /Verdana/.test(q.heading.family) && !/Verdana/.test(q.text.family)},
       body_font: {v: FONT2, pre: {enable_custom_fonts: true, heading_font: FONT}, ok: q => /Courier/.test(q.text.family) && !/Courier/.test(q.heading.family)},
-      overlay_opacity: {v: 70, ok: q => q.scrimVar === '0.7' && (q.modal ? q.scrim.opacity === '0.7' : true)},
+      overlay_opacity: {v: 70, ok: q => q.scrimVar === '0.7' && (W === 375 ? q.scrim.display === 'block' && q.scrim.opacity === '0.7' : q.scrim.display === 'none')},
     }),
     block: () => ({
       heading: {
@@ -452,7 +452,7 @@ async function lifecycle(browser, name, W) {
   if (popup) {
     /* one open event per opener click after several redraws: the manager holds one entry */
     await u.emit({editor_mode: false}); await settle(u);
-    await u.page.evaluate(() => { window.__opens = 0; document.addEventListener('materia:popup-open', () => window.__opens++); const a = document.createElement('a'); a.href = '#bottom-sheet'; a.id = 'opener'; a.textContent = 'open'; document.body.prepend(a); });
+    await u.page.evaluate(() => { window.__opens = 0; const a = document.createElement('a'); a.href = '#bottom-sheet'; a.id = 'opener'; a.textContent = 'open'; document.body.prepend(a); });
     await u.page.click('#opener'); await settle(u);
     eq(await u.page.evaluate(() => [window.__opens, document.querySelector('#shopify-section-test dialog').open]), [1, true], tag + ': a link to #bottom-sheet opens it once after several redraws');
   }
@@ -584,8 +584,9 @@ async function behaviour(browser, W) {
   await t.page.waitForTimeout(1000); await frames(t);
   ok(await isOpen(t), tag + ': After a delay: open after it');
   await t.page.close();
-  t = await mountOf(browser, name, {width: W, editing: false, settings: {open_mode: 'scroll', scroll_pct: 50}});
+  t = await mountOf(browser, name, {width: W, editing: false, settings: {open_mode: 'scroll', scroll_pct: 50}, inlineScripts: false, assets: []});
   await t.page.evaluate(() => { document.body.style.minHeight = '4000px'; });
+  for (const f of [MANAGER, ASSET]) await t.page.addScriptTag({content: fs.readFileSync(path.join(ROOT, 'shopify/assets', f), 'utf8')});
   await settle(t, 200);
   ok(!await isOpen(t), tag + ': On scroll: not at the top');
   await t.page.evaluate(() => window.scrollTo(0, 2500)); await settle(t, 200);
