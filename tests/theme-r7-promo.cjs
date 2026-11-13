@@ -600,13 +600,13 @@ async function timing(browser, width, editing) {
   const n = await t.page.evaluate(() => window.MateriaLiveR7Promo.ticks()) - t0;
   ok(n >= 2 && n <= 3, 'ticks once a second', n);
   /* Off screen and in a hidden tab. */
-  await t.page.evaluate(() => { document.getElementById('shopify-section-test').style.marginTop = '3000px'; });
+  await t.page.evaluate(() => { const gap = document.createElement('div'); gap.id = 'r7p-gap'; gap.style.height = '4000px'; document.body.prepend(gap); });
   await t.page.waitForTimeout(300);
   eq(await t.page.evaluate(() => window.MateriaLiveR7Promo.pending()), 0, 'paused off screen');
   const t1 = await t.page.evaluate(() => window.MateriaLiveR7Promo.ticks());
   await t.page.waitForTimeout(1300);
   eq(await t.page.evaluate(() => window.MateriaLiveR7Promo.ticks()), t1, 'no ticks while off screen');
-  await t.page.evaluate(() => { document.getElementById('shopify-section-test').style.marginTop = ''; });
+  await t.page.evaluate(() => document.getElementById('r7p-gap').remove());
   await t.page.waitForTimeout(300);
   eq(await t.page.evaluate(() => window.MateriaLiveR7Promo.pending()), 1, 'running again back on screen');
   await t.page.evaluate(() => { Object.defineProperty(document, 'hidden', {configurable: true, get: () => true}); document.dispatchEvent(new Event('visibilitychange')); });
@@ -620,9 +620,9 @@ async function timing(browser, width, editing) {
   /* The end: two seconds away. */
   await t.redraw({settings: {end_iso: new Date(Date.now() + 2500).toISOString().slice(0, 19), time_zone: '+00:00'}}); await frames(t);
   eq(await read(t, [['.pdc', '@data-state']]), 'running', 'running before the moment');
-  eq(await read(t, [['[data-r7p-before]', 'display'], ['[data-r7p-after]', 'display']]), 'inline | none', 'the button reads its first label');
+  eq(await read(t, [['[data-r7p-before]', 'display'], ['[data-r7p-after]', 'display']]), 'block | none', 'the button reads its first label');
   await t.page.waitForTimeout(3200);
-  eq(await read(t, [['.pdc', '@data-state'], ['.pdc__timer', 'display'], ['.pdc__ended', 'display'], ['.pdc__ended', '#text'], ['[data-r7p-before]', 'display'], ['[data-r7p-after]', 'display']]), 'ended | none | block | On sale now | none | inline', 'at the moment: the on sale message and the sale label');
+  eq(await read(t, [['.pdc', '@data-state'], ['.pdc__timer', 'display'], ['.pdc__ended', 'display'], ['.pdc__ended', '#text'], ['[data-r7p-before]', 'display'], ['[data-r7p-after]', 'display']]), 'ended | none | block | On sale now | none | block', 'at the moment: the on sale message and the sale label');
   eq(await t.page.evaluate(() => window.MateriaLiveR7Promo.pending()), 0, 'and the timer stops');
   await t.page.close();
   /* Hidden once it ended. */
@@ -633,10 +633,10 @@ async function timing(browser, width, editing) {
   /* Sold out once on sale: no button. Before the moment the button stays. */
   const soldOut = {...PANTS, available: false};
   t = await mount(browser, name, {width, editing, settings: {...settings, end_iso: PAST, product: soldOut}, blocks, assets: ASSETS});
-  eq(await read(t, [['.pdc__btn', 'display'], ['.pdc__sold', 'display'], ['.pdc__sold', '#text']]), 'none | inline | sold out', 'a sold out product shows the sold out word and no button');
+  eq(await read(t, [['.pdc__btn', 'display'], ['.pdc__sold', 'display'], ['.pdc__sold', '#text']]), 'none | block | sold out', 'a sold out product shows the sold out word and no button');
   await t.page.close();
   t = await mount(browser, name, {width, editing, settings: {...settings, product: soldOut}, blocks, assets: ASSETS});
-  eq(await read(t, [['.pdc__btn', 'display'], ['.pdc__sold', 'display']]), 'inline-flex | none', 'before the moment the button stays');
+  eq(await read(t, [['.pdc__btn', 'display'], ['.pdc__sold', 'display']]), 'flex | none', 'before the moment the button stays');
   await t.page.close();
   /* No date: a hint in the builder, nothing for visitors. No product: a placeholder in the builder. */
   t = await mount(browser, name, {width, editing, assets: ASSETS});
