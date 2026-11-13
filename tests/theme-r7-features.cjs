@@ -212,6 +212,14 @@ async function suite(cfg) {
       await rm.page.close();
       process.stdout.write('.');
     }
+    /* Theme settings > Animations: the theme's reveal reaches the section and never leaves it hidden */
+    for (const editing of [true, false]) {
+      const an = await mount(browser, cfg.name, {width: 1366, editing, blocks: cfg.full, theme: {scroll_animation: 'blur_up', animation_duration: 300}, assets: [ASSET]});
+      h.match(await an.page.evaluate(() => document.getElementById('shopify-section-test').className), /scroll-trigger blur_up/, 'the theme reveal class is on the section ' + (editing ? 'editor' : 'storefront'));
+      await an.page.waitForTimeout(700);
+      h.eq(await an.page.evaluate(() => { const w = getComputedStyle(document.getElementById('shopify-section-test')); return w.opacity + ' ' + w.visibility; }) + ' ' + await read(an, '.r7h__heading', 'visible'), '1 visible true', 'the section is fully shown after the theme reveal ' + (editing ? 'editor' : 'storefront'));
+      await an.page.close();
+    }
     /* Theme priority off: the same theme inheritance */
     h.tag = '@1366 priority off'; h.width = 1366; h.editing = true;
     const off = await mount(browser, cfg.name, {width: 1366, editing: true, priority: 'off', blocks: cfg.full, assets: [ASSET]});

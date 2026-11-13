@@ -690,6 +690,13 @@ async function rvScroller(browser, width, editing) {
     eq([await prev.isVisible(), await next.isVisible()], [false, false], tag + ': no arrows on phones, the finger moves the row');
     const peek = await track.evaluate(el => { const third = el.children[2].getBoundingClientRect(), r = el.getBoundingClientRect(); return r.right - third.left; });
     ok(peek > 12 && peek < 60, tag + ': the next card peeks in (' + Math.round(peek) + 'px)');
+    /* the row runs to both screen edges and its cards start on the page's gutter, at every section width */
+    for (const w of ['container', 'fluid_container', 'stretch_width', 'full_width']) {
+      await t.redraw({settings: {section_width: w}}); await settle(t);
+      const e = await t.root('[data-r7p-root]').evaluate(el => { const tr = el.querySelector('[data-r7p-track]').getBoundingClientRect(); return {track: [Math.round(tr.left), Math.round(tr.right)], card: Math.round(el.querySelector('[data-rv-card]').getBoundingClientRect().left), heading: Math.round(el.querySelector('.r7p-heading').getBoundingClientRect().left), left: el.querySelector('[data-r7p-track]').scrollLeft}; });
+      eq([e.track, e.card, e.left], [[0, 375], e.heading, 0], `${tag} ${w}: edge to edge, the first card on the gutter with the heading`);
+    }
+    await t.redraw({settings: {section_width: 'fluid_container'}}); await settle(t);
   }
   /* a row that fits is not a scroller: no arrows, no progress, no tab stop */
   await t.redraw({settings: {products_to_show: 2, items_per_row_mobile: 2}}); await settle(t);
@@ -835,6 +842,8 @@ async function duoLayout(browser, width, editing) {
       b = await boxes();
       eq(b[0][1], b[1][1], `${tag} ${how}: the cards sit in a row`);
       ok(b[1][0] < width && b[1][0] > width * 0.6, `${tag} ${how}: the second card peeks in`);
+      const edge = await t.root('[data-r7p-root]').evaluate(el => { const tr = el.querySelector('[data-r7p-track]').getBoundingClientRect(); return [Math.round(tr.left), Math.round(tr.right), Math.round(el.querySelector('.r7duo__card').getBoundingClientRect().left) === Math.round(el.querySelector('.r7p-sub').getBoundingClientRect().left)]; });
+      eq(edge, [0, width, true], `${tag} ${how}: the row runs to both screen edges, its first card on the page's gutter`);
       eq(await t.root('.r7duo__or').isVisible(), false, `${tag} ${how}: no word in the row`);
       if (editing || how === 'redraw') eq(await track.getAttribute('tabindex'), '0', `${tag} ${how}: the row is a tab stop`);
       const max = await track.evaluate(el => el.scrollWidth - el.clientWidth);

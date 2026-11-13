@@ -199,10 +199,12 @@
       const s = st.s;
       common(root, st);
       attr(root, 'data-align', s.text_align || 'center');
-      const cols = Math.max(1, Math.round(num(s.columns, 3)));
+      const total = root.querySelectorAll('[data-r7t-type="testimonial"]').length, wanted = Math.max(1, Math.round(num(s.columns, 3)));
+      /* fewer quotes than columns: as many columns as quotes */
+      const cols = Math.max(1, Math.min(wanted, total));
+      flag(root, 'data-few', total < wanted);
       set(root, '--r7w-cols', String(cols)); set(root, '--r7w-cols-l', String(Math.min(cols, 3))); set(root, '--r7w-cols-t', String(Math.min(cols, 2)));
       set(root, '--r7w-part', num(s.collapsed_part, 40) / 100 + 'fr');
-      const total = root.querySelectorAll('[data-r7t-type="testimonial"]').length;
       attr(root, 'data-collapse', total < 5 ? 'none' : s.collapse || 'mobile');
       flag(root, 'data-less', !!String(s.less_label || '').trim());
       const more = root.querySelector('[data-r7t-more]');

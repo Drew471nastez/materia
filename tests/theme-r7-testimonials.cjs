@@ -254,6 +254,16 @@ const WALL = {
       ok(await t.page.evaluate(() => { const a = document.querySelector('.r7t__actions'); return a.getBoundingClientRect().height; }) === 0, 'wall: no empty button row with ' + n + ' quotes');
       await t.page.close();
     }
+    /* fewer quotes than columns: as many columns as quotes, at a card's width, under the heading (live too) */
+    for (const [n, align] of [[1, 'center'], [2, 'center'], [2, 'left']]) {
+      const t = await mount(browser, 'testimonial-wall', {width: 1366, assets: [ASSET], blocks: [...HEAD_BLOCKS, ...quotes(n)], settings: {text_align: align}});
+      const read = () => t.page.evaluate(() => { const w = document.querySelector('.r7w__wall'), c = [...document.querySelectorAll('.r7w__card')].map(x => x.getBoundingClientRect()), h = document.querySelector('.r7t__heading').getBoundingClientRect(); return {count: getComputedStyle(w).columnCount, width: Math.round(c[0].width), mid: Math.round((c[0].left + c[c.length - 1].right) / 2), tops: new Set(c.map(x => Math.round(x.top))).size, headMid: Math.round((h.left + h.right) / 2), left: Math.round(c[0].left), headLeft: Math.round(h.left)}; });
+      let s = await read();
+      ok(s.count === String(n) && s.width <= 441 && s.width >= 300 && s.tops === 1 && (align === 'center' ? Math.abs(s.mid - s.headMid) <= 2 : s.left === s.headLeft), 'wall: ' + n + ' quotes in a 3 column wall sit ' + (align === 'center' ? 'centred under' : 'in line with') + ' the heading ' + JSON.stringify(s));
+      await t.emit({columns: 4}); await wait2(t.page); s = await read();
+      ok(s.count === String(n) && s.width <= 441, 'wall: still ' + n + ' columns after a live columns edit ' + JSON.stringify(s));
+      await t.page.close();
+    }
     /* without scripts the whole wall shows (html.no-js) and the dead button is hidden */
     {
       const t = await mount(browser, 'testimonial-wall', {width: 375, assets: [], blocks: [...HEAD_BLOCKS, ...quotes(7)], inlineScripts: false});
@@ -357,6 +367,15 @@ const PRODUCT = {
       ok(shown === want && await t.noOverflow() && t.errors.length === 0, 'product: ' + n + ' cards at ' + width + (want ? ' show' : ' hide') + ' the arrows and line (' + shown + ') ' + t.errors);
       if (n) ok(await t.page.evaluate(() => { const el = document.querySelector('.r7p__track'); return el.scrollWidth - el.clientWidth > 2; }) === want, 'product: ' + n + ' cards at ' + width + (want ? ' scroll' : ' do not scroll'));
       if (!n) ok(await t.page.locator('.r7t__heading').isVisible() && await t.page.locator('.r7p__track').count() === 0, 'product: no quotes leaves the heading and no empty row');
+      await t.page.close();
+    }
+    /* cards that all fit sit under a centred heading */
+    {
+      const t = await mount(browser, 'testimonial-product', {width: 1366, assets: [ASSET], blocks: [...HEAD_BLOCKS, ...quotes(1)], settings: {text_align: 'center'}});
+      const s = await t.page.evaluate(() => { const c = document.querySelector('.r7p__card').getBoundingClientRect(), h = document.querySelector('.r7t__heading').getBoundingClientRect(); return [Math.round((c.left + c.right) / 2), Math.round((h.left + h.right) / 2)]; });
+      ok(Math.abs(s[0] - s[1]) <= 2, 'product: one card sits under a centred heading ' + s);
+      await t.emit({text_align: 'left'}); await wait2(t.page);
+      ok(await t.page.evaluate(() => Math.round(document.querySelector('.r7p__card').getBoundingClientRect().left) === Math.round(document.querySelector('.r7t__heading').getBoundingClientRect().left)), 'product: and in line with a left heading');
       await t.page.close();
     }
     /* sold out and no compare price */
