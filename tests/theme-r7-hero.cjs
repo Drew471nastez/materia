@@ -354,7 +354,8 @@ async function splitLayout(browser, width, editing) {
     eq((await box('.hsm__grid')).h, 900, `${where}: fills the screen height`);
     await t.redraw({settings: {full_height: false, section_width: 'container'}});
     const grid = await box('.hsm__grid');
-    ok(grid.x > 0 && grid.r < 1366 && grid.w === Math.round(1366 * 0.9) - 30, `${where}: the default width keeps the split inside the page width, as the theme's container does (${JSON.stringify(grid)})`);
+    const themeContainer = await t.page.evaluate(() => { const d = document.createElement('div'); d.className = 'container'; d.innerHTML = '<div style="height:1px"></div>'; document.body.append(d); const w = Math.round(d.firstChild.getBoundingClientRect().width); d.remove(); return w; });
+    ok(grid.x > 0 && grid.r < 1366 && Math.abs(grid.w - themeContainer) <= 1, `${where}: the default width keeps the split inside the page width, as the theme's container does (${JSON.stringify(grid)} / ${themeContainer})`);
     eq([await t.css('.hsm__media', 'borderTopLeftRadius'), await t.css('.hsm__media', 'borderBottomRightRadius')], ['8px', '8px'], `${where}: inside the page width the media takes the theme radius`);
     await t.redraw({settings: {section_width: 'full_width'}});
     eq(await t.css('.hsm__media', 'borderTopLeftRadius'), '0px', `${where}: at full width the media has square corners`);

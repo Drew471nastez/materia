@@ -617,6 +617,14 @@ async function run(spec, browser) {
     }
   }
 
+  /* a font whose fallback families are quoted does not break the style attribute it is printed in */
+  {
+    const t = await mount(browser, name, {width: 1366, assets: [ASSET], blocks: spec.blocks, settings: {enable_custom_fonts: true, heading_font: {family: 'Courier New', fallback_families: '"Arial Black", monospace'}, body_font: {family: 'Courier New', fallback_families: "'Arial Black', monospace"}}});
+    const s = await t.page.evaluate(() => { const r = document.querySelector('[data-r7t-root]'); return [r.dataset.sectionId, r.dataset.card, getComputedStyle(r.querySelector('.r7t__heading')).fontFamily, getComputedStyle(r.querySelector('.r7t-card__quote')).fontFamily, r.style.getPropertyValue('--r7t-pt')].join('|'); });
+    ok(/^test\|filled\|"Courier New", "Arial Black", monospace\|"Courier New", "Arial Black", monospace\|60px$/.test(s), name + ': quoted fallback fonts are printed safely ' + s);
+    await t.page.close();
+  }
+
   /* reduced motion: everything shows, nothing moves on its own, nothing animates */
   {
     const t = await mount(browser, name, {width: 375, assets: [ASSET], blocks: spec.blocks, reducedMotion: 'reduce'});

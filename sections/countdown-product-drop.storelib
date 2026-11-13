@@ -1,0 +1,569 @@
+<template compat="shopify">
+<script src="{{ 'live-r7-promo.js' | asset_url }}" defer="defer"></script>
+{% render 'theme-type' %}
+{%- comment -%}
+  Materia Themes. Product Drop Countdown: the time left until a product goes
+  on sale, beside the product itself (picture, name and price from the
+  product picker). Before the moment the button reads one label; once it
+  passes the timer gives way to the "on sale" message and the button reads
+  its sale label, or the whole section hides, as the creator picks. A sold
+  out product shows the theme's sold out word and no button once on sale.
+
+  The moment is a date and time with a time zone: either a fixed UTC offset
+  (one moment everywhere) or each visitor's own clock. No date: the builder
+  shows zeros and a hint, visitors see nothing. Nothing is invented: no date,
+  product or price is a default.
+
+  The timer runs in live-r7-promo.js, one per section, at most once a second,
+  paused while the section is off screen or the tab is hidden. The Liquid
+  works out the state (unset, running, ended) for the first paint; the
+  script keeps it right after that. Theme first: scheme colours, theme fonts
+  and weights, a theme button (data-theme-button) with its own shape only
+  while Match theme button is off (data-own-shape).
+{%- endcomment -%}
+{%- liquid
+  assign st = section.settings
+  assign sid = section.id
+  assign color_scheme = st.color_scheme.id | default: st.color_scheme | default: 'default-color-scheme'
+  assign custom = st.enable_custom_style
+  assign fonts = st.enable_custom_fonts
+  assign product = st.product
+  assign tz = st.time_zone | default: 'visitor'
+  assign mt_d = st.section_margin_top_desktop | default: 0
+  assign mb_d = st.section_margin_bottom_desktop | default: 0
+  assign mt_m = st.section_margin_top_mobile | default: 0
+  assign mb_m = st.section_margin_bottom_mobile | default: 0
+  if st.reset_spacing
+    assign mt_d = 0
+    assign mb_d = 0
+    assign mt_m = 0
+    assign mb_m = 0
+  endif
+
+  comment
+    The moment: 2026-12-31, 2026-12-31T18:00 or 2026-12-31T18:00:00, with the
+    picked UTC offset added; a value that already carries an offset keeps it.
+  endcomment
+  assign end_iso = st.end_iso | default: '' | strip | replace: ' ', 'T'
+  if end_iso.size == 10
+    assign end_iso = end_iso | append: 'T00:00:00'
+  elsif end_iso.size == 16
+    assign end_iso = end_iso | append: ':00'
+  endif
+  assign end_full = end_iso
+  if end_iso.size == 19 and tz != 'visitor'
+    assign end_full = end_iso | append: tz
+  endif
+  assign state = 'unset'
+  assign left = 0
+  if end_iso.size >= 19
+    assign end_t = end_full | date: '%s' | plus: 0
+    assign now_t = 'now' | date: '%s' | plus: 0
+    if end_t > 0
+      assign state = 'running'
+      assign left = end_t | minus: now_t
+      if left <= 0
+        assign left = 0
+        assign state = 'ended'
+      endif
+    endif
+  endif
+  assign d = left | divided_by: 86400
+  assign rem = left | modulo: 86400
+  assign h = rem | divided_by: 3600
+  assign rem = rem | modulo: 3600
+  assign m = rem | divided_by: 60
+  assign s = rem | modulo: 60
+  assign available = true
+  if product != blank and product.available == false
+    assign available = false
+  endif
+  assign has_media = false
+  if product != blank or request.design_mode
+    assign has_media = true
+  endif
+-%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' and st.reveal -%}
+<style>
+  #shopify-section-{{ sid }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ sid }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+{%- if fonts -%}
+<style>
+  {%- if st.heading_font.family != blank -%}{{ st.heading_font | font_face: font_display: 'swap' }}{%- endif -%}
+  {%- if st.body_font.family != blank -%}{{ st.body_font | font_face: font_display: 'swap' }}{%- endif -%}
+{% comment %}{% endcomment %}</style>
+{%- endif -%}
+{%- for block in section.blocks -%}{%- if block.settings.enable_custom_fonts and block.settings.font.family != blank -%}<style>{{ block.settings.font | font_face: font_display: 'swap' }}{% comment %}{% endcomment %}</style>{%- endif -%}{%- endfor -%}
+<style>
+  #shopify-section-{{ sid }} { position: relative; isolation: isolate; }
+  #shopify-section-{{ sid }}#shopify-section-{{ sid }} { margin-top: var(--pdc-mt-m, {{ mt_m }}px) !important; margin-bottom: var(--pdc-mb-m, {{ mb_m }}px) !important; }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }}#shopify-section-{{ sid }} { margin-top: var(--pdc-mt-d, {{ mt_d }}px) !important; margin-bottom: var(--pdc-mb-d, {{ mb_d }}px) !important; }
+  }
+  #shopify-section-{{ sid }}:has(> .pdc[data-reset='true']) + .shopify-section { margin-top: 0 !important; }
+  #shopify-section-{{ sid }} .pdc, #shopify-section-{{ sid }} .pdc *, #shopify-section-{{ sid }} .pdc *::before, #shopify-section-{{ sid }} .pdc *::after { box-sizing: border-box; }
+  #shopify-section-{{ sid }} .pdc [hidden] { display: none !important; }
+  /* Visitors: nothing without a date, and nothing once it ended when the section hides itself. */
+  #shopify-section-{{ sid }} .pdc[data-state='unset']:not([data-r7p-editor]),
+  #shopify-section-{{ sid }} .pdc[data-state='ended'][data-after='hide']:not([data-r7p-editor]) { display: none; }
+  #shopify-section-{{ sid }} .pdc {
+    display: block;
+    background: var(--pdc-bg);
+    color: var(--color-text);
+    padding: var(--pdc-pt-m) 0 var(--pdc-pb-m);
+    font-family: var(--pdc-body-font);
+  }
+  #shopify-section-{{ sid }} .pdc__inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+    align-items: center;
+    width: 100%;
+    max-width: var(--pdc-max);
+    margin-inline: auto;
+    padding-inline: var(--pdc-pad);
+  }
+  /* The product: a compact row on a phone, a picture with its name and price under it from 990px. */
+  #shopify-section-{{ sid }} .pdc__media {
+    display: grid;
+    grid-template-columns: 88px minmax(0, 1fr);
+    align-items: center;
+    gap: 14px;
+    margin: 0;
+    min-width: 0;
+  }
+  #shopify-section-{{ sid }} .pdc__frame {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    border-radius: var(--rounded-radius, 8px);
+    background: var(--pdc-card);
+  }
+  #shopify-section-{{ sid }} .pdc__frame img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  #shopify-section-{{ sid }} .pdc__caption { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  #shopify-section-{{ sid }} .pdc .pdc__title { margin: 0; font-family: var(--pdc-heading-font); font-size: 1.7rem; line-height: 1.3; color: var(--color-heading); overflow-wrap: anywhere; }
+  #shopify-section-{{ sid }} .pdc__title a { color: inherit; text-decoration: none; }
+  #shopify-section-{{ sid }} .pdc__title a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  #shopify-section-{{ sid }} .pdc__price { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; color: var(--pdc-price); font-size: 1.5rem; }
+  #shopify-section-{{ sid }} .pdc__was { text-decoration: line-through; opacity: 0.7; }
+  #shopify-section-{{ sid }} .pdc__note { margin: 0; font-size: 1.3rem; opacity: 0.8; }
+  #shopify-section-{{ sid }} .pdc__body { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; min-width: 0; }
+  #shopify-section-{{ sid }} .pdc .pdc__heading {
+    margin: 0;
+    max-width: 100%;
+    color: var(--hb-c, var(--color-heading));
+    font-family: var(--hb-ff, var(--pdc-heading-font));
+    font-size: var(--hb-fs-m, calc(var(--h2-size, 3.6rem) * 0.8));
+    overflow-wrap: anywhere;
+  }
+  #shopify-section-{{ sid }} .pdc__heading :is(em, strong, a) { font-family: inherit; }
+  #shopify-section-{{ sid }} .pdc .pdc__text { max-width: 56ch; color: var(--hb-c, var(--color-text)); font-family: var(--hb-ff, var(--pdc-body-font)); }
+  #shopify-section-{{ sid }} .pdc .pdc__text :is(p, li, strong, em) { color: inherit; font-family: inherit; }
+  #shopify-section-{{ sid }} .pdc__text > :first-child { margin-top: 0; }
+  #shopify-section-{{ sid }} .pdc__text > :last-child { margin-bottom: 0; }
+  #shopify-section-{{ sid }} .pdc__timer { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0; font-variant-numeric: tabular-nums; }
+  #shopify-section-{{ sid }} .pdc[data-state='ended'] .pdc__timer { display: none; }
+  #shopify-section-{{ sid }} .pdc__unit {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 68px;
+    padding: 12px 8px 10px;
+    border: 1px solid var(--pdc-line);
+    border-radius: var(--rounded-radius, 8px);
+    background: var(--pdc-digit-bg);
+  }
+  #shopify-section-{{ sid }} .pdc__num { font-family: var(--pdc-heading-font); font-weight: var(--heading-weight, 700); font-size: var(--pdc-ds-m); line-height: 1; color: var(--pdc-digit); }
+  #shopify-section-{{ sid }} .pdc__lbl { font-size: 1.1rem; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pdc-label); }
+  #shopify-section-{{ sid }} .pdc__ended { display: none; margin: 0; font-family: var(--pdc-heading-font); font-weight: var(--heading-weight, 700); font-size: 2rem; line-height: 1.3; color: var(--pdc-digit); }
+  #shopify-section-{{ sid }} .pdc[data-state='ended'][data-after='live'] .pdc__ended:not(:empty) { display: block; }
+  #shopify-section-{{ sid }} .pdc__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  #shopify-section-{{ sid }} .pdc__btn { min-height: 44px; text-decoration: none; }
+  #shopify-section-{{ sid }} .pdc__after, #shopify-section-{{ sid }} .pdc[data-state='ended'] .pdc__before { display: none; }
+  #shopify-section-{{ sid }} .pdc[data-state='ended'] .pdc__after { display: inline; }
+  #shopify-section-{{ sid }} .pdc__sold { display: none; font-weight: var(--heading-weight, 700); color: var(--color-heading); }
+  #shopify-section-{{ sid }} .pdc[data-state='ended'][data-available='false'] .pdc__btn { display: none; }
+  #shopify-section-{{ sid }} .pdc[data-state='ended'][data-available='false'] .pdc__sold { display: inline; }
+  #shopify-section-{{ sid }} .pdc__hint { display: none; margin: 0; font-size: 1.3rem; color: var(--color-text); }
+  #shopify-section-{{ sid }} .pdc[data-state='unset'] .pdc__hint--date,
+  #shopify-section-{{ sid }} .pdc[data-state='ended'][data-after='hide'] .pdc__hint--hidden { display: block; }
+  @media (max-width: 767px) { #shopify-section-{{ sid }} .pdc[data-show='desktop'] { display: none; } }
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .pdc { padding: var(--pdc-pt-d) 0 var(--pdc-pb-d); }
+    #shopify-section-{{ sid }} .pdc[data-show='mobile'] { display: none; }
+    #shopify-section-{{ sid }} .pdc .pdc__heading { font-size: var(--hb-fs-d, var(--h2-size, 3.6rem)); }
+    #shopify-section-{{ sid }} .pdc__timer { gap: 12px; }
+    #shopify-section-{{ sid }} .pdc__unit { min-width: 92px; padding: 16px 10px 12px; }
+    #shopify-section-{{ sid }} .pdc__num { font-size: var(--pdc-ds-d); }
+    #shopify-section-{{ sid }} .pdc__lbl { font-size: 1.2rem; }
+  }
+  @media (min-width: 990px) {
+    #shopify-section-{{ sid }} .pdc[data-media='true'] .pdc__inner { grid-template-columns: minmax(0, 4fr) minmax(0, 6fr); column-gap: clamp(40px, 6vw, 96px); }
+    #shopify-section-{{ sid }} .pdc[data-side='right'] .pdc__media { order: 2; }
+    #shopify-section-{{ sid }} .pdc__media { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    #shopify-section-{{ sid }} .pdc .pdc__title { font-size: 2rem; }
+    #shopify-section-{{ sid }} .pdc__price { font-size: 1.7rem; }
+    #shopify-section-{{ sid }} .pdc__body { gap: 20px; }
+  }
+{% comment %}{% endcomment %}</style>
+{%- capture pdc_vars -%}
+--pdc-bg: {% if custom %}{% render 'scheme-color', color: st.section_bg, fallback: 'var(--color-background)' %}{% else %}var(--color-background){% endif %};
+--pdc-card: {% if custom %}{% render 'scheme-color', color: st.card_bg, fallback: 'color-mix(in srgb, var(--color-text) 8%, var(--color-background))' %}{% else %}color-mix(in srgb, var(--color-text) 8%, var(--color-background)){% endif %};
+--pdc-digit: {% if custom %}{% render 'scheme-color', color: st.digit_color, fallback: 'var(--color-heading)' %}{% else %}var(--color-heading){% endif %};
+--pdc-digit-bg: {% if custom %}{% render 'scheme-color', color: st.digit_bg, fallback: 'transparent' %}{% else %}transparent{% endif %};
+--pdc-label: {% if custom %}{% render 'scheme-color', color: st.label_color, fallback: 'var(--color-text)' %}{% else %}var(--color-text){% endif %};
+--pdc-line: {% if custom %}{% render 'scheme-color', color: st.line_color, fallback: 'var(--color-border)' %}{% else %}var(--color-border){% endif %};
+--pdc-price: {% if custom %}{% render 'scheme-color', color: st.price_color, fallback: 'var(--color-text)' %}{% else %}var(--color-text){% endif %};
+--pdc-heading-font: {% if fonts and st.heading_font.family != blank %}{{ st.heading_font.family }}, {{ st.heading_font.fallback_families | default: 'sans-serif' }}{% else %}var(--heading-font){% endif %};
+--pdc-body-font: {% if fonts and st.body_font.family != blank %}{{ st.body_font.family }}, {{ st.body_font.fallback_families | default: 'sans-serif' }}{% else %}var(--body-font){% endif %};
+--pdc-max: {% case st.section_width %}{% when 'container' %}calc(var(--page-width, 1300px) + 48px){% when 'fluid_container' %}calc(var(--fluid-container-width, 1500px) + 48px){% else %}none{% endcase %};
+--pdc-pad: {% if st.section_width == 'full_width' %}max(20px, 4vw){% else %}20px{% endif %};
+--pdc-ds-d: {{ st.digit_size_desktop | default: 44 }}px; --pdc-ds-m: {{ st.digit_size_mobile | default: 30 }}px;
+--pdc-pt-d: {{ st.padding_top_desktop }}px; --pdc-pb-d: {{ st.padding_bottom_desktop }}px; --pdc-pt-m: {{ st.padding_top_mobile }}px; --pdc-pb-m: {{ st.padding_bottom_mobile }}px;
+{%- endcapture -%}
+<section
+  class="pdc color-{{ color_scheme }} gradient"
+  data-r7p="countdown-product-drop"
+  data-r7p-section="{{ sid }}"
+  {% if request.design_mode %}data-r7p-settings="{{ st | json | escape }}" data-r7p-editor{% endif %}
+  data-end="{{ st.end_iso | escape }}"
+  data-tz="{{ tz | escape }}"
+  data-state="{{ state }}"
+  data-after="{{ st.after_end | default: 'live' }}"
+  data-available="{{ available }}"
+  data-media="{{ has_media }}"
+  data-side="{{ st.image_position | default: 'left' }}"
+  data-show="{{ st.show_section_on | default: 'all' }}"
+  data-reset="{% if st.reset_spacing %}true{% else %}false{% endif %}"
+  {% if fonts %}data-own-font{% endif %}
+  {% unless st.reveal %}data-ti-no-reveal{% endunless %}
+  style="{{ pdc_vars | strip_newlines }}"
+>
+  <div class="pdc__inner">
+    {%- if has_media -%}
+      <figure class="pdc__media" data-r7p-media>
+        <div class="pdc__frame">
+          {%- if product.featured_image != blank -%}
+            {%- assign img = product.featured_image -%}
+            <img
+              src="{{ img | image_url: width: 900 }}"
+              srcset="{{ img | image_url: width: 300 }} 300w, {{ img | image_url: width: 600 }} 600w, {{ img | image_url: width: 900 }} 900w, {{ img | image_url: width: 1300 }} 1300w"
+              sizes="(min-width: 990px) 40vw, 88px"
+              alt="{{ img.alt | default: product.title | escape }}"
+              width="{{ img.width | default: 1000 }}"
+              height="{{ img.height | default: 1000 }}"
+              loading="lazy"
+              decoding="async"
+            >
+          {%- else -%}
+            {%- render 'placeholder-render' -%}
+          {%- endif -%}
+        </div>
+        <figcaption class="pdc__caption">
+          {%- if product != blank -%}
+            <h3 class="pdc__title"><a href="{{ product.url }}">{{ product.title | escape }}</a></h3>
+            <div class="pdc__price">
+              <span>{{ product.price | money }}</span>
+              {%- if product.compare_at_price > product.price -%}<s class="pdc__was">{{ product.compare_at_price | money }}</s>{%- endif -%}
+            </div>
+          {%- else -%}
+            <p class="pdc__note">Pick the product in the section settings.</p>
+          {%- endif -%}
+        </figcaption>
+      </figure>
+    {%- endif -%}
+    <div class="pdc__body">
+      {%- for block in section.blocks -%}
+        {%- assign bs = block.settings -%}
+        {%- assign bfont = false -%}{%- if bs.enable_custom_fonts and bs.font.family != blank -%}{%- assign bfont = true -%}{%- endif -%}
+        {%- case block.type -%}
+          {%- when 'heading' -%}
+            {%- capture hv -%}
+              {%- if bs.enable_custom_style -%}--hb-c: {% render 'scheme-color', color: bs.color, fallback: 'var(--color-heading)' %};{%- endif -%}
+              {%- if bfont -%}--hb-ff: {{ bs.font.family }}, {{ bs.font.fallback_families | default: 'sans-serif' }};{%- endif -%}
+              {%- if bs.size_enable -%}--hb-fs-d: {{ bs.size_desktop }}px; --hb-fs-m: {{ bs.size_mobile }}px;{%- endif -%}
+            {%- endcapture -%}
+            <h2 class="pdc__heading" data-r7p-block="{{ block.id }}" data-r7p-type="heading"{% if request.design_mode %} data-r7p-settings="{{ bs | json | escape }}"{% endif %}{% if fonts or bs.enable_custom_fonts %} data-own-font{% endif %}{% if bs.text == blank %} hidden{% endif %} style="{{ hv | strip_newlines }}" {{ block.shopify_attributes }}>{{ bs.text }}</h2>
+          {%- when 'text' -%}
+            {%- capture tv -%}
+              {%- if bs.enable_custom_style -%}--hb-c: {% render 'scheme-color', color: bs.color, fallback: 'var(--color-text)' %};{%- endif -%}
+              {%- if bfont -%}--hb-ff: {{ bs.font.family }}, {{ bs.font.fallback_families | default: 'sans-serif' }};{%- endif -%}
+            {%- endcapture -%}
+            <div class="pdc__text" data-r7p-block="{{ block.id }}" data-r7p-type="text"{% if request.design_mode %} data-r7p-settings="{{ bs | json | escape }}"{% endif %}{% if fonts or bs.enable_custom_fonts %} data-own-font{% endif %}{% if bs.text == blank %} hidden{% endif %} style="{{ tv | strip_newlines }}" {{ block.shopify_attributes }}>{{ bs.text }}</div>
+          {%- when 'timer' -%}
+            <div class="pdc__clock" data-r7p-block="{{ block.id }}" data-r7p-type="timer"{% if request.design_mode %} data-r7p-settings="{{ bs | json | escape }}"{% endif %} {{ block.shopify_attributes }}>
+              <div class="pdc__timer" role="timer" aria-live="off">
+                <span class="pdc__unit"><span class="pdc__num" data-r7p-unit="d">{% if d < 10 %}0{% endif %}{{ d }}</span><span class="pdc__lbl" data-r7p-label="d">{{ bs.label_days }}</span></span>
+                <span class="pdc__unit"><span class="pdc__num" data-r7p-unit="h">{% if h < 10 %}0{% endif %}{{ h }}</span><span class="pdc__lbl" data-r7p-label="h">{{ bs.label_hours }}</span></span>
+                <span class="pdc__unit"><span class="pdc__num" data-r7p-unit="m">{% if m < 10 %}0{% endif %}{{ m }}</span><span class="pdc__lbl" data-r7p-label="m">{{ bs.label_minutes }}</span></span>
+                <span class="pdc__unit" data-r7p-seconds{% unless bs.show_seconds %} hidden{% endunless %}><span class="pdc__num" data-r7p-unit="s">{% if s < 10 %}0{% endif %}{{ s }}</span><span class="pdc__lbl" data-r7p-label="s">{{ bs.label_seconds }}</span></span>
+              </div>
+              <p class="pdc__ended" data-r7p-ended>{{ st.expired_message | escape }}</p>
+            </div>
+          {%- when 'button' -%}
+            {%- liquid
+              assign shape = false
+              if bs.use_theme_button == false
+                assign shape = true
+              endif
+              assign href = bs.link
+              if href == blank and product != blank
+                assign href = product.url
+              endif
+            -%}
+            {%- capture bv -%}
+              {%- if bs.enable_custom_style -%}
+                {%- capture bbg -%}{% render 'scheme-color', color: bs.bg_color, fallback: 'none' %}{%- endcapture -%}{%- assign bbg = bbg | strip -%}
+                {%- capture bhover -%}{% render 'scheme-color', color: bs.bg_color_hover, fallback: 'none' %}{%- endcapture -%}{%- assign bhover = bhover | strip -%}
+                {%- capture btext -%}{% render 'scheme-color', color: bs.text_color, fallback: 'none' %}{%- endcapture -%}{%- assign btext = btext | strip -%}
+                {%- capture bhtext -%}{% render 'scheme-color', color: bs.text_color_hover, fallback: 'none' %}{%- endcapture -%}{%- assign bhtext = bhtext | strip -%}
+                {%- if bbg != 'none' -%}--mb-bg: {{ bbg }}; --mb-border: {{ bbg }};{%- endif -%}
+                {%- if btext != 'none' -%}--mb-text: {{ btext }};{%- endif -%}
+                {%- if bhover != 'none' -%}--mb-hover-bg: {{ bhover }}; --mb-hover-border: {{ bhover }};{%- endif -%}
+                {%- if bhtext != 'none' -%}--mb-hover-text: {{ bhtext }};{%- endif -%}
+              {%- endif -%}
+              {%- if shape -%}--mb-radius: {{ bs.radius }}px; --mb-padding-x: {{ bs.pad_x }}px; --mb-padding-y: {{ bs.pad_y }}px; --mb-font-size: {{ bs.size }}px;{%- endif -%}
+            {%- endcapture -%}
+            {%- comment -%} A button that leads nowhere (no link, no product) is not shown to visitors. {%- endcomment -%}
+            <div class="pdc__actions" data-r7p-block="{{ block.id }}" data-r7p-type="button"{% if request.design_mode %} data-r7p-settings="{{ bs | json | escape }}"{% endif %}{% if bs.label == blank and bs.live_label == blank %} hidden{% elsif href == blank and request.design_mode != true %} hidden{% endif %} data-product-url="{{ product.url }}" {{ block.shopify_attributes }}>
+              {%- if href != blank -%}
+                <a class="pdc__btn" href="{{ href }}" data-r7p-btn data-theme-button="{% if bs.style == 'secondary' %}secondary{% else %}primary{% endif %}" data-sl-button{% if shape %} data-own-shape{% endif %} style="{{ bv | strip_newlines }}">
+              {%- else -%}
+                <button class="pdc__btn" type="button" data-r7p-btn data-theme-button="{% if bs.style == 'secondary' %}secondary{% else %}primary{% endif %}" data-sl-button{% if shape %} data-own-shape{% endif %} style="{{ bv | strip_newlines }}">
+              {%- endif -%}
+                <span class="pdc__before" data-r7p-before>{{ bs.label | escape }}</span><span class="pdc__after" data-r7p-after>{{ bs.live_label | escape }}</span>
+              {%- if href != blank -%}</a>{%- else -%}</button>{%- endif -%}
+              <span class="pdc__sold">{{ 'products.product.sold_out' | t }}</span>
+            </div>
+        {%- endcase -%}
+      {%- endfor -%}
+      {%- if request.design_mode -%}
+        <p class="pdc__hint pdc__hint--date">Add the date and time it goes on sale in the section settings to start the timer.</p>
+        <p class="pdc__hint pdc__hint--hidden">The date has passed, so visitors no longer see this section.</p>
+      {%- endif -%}
+    </div>
+  </div>
+</section>
+</template>
+
+<schema>
+{
+  "shopify": {
+    "name": "Product Drop Countdown",
+    "tag": "section",
+    "class": "section-countdown-product-drop",
+    "max_blocks": 4,
+    "settings": [
+      { "type": "header", "content": "General" },
+      { "type": "color_scheme", "id": "color_scheme", "label": "Color scheme", "default": "default-color-scheme" },
+      {
+        "type": "select",
+        "id": "section_width",
+        "label": "Section width",
+        "default": "container",
+        "options": [
+          { "value": "container", "label": "Default" },
+          { "value": "fluid_container", "label": "Fluid container" },
+          { "value": "stretch_width", "label": "Stretched" },
+          { "value": "full_width", "label": "Full width" }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "show_section_on",
+        "label": "Show on",
+        "default": "all",
+        "options": [
+          { "value": "all", "label": "All" },
+          { "value": "mobile", "label": "Mobile" },
+          { "value": "desktop", "label": "Desktop" }
+        ]
+      },
+      { "type": "checkbox", "id": "reset_spacing", "label": "Remove space between sections", "default": true, "info": "Turn off to set top and bottom margins under Desktop spacing and Mobile." },
+      { "type": "header", "content": "Content" },
+      { "type": "product", "id": "product", "label": "Product" },
+      { "type": "text", "id": "end_iso", "label": "Goes on sale", "default": "", "placeholder": "2026-12-31T18:00", "info": "Year-month-day, then the 24-hour time, for example 2026-12-31T18:00. Empty: visitors see nothing until you add it." },
+      {
+        "type": "select",
+        "id": "time_zone",
+        "label": "Time zone",
+        "default": "visitor",
+        "info": "A UTC offset makes it one moment everywhere. Pick the offset in force on that date, for example UTC-07:00 for Los Angeles in summer.",
+        "options": [
+          { "value": "visitor", "label": "Each visitor's own clock" },
+          { "value": "-10:00", "label": "UTC-10:00 Honolulu" },
+          { "value": "-08:00", "label": "UTC-08:00 Los Angeles, winter" },
+          { "value": "-07:00", "label": "UTC-07:00 Los Angeles, summer" },
+          { "value": "-06:00", "label": "UTC-06:00 Chicago, winter" },
+          { "value": "-05:00", "label": "UTC-05:00 New York, winter" },
+          { "value": "-04:00", "label": "UTC-04:00 New York, summer" },
+          { "value": "-03:00", "label": "UTC-03:00 São Paulo" },
+          { "value": "+00:00", "label": "UTC+00:00 London, winter" },
+          { "value": "+01:00", "label": "UTC+01:00 London, summer; Paris, winter" },
+          { "value": "+02:00", "label": "UTC+02:00 Paris, summer" },
+          { "value": "+03:00", "label": "UTC+03:00 Istanbul" },
+          { "value": "+04:00", "label": "UTC+04:00 Dubai" },
+          { "value": "+05:30", "label": "UTC+05:30 Mumbai" },
+          { "value": "+07:00", "label": "UTC+07:00 Bangkok" },
+          { "value": "+08:00", "label": "UTC+08:00 Singapore" },
+          { "value": "+09:00", "label": "UTC+09:00 Tokyo" },
+          { "value": "+10:00", "label": "UTC+10:00 Sydney, winter" },
+          { "value": "+11:00", "label": "UTC+11:00 Sydney, summer" },
+          { "value": "+12:00", "label": "UTC+12:00 Auckland, winter" },
+          { "value": "+13:00", "label": "UTC+13:00 Auckland, summer" }
+        ]
+      },
+      {
+        "type": "select",
+        "id": "after_end",
+        "label": "When it goes on sale",
+        "default": "live",
+        "options": [
+          { "value": "live", "label": "Show on sale" },
+          { "value": "hide", "label": "Hide section" }
+        ]
+      },
+      { "type": "text", "id": "expired_message", "label": "On sale message", "default": "On sale now", "visible_if": "{{ section.settings.after_end == 'live' }}" },
+      { "type": "header", "content": "Layout" },
+      {
+        "type": "select",
+        "id": "image_position",
+        "label": "Product side (desktop)",
+        "default": "left",
+        "options": [
+          { "value": "left", "label": "Left" },
+          { "value": "right", "label": "Right" }
+        ]
+      },
+      { "type": "header", "content": "Appearance" },
+      { "type": "checkbox", "id": "enable_custom_style", "label": "Enable custom styling", "default": false, "info": "Off: colours follow the colour scheme." },
+      { "type": "color", "id": "section_bg", "label": "Background", "visible_if": "{{ section.settings.enable_custom_style }}" },
+      { "type": "color", "id": "card_bg", "label": "Picture background", "visible_if": "{{ section.settings.enable_custom_style }}" },
+      { "type": "color", "id": "price_color", "label": "Price", "visible_if": "{{ section.settings.enable_custom_style }}" },
+      { "type": "color", "id": "digit_color", "label": "Numbers and on sale message", "visible_if": "{{ section.settings.enable_custom_style }}" },
+      { "type": "color", "id": "digit_bg", "label": "Number boxes", "visible_if": "{{ section.settings.enable_custom_style }}" },
+      { "type": "color", "id": "line_color", "label": "Number box border", "visible_if": "{{ section.settings.enable_custom_style }}" },
+      { "type": "color", "id": "label_color", "label": "Days, hours and minutes labels", "visible_if": "{{ section.settings.enable_custom_style }}" },
+      { "type": "header", "content": "Typography" },
+      { "type": "checkbox", "id": "enable_custom_fonts", "label": "Enable custom fonts", "default": false, "info": "Off: fonts follow Theme settings > Typography." },
+      { "type": "font_picker", "id": "heading_font", "label": "Heading and numbers font", "default": "assistant_n4", "visible_if": "{{ section.settings.enable_custom_fonts }}" },
+      { "type": "font_picker", "id": "body_font", "label": "Text font", "default": "assistant_n4", "visible_if": "{{ section.settings.enable_custom_fonts }}" },
+      { "type": "range", "id": "digit_size_desktop", "label": "Number size (desktop)", "min": 24, "max": 72, "step": 2, "unit": "px", "default": 44 },
+      { "type": "header", "content": "Animation" },
+      { "type": "checkbox", "id": "reveal", "label": "Reveal on scroll", "default": true },
+      { "type": "header", "content": "Desktop spacing" },
+      { "type": "range", "id": "padding_top_desktop", "label": "Top padding (desktop)", "min": 0, "max": 200, "step": 4, "unit": "px", "default": 64 },
+      { "type": "range", "id": "padding_bottom_desktop", "label": "Bottom padding (desktop)", "min": 0, "max": 200, "step": 4, "unit": "px", "default": 64 },
+      { "type": "range", "id": "section_margin_top_desktop", "label": "Top margin (desktop)", "min": 0, "max": 300, "step": 4, "unit": "px", "default": 0, "visible_if": "{{ section.settings.reset_spacing == false }}" },
+      { "type": "range", "id": "section_margin_bottom_desktop", "label": "Bottom margin (desktop)", "min": 0, "max": 300, "step": 4, "unit": "px", "default": 0, "visible_if": "{{ section.settings.reset_spacing == false }}" },
+      { "type": "header", "content": "Mobile" },
+      { "type": "range", "id": "digit_size_mobile", "label": "Number size (mobile)", "min": 20, "max": 48, "step": 2, "unit": "px", "default": 30 },
+      { "type": "range", "id": "padding_top_mobile", "label": "Top padding (mobile)", "min": 0, "max": 200, "step": 2, "unit": "px", "default": 40 },
+      { "type": "range", "id": "padding_bottom_mobile", "label": "Bottom padding (mobile)", "min": 0, "max": 200, "step": 2, "unit": "px", "default": 40 },
+      { "type": "range", "id": "section_margin_top_mobile", "label": "Top margin (mobile)", "min": 0, "max": 300, "step": 4, "unit": "px", "default": 0, "visible_if": "{{ section.settings.reset_spacing == false }}" },
+      { "type": "range", "id": "section_margin_bottom_mobile", "label": "Bottom margin (mobile)", "min": 0, "max": 300, "step": 4, "unit": "px", "default": 0, "visible_if": "{{ section.settings.reset_spacing == false }}" }
+    ],
+    "blocks": [
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          { "type": "inline_richtext", "id": "text", "label": "Heading", "default": "Name your next release" },
+          { "type": "header", "content": "Appearance" },
+          { "type": "checkbox", "id": "enable_custom_style", "label": "Enable custom styling", "default": false },
+          { "type": "color", "id": "color", "label": "Color", "visible_if": "{{ block.settings.enable_custom_style }}" },
+          { "type": "header", "content": "Typography" },
+          { "type": "checkbox", "id": "enable_custom_fonts", "label": "Enable custom font", "default": false },
+          { "type": "font_picker", "id": "font", "label": "Font", "default": "assistant_n4", "visible_if": "{{ block.settings.enable_custom_fonts }}" },
+          { "type": "checkbox", "id": "size_enable", "label": "Custom size", "default": false, "info": "Off: the theme's section heading size." },
+          { "type": "range", "id": "size_desktop", "label": "Size (desktop)", "min": 20, "max": 72, "step": 1, "unit": "px", "default": 40, "visible_if": "{{ block.settings.size_enable }}" },
+          { "type": "range", "id": "size_mobile", "label": "Size (mobile)", "min": 18, "max": 48, "step": 1, "unit": "px", "default": 28, "visible_if": "{{ block.settings.size_enable }}" }
+        ]
+      },
+      {
+        "type": "text",
+        "name": "Text",
+        "limit": 1,
+        "settings": [
+          { "type": "richtext", "id": "text", "label": "Text", "default": "<p>Say what is coming and when it goes on sale.</p>" },
+          { "type": "header", "content": "Appearance" },
+          { "type": "checkbox", "id": "enable_custom_style", "label": "Enable custom styling", "default": false },
+          { "type": "color", "id": "color", "label": "Color", "visible_if": "{{ block.settings.enable_custom_style }}" },
+          { "type": "header", "content": "Typography" },
+          { "type": "checkbox", "id": "enable_custom_fonts", "label": "Enable custom font", "default": false },
+          { "type": "font_picker", "id": "font", "label": "Font", "default": "assistant_n4", "visible_if": "{{ block.settings.enable_custom_fonts }}" }
+        ]
+      },
+      {
+        "type": "timer",
+        "name": "Timer",
+        "limit": 1,
+        "settings": [
+          { "type": "text", "id": "label_days", "label": "Days label", "default": "Days" },
+          { "type": "text", "id": "label_hours", "label": "Hours label", "default": "Hours" },
+          { "type": "text", "id": "label_minutes", "label": "Minutes label", "default": "Minutes" },
+          { "type": "checkbox", "id": "show_seconds", "label": "Show seconds", "default": true },
+          { "type": "text", "id": "label_seconds", "label": "Seconds label", "default": "Seconds", "visible_if": "{{ block.settings.show_seconds }}" }
+        ]
+      },
+      {
+        "type": "button",
+        "name": "Button",
+        "limit": 1,
+        "settings": [
+          { "type": "text", "id": "label", "label": "Label before the sale", "default": "See the product" },
+          { "type": "text", "id": "live_label", "label": "Label once on sale", "default": "Shop now" },
+          { "type": "url", "id": "link", "label": "Link", "info": "Empty: the product's page." },
+          {
+            "type": "select",
+            "id": "style",
+            "label": "Style",
+            "default": "primary",
+            "options": [
+              { "value": "primary", "label": "Primary" },
+              { "value": "secondary", "label": "Secondary" }
+            ]
+          },
+          { "type": "header", "content": "Appearance" },
+          { "type": "checkbox", "id": "enable_custom_style", "label": "Enable custom styling", "default": false, "info": "Off: colours follow Theme settings > Buttons." },
+          { "type": "color", "id": "bg_color", "label": "Background", "visible_if": "{{ block.settings.enable_custom_style }}" },
+          { "type": "color", "id": "text_color", "label": "Text", "visible_if": "{{ block.settings.enable_custom_style }}" },
+          { "type": "color", "id": "bg_color_hover", "label": "Background on hover", "visible_if": "{{ block.settings.enable_custom_style }}" },
+          { "type": "color", "id": "text_color_hover", "label": "Text on hover", "visible_if": "{{ block.settings.enable_custom_style }}" },
+          { "type": "header", "content": "Shape" },
+          { "type": "checkbox", "id": "use_theme_button", "label": "Match theme button", "default": true },
+          { "type": "range", "id": "radius", "label": "Corner radius", "min": 0, "max": 60, "step": 1, "unit": "px", "default": 6, "visible_if": "{{ block.settings.use_theme_button == false }}" },
+          { "type": "range", "id": "size", "label": "Text size", "min": 12, "max": 22, "step": 1, "unit": "px", "default": 16, "visible_if": "{{ block.settings.use_theme_button == false }}" },
+          { "type": "range", "id": "pad_x", "label": "Side padding", "min": 8, "max": 60, "step": 1, "unit": "px", "default": 28, "visible_if": "{{ block.settings.use_theme_button == false }}" },
+          { "type": "range", "id": "pad_y", "label": "Top and bottom padding", "min": 6, "max": 28, "step": 1, "unit": "px", "default": 14, "visible_if": "{{ block.settings.use_theme_button == false }}" }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Product Drop Countdown",
+        "category": "Countdowns",
+        "blocks": [
+          { "type": "heading" },
+          { "type": "text" },
+          { "type": "timer" },
+          { "type": "button" }
+        ]
+      }
+    ]
+  }
+}
+</schema>
