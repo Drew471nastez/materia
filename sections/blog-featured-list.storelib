@@ -1,0 +1,455 @@
+<template compat="shopify">
+<script src="{{ 'live-r7-stories.js' | asset_url }}" defer="defer"></script>
+{% render 'theme-type' %}
+{%- liquid
+  assign st = section.settings
+  assign sid = section.id
+  assign design = request.design_mode
+  assign color_scheme = st.color_scheme.id | default: st.color_scheme | default: 'default-color-scheme'
+-%}
+{%- comment -%}
+  Materia Themes. Blog Spotlight: one post drawn large (picture, date,
+  title, excerpt and a read link) beside a short list of the next posts of
+  the same blog (title, date and a small picture). Every post, picture, date
+  and link comes from the blog picked (or the blog being read on a blog or
+  article page); the featured post is the one picked, else the newest. On a
+  phone the list sits under the featured post. A blog with no posts shows
+  placeholders and a hint in the builder and nothing on the storefront.
+  Live builder updates: shopify/assets/live-r7-stories.js.
+{%- endcomment -%}
+{%- if settings.scroll_animation != blank and settings.scroll_animation != 'none' -%}
+<style>
+  #shopify-section-{{ section.id }}.scroll-trigger {
+    --animation-duration: {{ settings.animation_duration | default: 700 }}ms;
+    --animation-delay: {{ settings.animation_delay | default: 0 }}ms;
+  }
+{% comment %}{% endcomment %}</style>
+<script>
+  (function(){
+    var el = document.getElementById('shopify-section-{{ section.id }}');
+    if (!el || el.classList.contains('scroll-trigger')) return;
+    el.classList.add('scroll-trigger', {{ settings.scroll_animation | json }});
+  })();
+{% comment %}{% endcomment %}</script>
+{%- endif -%}
+{%- liquid
+  comment
+    The blog: the one picked (an object or its handle), else on a blog or
+    article page the blog being read. On an article page the post being read
+    is left out, unless it is the post picked to feature.
+  endcomment
+  assign blog_pick = st.blog
+  assign the_blog = blogs[blog_pick]
+  if the_blog == blank and blog_pick.handle != blank
+    assign the_blog = blogs[blog_pick.handle]
+  endif
+  if the_blog == blank and blog_pick.articles != blank
+    assign the_blog = blog_pick
+  endif
+  if the_blog == blank and blog != blank
+    assign the_blog = blog
+  endif
+  assign current_id = article.id
+  assign feature = st.featured_article
+  if feature != blank and feature.title == blank
+    assign feature = articles[feature]
+  endif
+  if feature == blank
+    for post in the_blog.articles
+      if current_id == blank or post.id != current_id
+        assign feature = post
+        break
+      endif
+    endfor
+  endif
+  assign list_max = st.posts_count | default: 3
+  assign list_count = 0
+  for post in the_blog.articles
+    if post.id == feature.id
+      continue
+    endif
+    if current_id != blank and post.id == current_id
+      continue
+    endif
+    assign list_count = list_count | plus: 1
+    if list_count >= list_max
+      break
+    endif
+  endfor
+  assign has_posts = false
+  if feature != blank
+    assign has_posts = true
+  endif
+  assign view_all_url = st.view_all_link | default: the_blog.url
+  assign view_all_default = 'blog_post.view_all' | t
+  assign view_all_label = st.view_all_label | strip | default: view_all_default
+  assign head_words = 0
+  for block in section.blocks
+    if block.type == 'heading' and block.settings.heading != blank
+      assign head_words = head_words | plus: 1
+    elsif block.type == 'text' and block.settings.text != blank
+      assign head_words = head_words | plus: 1
+    endif
+  endfor
+  assign show_all = false
+  if st.show_view_all and view_all_url != blank
+    assign show_all = true
+  endif
+  assign ratio = st.image_ratio | default: 'landscape'
+  assign custom = st.enable_custom_style
+-%}
+{%- if has_posts or design -%}
+<style data-r7s-space>#shopify-section-{{ sid }}{margin-top:{{ st.section_margin_top_mobile | default: 0 }}px;margin-bottom:{{ st.section_margin_bottom_mobile | default: 0 }}px}@media (min-width:768px){#shopify-section-{{ sid }}{margin-top:{{ st.section_margin_top_desktop | default: 0 }}px;margin-bottom:{{ st.section_margin_bottom_desktop | default: 0 }}px}}{% if st.reset_spacing %}#shopify-section-{{ sid }}{margin-top:0!important;margin-bottom:0!important}#shopify-section-{{ sid }} + .shopify-section{margin-top:0!important}{% endif %}{% comment %}{% endcomment %}</style>
+<style>
+  #shopify-section-{{ sid }} { isolation: isolate; position: relative; }
+  {%- if st.enable_custom_fonts -%}
+    {{ st.heading_font | font_face: font_display: 'swap' }}
+    {{ st.body_font | font_face: font_display: 'swap' }}
+  {%- endif %}
+  #shopify-section-{{ sid }} .bfl {
+    --bfl-edge: 1.5rem;
+    font-family: var(--body-font, inherit); color: var(--bfl-text, var(--color-text));
+    background: var(--color-background);
+    padding-top: calc(var(--bfl-pt-m, 0) * 1px); padding-bottom: calc(var(--bfl-pb-m, 0) * 1px);
+  }
+  #shopify-section-{{ sid }} .bfl, #shopify-section-{{ sid }} .bfl *, #shopify-section-{{ sid }} .bfl *::before, #shopify-section-{{ sid }} .bfl *::after { box-sizing: border-box; }
+  #shopify-section-{{ sid }} .bfl__inner { width: 100%; margin-inline: auto; padding-inline: var(--bfl-edge); }
+  #shopify-section-{{ sid }} .bfl [hidden] { display: none !important; }
+
+  /* Heading, text and View all */
+  #shopify-section-{{ sid }} .bfl__header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1.2rem 3rem; margin-bottom: 2.4rem; }
+  #shopify-section-{{ sid }} .bfl__intro { min-width: 0; flex: 1 1 32rem; max-width: 64rem; }
+  #shopify-section-{{ sid }} .bfl__heading {
+    margin: 0; font-size: calc(var(--heading-font-scale, 1) * clamp(2.4rem, calc(2.4rem + 8 * var(--responsive-rate, 0px)), 3.2rem));
+    color: var(--bfl-b-color, var(--bfl-heading, var(--color-heading))); text-wrap: balance; overflow-wrap: anywhere;
+  }
+  #shopify-section-{{ sid }} .bfl__lede { margin: 0; color: var(--bfl-b-color, var(--bfl-text, var(--color-text))); font-size: 1.6rem; line-height: 1.6; overflow-wrap: anywhere; }
+  #shopify-section-{{ sid }} .bfl__heading + .bfl__lede, #shopify-section-{{ sid }} .bfl__lede + .bfl__heading { margin-top: 1rem; }
+  #shopify-section-{{ sid }} .bfl__lede :is(p, li, span, strong, em, a) { color: inherit; }
+  #shopify-section-{{ sid }} .bfl__lede > :first-child { margin-top: 0; }
+  #shopify-section-{{ sid }} .bfl__lede > :last-child { margin-bottom: 0; }
+  #shopify-section-{{ sid }} .bfl__all { flex: 0 0 auto; text-decoration: none; }
+
+  /* The featured post and the list */
+  #shopify-section-{{ sid }} .bfl__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3.2rem; align-items: start; }
+  #shopify-section-{{ sid }} .bfl__feature { min-width: 0; margin: 0; }
+  #shopify-section-{{ sid }} .bfl__media {
+    position: relative; display: block; overflow: hidden; aspect-ratio: 4 / 3;
+    border-radius: var(--rounded-radius, 8px);
+    background: var(--bfl-image-bg, color-mix(in srgb, var(--color-text) 8%, var(--color-background)));
+    -webkit-tap-highlight-color: transparent;
+  }
+  #shopify-section-{{ sid }} .bfl[data-ratio='square'] .bfl__media { aspect-ratio: 1; }
+  #shopify-section-{{ sid }} .bfl[data-ratio='portrait'] .bfl__media { aspect-ratio: 4 / 5; }
+  #shopify-section-{{ sid }} .bfl__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .4s cubic-bezier(.3, 1, .3, 1); }
+  #shopify-section-{{ sid }} .bfl__ph { position: absolute; inset: 0; width: 100%; height: 100%; display: block; color: var(--color-text); opacity: .28; }
+  #shopify-section-{{ sid }} .bfl__body { padding-top: 2rem; }
+  #shopify-section-{{ sid }} .bfl__meta, #shopify-section-{{ sid }} .bfl__date {
+    display: block; margin: 0; font-size: 1.3rem; line-height: 1.4; letter-spacing: .04em;
+    color: var(--bfl-meta, color-mix(in srgb, var(--color-text) 80%, var(--color-background)));
+  }
+  #shopify-section-{{ sid }} .bfl__title {
+    margin: .8rem 0 0; font-size: var(--bfl-title-size, 2.6rem); line-height: 1.2;
+    color: var(--bfl-title, var(--color-heading)); text-wrap: balance; overflow-wrap: anywhere;
+  }
+  #shopify-section-{{ sid }} .bfl[data-title-size='small'] { --bfl-title-size: 2.2rem; }
+  #shopify-section-{{ sid }} .bfl[data-title-size='large'] { --bfl-title-size: 3rem; }
+  #shopify-section-{{ sid }} .bfl__title a, #shopify-section-{{ sid }} .bfl__row { color: inherit; text-decoration: none; }
+  #shopify-section-{{ sid }} .bfl__excerpt {
+    margin: 1.2rem 0 0; max-width: 60ch; font-size: 1.6rem; line-height: 1.6; color: var(--bfl-text, var(--color-text));
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere;
+  }
+  #shopify-section-{{ sid }} .bfl__read {
+    display: inline-flex; align-items: center; min-height: 44px; margin-top: .4rem;
+    font-size: 1.5rem; font-weight: 600; color: var(--bfl-title, var(--color-heading));
+    text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: .4rem;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #shopify-section-{{ sid }} .bfl__list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--bfl-border, var(--color-border)); min-width: 0; }
+  #shopify-section-{{ sid }} .bfl__item { margin: 0; padding: 0; border-bottom: 1px solid var(--bfl-border, var(--color-border)); }
+  #shopify-section-{{ sid }} .bfl__row { display: flex; align-items: center; gap: 1.6rem; min-height: 44px; padding: 1.6rem 0; -webkit-tap-highlight-color: transparent; transition: opacity .2s ease; }
+  #shopify-section-{{ sid }} .bfl__thumb {
+    position: relative; flex: 0 0 7.2rem; width: 7.2rem; aspect-ratio: 1; overflow: hidden;
+    border-radius: var(--rounded-radius, 8px);
+    background: var(--bfl-image-bg, color-mix(in srgb, var(--color-text) 8%, var(--color-background)));
+  }
+  #shopify-section-{{ sid }} .bfl__row-body { min-width: 0; flex: 1 1 auto; }
+  #shopify-section-{{ sid }} .bfl__row-title {
+    margin: .4rem 0 0; font-size: 1.7rem; line-height: 1.3; color: var(--bfl-title, var(--color-heading));
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;
+  }
+  #shopify-section-{{ sid }} .bfl[data-date='false'] :is(.bfl__meta, .bfl__date) { display: none; }
+  #shopify-section-{{ sid }} .bfl[data-date='false'] .bfl__title { margin-top: 0; }
+  #shopify-section-{{ sid }} .bfl[data-date='false'] .bfl__row-title { margin-top: 0; }
+  #shopify-section-{{ sid }} .bfl[data-excerpt='false'] .bfl__excerpt { display: none; }
+  #shopify-section-{{ sid }} .bfl[data-thumbs='false'] .bfl__thumb { display: none; }
+  #shopify-section-{{ sid }} .bfl__hint { margin: 1.6rem 0 0; font-size: 1.4rem; color: var(--color-text); }
+
+  /* Touch and keyboard */
+  #shopify-section-{{ sid }} :is(.bfl__title a, .bfl__read, .bfl__row):focus-visible { outline: 2px solid var(--color-heading); outline-offset: 3px; border-radius: 2px; }
+  #shopify-section-{{ sid }} .bfl__row:active, #shopify-section-{{ sid }} .bfl__read:active { opacity: .6; }
+  @media (hover: hover) {
+    #shopify-section-{{ sid }} .bfl__feature:hover .bfl__img { transform: scale(1.03); }
+    #shopify-section-{{ sid }} .bfl__title a:hover, #shopify-section-{{ sid }} .bfl__row:hover .bfl__row-title { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: .3rem; }
+    #shopify-section-{{ sid }} .bfl__read:hover { text-decoration-thickness: 2px; }
+  }
+
+  @media (min-width: 768px) {
+    #shopify-section-{{ sid }} .bfl { padding-top: calc(var(--bfl-pt, 0) * 1px); padding-bottom: calc(var(--bfl-pb, 0) * 1px); }
+    #shopify-section-{{ sid }} .bfl[data-width='full_width'] { --bfl-edge: 2rem; }
+    #shopify-section-{{ sid }} .bfl__header { margin-bottom: 3.2rem; }
+    #shopify-section-{{ sid }} .bfl__thumb { flex-basis: 9.6rem; width: 9.6rem; }
+    #shopify-section-{{ sid }} .bfl__row { gap: 2rem; padding: 2rem 0; }
+    #shopify-section-{{ sid }} .bfl__row-title { font-size: 1.9rem; }
+    #shopify-section-{{ sid }} .bfl[data-title-size='small'] { --bfl-title-size: 2.6rem; }
+    #shopify-section-{{ sid }} .bfl { --bfl-title-size: 3.2rem; }
+    #shopify-section-{{ sid }} .bfl[data-title-size='large'] { --bfl-title-size: 4rem; }
+  }
+  @media (min-width: 990px) {
+    #shopify-section-{{ sid }} .bfl__grid { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 5.6rem; }
+    #shopify-section-{{ sid }} .bfl[data-feature='right'] .bfl__grid { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+    #shopify-section-{{ sid }} .bfl[data-feature='right'] .bfl__feature { order: 2; }
+  }
+  @media (min-width: 1025px) {
+    #shopify-section-{{ sid }} .bfl[data-width='container'] .bfl__inner { width: 90%; }
+    #shopify-section-{{ sid }} .bfl[data-width='fluid_container'] .bfl__inner { width: 95%; }
+  }
+  @media (min-width: 1200px) {
+    #shopify-section-{{ sid }} .bfl[data-width='container'] .bfl__inner { max-width: calc(var(--page-width, 1300px) + 3rem); }
+    #shopify-section-{{ sid }} .bfl[data-width='fluid_container'] .bfl__inner { max-width: calc(var(--fluid-container-width, 1500px) + 3rem); }
+    #shopify-section-{{ sid }} .bfl[data-width='stretch_width'] { --bfl-edge: 3rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #shopify-section-{{ sid }} :is(.bfl__img, .bfl__row) { transition: none; }
+    #shopify-section-{{ sid }} .bfl__feature:hover .bfl__img { transform: none; }
+  }
+{% comment %}{% endcomment %}</style>
+{%- capture bfl_vars -%}
+--bfl-pt: {{ st.padding_top | default: 0 }};--bfl-pb: {{ st.padding_bottom | default: 0 }};--bfl-pt-m: {{ st.padding_top_mobile | default: 0 }};--bfl-pb-m: {{ st.padding_bottom_mobile | default: 0 }};
+{%- if custom -%}--bfl-heading: {% render 'scheme-color', color: st.heading_color, fallback: 'var(--color-heading)' %};--bfl-text: {% render 'scheme-color', color: st.text_color, fallback: 'var(--color-text)' %};--bfl-title: {% render 'scheme-color', color: st.title_color, fallback: 'var(--color-heading)' %};--bfl-meta: {% render 'scheme-color', color: st.meta_color, fallback: 'color-mix(in srgb, var(--color-text) 80%, var(--color-background))' %};--bfl-border: {% render 'scheme-color', color: st.border_color, fallback: 'var(--color-border)' %};{%- endif -%}
+{%- if st.enable_custom_fonts -%}{%- if st.heading_font.family != blank -%}--heading-font: {{ st.heading_font.family }}, {{ st.heading_font.fallback_families | default: 'sans-serif' }};{%- endif -%}{%- if st.body_font.family != blank -%}--body-font: {{ st.body_font.family }}, {{ st.body_font.fallback_families | default: 'sans-serif' }};{%- endif -%}{%- endif -%}
+{%- endcapture -%}
+{%- assign own_font = false -%}
+{%- if st.enable_custom_fonts -%}{%- if st.heading_font.family != blank or st.body_font.family != blank -%}{%- assign own_font = true -%}{%- endif -%}{%- endif -%}
+{%- if design -%}
+{%- capture bfl_json -%}{"color_scheme":{{ color_scheme | json }},"section_width":{{ st.section_width | append: '' | json }},"reset_spacing":{% if st.reset_spacing %}true{% else %}false{% endif %},"show_date":{% if st.show_date %}true{% else %}false{% endif %},"show_excerpt":{% if st.show_excerpt %}true{% else %}false{% endif %},"button_label":{{ st.button_label | append: '' | json }},"show_view_all":{% if st.show_view_all %}true{% else %}false{% endif %},"view_all_label":{{ st.view_all_label | append: '' | json }},"view_all_link":{{ st.view_all_link | append: '' | json }},"featured_position":{{ st.featured_position | append: '' | json }},"image_ratio":{{ st.image_ratio | append: '' | json }},"show_list_images":{% if st.show_list_images %}true{% else %}false{% endif %},"enable_custom_style":{% if st.enable_custom_style %}true{% else %}false{% endif %},"heading_color":{{ st.heading_color | append: '' | json }},"text_color":{{ st.text_color | append: '' | json }},"title_color":{{ st.title_color | append: '' | json }},"meta_color":{{ st.meta_color | append: '' | json }},"border_color":{{ st.border_color | append: '' | json }},"title_size":{{ st.title_size | append: '' | json }},"enable_custom_fonts":{% if st.enable_custom_fonts %}true{% else %}false{% endif %},"heading_font":{"family":{{ st.heading_font.family | append: '' | json }},"fallback_families":{{ st.heading_font.fallback_families | append: '' | json }}},"body_font":{"family":{{ st.body_font.family | append: '' | json }},"fallback_families":{{ st.body_font.fallback_families | append: '' | json }}},"padding_top":{{ st.padding_top | default: 0 | json }},"padding_bottom":{{ st.padding_bottom | default: 0 | json }},"section_margin_top_desktop":{{ st.section_margin_top_desktop | default: 0 | json }},"section_margin_bottom_desktop":{{ st.section_margin_bottom_desktop | default: 0 | json }},"padding_top_mobile":{{ st.padding_top_mobile | default: 0 | json }},"padding_bottom_mobile":{{ st.padding_bottom_mobile | default: 0 | json }},"section_margin_top_mobile":{{ st.section_margin_top_mobile | default: 0 | json }},"section_margin_bottom_mobile":{{ st.section_margin_bottom_mobile | default: 0 | json }}}{%- endcapture -%}
+{%- endif -%}
+<div class="bfl color-{{ color_scheme }} gradient{% if st.reset_spacing %} remove_spacing{% endif %}" data-r7s="blog-featured-list" data-r7s-section="{{ sid }}"{% if design %} data-r7s-settings="{{ bfl_json | escape }}" data-r7s-blog-url="{{ the_blog.url }}" data-r7s-all-default="{{ view_all_default | escape }}"{% endif %} data-width="{{ st.section_width | default: 'fluid_container' }}" data-feature="{{ st.featured_position | default: 'left' }}" data-ratio="{{ ratio }}" data-title-size="{{ st.title_size | default: 'medium' }}" data-date="{% if st.show_date %}true{% else %}false{% endif %}" data-excerpt="{% if st.show_excerpt %}true{% else %}false{% endif %}" data-thumbs="{% if st.show_list_images %}true{% else %}false{% endif %}"{% if own_font %} data-own-font{% endif %} style="{{ bfl_vars | strip }}">
+  <div class="bfl__inner">
+    {%- if head_words > 0 or show_all or design -%}
+    <div class="bfl__header" data-r7s-header{% if head_words == 0 and show_all == false %} hidden{% endif %}>
+      <div class="bfl__intro">
+        {%- for block in section.blocks -%}
+          {%- assign bs = block.settings -%}
+          {%- case block.type -%}
+            {%- when 'heading' -%}
+              <h2 class="bfl__heading" data-r7s-block="{{ block.id }}" data-r7s-type="heading"{% if design %} data-r7s-settings="{% capture b_json %}{"heading":{{ bs.heading | append: '' | json }},"enable_custom_style":{% if bs.enable_custom_style %}true{% else %}false{% endif %},"color":{{ bs.color | append: '' | json }}}{% endcapture %}{{ b_json | escape }}"{% endif %} style="{% if bs.enable_custom_style %}--bfl-b-color: {% render 'scheme-color', color: bs.color, fallback: 'var(--color-heading)' %};{% endif %}"{% if bs.heading == blank %} hidden{% endif %} {{ block.shopify_attributes }}>{{ bs.heading }}</h2>
+            {%- when 'text' -%}
+              <div class="bfl__lede" data-r7s-block="{{ block.id }}" data-r7s-type="text"{% if design %} data-r7s-settings="{% capture b_json %}{"text":{{ bs.text | append: '' | json }},"enable_custom_style":{% if bs.enable_custom_style %}true{% else %}false{% endif %},"color":{{ bs.color | append: '' | json }}}{% endcapture %}{{ b_json | escape }}"{% endif %} style="{% if bs.enable_custom_style %}--bfl-b-color: {% render 'scheme-color', color: bs.color, fallback: 'var(--color-text)' %};{% endif %}"{% if bs.text == blank %} hidden{% endif %} {{ block.shopify_attributes }}>{{ bs.text }}</div>
+          {%- endcase -%}
+        {%- endfor -%}
+      </div>
+      {%- if show_all or design -%}
+        <a class="bfl__all btn btn-secondary" data-theme-button="secondary" data-sl-button data-r7s-all{% if view_all_url != blank %} href="{{ view_all_url }}"{% endif %}{% if show_all == false %} hidden{% endif %}>{{ view_all_label | escape }}</a>
+      {%- endif -%}
+    </div>
+    {%- endif -%}
+    <div class="bfl__grid">
+      {%- if has_posts -%}
+        <article class="bfl__feature">
+          <a class="bfl__media" href="{{ feature.url }}" tabindex="-1" aria-hidden="true">
+            {%- if feature.image != blank -%}
+              <img class="bfl__img" src="{{ feature.image | image_url: width: 1200 }}" srcset="{{ feature.image | image_url: width: 600 }} 600w, {{ feature.image | image_url: width: 900 }} 900w, {{ feature.image | image_url: width: 1200 }} 1200w, {{ feature.image | image_url: width: 1600 }} 1600w" sizes="(min-width: 990px) 58vw, 100vw" width="{{ feature.image.width | default: 1200 }}" height="{{ feature.image.height | default: 900 }}" alt="" loading="lazy" decoding="async">
+            {%- else -%}
+              <svg class="bfl__ph" viewBox="0 0 120 90" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false"><circle cx="50" cy="38" r="5" fill="currentColor"/><path d="M36 64l16-18 10 10 7-6 15 14z" fill="currentColor"/></svg>
+            {%- endif -%}
+          </a>
+          <div class="bfl__body">
+            <time class="bfl__meta" datetime="{{ feature.published_at | date: '%Y-%m-%d' }}">{{ feature.published_at | date: '%b %d, %Y' }}</time>
+            <h3 class="bfl__title"><a href="{{ feature.url }}">{{ feature.title | escape }}</a></h3>
+            {%- liquid
+              assign excerpt = feature.excerpt | strip_html | strip
+              if excerpt == blank
+                assign excerpt = feature.content | strip_html | strip
+              endif
+            -%}
+            {%- if excerpt != blank -%}<p class="bfl__excerpt">{{ excerpt | truncatewords: 40 | escape }}</p>{%- endif -%}
+            {%- assign read_label = st.button_label | strip -%}
+            <a class="bfl__read" href="{{ feature.url }}" data-r7s-read{% if read_label == blank %} hidden{% endif %}>{{ read_label | escape }}</a>
+          </div>
+        </article>
+        {%- if list_count > 0 -%}
+        <ol class="bfl__list" role="list">
+          {%- assign n = 0 -%}
+          {%- for post in the_blog.articles -%}
+            {%- if post.id == feature.id -%}{%- continue -%}{%- endif -%}
+            {%- if current_id != blank and post.id == current_id -%}{%- continue -%}{%- endif -%}
+            {%- assign n = n | plus: 1 -%}
+            {%- if n > list_max -%}{%- break -%}{%- endif -%}
+            <li class="bfl__item">
+              <a class="bfl__row" href="{{ post.url }}">
+                <span class="bfl__thumb">
+                  {%- if post.image != blank -%}
+                    <img class="bfl__img" src="{{ post.image | image_url: width: 240 }}" srcset="{{ post.image | image_url: width: 120 }} 120w, {{ post.image | image_url: width: 240 }} 240w" sizes="96px" width="240" height="240" alt="" loading="lazy" decoding="async">
+                  {%- else -%}
+                    <svg class="bfl__ph" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><circle cx="50" cy="50" r="7" fill="currentColor"/><path d="M30 84l22-25 13 14 10-9 19 20z" fill="currentColor"/></svg>
+                  {%- endif -%}
+                </span>
+                <span class="bfl__row-body">
+                  <time class="bfl__date" datetime="{{ post.published_at | date: '%Y-%m-%d' }}">{{ post.published_at | date: '%b %d, %Y' }}</time>
+                  <h3 class="bfl__row-title">{{ post.title | escape }}</h3>
+                </span>
+              </a>
+            </li>
+          {%- endfor -%}
+        </ol>
+        {%- endif -%}
+      {%- else -%}
+        {%- comment -%} Builder only: placeholders until the blog has posts. Nothing here is a real post. {%- endcomment -%}
+        <div class="bfl__feature" data-r7s-placeholder>
+          <div class="bfl__media"><svg class="bfl__ph" viewBox="0 0 120 90" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false"><circle cx="50" cy="38" r="5" fill="currentColor"/><path d="M36 64l16-18 10 10 7-6 15 14z" fill="currentColor"/></svg></div>
+          <div class="bfl__body">
+            <span class="bfl__meta">Date</span>
+            <h3 class="bfl__title">Your newest post</h3>
+            <p class="bfl__excerpt">The opening lines of the post show here.</p>
+            {%- assign read_label = st.button_label | strip -%}
+            <span class="bfl__read" data-r7s-read{% if read_label == blank %} hidden{% endif %}>{{ read_label | escape }}</span>
+          </div>
+        </div>
+        <ol class="bfl__list" role="list">
+          {%- for i in (1..list_max) -%}
+            <li class="bfl__item"><div class="bfl__row">
+              <span class="bfl__thumb"><svg class="bfl__ph" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><circle cx="50" cy="50" r="7" fill="currentColor"/><path d="M30 84l22-25 13 14 10-9 19 20z" fill="currentColor"/></svg></span>
+              <span class="bfl__row-body"><span class="bfl__date">Date</span><h3 class="bfl__row-title">Next post</h3></span>
+            </div></li>
+          {%- endfor -%}
+          <li class="bfl__hint">Pick a blog with posts in Content to show them here.</li>
+        </ol>
+      {%- endif -%}
+    </div>
+  </div>
+</div>
+{%- endif -%}
+</template>
+
+<schema>
+{
+  "shopify": {
+    "name": "Blog Spotlight",
+    "settings": [
+      { "type": "header", "content": "General" },
+      { "type": "color_scheme", "id": "color_scheme", "label": "Colour scheme", "default": "default-color-scheme" },
+      {
+        "type": "select", "id": "section_width", "label": "Section width", "default": "fluid_container",
+        "options": [
+          { "value": "container", "label": "Default" },
+          { "value": "fluid_container", "label": "Fluid container" },
+          { "value": "stretch_width", "label": "Stretched" },
+          { "value": "full_width", "label": "Full width" }
+        ]
+      },
+      { "type": "checkbox", "id": "reset_spacing", "label": "Remove default space between sections", "default": true },
+
+      { "type": "header", "content": "Content" },
+      { "type": "blog", "id": "blog", "label": "Blog", "info": "Posts come from this blog. On a blog or article page an empty choice uses that blog." },
+      { "type": "article", "id": "featured_article", "label": "Featured post", "info": "Empty features the newest post." },
+      { "type": "range", "id": "posts_count", "label": "Posts in the list", "min": 2, "max": 5, "step": 1, "default": 3 },
+      { "type": "checkbox", "id": "show_date", "label": "Show date", "default": true },
+      { "type": "checkbox", "id": "show_excerpt", "label": "Show excerpt", "default": true, "info": "The first lines of the featured post." },
+      { "type": "text", "id": "button_label", "label": "Read link label", "default": "Read the post", "info": "Empty hides the link. The title stays a link." },
+      { "type": "checkbox", "id": "show_view_all", "label": "Show View all button", "default": true },
+      { "type": "text", "id": "view_all_label", "label": "View all label", "info": "Empty uses the theme's own wording.", "visible_if": "{{ section.settings.show_view_all }}" },
+      { "type": "url", "id": "view_all_link", "label": "View all link", "info": "Empty links to the blog these posts come from.", "visible_if": "{{ section.settings.show_view_all }}" },
+
+      { "type": "header", "content": "Layout" },
+      {
+        "type": "select", "id": "featured_position", "label": "Featured post", "default": "left",
+        "info": "On phones the list sits under it.",
+        "options": [
+          { "value": "left", "label": "Left" },
+          { "value": "right", "label": "Right" }
+        ]
+      },
+
+      { "type": "header", "content": "Images" },
+      {
+        "type": "select", "id": "image_ratio", "label": "Featured picture shape", "default": "landscape",
+        "options": [
+          { "value": "landscape", "label": "Landscape" },
+          { "value": "square", "label": "Square" },
+          { "value": "portrait", "label": "Portrait" }
+        ]
+      },
+      { "type": "checkbox", "id": "show_list_images", "label": "Pictures in the list", "default": true },
+
+      { "type": "header", "content": "Appearance" },
+      { "type": "checkbox", "id": "enable_custom_style", "label": "Enable custom styling", "default": false, "info": "Off: colours follow the colour scheme." },
+      { "type": "color", "id": "heading_color", "label": "Heading", "visible_if": "{{ section.settings.enable_custom_style }}" },
+      { "type": "color", "id": "text_color", "label": "Text", "visible_if": "{{ section.settings.enable_custom_style }}" },
+      { "type": "color", "id": "title_color", "label": "Post titles", "visible_if": "{{ section.settings.enable_custom_style }}" },
+      { "type": "color", "id": "meta_color", "label": "Dates", "visible_if": "{{ section.settings.enable_custom_style }}" },
+      { "type": "color", "id": "border_color", "label": "Lines between posts", "visible_if": "{{ section.settings.enable_custom_style }}" },
+
+      { "type": "header", "content": "Typography" },
+      {
+        "type": "select", "id": "title_size", "label": "Featured title size", "default": "medium",
+        "options": [
+          { "value": "small", "label": "Small" },
+          { "value": "medium", "label": "Medium" },
+          { "value": "large", "label": "Large" }
+        ]
+      },
+      { "type": "checkbox", "id": "enable_custom_fonts", "label": "Enable custom fonts", "default": false },
+      { "type": "font_picker", "id": "heading_font", "label": "Heading and titles font", "default": "assistant_n4", "visible_if": "{{ section.settings.enable_custom_fonts }}" },
+      { "type": "font_picker", "id": "body_font", "label": "Text font", "default": "assistant_n4", "visible_if": "{{ section.settings.enable_custom_fonts }}" },
+
+      { "type": "header", "content": "Desktop spacing" },
+      { "type": "range", "id": "padding_top", "label": "Top padding", "default": 0, "min": 0, "max": 100, "step": 1, "unit": "px" },
+      { "type": "range", "id": "padding_bottom", "label": "Bottom padding", "default": 0, "min": 0, "max": 100, "step": 1, "unit": "px" },
+      { "type": "range", "id": "section_margin_top_desktop", "label": "Top margin", "min": 0, "max": 300, "step": 4, "default": 0, "visible_if": "{{ section.settings.reset_spacing == false }}" },
+      { "type": "range", "id": "section_margin_bottom_desktop", "label": "Bottom margin", "min": 0, "max": 300, "step": 4, "default": 0, "visible_if": "{{ section.settings.reset_spacing == false }}" },
+
+      { "type": "header", "content": "Mobile" },
+      { "type": "range", "id": "padding_top_mobile", "label": "Top padding (mobile)", "default": 0, "min": 0, "max": 100, "step": 1, "unit": "px" },
+      { "type": "range", "id": "padding_bottom_mobile", "label": "Bottom padding (mobile)", "default": 0, "min": 0, "max": 100, "step": 1, "unit": "px" },
+      { "type": "range", "id": "section_margin_top_mobile", "label": "Top margin (mobile)", "min": 0, "max": 300, "step": 4, "default": 0, "visible_if": "{{ section.settings.reset_spacing == false }}" },
+      { "type": "range", "id": "section_margin_bottom_mobile", "label": "Bottom margin (mobile)", "min": 0, "max": 300, "step": 4, "default": 0, "visible_if": "{{ section.settings.reset_spacing == false }}" }
+    ],
+    "blocks": [
+      {
+        "type": "heading",
+        "name": "Heading",
+        "limit": 1,
+        "settings": [
+          { "type": "inline_richtext", "id": "heading", "label": "Heading", "default": "From the blog" },
+          { "type": "header", "content": "Style" },
+          { "type": "checkbox", "id": "enable_custom_style", "label": "Enable custom styling", "default": false },
+          { "type": "color", "id": "color", "label": "Colour", "visible_if": "{{ block.settings.enable_custom_style }}" }
+        ]
+      },
+      {
+        "type": "text",
+        "name": "Text",
+        "limit": 1,
+        "settings": [
+          { "type": "richtext", "id": "text", "label": "Text", "default": "<p>Add a short line about what you write about.</p>" },
+          { "type": "header", "content": "Style" },
+          { "type": "checkbox", "id": "enable_custom_style", "label": "Enable custom styling", "default": false },
+          { "type": "color", "id": "color", "label": "Colour", "visible_if": "{{ block.settings.enable_custom_style }}" }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "name": "Blog Spotlight",
+        "category": "Blog",
+        "settings": { "padding_top": 64, "padding_bottom": 64, "padding_top_mobile": 40, "padding_bottom_mobile": 40 },
+        "blocks": [
+          { "type": "heading" },
+          { "type": "text" }
+        ]
+      }
+    ]
+  }
+}
+</schema>
