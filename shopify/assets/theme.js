@@ -2696,7 +2696,25 @@ class LocalizationForm extends HTMLElement {
     event.preventDefault();
     const form = this.querySelector("form");
     this.elements.input.value = item.dataset.value;
-    if (form) form.submit();
+    if (!form) return;
+    /* A language change keeps the page: Storelib answers the form with a
+       redirect to the language's home (/ro, or / for the main language), so
+       its address is read and the current page opened under it. Anything
+       unexpected falls back to the plain form, which lands on that home. */
+    if (this.elements.input.name !== "language_code" || !window.fetch || !window.AbortController) { form.submit(); return; }
+    const stop = new AbortController();
+    fetch(form.action, {method: "POST", body: new FormData(form), credentials: "same-origin", redirect: "follow", signal: stop.signal})
+      .then((response) => {
+        const landed = new URL(response.url, location.href);
+        stop.abort();
+        if (!response.ok || landed.origin !== location.origin) throw new Error("localization");
+        const root = landed.pathname.replace(/\/+$/, "");
+        const current = (document.documentElement.lang || "").toLowerCase();
+        let path = location.pathname;
+        if (current && new RegExp("^/" + current.replace(/[^a-z-]/g, "") + "(?=/|$)", "i").test(path)) path = path.slice(current.length + 1) || "/";
+        location.assign(root + (path === "/" && root ? "" : path) + location.search + location.hash);
+      })
+      .catch(() => form.submit());
   }
 
   openSelector() {
