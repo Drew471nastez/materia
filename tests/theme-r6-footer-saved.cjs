@@ -51,6 +51,9 @@ async function state(browser, opts, width, mode) {
         const A = String(x).split('|'), B = String(y).split('|');
         const ch = A.map((v, k) => [v, B[k]]).filter(([u, w]) => u !== w);
         if (A[0].endsWith(' svg')) return ch.every(([u, w]) => u === '100%' && w === '14px');
+        /* On touch screens the store contact links carry an invisible 44px touch layer (materia-experience.css),
+           which needs position: relative on the link; nothing moves on screen. */
+        if (/(^| )A$/.test(A[0]) && ch.length) return ch.every(([u, w]) => (u === 'static' && w === 'relative') || (u === 'auto' && w === '0px'));
         if (A[0].endsWith(' DIV')) return ch.some(([u, w]) => u === '100%' && w === '33.333%') && ch.every(([u, w]) => (u === '100%' && w === '33.333%') || (/^-?[\d.]+(px)?$/.test(u) && /^-?[\d.]+(px)?$/.test(w)));
         return false;
       };
@@ -61,7 +64,7 @@ async function state(browser, opts, width, mode) {
       if (width === 375 && mode === 'open') ok(/true/.test(b.extra.expanded), `${tag}: a tap opens a footer column`);
       ok(a.extra.pad === b.extra.pad, `${tag}: the page keeps the bar's room at the bottom (${b.extra.pad})`);
       ok(b.extra.scroll <= Math.max(width + 1, a.extra.scroll), `${tag}: nothing wider than before (${b.extra.scroll} / ${a.extra.scroll}; the layout's closed cart drawer widens this harness page)`);
-      ok(JSON.stringify(a.errors) === JSON.stringify(b.errors), `${tag}: no new page errors (${b.errors.join('; ')})`);
+      ok(b.errors.every(m => a.errors.includes(m)), `${tag}: no new page errors (${b.errors.filter(m => !a.errors.includes(m)).join('; ')})`);
       if (mode === 'closed') {
         /* Without the toggle only the Big text colour falls back to the scheme heading colour. */
         const c = await state(browser, {design_mode, footer: {enable_custom_style: false}}, width, mode);
