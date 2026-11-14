@@ -914,7 +914,8 @@
     roots.forEach(root=>{delete root._tierImageOverrides;watchTierImages(root);});
   });
   let nativeOfferSequence=0;
-  /* rate: store currency per base unit, from the offer (see draw). Storelib
+  /* rate: store currency per base unit (offer variant price here / its
+     priceCents in the offer), set in draw. Storelib
      prices a tier in the base currency and converts the total, so the same
      steps give the cart's own number. */
   const tierPrice = (tier, variant, rate = 0) => {
