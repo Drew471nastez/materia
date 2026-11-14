@@ -45,7 +45,7 @@ async function state(browser, old, width, mode) {
       ok(a.sig.length > 100 && a.sig.length === b.sig.length, `${width} ${mode}: same elements (${a.sig.length} / ${b.sig.length})`);
       ok(d.length === 0, `${width} ${mode}: every element looks the same\n` + d.slice(0, 6).map(x => JSON.stringify(x)).join('\n'));
       ok(b.extra.scroll <= width + 1, `${width} ${mode}: no sideways scroll`);
-      ok(JSON.stringify(a.errors) === JSON.stringify(b.errors), `${width} ${mode}: no new page errors (${b.errors.join('; ')})`);
+      ok(b.errors.every(m => a.errors.includes(m)), `${width} ${mode}: no new page errors (${b.errors.filter(m => !a.errors.includes(m)).join('; ')})`);
       ok(b.extra.active === '0', `${width} ${mode}: the message rotator runs from the controller`);
     }
   } finally { await browser.close(); }
