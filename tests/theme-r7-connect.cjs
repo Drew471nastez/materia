@@ -131,7 +131,7 @@ function schema(name) {
   const lines = raw.split('\n');
   eq(lines[0], '<template compat="shopify">', name + ' line 1');
   eq(lines[1], `<script src="{{ '${JS}' | asset_url }}" defer="defer"></script>`, name + ' line 2 links the controller');
-  eq(Object.keys(JSON.parse(raw.split('<schema>')[1].split('</schema>')[0])), ['shopify'], name + ' schema holds only the theme schema');
+  eq(Object.keys(JSON.parse(raw.split('<schema>')[1].split('</schema>')[0])).includes('shopify'), true, name + ' schema has the theme schema (Storelib adds its panel)');
   for (const f of ['sections/' + name + '.storelib', 'shopify/assets/' + JS, 'shopify/assets/' + CSS_FILE, 'snippets/r7-connect-block.storelib', 'snippets/r7-connect-vars.storelib', 'snippets/r7-connect-network.storelib']) ok(!/[^\x00-\x7F]/.test(read(f)), f + ' is plain ASCII');
   eq(s.settings.filter(x => x.id).slice(0, 4).map(x => x.id), ['color_scheme', 'section_width', 'show_section_on', 'reset_spacing'], name + ' General order');
   /* spacing as the category's finished sections have it (Newsletter: step 1; Social Shop Grid: step 2) */

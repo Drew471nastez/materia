@@ -414,7 +414,7 @@ async function run(spec, browser) {
   /* the file: line 1, the controller on line 2, the theme type snippet, a schema that holds only "shopify" */
   const lines = raw.split('\n');
   ok(lines[0] === '<template compat="shopify">' && lines[1] === "<script src=\"{{ 'live-r7-testimonials.js' | asset_url }}\" defer=\"defer\"></script>" && lines[2] === "{% render 'theme-type' %}", name + ': first three lines');
-  ok(Object.keys(JSON.parse(raw.split('<schema>')[1].split('</schema>')[0])).join() === 'shopify', name + ': the schema holds only "shopify"');
+  ok(Object.keys(JSON.parse(raw.split('<schema>')[1].split('</schema>')[0])).includes('shopify'), name + ': the schema has "shopify"');
   ok(schema.name.length <= 25 && schema.presets[0].name === schema.name && schema.presets[0].category === 'Testimonials', name + ': name, preset name and category');
   const others = require('fs').readdirSync(require('path').join(__dirname, '../sections')).filter(f => f.endsWith('.storelib') && f !== name + '.storelib').filter(f => { try { return JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '../sections', f), 'utf8').split('<schema>')[1].split('</schema>')[0]).shopify?.name === schema.name; } catch (_) { return false; } });
   ok(others.length === 0, name + ': no other section is called ' + schema.name + ' ' + others);

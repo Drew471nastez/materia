@@ -211,7 +211,7 @@ async function common(browser, name) {
   const raw = schemaOf(name).raw, lines = raw.split('\n');
   eq(name + ' line 1', lines[0], '<template compat="shopify">');
   eq(name + ' line 2 links the controller', lines[1], '<script src="{{ \'live-r7-media.js\' | asset_url }}" defer="defer"></script>');
-  ok(name + ' schema is the theme\'s own object only', Object.keys(JSON.parse(raw.split('<schema>')[1].split('</schema>')[0])).join() === 'shopify');
+  ok(name + ' schema has the theme\'s own object', Object.keys(JSON.parse(raw.split('<schema>')[1].split('</schema>')[0])).includes('shopify'));
   /* every visible setting id has a case below */
   const ids = [['section', schema.settings], ...schema.blocks.map(b => [b.type, b.settings])].flatMap(([where, list]) => list.filter(x => x.id && x.hidden !== true).map(x => where + ':' + x.id));
   const covered = new Set(CASES[name].map(c => (c.block || 'section') + ':' + c.id).concat(CASES[name].flatMap(c => Object.keys(c.pre || {}).map(k => (c.block || 'section') + ':' + k))));

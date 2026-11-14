@@ -576,7 +576,7 @@ async function collageScroller(browser, editing, reducedMotion) {
   for (const sec of run) {
     const {raw, schema} = schemaOf(sec.name);
     eq(schemaProblems(sec.name), [], sec.name + ': schema problems');
-    eq(Object.keys(JSON.parse(raw.split('<schema>')[1].split('</schema>')[0])), ['shopify'], sec.name + ': the schema holds the theme schema only');
+    eq(Object.keys(JSON.parse(raw.split('<schema>')[1].split('</schema>')[0])).includes('shopify'), true, sec.name + ': the schema has the theme schema (Storelib adds its panel)');
     ok(schema.name === sec.title && schema.name.length <= 25 && names.filter(n => n === schema.name).length === 1, sec.name + ': its name is its own');
     eq([schema.presets[0].name, schema.presets[0].category], [sec.title, 'Hero and banners'], sec.name + ': first preset');
     ok(raw.split('\n')[1] === `<script src="{{ '${ASSET}' | asset_url }}" defer="defer"></script>`, sec.name + ': line 2 links the controller');

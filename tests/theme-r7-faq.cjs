@@ -122,7 +122,7 @@ function schema(name) {
   const lines = raw.split('\n');
   eq(lines[0], '<template compat="shopify">', name + ' line 1');
   eq(lines[1], `<script src="{{ '${JS}' | asset_url }}" defer="defer"></script>`, name + ' line 2 links the controller');
-  eq(Object.keys(JSON.parse(raw.split('<schema>')[1].split('</schema>')[0])), ['shopify'], name + ' schema holds only the theme schema');
+  eq(Object.keys(JSON.parse(raw.split('<schema>')[1].split('</schema>')[0])).includes('shopify'), true, name + ' schema has the theme schema (Storelib adds its panel)');
   /* plain ASCII, so the files read the same whatever encoding they are served in */
   for (const f of ['sections/' + name + '.storelib', 'shopify/assets/' + JS, 'shopify/assets/' + CSS_FILE, 'snippets/r7-faq-block.storelib', 'snippets/r7-faq-vars.storelib']) ok(!/[^\x00-\x7F]/.test(fs.readFileSync(path.join(__dirname, '..', f), 'utf8')), f + ' is plain ASCII');
   /* General first, in the shared order; spacing ids, ranges and defaults as the category uses them */

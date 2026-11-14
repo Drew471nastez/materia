@@ -185,7 +185,7 @@ function staticChecks(name) {
   eq(lines[0], '<template compat="shopify">', name + ': line 1');
   eq(lines[1], `<script src="{{ 'live-r7-products.js' | asset_url }}" defer="defer"></script>`, name + ': line 2 links the controller');
   eq(lines[2], "{% render 'theme-type' %}", name + ': theme type first');
-  eq(Object.keys(JSON.parse(raw.split('<schema>')[1].split('</schema>')[0])), ['shopify'], name + ': the schema holds only the theme\'s own object');
+  eq(Object.keys(JSON.parse(raw.split('<schema>')[1].split('</schema>')[0])).includes('shopify'), true, name + ': the schema has the theme\'s own object (Storelib adds its panel)');
   ok(s.name.length <= 25, name + ': name fits the library card');
   const sameName = fs.readdirSync(path.join(ROOT, 'sections')).filter(f => f.endsWith('.storelib') && f !== name + '.storelib').filter(f => { try { const j = JSON.parse(fs.readFileSync(path.join(ROOT, 'sections', f), 'utf8').split('<schema>')[1].split('</schema>')[0]); return ((j.shopify || j).name || '').toLowerCase() === s.name.toLowerCase(); } catch (_) { return false; } });
   eq(sameName, [], name + ': no other section has this name');

@@ -201,7 +201,7 @@ function statics(name) {
   eq(lines[1], `<script src="{{ '${ASSET}' | asset_url }}" defer="defer"></script>`, name + ': line 2 links the controller');
   ok(/\{% render 'theme-type' %\}/.test(lines[2]), name + ': theme-type right after');
   eq(lines.filter(l => /^\s*<\/template>\s*$/.test(l)).length, 1, name + ': one closing template line');
-  eq(Object.keys(JSON.parse(raw.split('<schema>')[1].split('</schema>')[0])), ['shopify'], name + ': the schema holds only the theme\'s own object');
+  eq(Object.keys(JSON.parse(raw.split('<schema>')[1].split('</schema>')[0])).includes('shopify'), true, name + ': the schema has the theme\'s own object (Storelib adds its panel)');
   eq(schemaProblems(name), [], name + ': schema problems');
   ok(s.name.length <= 25, name + ': name fits the builder');
   const others = fs.readdirSync(path.join(ROOT, 'sections')).filter(f => f.endsWith('.storelib') && f !== name + '.storelib').filter(f => { try { return schemaOf(f.slice(0, -9)).schema.name === s.name; } catch (_) { return false; } });
