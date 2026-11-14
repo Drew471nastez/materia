@@ -175,3 +175,13 @@ Every-setting sweep: 229 sections, 17,281 settings, 17,153 change the section,
   copies), including the activation check's snippet and script.
 - 19 saved theme values belong to settings retired earlier; nothing reads
   them and they are left in place.
+- Language switch: choosing a language on any page now opens the same page
+  in that language (/products/x to /ro/products/x and back) instead of the
+  language's home page. Romanian prices use the Romanian format and still
+  match the cart.
+- Counts checked against Storelib: collection product count, search result
+  count and cart bubble all match the server.
+- Full suite on the final tree: 267 test files, 263 passed first time; the
+  4 that failed (new-section tests expecting no builder panel in the schema,
+  which Storelib writes on sync) were updated and pass (1835, 3918, 1480,
+  4365 checks).
