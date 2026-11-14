@@ -29,7 +29,8 @@ function engine(groups = {}, old = false) {
     root: [path.join(root, 'snippets')], extname: '.storelib', dynamicPartials: true, strictFilters: false, strictVariables: false, jsTruthy: false, lenientIf: true,
     fs: {
       readFileSync: f => clean(body(src(f))), readFile: async f => clean(body(src(f))),
-      existsSync: f => fs.existsSync(f), exists: async f => fs.existsSync(f),
+      /* an old render may include a file removed since (the activation check snippet): it comes from git */
+      existsSync: f => fs.existsSync(f) || (old && readHead(path.relative(root, f)) != null), exists: async f => fs.existsSync(f) || (old && readHead(path.relative(root, f)) != null),
       resolve: (dir, file, ext) => path.join(dir, file + ext), contains: () => true, dirname: path.dirname, sep: '/',
     },
   });

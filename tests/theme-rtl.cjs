@@ -59,7 +59,7 @@ const decide = (src, settings, iso) => h.renderTemplate(rtlBlock(src) + '[{% if 
 
 (async () => {
   await group('one reading-direction rule in every file that draws a side', () => {
-    assert(FILES.length >= 25, `files ${FILES.length}`);
+    assert(FILES.length >= 23, `files ${FILES.length}`); /* 27 before four unused sidebar and toolbar snippets were removed */
     const LIST = 'ar,iw,he,ur,ug';
     for (const f of FILES) {
       const src = read(f);

@@ -153,3 +153,25 @@ Every-setting sweep: 229 sections, 17,281 settings, 17,153 change the section,
   from 0.037 to 0.003). The only failing request is still the Black Sleeves
   image.
 - Not live until the creator presses Publish in the builder.
+
+## H. Follow-up pass (prices, settings, clean-up)
+
+- Prices: every price on the home, collection, product, search, cart page and
+  drawer was compared with Storelib's product and cart data (store currency
+  BRL, R$). One mismatch, fixed: quantity-offer tiers were worked out in reais
+  while Storelib prices them in the base currency and converts the total, so
+  "Buy 2, save 20%" showed R$244.28 and the cart charged R$244.25. The theme
+  now follows the same steps; Buy 2 and Buy 3 match the cart to the cent.
+- Content to check (a setting, not changed): the announcement bar says
+  "Free shipping on orders over $99" while the store is in reais and the
+  drawer's free-shipping bar uses R$150.00.
+- Theme settings: 67 labels showed raw translation keys (Product badges,
+  Cart, Social media, Currency, Cookies); they now show plain words. Two em
+  dashes removed. No duplicate ids among the 460 settings.
+- Sections: no duplicate setting ids or block types in any section; no two
+  sections share a name.
+- Removed 52 files nothing used: 33 snippets never rendered and 19 assets
+  never loaded (about 1.3MB, mostly the unused map library and old font
+  copies), including the activation check's snippet and script.
+- 19 saved theme values belong to settings retired earlier; nothing reads
+  them and they are left in place.
