@@ -38,7 +38,7 @@ const clone = o => JSON.parse(JSON.stringify(o));
 const presetBlocks = name => clone(schemaOf(name).schema.presets[0].blocks || []);
 const frames = page => page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 const STILL = '*,*::before,*::after{transition:none!important;scroll-behavior:auto!important}';
-const R = '[data-r7c]', H = '.r7c__heading', SUB = '.r7c__subheading', BTN = '[data-r7c-submit]', FB = '[data-r7c-fbtn]', IN = '[data-r7c-input]', NOTE = '[data-r7c-note]';
+const R = '[data-r7n]', H = '.r7n__heading', SUB = '.r7n__subheading', BTN = '[data-r7n-submit]', FB = '[data-r7n-fbtn]', IN = '[data-r7n-input]', NOTE = '[data-r7n-note]';
 const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const opts = (name, o = {}) => ({theme: NET, assets: ASSETS, ...o});
 
@@ -90,22 +90,22 @@ async function addFp(page) {
     const P = ['color', 'backgroundColor', 'fontSize', 'fontFamily', 'fontWeight', 'lineHeight', 'letterSpacing', 'textAlign', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'marginTop', 'marginBottom', 'marginLeft', 'rowGap', 'columnGap', 'order', 'alignItems', 'justifyContent', 'borderTopLeftRadius', 'display', 'gridTemplateColumns', 'flexDirection', 'borderTopWidth', 'borderTopColor', 'width', 'height', 'maxWidth', 'objectPosition', 'aspectRatio'];
     const A = ['href', 'alt', 'src', 'target', 'data-theme-button', 'data-sl-button', 'data-own-shape', 'data-own-font', 'data-own-weight', 'data-own-size', 'type', 'placeholder', 'aria-label', 'data-success-message', 'data-already-message', 'data-invalid-message', 'data-error-message', 'data-success-ms'];
     window.__fp = uid => {
-      const wrap = document.getElementById('shopify-section-' + uid), root = wrap.querySelector('[data-r7c]'), out = {}, seen = {};
+      const wrap = document.getElementById('shopify-section-' + uid), root = wrap.querySelector('[data-r7n]'), out = {}, seen = {};
       const r0 = root.getBoundingClientRect();
       for (const e of [root, ...root.querySelectorAll('*')]) {
         if (e.ownerSVGElement || e.tagName === 'STYLE') continue;
         const cls = typeof e.className === 'string' ? e.className : e.className.baseVal;
-        let k = (e.dataset && e.dataset.r7cBlock) || e.tagName + '.' + (cls.split(' ')[0] || '');
+        let k = (e.dataset && e.dataset.r7nBlock) || e.tagName + '.' + (cls.split(' ')[0] || '');
         seen[k] = (seen[k] || 0) + 1; k += '#' + seen[k];
         const cs = getComputedStyle(e), r = e.getBoundingClientRect(), o = {};
         for (const q of P) o[q] = cs[q];
         o.rect = r.width || r.height ? [r.x - r0.x, r.y - r0.y, r.width, r.height].map(Math.round).join(',') : 'none';
         if (!e.children.length || /^(H\d|P|A|BUTTON|LABEL)$/.test(e.tagName)) o.text = e.textContent.trim().slice(0, 80);
-        if (e.matches('[data-r7c-submit], [data-r7c-fbtn]')) for (const v of ['--mb-hover-bg', '--mb-hover-text', '--mb-hover-border']) o[v] = cs.getPropertyValue(v).trim();
-        if (e.matches('[data-r7c]')) o.done = cs.getPropertyValue('--r7c-done').trim();
+        if (e.matches('[data-r7n-submit], [data-r7n-fbtn]')) for (const v of ['--mb-hover-bg', '--mb-hover-text', '--mb-hover-border']) o[v] = cs.getPropertyValue(v).trim();
+        if (e.matches('[data-r7n]')) o.done = cs.getPropertyValue('--r7n-done').trim();
         o.tag = e.tagName; o.hidden = e.hidden; o.cls = cls.split(/\s+/).filter(Boolean).sort().join(' ');
         for (const a of A) o[a] = e.getAttribute(a);
-        o.blk = e.closest('[data-r7c-block]')?.dataset.r7cBlock || '';
+        o.blk = e.closest('[data-r7n-block]')?.dataset.r7nBlock || '';
         out[k] = o;
       }
       out.root = {scheme: [...root.classList].filter(c => c.startsWith('color-')).join(), blk: ''};
@@ -115,7 +115,7 @@ async function addFp(page) {
   });
 }
 const fp = (t, uid = 'test') => t.page.evaluate(u => window.__fp(u), uid);
-const audit = (t, uid = 'test') => t.page.evaluate(u => window.MateriaR7Connect.audit(document.querySelector('#shopify-section-' + u + ' [data-r7c]')), uid);
+const audit = (t, uid = 'test') => t.page.evaluate(u => window.MateriaR7Connect.audit(document.querySelector('#shopify-section-' + u + ' [data-r7n]')), uid);
 const diff = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
 const detail = (a, b, d) => d.map(k => k + ' ' + JSON.stringify(Object.fromEntries(Object.entries(a[k] || {}).filter(([q, v]) => JSON.stringify(v) !== JSON.stringify((b[k] || {})[q])))));
 
@@ -261,29 +261,29 @@ async function theme(browser, name, width, editing) {
     ok((await t.root(BTN).boundingBox()).height >= 44, tag + ' button target');
     eq(await t.css(NOTE, 'color'), 'rgb(204, 204, 204)', tag + ' note in the scheme text colour');
     ok(/^Arial/.test(await t.css(NOTE, 'fontFamily')), tag + ' note font');
-    const box = await t.root('[data-r7c-media]').boundingBox();
+    const box = await t.root('[data-r7n-media]').boundingBox();
     ok(Math.abs(box.width - box.height) <= 1, tag + ' the picture keeps its shape (square)');
-    if (width >= 768) { const b = await t.root('.r7c__body').boundingBox(); ok(b.x > box.x + box.width && Math.abs((b.y + b.height / 2) - (box.y + box.height / 2)) < 2, tag + ' the words sit beside the picture, centred'); }
-    else { const b = await t.root('.r7c__body').boundingBox(); ok(b.y >= box.y + box.height, tag + ' a phone stacks the words under the picture'); }
-    eq(await t.root('.r7c__hint, .r7c__msg--error, .r7c__msg--done').evaluateAll(els => els.map(e => getComputedStyle(e).display)), ['none', 'none', 'none'], tag + ' no message before a sign-up');
+    if (width >= 768) { const b = await t.root('.r7n__body').boundingBox(); ok(b.x > box.x + box.width && Math.abs((b.y + b.height / 2) - (box.y + box.height / 2)) < 2, tag + ' the words sit beside the picture, centred'); }
+    else { const b = await t.root('.r7n__body').boundingBox(); ok(b.y >= box.y + box.height, tag + ' a phone stacks the words under the picture'); }
+    eq(await t.root('.r7n__hint, .r7n__msg--error, .r7n__msg--done').evaluateAll(els => els.map(e => getComputedStyle(e).display)), ['none', 'none', 'none'], tag + ' no message before a sign-up');
   } else {
     const n = await t.root(FB).count();
     eq(n, 3, tag + ' a button for each network set (a # or an empty link is not set)');
-    eq(await t.root(FB).evaluateAll(els => els.map(e => [e.querySelector('.r7c__fname').textContent, e.getAttribute('href'), e.target, e.dataset.themeButton, e.hasAttribute('data-sl-button'), !!e.querySelector('svg')])), [['Instagram', NET.instagram, '_self', 'secondary', true, true], ['YouTube', NET.youtube, '_self', 'secondary', true, true], ['TikTok', NET.tiktok, '_self', 'secondary', true, true]], tag + ' name, link, the theme\'s new tab choice, theme contract and icon');
+    eq(await t.root(FB).evaluateAll(els => els.map(e => [e.querySelector('.r7n__fname').textContent, e.getAttribute('href'), e.target, e.dataset.themeButton, e.hasAttribute('data-sl-button'), !!e.querySelector('svg')])), [['Instagram', NET.instagram, '_self', 'secondary', true, true], ['YouTube', NET.youtube, '_self', 'secondary', true, true], ['TikTok', NET.tiktok, '_self', 'secondary', true, true]], tag + ' name, link, the theme\'s new tab choice, theme contract and icon');
     eq([await t.css(FB, 'backgroundColor'), await t.css(FB, 'color'), await t.css(FB, 'borderTopLeftRadius')], ['rgb(255, 255, 255)', 'rgb(18, 52, 86)', '12px'], tag + ' follow buttons are the theme secondary button');
     ok(/^Arial/.test(await t.css(FB, 'fontFamily')), tag + ' follow button font');
     for (const b of await t.root(FB).all()) ok((await b.boundingBox()).height >= 48, tag + ' follow button is large (48px or more)');
-    eq(await t.root('.r7c__ficon svg').first().evaluate(el => getComputedStyle(el).color), await t.css(FB, 'color'), tag + ' the icon takes the button colour');
+    eq(await t.root('.r7n__ficon svg').first().evaluate(el => getComputedStyle(el).color), await t.css(FB, 'color'), tag + ' the icon takes the button colour');
     const before2 = await t.root(FB).first().evaluate(el => [getComputedStyle(el).backgroundColor, getComputedStyle(el, '::before').backgroundColor, getComputedStyle(el).color].join());
     await t.root(FB).first().hover(); await t.page.waitForTimeout(60);
     ok(await t.root(FB).first().evaluate(el => [getComputedStyle(el).backgroundColor, getComputedStyle(el, '::before').backgroundColor, getComputedStyle(el).color].join()) !== before2, tag + ' follow button hover follows the theme');
     await t.page.mouse.move(0, 0);
-    const tiles = await t.root('[data-r7c-tile]').all();
+    const tiles = await t.root('[data-r7n-tile]').all();
     eq(tiles.length, 4, tag + ' four pictures in the preset');
     const tb = await tiles[0].boundingBox();
     ok(Math.abs(tb.width - tb.height) <= 1, tag + ' square pictures');
-    if (width >= 768) { const all = await Promise.all(tiles.map(x => x.boundingBox())); ok(all.every(b => Math.abs(b.y - all[0].y) < 1 && Math.abs(b.width - all[0].width) < 1), tag + ' one row of equal pictures'); ok(await t.root('[data-r7c-nav]').evaluate(el => getComputedStyle(el).display === 'none'), tag + ' no arrows on desktop'); }
-    else { ok(await t.root('[data-r7c-track]').evaluate(el => el.scrollWidth > el.clientWidth + 10), tag + ' the row scrolls sideways on a phone'); for (const a of await t.root('.r7c__arrow').all()) { const b = await a.boundingBox(); ok(b.width >= 44 && b.height >= 44, tag + ' arrow target 44px'); } }
+    if (width >= 768) { const all = await Promise.all(tiles.map(x => x.boundingBox())); ok(all.every(b => Math.abs(b.y - all[0].y) < 1 && Math.abs(b.width - all[0].width) < 1), tag + ' one row of equal pictures'); ok(await t.root('[data-r7n-nav]').evaluate(el => getComputedStyle(el).display === 'none'), tag + ' no arrows on desktop'); }
+    else { ok(await t.root('[data-r7n-track]').evaluate(el => el.scrollWidth > el.clientWidth + 10), tag + ' the row scrolls sideways on a phone'); for (const a of await t.root('.r7n__arrow').all()) { const b = await a.boundingBox(); ok(b.width >= 44 && b.height >= 44, tag + ' arrow target 44px'); } }
   }
   ok(await t.noOverflow(), tag + ' no sideways scroll');
   if (editing) {
@@ -307,7 +307,7 @@ async function theme(browser, name, width, editing) {
     eq(await t.css(SUB + ' p', 'color'), 'rgb(0, 51, 204)', tag + ' custom subheading paragraph');
     eq([await t.css(B, 'backgroundColor'), await t.css(B, 'color'), await t.css(B, 'borderTopColor')], ['rgb(0, 255, 0)', 'rgb(0, 0, 0)', 'rgb(10, 11, 12)'], tag + ' custom button colours');
     if (split) eq(await t.css(NOTE, 'color'), 'rgb(17, 34, 51)', tag + ' custom note colour');
-    else eq(await t.root('.r7c__ficon svg').first().evaluate(el => getComputedStyle(el).color), 'rgb(0, 0, 0)', tag + ' custom icon colour follows the button text');
+    else eq(await t.root('.r7n__ficon svg').first().evaluate(el => getComputedStyle(el).color), 'rgb(0, 0, 0)', tag + ' custom icon colour follows the button text');
     await t.root(B).first().hover(); await t.page.waitForTimeout(60);
     eq(await t.root(B).first().evaluate(el => getComputedStyle(el, '::before').backgroundColor), 'rgb(0, 0, 255)', tag + ' custom button hover');
     await t.page.mouse.move(0, 0);
@@ -336,8 +336,8 @@ function priorityCases(name) {
   const HS = H + ' strong', SP = SUB + ' p', SS = SUB + ' strong', cases = [];
   const sec = {label: 'section custom fonts', probes: [['h', H, 'fontFamily'], ['hs', HS, 'fontFamily'], ['sp', SP, 'fontFamily'], ['b', B, 'fontFamily']],
     on: {enable_custom_fonts: true, heading_font: FONT, body_font: MONO}, off: {enable_custom_fonts: false}, want: {h: /Verdana/, hs: /Verdana/, sp: /Courier New/, b: /Courier New/}, attrs: [[H, 'data-own-font'], [SUB, 'data-own-font']]};
-  if (split) { sec.probes.push(['in', IN, 'fontFamily'], ['note', NOTE, 'fontFamily'], ['msg', '.r7c__hint', 'fontFamily'], ['lab', '[data-r7c-email-label]', 'fontFamily']); Object.assign(sec.want, {in: /Courier New/, note: /Courier New/, msg: /Courier New/, lab: /Courier New/}); sec.attrs.push(['[data-r7c-signup]', 'data-own-font']); }
-  else { sec.probes.push(['fn', '.r7c__fname', 'fontFamily']); sec.want.fn = /Courier New/; sec.attrs.push([FB, 'data-own-font']); }
+  if (split) { sec.probes.push(['in', IN, 'fontFamily'], ['note', NOTE, 'fontFamily'], ['msg', '.r7n__hint', 'fontFamily'], ['lab', '[data-r7n-email-label]', 'fontFamily']); Object.assign(sec.want, {in: /Courier New/, note: /Courier New/, msg: /Courier New/, lab: /Courier New/}); sec.attrs.push(['[data-r7n-signup]', 'data-own-font']); }
+  else { sec.probes.push(['fn', '.r7n__fname', 'fontFamily']); sec.want.fn = /Courier New/; sec.attrs.push([FB, 'data-own-font']); }
   cases.push(sec);
   cases.push({block: 'heading', label: 'heading custom font', probes: [['h', H, 'fontFamily'], ['hs', HS, 'fontFamily']], on: {enable_custom_fonts: true, font: FONT}, off: {enable_custom_fonts: false}, want: {h: /Verdana/, hs: /Verdana/}, attrs: [[H, 'data-own-font']]});
   cases.push({block: 'heading', label: 'heading custom weight', probes: [['w', H, 'fontWeight']], on: {weight_enable: true, weight: '300'}, off: {weight_enable: false}, want: {w: '300'}, attrs: [[H, 'data-own-weight']]});
@@ -427,14 +427,14 @@ async function instances(browser, name) {
       await t.emit({btn_text: 'Join', note: 'Changed note', column_gap: 20}, undefined, 'a'); await frames(t.page);
       eq(await input.inputValue(), 'someone@example.com', tag + ' a typed address stays through an edit');
       ok(await h.evaluate(el => el.isConnected), tag + ' the field element is kept through an edit');
-      eq(await t.page.locator('#shopify-section-a [data-r7c-label]').textContent(), 'Join', tag + ' button label live');
+      eq(await t.page.locator('#shopify-section-a [data-r7n-label]').textContent(), 'Join', tag + ' button label live');
     } else {
       /* an unchanged picture is never loaded again */
       await t.redraw({uid: 'a', blocks: presetBlocks(name).map(b => b.type === 'image' ? {...b, settings: {image: IMG}} : b)});
-      const img = await t.page.locator('#shopify-section-a .r7c__tile-img').first().elementHandle(), src = await img.evaluate(e => e.currentSrc || e.src);
+      const img = await t.page.locator('#shopify-section-a .r7n__tile-img').first().elementHandle(), src = await img.evaluate(e => e.currentSrc || e.src);
       await t.emit({image_gap: 20, button_prefix: 'Follow us on'}, undefined, 'a'); await frames(t.page);
       eq([await img.evaluate(e => e.isConnected), await img.evaluate(e => e.currentSrc || e.src)], [true, src], tag + ' the picture is not loaded again on an unrelated edit');
-      eq(await t.page.locator('#shopify-section-a .r7c__fname').first().textContent(), 'Follow us on Instagram', tag + ' words before the name, live');
+      eq(await t.page.locator('#shopify-section-a .r7n__fname').first().textContent(), 'Follow us on Instagram', tag + ' words before the name, live');
     }
     for (let i = 0; i < 3; i++) await t.redraw({uid: 'a'});
     eq(await t.page.evaluate(() => window.MateriaR7Connect.roots.size), 2, tag + ': redraws leave one controller per section');
@@ -444,16 +444,16 @@ async function instances(browser, name) {
     await t.redraw({uid: 'a', blocks: nb});
     const added = 'a-b' + (nb.length - 1);
     if (type === 'subheading') {
-      eq(await t.page.locator('[data-r7c-block="' + added + '"]').textContent(), 'Added text', tag + ' added block drawn');
+      eq(await t.page.locator('[data-r7n-block="' + added + '"]').textContent(), 'Added text', tag + ' added block drawn');
       await t.emit({text: '<p>Edited added</p>'}, added, 'a'); await frames(t.page);
-      eq(await t.page.locator('[data-r7c-block="' + added + '"]').textContent(), 'Edited added', tag + ' added block live');
+      eq(await t.page.locator('[data-r7n-block="' + added + '"]').textContent(), 'Edited added', tag + ' added block live');
     } else {
-      eq(await t.page.locator('[data-r7c-block="' + added + '"]').evaluate(e => [e.tagName, e.getAttribute('href')]), ['A', '/pages/added'], tag + ' added picture drawn as a link');
+      eq(await t.page.locator('[data-r7n-block="' + added + '"]').evaluate(e => [e.tagName, e.getAttribute('href')]), ['A', '/pages/added'], tag + ' added picture drawn as a link');
       await t.emit({link: ''}, added, 'a'); await frames(t.page);
-      eq(await t.page.locator('[data-r7c-block="' + added + '"]').evaluate(e => [e.tagName, e.hasAttribute('href')]), ['DIV', false], tag + ' a picture without a link is not a link, live');
+      eq(await t.page.locator('[data-r7n-block="' + added + '"]').evaluate(e => [e.tagName, e.hasAttribute('href')]), ['DIV', false], tag + ' a picture without a link is not a link, live');
       await t.emit({link: '/pages/again'}, added, 'a'); await frames(t.page);
-      eq(await t.page.locator('[data-r7c-block="' + added + '"]').evaluate(e => [e.tagName, e.getAttribute('href')]), ['A', '/pages/again'], tag + ' and a link again, live');
-      eq(await t.page.locator('#shopify-section-a [data-r7c]').getAttribute('data-r7c-count'), '5', tag + ' the row counts its pictures');
+      eq(await t.page.locator('[data-r7n-block="' + added + '"]').evaluate(e => [e.tagName, e.getAttribute('href')]), ['A', '/pages/again'], tag + ' and a link again, live');
+      eq(await t.page.locator('#shopify-section-a [data-r7n]').getAttribute('data-r7n-count'), '5', tag + ' the row counts its pictures');
     }
     eq(await audit(t, 'a'), [], tag + ' audit after edits');
     ok(await t.noOverflow(), tag + ' no overflow'); eq(t.errors, [], tag + ' errors');
@@ -474,34 +474,34 @@ async function contents(browser, name) {
     ok(await t.noOverflow(), tag + ': no sideways scroll');
     ok(await t.root(R).evaluate(el => el.scrollWidth <= el.clientWidth + 1), tag + ': nothing wider than the section');
     eq(t.errors, [], tag + ' errors');
-    if (!blocks.length) eq(await t.root('.r7c__header').count(), 0, tag + ': no empty header');
+    if (!blocks.length) eq(await t.root('.r7n__header').count(), 0, tag + ': no empty header');
     if (label === 'six pictures' && width === 375) {
-      eq(await t.root('[data-r7c-tile]').count(), 6, tag + ' six pictures');
-      const cols = await t.root('.r7c__follow').evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length);
+      eq(await t.root('[data-r7n-tile]').count(), 6, tag + ' six pictures');
+      const cols = await t.root('.r7n__follow').evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length);
       eq(cols, 1, tag + ' equal width buttons: one full-width button per row on a phone');
     }
-    if (label === 'one picture') ok(await t.root('[data-r7c-nav]').evaluate(el => getComputedStyle(el).display === 'none'), tag + ' one picture: no arrows');
+    if (label === 'one picture') ok(await t.root('[data-r7n-nav]').evaluate(el => getComputedStyle(el).display === 'none'), tag + ' one picture: no arrows');
     if (label.startsWith('stacked') && width === 375) {
-      ok(await t.root('[data-r7c-media]').evaluate(el => getComputedStyle(el).display === 'none'), tag + ' no picture on a phone');
+      ok(await t.root('[data-r7n-media]').evaluate(el => getComputedStyle(el).display === 'none'), tag + ' no picture on a phone');
       const [i, b] = [await t.root(IN).boundingBox(), await t.root(BTN).boundingBox()];
       ok(b.y > i.y + i.height - 1 && Math.abs(b.width - i.width) < 1, tag + ' stacked: the button under the field, as wide');
     }
-    if (label.startsWith('stacked') && width === 1366) ok(await t.root('[data-r7c-media]').evaluate(el => getComputedStyle(el).display !== 'none'), tag + ' the picture still shows on desktop');
-    if (label === 'long words' && name === 'newsletter-split') eq(await t.root('[data-r7c-img]').evaluate(e => [e.alt, e.getAttribute('loading'), +e.getAttribute('width') > 0, +e.getAttribute('height') > 0, getComputedStyle(e).objectPosition]), ['Own description', 'lazy', true, true, '30% 40%'], tag + ' a picked picture: its description, lazy, sized, focal point');
+    if (label.startsWith('stacked') && width === 1366) ok(await t.root('[data-r7n-media]').evaluate(el => getComputedStyle(el).display !== 'none'), tag + ' the picture still shows on desktop');
+    if (label === 'long words' && name === 'newsletter-split') eq(await t.root('[data-r7n-img]').evaluate(e => [e.alt, e.getAttribute('loading'), +e.getAttribute('width') > 0, +e.getAttribute('height') > 0, getComputedStyle(e).objectPosition]), ['Own description', 'lazy', true, true, '30% 40%'], tag + ' a picked picture: its description, lazy, sized, focal point');
     await t.page.close();
   }
   if (name === 'social-follow-cta') {
     /* no network set: nothing on a visitor's page, a hint in the builder */
     const none = {instagram: '', tiktok: '#', youtube: ''};
     const s = await render(name, {editing: false, theme: none});
-    ok(!s.html.includes('data-r7c-follow') && !s.html.includes('data-r7c-nohint'), name + ' no network set: no buttons and no hint on a visitor\'s page');
+    ok(!s.html.includes('data-r7n-follow') && !s.html.includes('data-r7n-nohint'), name + ' no network set: no buttons and no hint on a visitor\'s page');
     const e = await render(name, {editing: true, theme: none});
-    ok(!e.html.includes('data-r7c-follow') && /data-r7c-nohint>Add your social links in Theme settings &gt; Social media/.test(e.html), name + ' no network set: a hint in the builder');
+    ok(!e.html.includes('data-r7n-follow') && /data-r7n-nohint>Add your social links in Theme settings &gt; Social media/.test(e.html), name + ' no network set: a hint in the builder');
     const tab = await render(name, {editing: false, theme: {...NET, social_open_new_tab: true}});
     ok((tab.html.match(/target="_blank" rel="noopener"/g) || []).length === 3, name + ' Open social links in a new tab is followed');
     const all = await render(name, {editing: false, theme: Object.fromEntries(['facebook', 'instagram', 'twitter', 'youtube', 'tiktok', 'pinterest', 'vimeo', 'linkedin', 'whatsapp', 'tumblr', 'snapchat', 'social_threads', 'social_x', 'social_telegram', 'social_discord', 'social_spotify', 'social_reddit'].map(k => [k, 'https://example.test/' + k]))});
-    eq((all.html.match(/data-r7c-net=/g) || []).length, 17, name + ' every network of Theme settings > Social media has its button');
-    eq((all.html.match(/<span class="r7c__ficon"><svg/g) || []).length, 17, name + ' and its icon');
+    eq((all.html.match(/data-r7n-net=/g) || []).length, 17, name + ' every network of Theme settings > Social media has its button');
+    eq((all.html.match(/<span class="r7n__ficon"><svg/g) || []).length, 17, name + ' and its icon');
   }
 }
 
@@ -515,10 +515,10 @@ async function scriptsOff(browser, name) {
     await page.goto('http://theme.test/');
     const tag = name + ' scripts off @' + width;
     ok(await page.locator(H).isVisible() && await page.locator(SUB).isVisible(), tag + ': heading and text are drawn');
-    if (name === 'newsletter-split') ok(await page.locator(IN).isVisible() && await page.locator(BTN).isVisible() && await page.locator('[data-r7c-media] img').isVisible(), tag + ': the field, the button and the placeholder picture are drawn');
+    if (name === 'newsletter-split') ok(await page.locator(IN).isVisible() && await page.locator(BTN).isVisible() && await page.locator('[data-r7n-media] img').isVisible(), tag + ': the field, the button and the placeholder picture are drawn');
     else {
-      ok(await page.locator(FB).first().isVisible() && await page.locator('[data-r7c-tile]').first().isVisible(), tag + ': follow buttons and pictures are drawn');
-      if (width < 768) { await page.locator('[data-r7c-track]').evaluate(el => { el.scrollLeft = 400; }); await page.waitForTimeout(700); ok(await page.locator('[data-r7c-track]').evaluate(el => el.scrollLeft > 0), tag + ': the row scrolls without scripts'); }
+      ok(await page.locator(FB).first().isVisible() && await page.locator('[data-r7n-tile]').first().isVisible(), tag + ': follow buttons and pictures are drawn');
+      if (width < 768) { await page.locator('[data-r7n-track]').evaluate(el => { el.scrollLeft = 400; }); await page.waitForTimeout(700); ok(await page.locator('[data-r7n-track]').evaluate(el => el.scrollLeft > 0), tag + ': the row scrolls without scripts'); }
     }
     ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), tag + ': no sideways scroll');
     await ctx.close();
@@ -560,7 +560,7 @@ async function signup(browser) {
   };
   const look = p => p.evaluate(() => {
     const f = document.querySelector('#shopify-section-ns form'), shown = el => !!el && getComputedStyle(el).display !== 'none' && getComputedStyle(el).visibility !== 'hidden' && el.getClientRects().length > 0;
-    return {state: f.dataset.state || '', msgs: [...f.querySelectorAll('.r7c__msg')].filter(shown).map(el => el.textContent.trim()), label: shown(f.querySelector('[data-r7c-label]')), subscribed: shown(f.querySelector('[data-r7c-subscribed]')), spinner: shown(f.querySelector('.r7c__spinner')), toast: !!document.querySelector('.mt-toast[data-show]')};
+    return {state: f.dataset.state || '', msgs: [...f.querySelectorAll('.r7n__msg')].filter(shown).map(el => el.textContent.trim()), label: shown(f.querySelector('[data-r7n-label]')), subscribed: shown(f.querySelector('[data-r7n-subscribed]')), spinner: shown(f.querySelector('.r7n__spinner')), toast: !!document.querySelector('.mt-toast[data-show]')};
   });
   const words = {success_text: 'Welcome in. The next letter is on its way.', error_text: 'Could not send it. Try again.', invalid_text: 'That address does not look right.', subscribed_button_text: 'On the list', success_duration: 2};
   {
@@ -618,12 +618,12 @@ async function row(browser) {
     await page.route('**/*', route => route.fulfill({contentType: 'text/html', body: `<!doctype html><html dir="${dir}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${THEME_VARS}${read('shopify/assets/theme-button-contract.css')}${read('shopify/assets/' + CSS_FILE)}</style></head><body><div style="height:300px"></div><div id="shopify-section-x" class="shopify-section">${r.html}</div><div style="height:1200px"></div><script>${read('shopify/assets/' + JS)}</script></body></html>`}));
     await page.goto('http://theme.test/');
     const tag = name + ' row ' + dir;
-    const T = page.locator('[data-r7c-track]'), prev = page.locator('[data-r7c-prev]'), next = page.locator('[data-r7c-next]');
+    const T = page.locator('[data-r7n-track]'), prev = page.locator('[data-r7n-prev]'), next = page.locator('[data-r7n-next]');
     await T.scrollIntoViewIfNeeded();
     const css = await T.evaluate(el => { const c = getComputedStyle(el); return [c.overflowX, c.scrollSnapType, c.overscrollBehaviorX, c.scrollbarWidth, c.touchAction, getComputedStyle(el.firstElementChild).scrollSnapAlign]; });
     eq(css, ['auto', 'x mandatory', 'contain', 'none', 'pan-x pan-y', 'start'], tag + ': a native scroller with snap points');
     const pos = () => T.evaluate(el => Math.abs(el.scrollLeft));
-    const step = await T.evaluate(el => { const t = el.querySelectorAll('[data-r7c-tile]'); return Math.abs(t[1].getBoundingClientRect().left - t[0].getBoundingClientRect().left); });
+    const step = await T.evaluate(el => { const t = el.querySelectorAll('[data-r7n-tile]'); return Math.abs(t[1].getBoundingClientRect().left - t[0].getBoundingClientRect().left); });
     eq([await prev.isDisabled(), await next.isDisabled()], [true, false], tag + ': at the start, back is disabled');
     /* a finger swipe sideways moves the row and it snaps to a picture */
     const box = await T.boundingBox(), cdp = await ctx.newCDPSession(page);
@@ -666,10 +666,10 @@ async function row(browser) {
   const t = await mount(browser, name, opts(name, {width: 375, editing: true, blocks}));
   await t.page.addStyleTag({content: STILL});
   const last = 'test-b' + (blocks.length - 1);
-  await t.page.evaluate(id => document.querySelector('[data-r7c-block="' + id + '"]').dispatchEvent(new CustomEvent('shopify:block:select', {bubbles: true, detail: {blockId: id}})), last);
+  await t.page.evaluate(id => document.querySelector('[data-r7n-block="' + id + '"]').dispatchEvent(new CustomEvent('shopify:block:select', {bubbles: true, detail: {blockId: id}})), last);
   await t.page.waitForTimeout(150);
-  ok(await t.page.evaluate(id => { const el = document.querySelector('[data-r7c-block="' + id + '"]'), tr = el.closest('[data-r7c-track]'); const a = el.getBoundingClientRect(), b = tr.getBoundingClientRect(); return a.left >= b.left - 1 && a.left < b.right; }, last), name + ' block select brings the picture into view');
-  eq(await t.page.evaluate(() => document.querySelector('[data-r7c-next]').disabled), true, name + ' and the arrows follow');
+  ok(await t.page.evaluate(id => { const el = document.querySelector('[data-r7n-block="' + id + '"]'), tr = el.closest('[data-r7n-track]'); const a = el.getBoundingClientRect(), b = tr.getBoundingClientRect(); return a.left >= b.left - 1 && a.left < b.right; }, last), name + ' block select brings the picture into view');
+  eq(await t.page.evaluate(() => document.querySelector('[data-r7n-next]').disabled), true, name + ' and the arrows follow');
   eq(t.errors, [], name + ' block select errors');
   await t.page.close();
 }
@@ -685,11 +685,11 @@ async function motion(browser, name) {
     await t.page.waitForTimeout(200);
     ok(await t.root(R).evaluate(el => { for (let n = el; n; n = n.parentElement) if (+getComputedStyle(n).opacity < 1 || getComputedStyle(n).visibility === 'hidden') return false; return true; }), name + ' ' + reducedMotion + ': never hidden in the builder');
     if (name === 'social-follow-cta') {
-      const r = await t.root('[data-r7c-track]').evaluate(el => [getComputedStyle(el).scrollBehavior, getComputedStyle(el.querySelector('.r7c__tile-img')).transitionDuration, getComputedStyle(document.querySelector('.r7c__arrow')).transitionDuration]);
+      const r = await t.root('[data-r7n-track]').evaluate(el => [getComputedStyle(el).scrollBehavior, getComputedStyle(el.querySelector('.r7n__tile-img')).transitionDuration, getComputedStyle(document.querySelector('.r7n__arrow')).transitionDuration]);
       if (reducedMotion === 'reduce') eq([r[0], /^0s(, 0s)*$/.test(r[1]), /^0s(, 0s)*$/.test(r[2])], ['auto', true, true], name + ' reduced motion: the row jumps, nothing transitions');
       else { eq(r[0], 'smooth', name + ' the row glides'); ok(Math.max(...r[1].split(',').map(parseFloat)) * 1000 >= 150 && Math.max(...r[1].split(',').map(parseFloat)) * 1000 <= 400, name + ' picture hover in 150 to 400ms'); }
     } else {
-      const d = await t.root('.r7c__spinner').evaluate(el => getComputedStyle(el).animationPlayState);
+      const d = await t.root('.r7n__spinner').evaluate(el => getComputedStyle(el).animationPlayState);
       eq(d, 'paused', name + ' ' + reducedMotion + ': the spinner waits for a sign-up');
     }
     eq(t.errors, [], name + ' motion errors');

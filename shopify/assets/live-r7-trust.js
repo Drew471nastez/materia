@@ -10,8 +10,8 @@
    read in a passive listener, once per frame.
 
    Live edits (builder only: the sections print their settings as JSON
-   there and nowhere else). Every root [data-r7t] carries its settings and
-   every block [data-r7t-block] its own. derive() turns them into outputs (a
+   there and nowhere else). Every root [data-r7g] carries its settings and
+   every block [data-r7g-block] its own. derive() turns them into outputs (a
    CSS variable, an attribute, text, a picture), the same values the
    section prints, so on load the first derive is only recorded, never
    painted. After that an output is written only when its value changes,
@@ -19,7 +19,7 @@
    for an unrelated edit. A block added waits for the builder's redraw. */
 (() => {
   if (window.MateriaR7Trust) return;
-  const SEL = '[data-r7t]', BSEL = '[data-r7t-block]';
+  const SEL = '[data-r7g]', BSEL = '[data-r7g-block]';
   const roots = new Map();
   const parse = v => { try { return JSON.parse(v || '{}') || {}; } catch (_) { return {}; } };
   const bool = v => v === true || v === 'true';
@@ -78,7 +78,7 @@
 
   /* ---------- writers ---------- */
   function placeholder(st) {
-    const t = st.root.querySelector('template[data-r7t-ph]');
+    const t = st.root.querySelector('template[data-r7g-ph]');
     return t && t.content.firstElementChild ? t.content.firstElementChild.cloneNode(true) : document.createElement('span');
   }
   function write(el, key, v, st) {
@@ -144,7 +144,7 @@
         const tile = el.querySelector('.lw__tile');
         if (!tile) continue;
         put(tile, '@href', link(bs.url) || null);
-        const src = picture(bs.logo), alt = plain(bs.alt).trim() || el.dataset.r7tOwnAlt || '';
+        const src = picture(bs.logo), alt = plain(bs.alt).trim() || el.dataset.r7gOwnAlt || '';
         put(tile, 'logo', JSON.stringify({src, alt, name: '', cls: 'lw__img'}));
       } else if (bt === 'mention') {
         const a = el.querySelector('.pm__link');
@@ -180,7 +180,7 @@
 
   /* ---------- the swiped row of cards (Press Mentions on a phone) ---------- */
   function scroller(st) {
-    const root = st.root, track = root.querySelector('[data-r7t-track]');
+    const root = st.root, track = root.querySelector('[data-r7g-track]');
     if (!track) return;
     const sig = {signal: st.ac.signal};
     const rtl = () => getComputedStyle(track).direction === 'rtl';
@@ -217,20 +217,20 @@
 
   /* ---------- lifecycle ---------- */
   function setup(root) {
-    const type = TYPES[root.dataset.r7t];
+    const type = TYPES[root.dataset.r7g];
     if (!type) return;
     const wrap = root.closest('.shopify-section') || root.parentElement;
-    const st = {root, type, wrap, id: root.dataset.r7tSection || '', ac: new AbortController(), last: new WeakMap(), blocks: new Map(), frame: 0, queued: 0,
-      live: root.hasAttribute('data-r7t-settings'), s: parse(root.dataset.r7tSettings), raw: root.dataset.r7tSettings};
-    st.space = wrap ? wrap.querySelector('style[data-r7t-space]') : null;
-    for (const el of root.querySelectorAll(BSEL)) st.blocks.set(el.dataset.r7tBlock, {el, type: el.dataset.r7tType, s: parse(el.dataset.r7tSettings)});
+    const st = {root, type, wrap, id: root.dataset.r7gSection || '', ac: new AbortController(), last: new WeakMap(), blocks: new Map(), frame: 0, queued: 0,
+      live: root.hasAttribute('data-r7g-settings'), s: parse(root.dataset.r7gSettings), raw: root.dataset.r7gSettings};
+    st.space = wrap ? wrap.querySelector('style[data-r7g-space]') : null;
+    for (const el of root.querySelectorAll(BSEL)) st.blocks.set(el.dataset.r7gBlock, {el, type: el.dataset.r7gType, s: parse(el.dataset.r7gSettings)});
     roots.set(root, st);
     if (type.p === 'pm') scroller(st);
     if (st.live) {
       apply(st, false);
       /* The builder may rewrite the settings attribute itself. */
-      st.mo = new MutationObserver(() => { const raw = root.dataset.r7tSettings; if (raw === st.raw) return; st.raw = raw; st.s = parse(raw); schedule(st); });
-      st.mo.observe(root, {attributes: true, attributeFilter: ['data-r7t-settings']});
+      st.mo = new MutationObserver(() => { const raw = root.dataset.r7gSettings; if (raw === st.raw) return; st.raw = raw; st.s = parse(raw); schedule(st); });
+      st.mo.observe(root, {attributes: true, attributeFilter: ['data-r7g-settings']});
     }
   }
   function drop(root) {

@@ -10,7 +10,7 @@
    it by one picture (smoothly, at once under reduced motion), and an arrow
    is disabled at its end, read in a passive, frame-throttled scroll listener.
 
-   Live edits (builder only): every root [data-r7c] carries its settings as
+   Live edits (builder only): every root [data-r7n] carries its settings as
    JSON and every block its own. derive() turns them into outputs (a CSS
    variable, an attribute, text) per element, the same values the templates
    print, so on load the first derive is only recorded. After that an output
@@ -19,7 +19,7 @@
    audit() lists outputs whose markup differs (tests). */
 (() => {
   if (window.MateriaR7Connect) return;
-  const SEL = '[data-r7c]';
+  const SEL = '[data-r7n]';
   const TYPES = {'newsletter-split': {kind: 'split', align: 'left', pd: 60, pm: 40}, 'social-follow-cta': {kind: 'follow', align: 'center', pd: 60, pm: 40}};
   const roots = new Map();
   const touched = new WeakMap();
@@ -45,25 +45,25 @@
   /* ---------- the picture row of Follow Us ---------- */
   const rtl = el => getComputedStyle(el).direction === 'rtl';
   function step(track) {
-    const tile = track.querySelector('[data-r7c-tile]');
+    const tile = track.querySelector('[data-r7n-tile]');
     if (!tile) return track.clientWidth;
     const gap = parseFloat(getComputedStyle(track).columnGap) || 0;
     return tile.getBoundingClientRect().width + gap;
   }
   function arrows(root) {
-    const track = root.querySelector('[data-r7c-track]'); if (!track) return;
-    const prev = root.querySelector('[data-r7c-prev]'), next = root.querySelector('[data-r7c-next]');
+    const track = root.querySelector('[data-r7n-track]'); if (!track) return;
+    const prev = root.querySelector('[data-r7n-prev]'), next = root.querySelector('[data-r7n-next]');
     const max = track.scrollWidth - track.clientWidth, at = Math.abs(track.scrollLeft);
     const start = at <= 1, end = max <= 1 || at >= max - 1;
     if (prev && prev.disabled !== start) prev.disabled = start;
     if (next && next.disabled !== end) next.disabled = end;
   }
   function move(root, dir) {
-    const track = root.querySelector('[data-r7c-track]'); if (!track) return;
+    const track = root.querySelector('[data-r7n-track]'); if (!track) return;
     track.scrollBy({left: dir * step(track) * (rtl(track) ? -1 : 1), behavior: reduced.matches ? 'auto' : 'smooth'});
   }
   function bindTrack(root, st) {
-    const track = root.querySelector('[data-r7c-track]');
+    const track = root.querySelector('[data-r7n-track]');
     if (st.track === track) return;
     if (st.ac) st.ac.abort();
     if (st.ro) st.ro.disconnect();
@@ -76,11 +76,11 @@
     arrows(root);
   }
   document.addEventListener('click', e => {
-    const b = e.target && e.target.closest && e.target.closest('[data-r7c-prev], [data-r7c-next]'); if (!b || b.disabled) return;
-    const root = b.closest(SEL); if (root) move(root, b.hasAttribute('data-r7c-prev') ? -1 : 1);
+    const b = e.target && e.target.closest && e.target.closest('[data-r7n-prev], [data-r7n-next]'); if (!b || b.disabled) return;
+    const root = b.closest(SEL); if (root) move(root, b.hasAttribute('data-r7n-prev') ? -1 : 1);
   });
   document.addEventListener('keydown', e => {
-    const track = e.target && e.target.matches && e.target.matches('[data-r7c-track]') ? e.target : null; if (!track) return;
+    const track = e.target && e.target.matches && e.target.matches('[data-r7n-track]') ? e.target : null; if (!track) return;
     const root = track.closest(SEL); if (!root || track.scrollWidth - track.clientWidth <= 1) return;
     const back = rtl(track) ? 'ArrowRight' : 'ArrowLeft', fwd = rtl(track) ? 'ArrowLeft' : 'ArrowRight';
     const behavior = reduced.matches ? 'auto' : 'smooth';
@@ -91,9 +91,9 @@
   /* The builder picked a picture block: bring it into view in its row. */
   document.addEventListener('shopify:block:select', e => {
     const d = e.detail || {}, id = d.blockId || d.block_id || '';
-    let el = e.target && e.target.closest ? e.target.closest('[data-r7c-tile]') : null;
-    if (!el && id) el = document.querySelector('[data-r7c-tile][data-r7c-block="' + CSS.escape(String(id)) + '"]');
-    const track = el && el.closest('[data-r7c-track]'); if (!track) return;
+    let el = e.target && e.target.closest ? e.target.closest('[data-r7n-tile]') : null;
+    if (!el && id) el = document.querySelector('[data-r7n-tile][data-r7n-block="' + CSS.escape(String(id)) + '"]');
+    const track = el && el.closest('[data-r7n-track]'); if (!track) return;
     const t = el.getBoundingClientRect(), r = track.getBoundingClientRect();
     if (t.left < r.left || t.right > r.right) track.scrollBy({left: t.left - r.left, behavior: 'auto'});
   });
@@ -145,13 +145,13 @@
     const {root, s, put} = c, o = custom(s), type = c.st.type, f = bool(s.enable_custom_fonts);
     const v = s.color_scheme && s.color_scheme.id || s.color_scheme;
     if (typeof v === 'string' && /^[\w-]+$/.test(v)) put(root, 'scheme', v);
-    put(root, '--r7c-bg', pick(o, s.section_bg, 'var(--color-background)'));
-    put(root, '--r7c-pt-m', px(s.padding_top_mobile, type.pm)); put(root, '--r7c-pb-m', px(s.padding_bottom_mobile, type.pm));
-    put(root, '--r7c-pt-d', px(s.padding_top, type.pd)); put(root, '--r7c-pb-d', px(s.padding_bottom, type.pd));
-    put(root, '--r7c-hf', f && font(s.heading_font) || null); put(root, '--r7c-bf', f && font(s.body_font) || null);
-    put(root, '@data-r7c-width', s.section_width || 'fluid_container');
-    put(root, '@data-r7c-show', s.show_section_on || 'all');
-    put(root, '@data-r7c-align', s.content_alignment || type.align);
+    put(root, '--r7n-bg', pick(o, s.section_bg, 'var(--color-background)'));
+    put(root, '--r7n-pt-m', px(s.padding_top_mobile, type.pm)); put(root, '--r7n-pb-m', px(s.padding_bottom_mobile, type.pm));
+    put(root, '--r7n-pt-d', px(s.padding_top, type.pd)); put(root, '--r7n-pb-d', px(s.padding_bottom, type.pd));
+    put(root, '--r7n-hf', f && font(s.heading_font) || null); put(root, '--r7n-bf', f && font(s.body_font) || null);
+    put(root, '@data-r7n-width', s.section_width || 'fluid_container');
+    put(root, '@data-r7n-show', s.show_section_on || 'all');
+    put(root, '@data-r7n-align', s.content_alignment || type.align);
     const shape = s.use_theme_button === false || s.use_theme_button === 'false';
     const bodyFont = f && font(s.body_font) || null;
     if (type.kind === 'split') split(c, o, f, shape, bodyFont);
@@ -159,21 +159,21 @@
   }
   function split(c, o, f, shape, bodyFont) {
     const {root, s, put, q} = c;
-    put(root, '--r7c-media-w', num(s.image_width, 50) + '%'); put(root, '--r7c-gap', px(s.column_gap, 64));
-    put(root, '--r7c-done', num(s.success_duration, 5) + 's');
-    put(root, '--r7c-text', pick(o, s.text_color, 'var(--color-text)'));
-    put(root, '@data-r7c-side', s.image_position || 'left');
-    put(root, '@data-r7c-ratio', s.image_ratio || 'square');
-    put(root, '@data-r7c-mimg', s.show_image_mobile === false || s.show_image_mobile === 'false' ? 'false' : 'true');
-    put(root, '@data-r7c-form-layout', s.form_layout || 'horizontal');
-    const img = q('[data-r7c-img]');
+    put(root, '--r7n-media-w', num(s.image_width, 50) + '%'); put(root, '--r7n-gap', px(s.column_gap, 64));
+    put(root, '--r7n-done', num(s.success_duration, 5) + 's');
+    put(root, '--r7n-text', pick(o, s.text_color, 'var(--color-text)'));
+    put(root, '@data-r7n-side', s.image_position || 'left');
+    put(root, '@data-r7n-ratio', s.image_ratio || 'square');
+    put(root, '@data-r7n-mimg', s.show_image_mobile === false || s.show_image_mobile === 'false' ? 'false' : 'true');
+    put(root, '@data-r7n-form-layout', s.form_layout || 'horizontal');
+    const img = q('[data-r7n-img]');
     if (img) put(img, '@alt', str(s.image_alt) || (s.image && typeof s.image === 'object' && s.image.alt) || '');
-    put(q('[data-r7c-signup]'), '@data-own-font', f || null);
-    const input = q('[data-r7c-input]'), label = q('[data-r7c-email-label]');
+    put(q('[data-r7n-signup]'), '@data-own-font', f || null);
+    const input = q('[data-r7n-input]'), label = q('[data-r7n-email-label]');
     put(label, 'text', str(s.email_label).trim() || str(s.email_placeholder) || 'Email');
     put(input, '@placeholder', str(s.email_placeholder));
     put(input, '--body-font', bodyFont);
-    const btn = q('[data-r7c-submit]');
+    const btn = q('[data-r7n-submit]');
     if (btn) {
       const style = s.button_style === 'secondary' ? 'secondary' : 'primary';
       put(btn, '.style', 'btn-' + style); put(btn, '@data-theme-button', style);
@@ -182,34 +182,34 @@
       put(btn, '--mb-radius', shape ? px(s.button_radius, 4) : null); put(btn, '--mb-font-size', shape ? px(s.button_size, 15) : null);
       put(btn, '--mb-padding-x', shape ? px(s.button_pad_x, 28) : null); put(btn, '--mb-padding-y', shape ? px(s.button_pad_y, 12) : null);
       put(btn, '--mb-font', bodyFont);
-      const l = q('[data-r7c-label]'); if (l) put(l, 'text', str(s.btn_text).trim() || l.dataset.fallback || '');
-      put(q('[data-r7c-subscribed]'), 'text', str(s.subscribed_button_text) || 'Subscribed');
+      const l = q('[data-r7n-label]'); if (l) put(l, 'text', str(s.btn_text).trim() || l.dataset.fallback || '');
+      put(q('[data-r7n-subscribed]'), 'text', str(s.subscribed_button_text) || 'Subscribed');
     }
     const ok = str(s.success_text) || "Thanks, you're on the list.", bad = str(s.invalid_text) || 'Enter a valid email address.';
-    put(q('[data-r7c-hint]'), 'text', bad);
-    put(q('[data-r7c-msg="error"]'), 'text', str(s.error_text) || 'That did not go through. Check your connection and try again.');
-    put(q('[data-r7c-msg="done"]'), 'text', ok);
-    const words = q('[data-r7c-words]');
+    put(q('[data-r7n-hint]'), 'text', bad);
+    put(q('[data-r7n-msg="error"]'), 'text', str(s.error_text) || 'That did not go through. Check your connection and try again.');
+    put(q('[data-r7n-msg="done"]'), 'text', ok);
+    const words = q('[data-r7n-words]');
     put(words, '@data-success-message', ok); put(words, '@data-already-message', str(s.already_text)); put(words, '@data-invalid-message', str(s.invalid_text));
     put(words, '@data-error-message', str(s.error_text)); put(words, '@data-success-ms', String(num(s.success_duration, 5) * 1000));
-    const note = q('[data-r7c-note]'); put(note, 'rich', s.note || ''); put(note, 'hidden', blank(s.note));
+    const note = q('[data-r7n-note]'); put(note, 'rich', s.note || ''); put(note, 'hidden', blank(s.note));
   }
   function follow(c, f, shape, bodyFont) {
     const {root, s, put} = c;
-    put(root, '--r7c-tile-gap', px(s.image_gap, 12));
-    put(root, '@data-r7c-buttons', s.buttons_layout || 'inline');
-    put(root, '@data-r7c-ratio', s.image_ratio || 'square');
-    put(root, '@data-r7c-arrows', s.show_arrows === false || s.show_arrows === 'false' ? 'false' : 'true');
+    put(root, '--r7n-tile-gap', px(s.image_gap, 12));
+    put(root, '@data-r7n-buttons', s.buttons_layout || 'inline');
+    put(root, '@data-r7n-ratio', s.image_ratio || 'square');
+    put(root, '@data-r7n-arrows', s.show_arrows === false || s.show_arrows === 'false' ? 'false' : 'true');
     const style = s.button_style === 'primary' ? 'primary' : 'secondary', z = SIZES[s.button_size] || ['16px', '14px', '24px'];
     const prefix = str(s.button_prefix).trim();
-    for (const btn of mine(root, '[data-r7c-fbtn]')) {
+    for (const btn of mine(root, '[data-r7n-fbtn]')) {
       put(btn, '@data-theme-button', style);
       put(btn, '@data-own-shape', shape || null); put(btn, '@data-own-font', f || null);
       overrides(put, btn, s);
       put(btn, '--mb-radius', shape ? px(s.button_radius, 4) : null);
       put(btn, '--mb-font-size', shape ? z[0] : null); put(btn, '--mb-padding-y', shape ? z[1] : null); put(btn, '--mb-padding-x', shape ? z[2] : null);
       put(btn, '--mb-font', bodyFont);
-      const name = btn.querySelector('[data-r7c-fname]');
+      const name = btn.querySelector('[data-r7n-fname]');
       if (name) put(name, 'text', prefix ? prefix + ' ' + name.dataset.name : name.dataset.name);
     }
   }
@@ -228,7 +228,7 @@
   function tile(c, x) {
     const {put} = c, b = x.b;
     const el = put(x.el, 'href', url(b.link) || '');
-    const img = el.querySelector('[data-r7c-tile-img]');
+    const img = el.querySelector('[data-r7n-tile-img]');
     if (img) put(img, '@alt', str(b.alt) || (b.image && typeof b.image === 'object' && b.image.alt) || '');
   }
   const BLOCKS = {heading: header, subheading: header, image: tile};
@@ -244,10 +244,10 @@
       const prev = m.get(key); m.set(key, v);
       return write(el, key, v, prev, st) || el;
     };
-    const blocks = mine(root, '[data-r7c-block]').map(el => {
-      const id = el.dataset.r7cBlock;
-      if (st.rawBlocks.get(id) !== el.dataset.r7cBs) { st.rawBlocks.set(id, el.dataset.r7cBs); st.blocks.set(id, {...parse(el.dataset.r7cBs), ...(st.liveBlocks.get(id) || {})}); }
-      return {el, id, type: el.dataset.r7cType, b: st.blocks.get(id) || {}};
+    const blocks = mine(root, '[data-r7n-block]').map(el => {
+      const id = el.dataset.r7nBlock;
+      if (st.rawBlocks.get(id) !== el.dataset.r7nBs) { st.rawBlocks.set(id, el.dataset.r7nBs); st.blocks.set(id, {...parse(el.dataset.r7nBs), ...(st.liveBlocks.get(id) || {})}); }
+      return {el, id, type: el.dataset.r7nType, b: st.blocks.get(id) || {}};
     });
     const c = {root, st, s: st.s, put, q: sel => mine(root, sel)[0] || null};
     section(c);
@@ -260,7 +260,7 @@
     return out;
   }
   function paint(root, st) {
-    if (st.raw !== root.dataset.r7cSettings) { st.raw = root.dataset.r7cSettings; st.s = {...parse(st.raw), ...st.live}; }
+    if (st.raw !== root.dataset.r7nSettings) { st.raw = root.dataset.r7nSettings; st.s = {...parse(st.raw), ...st.live}; }
     derive(root, st, false);
     bindTrack(root, st); arrows(root);
   }
@@ -271,18 +271,18 @@
     cancelAnimationFrame(st.frame); roots.delete(root);
   }
   function add(root) {
-    const type = TYPES[root.dataset.r7c]; if (!type) return;
+    const type = TYPES[root.dataset.r7n]; if (!type) return;
     const wrap = root.closest('.shopify-section');
     if (wrap) { const set = touched.get(wrap); if (set) { for (const k of set) wrap.style.removeProperty(k); set.clear(); } }
     /* a visitor's page carries no settings JSON: only the picture row runs there */
-    const editable = root.hasAttribute('data-r7c-settings');
-    const st = {root, type, editable, live: {}, liveBlocks: new Map(), s: parse(root.dataset.r7cSettings), raw: root.dataset.r7cSettings, blocks: new Map(), rawBlocks: new Map(), last: new Map(), mq: matchMedia('(min-width: 768px)'), frame: 0, track: undefined};
+    const editable = root.hasAttribute('data-r7n-settings');
+    const st = {root, type, editable, live: {}, liveBlocks: new Map(), s: parse(root.dataset.r7nSettings), raw: root.dataset.r7nSettings, blocks: new Map(), rawBlocks: new Map(), last: new Map(), mq: matchMedia('(min-width: 768px)'), frame: 0, track: undefined};
     st.schedule = () => { if (!st.frame) st.frame = requestAnimationFrame(() => { st.frame = 0; if (!root.isConnected) return; if (editable) paint(root, st); else { bindTrack(root, st); arrows(root); } }); };
     st.mq.addEventListener('change', st.schedule);
     roots.set(root, st);
     if (editable) derive(root, st, true);
     bindTrack(root, st);
-    root.dataset.r7cReady = '';
+    root.dataset.r7nReady = '';
   }
   function scan() {
     for (const [root, st] of roots) if (!root.isConnected) drop(root, st);
@@ -293,17 +293,17 @@
     const d = e.detail || {}, id = sectionId(d.section || d.sectionId || d.section_id); if (!id || !d.settings) return;
     const bRaw = d.block || d.blockId || d.block_id, bid = bRaw ? String(bRaw.id || bRaw) : '';
     for (const [root, st] of roots) {
-      if (root.dataset.r7cSection !== id || !st.editable) continue;
+      if (root.dataset.r7nSection !== id || !st.editable) continue;
       if (bid) { st.liveBlocks.set(bid, {...st.liveBlocks.get(bid), ...d.settings}); st.blocks.set(bid, {...st.blocks.get(bid), ...d.settings}); }
       else { Object.assign(st.live, d.settings); Object.assign(st.s, d.settings); }
       st.schedule();
     }
   });
   for (const name of ['DOMContentLoaded', 'storelib:section-load', 'shopify:section:load']) document.addEventListener(name, scan);
-  const watched = n => n.nodeType === 1 && (n.matches(SEL + ',[data-r7c-block]') || n.querySelector(SEL + ',[data-r7c-block]'));
+  const watched = n => n.nodeType === 1 && (n.matches(SEL + ',[data-r7n-block]') || n.querySelector(SEL + ',[data-r7n-block]'));
   new MutationObserver(records => {
-    if (records.some(r => r.type === 'attributes' ? r.target.matches(SEL + ',[data-r7c-block]') : [...r.addedNodes, ...r.removedNodes].some(watched))) scan();
-  }).observe(document.documentElement, {subtree: true, childList: true, attributes: true, attributeFilter: ['data-r7c-settings', 'data-r7c-bs']});
+    if (records.some(r => r.type === 'attributes' ? r.target.matches(SEL + ',[data-r7n-block]') : [...r.addedNodes, ...r.removedNodes].some(watched))) scan();
+  }).observe(document.documentElement, {subtree: true, childList: true, attributes: true, attributeFilter: ['data-r7n-settings', 'data-r7n-bs']});
   /* Test helper: outputs whose markup value differs from the derived one. */
   function audit(root) {
     const st = roots.get(root); if (!st) return ['not initialised'];
@@ -318,7 +318,7 @@
       else if (key === 'href') { have = el.getAttribute('href') || ''; want = v || ''; }
       else if (key[0] === '.') { have = el.classList.contains(v); want = true; }
       else continue;
-      if (have !== want) bad.push((el.dataset.r7cBlock || el.className || el.tagName) + ' ' + key + ': markup ' + JSON.stringify(have) + ' vs ' + JSON.stringify(want));
+      if (have !== want) bad.push((el.dataset.r7nBlock || el.className || el.tagName) + ' ' + key + ': markup ' + JSON.stringify(have) + ' vs ' + JSON.stringify(want));
     }
     return bad;
   }

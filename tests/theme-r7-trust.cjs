@@ -231,7 +231,7 @@ async function controls(browser, name, W, editing) {
   const t = await mount(browser, name, {width: W, editing, blocks: cfg.blocks(), assets: [ASSET]});
   const base = await probe(t, name);
   ok(base.present, tag + ': draws');
-  eq(await t.page.evaluate(() => !!document.querySelector('[data-r7t-settings]')), editing, tag + ': settings JSON only in the builder');
+  eq(await t.page.evaluate(() => !!document.querySelector('[data-r7g-settings]')), editing, tag + ': settings JSON only in the builder');
   const orig = t.section;
   const run = async (id, spec, block) => {
     const where = block ? block + '.' + id : id, bid = block ? t.blockId(block) : undefined;
@@ -408,28 +408,28 @@ async function lifecycle(browser, name, W) {
   /* one block's logo changes only that block, and clearing it brings the placeholder (or the name) */
   const second = u.blockId(block, 2);
   await u.emit({logo: pic('third-own')}, second); await frames(u);
-  eq(await u.page.evaluate(({sel, id}) => { const i = document.querySelector(sel), j = document.querySelector('[data-r7t-block="' + id + '"] img'); return [i.__kept === true, i.getAttribute('src') === window.__src, /third-own\.png/.test(j.getAttribute('src'))]; }, {sel: imgSel, id: second}), [true, true, true], tag + ': one block\'s logo changes, the others stay');
+  eq(await u.page.evaluate(({sel, id}) => { const i = document.querySelector(sel), j = document.querySelector('[data-r7g-block="' + id + '"] img'); return [i.__kept === true, i.getAttribute('src') === window.__src, /third-own\.png/.test(j.getAttribute('src'))]; }, {sel: imgSel, id: second}), [true, true, true], tag + ': one block\'s logo changes, the others stay');
   await u.emit({logo: ''}, second); await frames(u);
-  eq(await u.page.evaluate(id => { const b = document.querySelector('[data-r7t-block="' + id + '"]'); return [!!b.querySelector('img'), !!b.querySelector('svg.lg__ph'), b.querySelector('.pm__name') ? b.querySelector('.pm__name').textContent : null]; }, second), m ? [false, false, 'Paper 3'] : [false, true, null], tag + ': clearing a logo shows ' + (m ? 'the publication name' : 'the placeholder'));
+  eq(await u.page.evaluate(id => { const b = document.querySelector('[data-r7g-block="' + id + '"]'); return [!!b.querySelector('img'), !!b.querySelector('svg.lg__ph'), b.querySelector('.pm__name') ? b.querySelector('.pm__name').textContent : null]; }, second), m ? [false, false, 'Paper 3'] : [false, true, null], tag + ': clearing a logo shows ' + (m ? 'the publication name' : 'the placeholder'));
   if (m) {
     await u.emit({publication: ''}, second); await frames(u);
-    ok(await u.page.evaluate(id => !!document.querySelector('[data-r7t-block="' + id + '"] svg.lg__ph'), second), tag + ': with no name either, the placeholder');
+    ok(await u.page.evaluate(id => !!document.querySelector('[data-r7g-block="' + id + '"] svg.lg__ph'), second), tag + ': with no name either, the placeholder');
     await u.emit({publication: 'Back again'}, second); await frames(u);
-    eq(await u.page.evaluate(id => document.querySelector('[data-r7t-block="' + id + '"] .pm__name').textContent, second), 'Back again', tag + ': and a name replaces the placeholder');
+    eq(await u.page.evaluate(id => document.querySelector('[data-r7g-block="' + id + '"] .pm__name').textContent, second), 'Back again', tag + ': and a name replaces the placeholder');
   }
   /* added block */
   const added = m ? {type: 'mention', settings: {title: 'An added mention', url: 'https://press.test/added'}} : {type: 'logo', settings: {logo: pic('added'), alt: 'Added', url: '/pages/added'}};
-  const before = await u.page.evaluate(b => document.querySelectorAll('[data-r7t-type="' + b + '"]').length, block);
+  const before = await u.page.evaluate(b => document.querySelectorAll('[data-r7g-type="' + b + '"]').length, block);
   const blocks = cfg.blocks().concat([added]);
   await u.redraw({blocks}); await frames(u);
   const newId = 'test-b' + (blocks.length - 1);
-  ok(await u.page.evaluate(({id, m}) => { const b = document.querySelector('[data-r7t-block="' + id + '"]'); return !!b && (m ? /An added mention/.test(b.textContent) && b.querySelector('a').getAttribute('href') === 'https://press.test/added' : /added\.png/.test(b.querySelector('img').getAttribute('src')) && b.querySelector('a').getAttribute('href') === '/pages/added'); }, {id: newId, m}), tag + ': an added block draws');
-  eq(await u.page.evaluate(b => document.querySelectorAll('[data-r7t-type="' + b + '"]').length, block), before + 1, tag + ': one more ' + block);
+  ok(await u.page.evaluate(({id, m}) => { const b = document.querySelector('[data-r7g-block="' + id + '"]'); return !!b && (m ? /An added mention/.test(b.textContent) && b.querySelector('a').getAttribute('href') === 'https://press.test/added' : /added\.png/.test(b.querySelector('img').getAttribute('src')) && b.querySelector('a').getAttribute('href') === '/pages/added'); }, {id: newId, m}), tag + ': an added block draws');
+  eq(await u.page.evaluate(b => document.querySelectorAll('[data-r7g-type="' + b + '"]').length, block), before + 1, tag + ': one more ' + block);
   await u.emit({logo: pic('added-own')}, newId); await frames(u);
-  ok(await u.page.evaluate(id => /added-own\.png/.test(document.querySelector('[data-r7t-block="' + id + '"] img').getAttribute('src')), newId), tag + ': the added block is live');
+  ok(await u.page.evaluate(id => /added-own\.png/.test(document.querySelector('[data-r7g-block="' + id + '"] img').getAttribute('src')), newId), tag + ': the added block is live');
   for (let i = 0; i < 3; i++) await u.redraw();
   await frames(u);
-  eq(await u.page.evaluate(() => [window.MateriaR7Trust.count(), document.querySelectorAll('[data-r7t]').length]), [1, 1], tag + ': redraws leave one root set up');
+  eq(await u.page.evaluate(() => [window.MateriaR7Trust.count(), document.querySelectorAll('[data-r7g]').length]), [1, 1], tag + ': redraws leave one root set up');
   /* a section swapped in with no event is found too */
   await u.page.evaluate(() => { const w = document.getElementById('shopify-section-test'), html = w.innerHTML; w.innerHTML = ''; w.innerHTML = html; });
   await frames(u, 4);
@@ -440,7 +440,7 @@ async function lifecycle(browser, name, W) {
     /* one key press, one scroll call: listeners are not doubled by redraws */
     await u.redraw({settings: {layout: 'cards', mobile_layout: 'swipe'}}); await u.redraw(); await frames(u, 3);
     await u.page.evaluate(() => { window.__calls = 0; const o = Element.prototype.scrollBy; Element.prototype.scrollBy = function (...a) { window.__calls++; return o.apply(this, a); }; });
-    await u.root('[data-r7t-track]').focus();
+    await u.root('[data-r7g-track]').focus();
     await u.page.keyboard.press('ArrowRight');
     eq(await u.page.evaluate(() => window.__calls), 1, tag + ': one key press scrolls once after several redraws');
   }
@@ -521,8 +521,8 @@ async function paint(browser, name, W, editing) {
   /* nothing filled in: placeholders in the builder (the Add a section card), nothing on the storefront for an empty wall */
   const e = await render(name, {editing});
   if (editing) ok(/<svg class="lg__ph"/.test(e.html) && !/<img/.test(e.html), tag + ': the first preset draws placeholders, no pictures');
-  else if (!m) ok(!/data-r7t=/.test(e.html), tag + ': a wall with no logos draws nothing on the storefront');
-  else ok(/data-r7t=/.test(e.html) && !/<svg class="lg__ph"/.test(e.html), tag + ': mentions with words draw on the storefront, with no placeholder');
+  else if (!m) ok(!/data-r7g=/.test(e.html), tag + ': a wall with no logos draws nothing on the storefront');
+  else ok(/data-r7g=/.test(e.html) && !/<svg class="lg__ph"/.test(e.html), tag + ': mentions with words draw on the storefront, with no placeholder');
   const none = await render(name, {editing, blocks: [{type: 'heading'}]});
   eq(new RegExp(m ? 'Add a Mention block' : 'Add a Logo block').test(none.html), editing, tag + ': no item block says so in the builder only');
 }
@@ -550,9 +550,9 @@ async function wallShapes(browser, W) {
 async function scrollerChecks(browser, W, editing) {
   const name = 'press-mentions', tag = `${name} ${W} ${editing ? 'builder' : 'storefront'}`;
   const t = await mount(browser, name, {width: W, editing, settings: {layout: 'cards', mobile_layout: 'swipe'}, blocks: CFG[name].blocks(), assets: [ASSET]});
-  const settle = async () => { let last = -1; for (let i = 0; i < 40; i++) { await t.page.waitForTimeout(70); const x = await t.page.evaluate(() => document.querySelector('[data-r7t-track]').scrollLeft); if (x === last) return x; last = x; } return last; };
+  const settle = async () => { let last = -1; for (let i = 0; i < 40; i++) { await t.page.waitForTimeout(70); const x = await t.page.evaluate(() => document.querySelector('[data-r7g-track]').scrollLeft); if (x === last) return x; last = x; } return last; };
   await frames(t, 3);
-  const m = await t.page.evaluate(() => { const tr = document.querySelector('[data-r7t-track]'), cs = getComputedStyle(tr), it = tr.querySelector('.pm__item');
+  const m = await t.page.evaluate(() => { const tr = document.querySelector('[data-r7g-track]'), cs = getComputedStyle(tr), it = tr.querySelector('.pm__item');
     return {x: cs.overflowX, snap: cs.scrollSnapType, over: cs.overscrollBehaviorX, touch: cs.touchAction, bar: cs.scrollbarWidth, align: getComputedStyle(it).scrollSnapAlign, wide: tr.scrollWidth - tr.clientWidth, step: it.getBoundingClientRect().width + parseFloat(cs.columnGap), tab: tr.getAttribute('tabindex'), label: tr.getAttribute('aria-label')}; });
   ok(!/touch-action:\s*none|addEventListener\('(wheel|touchmove|touchstart|pointermove|pointerdown|mousedown)'/.test(fs.readFileSync(path.join(ROOT, 'shopify/assets', ASSET), 'utf8')), tag + ': no drag, wheel or touch handlers');
   if (W === 1366) {
@@ -565,12 +565,12 @@ async function scrollerChecks(browser, W, editing) {
   ok(m.wide > 100 && m.tab === '0' && m.label === 'In the press', tag + ': four cards are wider than the phone; the row is a labelled tab stop');
   eq(await t.page.evaluate(() => document.querySelectorAll('#shopify-section-test button').length), 0, tag + ': no arrows on a phone, the finger moves the row');
   /* touch-style: the scroll position is set directly, and comes to rest on a card */
-  await t.page.evaluate(v => { document.querySelector('[data-r7t-track]').scrollLeft = v; }, m.step * 1.4);
+  await t.page.evaluate(v => { document.querySelector('[data-r7g-track]').scrollLeft = v; }, m.step * 1.4);
   let x = await settle();
   ok(x > 0 && (near(x / m.step, Math.round(x / m.step), 0.03) || near(x, m.wide, 1.5)), `${tag}: a touch-style scroll moves the row and snaps to a card (${x} of step ${m.step})`);
-  await t.page.evaluate(() => { document.querySelector('[data-r7t-track]').scrollLeft = 0; }); await settle();
+  await t.page.evaluate(() => { document.querySelector('[data-r7g-track]').scrollLeft = 0; }); await settle();
   /* keys on the focused row */
-  await t.root('[data-r7t-track]').focus();
+  await t.root('[data-r7g-track]').focus();
   await t.page.keyboard.press('ArrowRight');
   x = await settle();
   ok(near(x, m.step, 2), `${tag}: the right arrow key moves the row one card (${x})`);
@@ -579,30 +579,30 @@ async function scrollerChecks(browser, W, editing) {
   ok(near(await settle(), m.step, 2), tag + ': the left arrow key moves it back');
   for (let i = 0; i < 6; i++) { await t.page.keyboard.press('ArrowRight'); await settle(); }
   ok(near(await settle(), m.wide, 1.5), tag + ': the keys stop at the end');
-  eq(await t.page.evaluate(() => ['ArrowDown', 'ArrowUp', ' ', 'PageDown', 'ArrowLeft'].map(key => { const e = new KeyboardEvent('keydown', {key, bubbles: true, cancelable: true}); document.querySelector('[data-r7t-track]').dispatchEvent(e); return e.defaultPrevented; })), [false, false, false, false, true], tag + ': only left and right are taken; up, down, space and page keys stay with the page');
-  await t.page.evaluate(() => { document.querySelector('[data-r7t-track]').scrollLeft = 0; }); await settle();
+  eq(await t.page.evaluate(() => ['ArrowDown', 'ArrowUp', ' ', 'PageDown', 'ArrowLeft'].map(key => { const e = new KeyboardEvent('keydown', {key, bubbles: true, cancelable: true}); document.querySelector('[data-r7g-track]').dispatchEvent(e); return e.defaultPrevented; })), [false, false, false, false, true], tag + ': only left and right are taken; up, down, space and page keys stay with the page');
+  await t.page.evaluate(() => { document.querySelector('[data-r7g-track]').scrollLeft = 0; }); await settle();
   /* keys with a card focused: focus goes with the row */
   await t.root('.pm__item:nth-child(1) a').focus();
   await t.page.keyboard.press('ArrowRight'); await settle();
   eq(await t.page.evaluate(() => document.activeElement.closest('.pm__item') === document.querySelectorAll('.pm__item')[1]), true, tag + ': focus moves to the next linked card');
   /* a card picked in the builder comes into view */
-  await t.page.evaluate(() => { document.querySelector('[data-r7t-track]').scrollLeft = 0; }); await settle();
+  await t.page.evaluate(() => { document.querySelector('[data-r7g-track]').scrollLeft = 0; }); await settle();
   await t.page.evaluate(() => document.querySelector('.pm__item:last-child').dispatchEvent(new CustomEvent('shopify:block:select', {bubbles: true})));
   await settle();
-  ok(await t.page.evaluate(() => { const r = document.querySelector('.pm__item:last-child').getBoundingClientRect(), b = document.querySelector('[data-r7t-track]').getBoundingClientRect(); return r.left >= b.left - 1 && r.right <= b.right + 1; }), tag + ': a picked card is brought into view');
+  ok(await t.page.evaluate(() => { const r = document.querySelector('.pm__item:last-child').getBoundingClientRect(), b = document.querySelector('[data-r7g-track]').getBoundingClientRect(); return r.left >= b.left - 1 && r.right <= b.right + 1; }), tag + ': a picked card is brought into view');
   /* the page itself never scrolls sideways, and the page scroll is not trapped */
   ok(await t.noOverflow(), tag + ': no sideways page scroll');
   await t.page.evaluate(() => { document.body.style.minHeight = '3000px'; });
-  const box = await t.root('[data-r7t-track]').boundingBox();
+  const box = await t.root('[data-r7g-track]').boundingBox();
   await t.page.mouse.move(box.x + 20, box.y + 20);
   await t.page.mouse.wheel(0, 300); await t.page.waitForTimeout(300);
   ok(await t.page.evaluate(() => scrollY) > 100, tag + ': a vertical wheel over the row scrolls the page');
   /* switching to stack live: no longer a scroller, not a tab stop */
   if (editing) {
     await t.emit({mobile_layout: 'stack'}); await frames(t, 3);
-    eq(await t.page.evaluate(() => { const tr = document.querySelector('[data-r7t-track]'); return [getComputedStyle(tr).overflowX, tr.hasAttribute('tabindex')]; }), ['visible', false], tag + ': stacked live: not a scroller, not a tab stop');
+    eq(await t.page.evaluate(() => { const tr = document.querySelector('[data-r7g-track]'); return [getComputedStyle(tr).overflowX, tr.hasAttribute('tabindex')]; }), ['visible', false], tag + ': stacked live: not a scroller, not a tab stop');
     await t.emit({mobile_layout: 'swipe'}); await frames(t, 3);
-    eq(await t.page.evaluate(() => document.querySelector('[data-r7t-track]').getAttribute('tabindex')), '0', tag + ': swipe again: a tab stop again');
+    eq(await t.page.evaluate(() => document.querySelector('[data-r7g-track]').getAttribute('tabindex')), '0', tag + ': swipe again: a tab stop again');
   }
   eq(t.errors, [], tag + ': no errors');
   await t.page.close();
@@ -610,7 +610,7 @@ async function scrollerChecks(browser, W, editing) {
   const r = await mount(browser, name, {width: W, editing, settings: {layout: 'cards', mobile_layout: 'swipe'}, blocks: CFG[name].blocks(), assets: [ASSET], reducedMotion: 'reduce'});
   await frames(r, 3);
   await r.page.evaluate(() => { window.__b = []; const o = Element.prototype.scrollBy; Element.prototype.scrollBy = function (a) { window.__b.push(a && a.behavior); return o.apply(this, arguments); }; });
-  await r.root('[data-r7t-track]').focus();
+  await r.root('[data-r7g-track]').focus();
   await r.page.keyboard.press('ArrowRight');
   eq(await r.page.evaluate(() => window.__b), ['auto'], tag + ': under reduced motion a key moves the row at once');
   eq(r.errors, [], tag + ': no errors under reduced motion');

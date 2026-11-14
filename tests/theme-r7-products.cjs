@@ -52,7 +52,7 @@ const pxn = v => parseFloat(v) || 0;
 /* ------------------------------------------------------------ section configs */
 const CFG = {
   'recently-viewed': {
-    root: '.r7rv', heading: '.r7p-heading', text: '.r7p-sub',
+    root: '.r7rv', heading: '.r7k-heading', text: '.r7k-sub',
     blocks: () => [{type: 'eyebrow'}, {type: 'heading'}, {type: 'subheading'}],
     settings: () => ({}),
     desk: ['items_per_row', 'show_arrows'], mob: ['items_per_row_mobile'],
@@ -62,7 +62,7 @@ const CFG = {
     selects: ['header_alignment', 'section_width'],
   },
   'product-duo': {
-    root: '.r7duo', heading: '.r7p-heading', text: '.r7p-sub', button: '.r7duo__btn',
+    root: '.r7duo', heading: '.r7k-heading', text: '.r7k-sub', button: '.r7duo__btn',
     blocks: () => [{type: 'eyebrow'}, ...presetBlocks('product-duo')].map(b => b.type === 'product' ? {...b, settings: {product: null}} : b),
     fill: blocks => { let n = 0; return blocks.map(b => b.type === 'product' ? {...b, settings: {...b.settings, product: [CATALOG[0], SOLO][n++ % 2]}} : b); },
     settings: () => ({}),
@@ -109,9 +109,9 @@ const widthOk = (cfg, id, width) => /_mobile$/.test(id) || (cfg.mob || []).inclu
 async function addFp(page) {
   await page.evaluate(() => {
     const P = ['color', 'backgroundColor', 'fontSize', 'fontFamily', 'fontWeight', 'textAlign', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'marginTop', 'marginBottom', 'rowGap', 'columnGap', 'flexDirection', 'alignItems', 'justifyContent', 'borderTopLeftRadius', 'aspectRatio', 'opacity', 'display', 'gridTemplateColumns', 'borderTopWidth', 'borderTopColor', 'borderBottomColor', 'overflowX', 'scrollSnapType', 'transform'];
-    const SKIP = /^(style|data-r7p-settings|class|srcset|sizes|loading|decoding|src|width|height|id|tabindex|role|aria-labelledby|aria-label|aria-busy|data-rv-state|data-rv-url|data-rv-sample)$/;
+    const SKIP = /^(style|data-r7k-settings|class|srcset|sizes|loading|decoding|src|width|height|id|tabindex|role|aria-labelledby|aria-label|aria-busy|data-rv-state|data-rv-url|data-rv-sample)$/;
     window.__fp = uid => {
-      const wrap = document.getElementById('shopify-section-' + uid), root = wrap.querySelector('[data-r7p-root]'), out = {}, seen = {};
+      const wrap = document.getElementById('shopify-section-' + uid), root = wrap.querySelector('[data-r7k-root]'), out = {}, seen = {};
       const ws = getComputedStyle(wrap), wr = wrap.getBoundingClientRect();
       out.wrap = {marginTop: ws.marginTop, marginBottom: ws.marginBottom, display: ws.display, height: Math.round(wr.height)};
       if (!root || root.hidden) return out;
@@ -127,7 +127,7 @@ async function addFp(page) {
         o.rect = r.width || r.height ? [r.x - wr.x, r.y - wr.y, r.width, r.height].map(Math.round).join(',') : 'none';
         for (const v of ['--mb-hover-bg', '--mb-hover-text', '--mb-hover-border']) o[v] = cs.getPropertyValue(v).trim();
         if (!e.children.length || /^(H\d|P|A|BUTTON|SPAN|LI)$/.test(e.tagName)) o.text = e.textContent.trim().replace(/\s+/g, ' ').slice(0, 80);
-        o.html = /^(H\d|LI|DIV)$/.test(e.tagName) && e.matches('.r7p-heading,.r7p-sub,.r7duo__point') ? e.innerHTML.trim() : '';
+        o.html = /^(H\d|LI|DIV)$/.test(e.tagName) && e.matches('.r7k-heading,.r7k-sub,.r7duo__point') ? e.innerHTML.trim() : '';
         o.cls = cls.split(/\s+/).filter(Boolean).sort().join(' ');
         o.attrs = [...e.attributes].filter(a => !SKIP.test(a.name)).map(a => a.name + '=' + a.value).sort().join('|');
         if (e.tagName === 'IMG') o.src = (e.getAttribute('src') || '').split('?')[0];
@@ -141,12 +141,12 @@ async function addFp(page) {
 }
 const settle = async t => {
   await t.page.evaluate(() => window.__frames());
-  await t.page.waitForFunction(() => !document.querySelector('[data-r7p-track][aria-busy]') && !document.getAnimations().some(a => a.effect && a.effect.target && a.effect.target.closest && a.effect.target.closest('[data-r7p-root]') && !a.effect.target.closest('.product-item')), null, {timeout: 30000});
+  await t.page.waitForFunction(() => !document.querySelector('[data-r7k-track][aria-busy]') && !document.getAnimations().some(a => a.effect && a.effect.target && a.effect.target.closest && a.effect.target.closest('[data-r7k-root]') && !a.effect.target.closest('.product-item')), null, {timeout: 30000});
   await t.page.evaluate(() => window.__frames());
 };
 const fp = async (t, uid = 'test') => { await settle(t); return t.page.evaluate(u => window.__fp(u), uid); };
 const diff = (a, b) => { const out = []; for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) { if (!a[k] || !b[k]) { out.push(k + (a[k] ? ' gone' : ' new')); continue; } for (const p of Object.keys(a[k])) if (a[k][p] !== b[k][p]) out.push(k + ' ' + p + ': ' + a[k][p] + ' -> ' + b[k][p]); } return out; };
-const audit = (t, uid = 'test') => t.page.evaluate(u => { const r = document.querySelector('#shopify-section-' + u + ' [data-r7p-root]'); return r ? window.MateriaR7Products.audit(r) : ['no root']; }, uid);
+const audit = (t, uid = 'test') => t.page.evaluate(u => { const r = document.querySelector('#shopify-section-' + u + ' [data-r7k-root]'); return r ? window.MateriaR7Products.audit(r) : ['no root']; }, uid);
 
 /* What Storelib answers /search?q=id:..&section_id=recently-viewed with: the section drawn with search.results. */
 async function searchAnswer(url) {
@@ -222,7 +222,7 @@ async function inheritance(browser, name, width, editing) {
     eq(await t.root(cfg.heading).evaluate(el => el.tagName), 'H2', tag + ': the section heading is an h2');
     eq(await t.css(cfg.text, 'color'), 'rgb(204, 204, 204)', tag + ': text colour');
     ok(/Arial/.test(await t.css(cfg.text + ' p', 'fontFamily')), tag + ': body font');
-    ok(/Arial/.test(await t.css('.r7p-eyebrow', 'fontFamily')), tag + ': eyebrow font');
+    ok(/Arial/.test(await t.css('.r7k-eyebrow', 'fontFamily')), tag + ': eyebrow font');
     eq(await t.css(cfg.heading, 'fontSize'), width < 768 ? '26px' : '32px', tag + ': heading size at this width');
     if (cfg.button) {
       eq(await t.css(cfg.button, 'backgroundColor'), 'rgb(18, 52, 86)', tag + ': theme button background');
@@ -358,7 +358,7 @@ async function customStyle(browser, name, width, editing) {
   await t.redraw({settings: {enable_custom_style: false, section_bg_override: '#102030', card_style: name === 'product-duo' ? 'plain' : undefined}});
   eq(diff(theme, await fp(t)), [], tag + ': off restores the theme (redraw, colours still saved)');
   /* block colours */
-  for (const [type, sel, fallback] of [['eyebrow', '.r7p-eyebrow', 'rgb(204, 204, 204)'], ['heading', cfg.heading, 'rgb(255, 255, 255)'], ['subheading', cfg.text, 'rgb(204, 204, 204)']]) {
+  for (const [type, sel, fallback] of [['eyebrow', '.r7k-eyebrow', 'rgb(204, 204, 204)'], ['heading', cfg.heading, 'rgb(255, 255, 255)'], ['subheading', cfg.text, 'rgb(204, 204, 204)']]) {
     await t.emit({enable_custom_style: true, color: '#ab12cd'}, t.blockId(type)); await settle(t);
     eq(await t.css(sel, 'color'), 'rgb(171, 18, 205)', tag + ': ' + type + ' colour (live)');
     if (type === 'subheading') eq(await t.css(sel + ' p', 'color'), 'rgb(171, 18, 205)', tag + ': subheading paragraph colour');
@@ -383,7 +383,7 @@ async function priority(browser, name, width, editing) {
     await set({enable_custom_fonts: true, heading_font: FONT, body_font: {family: 'Courier New', fallback_families: 'monospace'}});
     ok(/Verdana/.test(await t.css(cfg.heading, 'fontFamily')), `${tag} ${how}: heading font from the picker`);
     ok(/Courier New/.test(await t.css(cfg.text + ' p', 'fontFamily')), `${tag} ${how}: body font from the picker on a paragraph`);
-    ok(/Courier New/.test(await t.css('.r7p-eyebrow', 'fontFamily')), `${tag} ${how}: body font on the eyebrow`);
+    ok(/Courier New/.test(await t.css('.r7k-eyebrow', 'fontFamily')), `${tag} ${how}: body font on the eyebrow`);
     if (name === 'product-duo') {
       ok(/Verdana/.test(await t.css('.r7duo__title', 'fontFamily')), `${tag} ${how}: product title font`);
       ok(/Verdana/.test(await t.css('.r7duo__title a', 'fontFamily')), `${tag} ${how}: product title link font`);
@@ -411,7 +411,7 @@ async function priority(browser, name, width, editing) {
   }
   /* block sizes, live and redraw */
   let sized = t.section.blocks.map(b => ({type: b.type, settings: b.settings}));
-  for (const [type, sel, id, v] of [['heading', cfg.heading, width < 768 ? 'size_mobile' : 'size_desktop', 41], ['eyebrow', '.r7p-eyebrow', 'size', 19], ['subheading', cfg.text, 'size', 23]]) {
+  for (const [type, sel, id, v] of [['heading', cfg.heading, width < 768 ? 'size_mobile' : 'size_desktop', 41], ['eyebrow', '.r7k-eyebrow', 'size', 19], ['subheading', cfg.text, 'size', 23]]) {
     await t.emit({[id]: v}, t.blockId(type)); await settle(t);
     eq(await t.css(sel, 'fontSize'), v + 'px', `${tag}: ${type} ${id} (live)`);
     if (type === 'heading') { await t.emit({text: 'Big <strong>words</strong>'}, t.blockId(type)); await settle(t); eq(await t.css(sel + ' strong', 'fontSize'), v + 'px', `${tag}: heading size on a descendant`); ok(/Georgia/.test(await t.css(sel + ' strong', 'fontFamily')), `${tag}: heading font on a descendant`); }
@@ -440,10 +440,10 @@ async function twoInstances(browser, name, width, editing) {
   if (name === 'recently-viewed') {
     /* each row scrolls on its own */
     if ((await t.page.locator('#shopify-section-a .r7rv__arrow--next').isVisible())) { await t.page.locator('#shopify-section-a .r7rv__arrow--next').click(); await t.page.waitForTimeout(700); }
-    else await t.page.locator('#shopify-section-a [data-r7p-track]').evaluate(el => { el.scrollLeft = 300; });
+    else await t.page.locator('#shopify-section-a [data-r7k-track]').evaluate(el => { el.scrollLeft = 300; });
     await settle(t);
-    ok((await t.page.locator('#shopify-section-a [data-r7p-track]').evaluate(el => el.scrollLeft)) > 0, tag + ': A scrolled');
-    eq(await t.page.locator('#shopify-section-b [data-r7p-track]').evaluate(el => el.scrollLeft), 0, tag + ': B did not');
+    ok((await t.page.locator('#shopify-section-a [data-r7k-track]').evaluate(el => el.scrollLeft)) > 0, tag + ': A scrolled');
+    eq(await t.page.locator('#shopify-section-b [data-r7k-track]').evaluate(el => el.scrollLeft), 0, tag + ': B did not');
     if (!editing) {
       eq(requests.length, 1, tag + ': two rows, one request');
       const dup = await t.page.evaluate(() => { const ids = [...document.querySelectorAll('[id]')].map(e => e.id).filter(Boolean); return ids.filter((x, i) => ids.indexOf(x) !== i); });
@@ -459,12 +459,12 @@ async function addedBlocksAndRedraws(browser, name, width, editing) {
   const requests = [];
   const start = name === 'product-duo' ? cfg.fill(presetBlocks(name)) : [{type: 'heading'}];
   const t = await usual(browser, name, width, editing, {blocks: start, requests});
-  ok(!(await t.root('.r7p-eyebrow').count()), tag + ': no eyebrow yet');
+  ok(!(await t.root('.r7k-eyebrow').count()), tag + ': no eyebrow yet');
   const added = name === 'product-duo' ? [...start, {type: 'eyebrow', settings: {text: 'Added'}}, {type: 'point', settings: {text: 'A new point'}}] : [...start, {type: 'eyebrow', settings: {text: 'Added'}}, {type: 'subheading', settings: {text: '<p>Added copy</p>'}}];
   await t.redraw({blocks: added}); await settle(t);
-  eq(await t.root('.r7p-eyebrow').textContent(), 'Added', tag + ': the added block is drawn');
+  eq(await t.root('.r7k-eyebrow').textContent(), 'Added', tag + ': the added block is drawn');
   await t.emit({text: 'Edited after adding'}, 'test-b' + added.findIndex(b => b.type === 'eyebrow')); await settle(t);
-  eq(await t.root('.r7p-eyebrow').textContent(), 'Edited after adding', tag + ': and takes live edits');
+  eq(await t.root('.r7k-eyebrow').textContent(), 'Edited after adding', tag + ': and takes live edits');
   if (name === 'product-duo') {
     eq(await t.root('.r7duo__card').nth(1).locator('.r7duo__point').last().textContent(), 'A new point', tag + ': a point added last belongs to the second product');
     await t.emit({text: 'Point <strong>edited</strong>'}, 'test-b' + (added.length - 1)); await settle(t);
@@ -472,14 +472,14 @@ async function addedBlocksAndRedraws(browser, name, width, editing) {
   }
   for (let i = 0; i < 4; i++) await t.redraw({});
   await settle(t);
-  const n = await t.page.evaluate(() => [window.MateriaR7Products.roots.size, document.querySelectorAll('[data-r7p-root]').length, [...window.MateriaR7Products.roots.keys()].every(r => r.isConnected)]);
+  const n = await t.page.evaluate(() => [window.MateriaR7Products.roots.size, document.querySelectorAll('[data-r7k-root]').length, [...window.MateriaR7Products.roots.keys()].every(r => r.isConnected)]);
   eq(n, [1, 1, true], tag + ': one live root after five redraws');
   if (name === 'recently-viewed') {
     if (!editing) eq(requests.length, 1, tag + ': redraws reuse the answer (one request)');
     else eq(requests.length, 0, tag + ': the builder asks for nothing');
     if (width >= 768) {
       /* one listener: one click, one page */
-      const track = t.root('[data-r7p-track]');
+      const track = t.root('[data-r7k-track]');
       await t.page.emulateMedia({reducedMotion: 'reduce'});
       const page1 = await track.evaluate(el => { const li = el.children[0]; const gap = parseFloat(getComputedStyle(el).columnGap); return Math.floor((el.clientWidth + gap) / (li.offsetWidth + gap)) * (li.offsetWidth + gap); });
       await t.root('.r7rv__arrow--next').click(); await settle(t);
@@ -495,7 +495,7 @@ async function picturesKept(browser, name, width, editing) {
   if (!editing) return;
   const tag = `${name} ${width} pictures`;
   const t = await usual(browser, name, width, true);
-  await t.page.evaluate(() => { window.__imgs = [...document.querySelectorAll('#shopify-section-test img')]; window.__srcs = window.__imgs.map(i => i.getAttribute('src')); window.__sets = 0; for (const i of window.__imgs) new MutationObserver(m => { window.__sets += m.length; }).observe(i, {attributes: true, attributeFilter: ['src', 'srcset']}); const tr = document.querySelector('#shopify-section-test [data-r7p-track]'); window.__kids = [...tr.children]; });
+  await t.page.evaluate(() => { window.__imgs = [...document.querySelectorAll('#shopify-section-test img')]; window.__srcs = window.__imgs.map(i => i.getAttribute('src')); window.__sets = 0; for (const i of window.__imgs) new MutationObserver(m => { window.__sets += m.length; }).observe(i, {attributes: true, attributeFilter: ['src', 'srcset']}); const tr = document.querySelector('#shopify-section-test [data-r7k-track]'); window.__kids = [...tr.children]; });
   ok((await t.page.evaluate(() => window.__imgs.length)) > 0, tag + ': pictures to watch');
   await t.emit({padding_top: 80, header_alignment: 'center', color_scheme: 'alt-scheme', enable_custom_style: true, section_bg_override: '#123123'});
   await t.emit({text: 'New words'}, t.blockId('heading'));
@@ -503,7 +503,7 @@ async function picturesKept(browser, name, width, editing) {
   else await t.emit({items_per_row: 3, column_gap: 10, show_arrows: false});
   await settle(t);
   eq(await t.page.evaluate(() => [window.__imgs.every(i => i.isConnected), window.__imgs.map(i => i.getAttribute('src')).join() === window.__srcs.join(), window.__sets]), [true, true, 0], tag + ': no picture was reloaded or replaced');
-  eq(await t.page.evaluate(() => { const tr = document.querySelector('#shopify-section-test [data-r7p-track]'); return window.__kids.every((k, i) => tr.children[i] === k); }), true, tag + ': the cards are the same elements');
+  eq(await t.page.evaluate(() => { const tr = document.querySelector('#shopify-section-test [data-r7k-track]'); return window.__kids.every((k, i) => tr.children[i] === k); }), true, tag + ': the cards are the same elements');
   await t.page.close();
 }
 
@@ -521,9 +521,9 @@ async function firstPaint(browser, name, width, editing) {
   /* scripts off entirely: the first preset is a complete drawing in the builder */
   if (editing) {
     const p = await mount(browser, name, {width, editing: true, theme: THEME, assets: [CSS], inlineScripts: false});
-    const box = await p.root('[data-r7p-root]').boundingBox();
+    const box = await p.root('[data-r7k-root]').boundingBox();
     ok(box && box.height > 150, tag + ': the first preset draws with no pictures and no script');
-    ok((await p.root('.r7p-heading').textContent()).trim().length > 0, tag + ': with its heading');
+    ok((await p.root('.r7k-heading').textContent()).trim().length > 0, tag + ': with its heading');
     ok(await p.noOverflow(), tag + ': preset has no overflow');
     eq(p.errors, [], tag + ': preset no errors');
     await p.page.close();
@@ -535,7 +535,7 @@ async function rvList(browser, width) {
   const tag = `recently-viewed ${width} list`;
   /* nothing saved */
   let t = await mountWith(browser, 'recently-viewed', {width, editing: false, ids: null});
-  eq([await t.root('[data-r7p-root]').evaluate(el => el.hidden), t.requests.length], [true, 0], tag + ': no list, hidden and nothing asked');
+  eq([await t.root('[data-r7k-root]').evaluate(el => el.hidden), t.requests.length], [true, 0], tag + ': no list, hidden and nothing asked');
   await t.page.close();
   /* a list longer than the limit, with the product being viewed in it */
   const saved = ['p3', 'p1', 'p7', 'p2', 'p9', 'p5', 'p8', 'p4', 'p6', 'p10'];
@@ -544,17 +544,17 @@ async function rvList(browser, width) {
   const u = t.requests[0];
   eq([u.pathname, u.searchParams.get('section_id'), u.searchParams.get('type'), u.searchParams.get('q')], ['/search', 'recently-viewed', 'product', 'id:p3 OR id:p7 OR id:p2 OR id:p9'], tag + ': asks for the newest four, without the product being viewed');
   eq(await t.root('[data-rv-card]').evaluateAll(els => els.map(e => e.dataset.rvId)), ['p3', 'p7', 'p2', 'p9'], tag + ': newest first, capped');
-  eq(await t.root('[data-r7p-root]').evaluate(el => el.hidden), false, tag + ': shown');
+  eq(await t.root('[data-r7k-root]').evaluate(el => el.hidden), false, tag + ': shown');
   eq(await t.root('[data-rv-card] .product-item').count(), 4, tag + ': each is the theme\'s product card');
   ok(/R\$137\.77/.test(await t.root('[data-rv-card]').first().textContent()), tag + ': with its real price through the money filter');
   eq(await t.root('[data-rv-card]').first().locator('a[href="/products/p3"]').count() > 0, true, tag + ': linking to the product');
   eq(await t.root('.r7rv__ghost').count(), 0, tag + ': the placeholders are gone');
-  eq(await t.root('[data-r7p-track]').getAttribute('aria-busy'), null, tag + ': no longer busy');
+  eq(await t.root('[data-r7k-track]').getAttribute('aria-busy'), null, tag + ': no longer busy');
   /* the product page writes the product being viewed to the front of the list */
   eq((await t.page.evaluate(k => JSON.parse(localStorage.getItem(k)), KEY)).slice(0, 3), ['p1', 'p3', 'p7'], tag + ': the product being viewed is recorded first');
   eq((await t.page.evaluate(k => JSON.parse(localStorage.getItem(k)), KEY)).length, 10, tag + ': without a duplicate');
   /* the row has the right scroll flags for its count */
-  eq(await t.root('[data-r7p-root]').evaluate(el => [el.dataset.overD, el.dataset.overM]), ['false', 'true'], tag + ': four cards fit a desktop row of five, not a phone row of two');
+  eq(await t.root('[data-r7k-root]').evaluate(el => [el.dataset.overD, el.dataset.overM]), ['false', 'true'], tag + ': four cards fit a desktop row of five, not a phone row of two');
   /* a new product saved in another tab */
   await t.page.evaluate(k => { localStorage.setItem(k, JSON.stringify(['p10', 'p3'])); window.dispatchEvent(new StorageEvent('storage', {key: k})); }, KEY);
   await settle(t);
@@ -571,14 +571,14 @@ async function rvList(browser, width) {
   const kept = await t.page.evaluate(k => JSON.parse(localStorage.getItem(k)), KEY);
   eq([kept.length, kept[0], kept.includes('x24')], [25, 'p2', false], tag + ': the list keeps 25 ids at most, oldest dropped');
   /* ids that are no longer products: asked once, nothing to show, hidden */
-  eq([await t.root('[data-r7p-root]').evaluate(el => el.hidden), t.requests.length, await t.root('[data-r7p-track]').evaluate(el => el.children.length)], [true, 1, 0], tag + ': products that are gone leave the section hidden');
+  eq([await t.root('[data-r7k-root]').evaluate(el => el.hidden), t.requests.length, await t.root('[data-r7k-track]').evaluate(el => el.children.length)], [true, 1, 0], tag + ': products that are gone leave the section hidden');
   eq((await fp(t)).wrap.display, 'none', tag + ': and it takes no space');
   await t.page.close();
   /* junk in storage is ignored */
   t = await mountWith(browser, 'recently-viewed', {width, editing: false, ids: null, assets: [CSS]});
   await t.page.evaluate(k => localStorage.setItem(k, '{"not":"a list"'), KEY);
   await t.page.addScriptTag({content: fs.readFileSync(path.join(ROOT, 'shopify/assets', JS), 'utf8')}); await settle(t);
-  eq([await t.root('[data-r7p-root]').evaluate(el => el.hidden), t.requests.length, t.errors], [true, 0, []], tag + ': a broken list is no list');
+  eq([await t.root('[data-r7k-root]').evaluate(el => el.hidden), t.requests.length, t.errors], [true, 0, []], tag + ': a broken list is no list');
   await t.page.evaluate(k => localStorage.setItem(k, JSON.stringify(['p1', '"><img src=x onerror=alert(1)>', 'p2 OR id:p3', {a: 1}])), KEY);
   await t.redraw({}); await settle(t);
   eq(t.requests.length && t.requests[0].searchParams.get('q'), 'id:p1', tag + ': only plain ids are asked for');
@@ -586,7 +586,7 @@ async function rvList(browser, width) {
   /* the request fails: hidden, a warning only, and it comes back with the connection */
   let down = true;
   t = await mountWith(browser, 'recently-viewed', {width, editing: false, ids: ['p1', 'p2'], fail: () => down});
-  eq([await t.root('[data-r7p-root]').evaluate(el => el.hidden), t.errors], [true, []], tag + ': a failed request hides the section without an error');
+  eq([await t.root('[data-r7k-root]').evaluate(el => el.hidden), t.errors], [true, []], tag + ': a failed request hides the section without an error');
   down = false;
   await t.page.evaluate(() => window.dispatchEvent(new Event('online'))); await settle(t);
   eq(await t.root('[data-rv-card]').evaluateAll(els => els.map(e => e.dataset.rvId)), ['p1', 'p2'], tag + ': back online, the row is drawn');
@@ -602,7 +602,7 @@ async function rvBuilder(browser, width) {
   eq(await t.page.evaluate(k => JSON.parse(localStorage.getItem(k)), KEY), ['p9', 'p8'], tag + ': and the builder records nothing');
   await t.emit({products_to_show: 3}); await settle(t);
   eq(await t.root('[data-rv-card]:not([hidden])').count(), 3, tag + ': fewer products show at once (live)');
-  eq(await t.root('[data-r7p-root]').evaluate(el => el.dataset.overD), 'false', tag + ': and the row no longer scrolls on a desktop');
+  eq(await t.root('[data-r7k-root]').evaluate(el => el.dataset.overD), 'false', tag + ': and the row no longer scrolls on a desktop');
   await t.page.close();
   /* a store with no products yet: the theme's placeholder cards */
   const e = await mountWith(browser, 'recently-viewed', {width, editing: true, globals: {...GLOBALS, collections: {}}});
@@ -614,10 +614,10 @@ async function rvBuilder(browser, width) {
 /* The search answer and what a real search page gets. */
 async function rvAnswer() {
   const tag = 'recently-viewed answer';
-  const drawn = async g => { const r = await render('recently-viewed', {editing: false, uid: 'x', theme: THEME, globals: {...GLOBALS, ...g}}); return {ids: [...r.html.matchAll(/data-rv-id="([^"]*)"/g)].map(m => m[1]), state: (r.html.match(/data-rv-state="([^"]*)"/) || [])[1], hidden: /\shidden\s*>\s*$/.test(r.html.split('<div class="r7p-inner')[0]), html: r.html}; };
+  const drawn = async g => { const r = await render('recently-viewed', {editing: false, uid: 'x', theme: THEME, globals: {...GLOBALS, ...g}}); return {ids: [...r.html.matchAll(/data-rv-id="([^"]*)"/g)].map(m => m[1]), state: (r.html.match(/data-rv-state="([^"]*)"/) || [])[1], hidden: /\shidden\s*>\s*$/.test(r.html.split('<div class="r7k-inner')[0]), html: r.html}; };
   let d = await drawn({search: {performed: true, terms: 'id:p4 OR id:p2', results: [BY_ID.p4, BY_ID.p2]}});
   eq([d.ids, d.state], [['p4', 'p2'], 'search'], tag + ': draws the asked products as cards');
-  ok(!/data-r7p-settings=/.test(d.html), tag + ': a visitor\'s page carries no settings JSON');
+  ok(!/data-r7k-settings=/.test(d.html), tag + ': a visitor\'s page carries no settings JSON');
   d = await drawn({search: {performed: true, terms: 'pants', results: CATALOG}});
   eq([d.ids, d.state, d.hidden], [[], 'wait', true], tag + ': a visitor\'s own search is not drawn as their viewed products');
   d = await drawn({});
@@ -630,7 +630,7 @@ async function rvAnswer() {
 async function rvScroller(browser, width, editing) {
   const tag = `recently-viewed ${width} ${editing ? 'editor' : 'store'} row`;
   const t = await usual(browser, 'recently-viewed', width, editing);
-  const track = t.root('[data-r7p-track]');
+  const track = t.root('[data-r7k-track]');
   const css = await track.evaluate(el => { const c = getComputedStyle(el); return [c.overflowX, c.scrollSnapType, c.overscrollBehaviorX, c.scrollbarWidth, c.touchAction, getComputedStyle(el.children[0]).scrollSnapAlign]; });
   eq(css, ['auto', 'x mandatory', 'contain', 'none', 'pan-x pan-y', 'start'], tag + ': a native snap scroller');
   const geo = () => track.evaluate(el => { const li = el.children[0], gap = parseFloat(getComputedStyle(el).columnGap); return {one: li.offsetWidth + gap, max: el.scrollWidth - el.clientWidth, w: el.clientWidth, left: el.scrollLeft, fit: Math.floor((el.clientWidth + gap) / (li.offsetWidth + gap))}; });
@@ -644,10 +644,10 @@ async function rvScroller(browser, width, editing) {
   const snapped = (await geo()).left;
   ok(snapped > 0, tag + ': scrollLeft moves the row');
   near(snapped / g.one, Math.round(snapped / g.one), 0.03, tag + ': and it rests on a card');
-  ok(Number(await t.root('[data-r7p-progress]').evaluate(el => el.style.getPropertyValue('--rv-p'))) > 0, tag + ': the progress line follows');
+  ok(Number(await t.root('[data-r7k-progress]').evaluate(el => el.style.getPropertyValue('--rv-p'))) > 0, tag + ': the progress line follows');
   await t.page.emulateMedia({reducedMotion: 'reduce'});
   await track.evaluate(el => { el.scrollLeft = 0; }); await settle(t);
-  eq(await t.root('[data-r7p-progress]').evaluate(el => el.style.getPropertyValue('--rv-p')), '', tag + ': progress is back at the start');
+  eq(await t.root('[data-r7k-progress]').evaluate(el => el.style.getPropertyValue('--rv-p')), '', tag + ': progress is back at the start');
   const thumb = await t.root('.r7rv__thumb').evaluate(el => { const r = el.getBoundingClientRect(), p = el.parentElement.getBoundingClientRect(); return [r.width / p.width, r.left - p.left, getComputedStyle(el.parentElement).display]; });
   eq(thumb[2], 'block', tag + ': the progress line shows when the row scrolls');
   near(thumb[0], g.w / (g.w + g.max), 0.03, tag + ': its thumb is the visible share of the row');
@@ -660,7 +660,7 @@ async function rvScroller(browser, width, editing) {
   near((await geo()).left, 0, 2, tag + ': ArrowLeft moves back');
   await t.page.keyboard.press('End'); await settle(t);
   near((await geo()).left, g.max, 2, tag + ': End goes to the last card');
-  near(Number(await t.root('[data-r7p-progress]').evaluate(el => el.style.getPropertyValue('--rv-p'))), 1, 0.01, tag + ': progress is full at the end');
+  near(Number(await t.root('[data-r7k-progress]').evaluate(el => el.style.getPropertyValue('--rv-p'))), 1, 0.01, tag + ': progress is full at the end');
   await t.page.keyboard.press('Home'); await settle(t);
   near((await geo()).left, 0, 2, tag + ': Home goes to the first');
   /* arrows */
@@ -693,7 +693,7 @@ async function rvScroller(browser, width, editing) {
     /* the row runs to both screen edges and its cards start on the page's gutter, at every section width */
     for (const w of ['container', 'fluid_container', 'stretch_width', 'full_width']) {
       await t.redraw({settings: {section_width: w}}); await settle(t);
-      const e = await t.root('[data-r7p-root]').evaluate(el => { const tr = el.querySelector('[data-r7p-track]').getBoundingClientRect(); return {track: [Math.round(tr.left), Math.round(tr.right)], card: Math.round(el.querySelector('[data-rv-card]').getBoundingClientRect().left), heading: Math.round(el.querySelector('.r7p-heading').getBoundingClientRect().left), left: el.querySelector('[data-r7p-track]').scrollLeft}; });
+      const e = await t.root('[data-r7k-root]').evaluate(el => { const tr = el.querySelector('[data-r7k-track]').getBoundingClientRect(); return {track: [Math.round(tr.left), Math.round(tr.right)], card: Math.round(el.querySelector('[data-rv-card]').getBoundingClientRect().left), heading: Math.round(el.querySelector('.r7k-heading').getBoundingClientRect().left), left: el.querySelector('[data-r7k-track]').scrollLeft}; });
       eq([e.track, e.card, e.left], [[0, 375], e.heading, 0], `${tag} ${w}: edge to edge, the first card on the gutter with the heading`);
     }
     await t.redraw({settings: {section_width: 'fluid_container'}}); await settle(t);
@@ -764,19 +764,19 @@ async function duoData(browser, width, editing) {
   }
   await t.page.close();
   t = await mountWith(browser, 'product-duo', {width, editing, blocks: base});
-  if (editing) eq([await t.root('.r7duo__card').count(), await t.root('[data-r7p-root]').evaluate(el => el.hidden)], [2, false], tag + ': the first preset draws two placeholder cards');
-  else eq([await t.root('.r7duo__card').count(), await t.root('[data-r7p-root]').evaluate(el => el.hidden), (await fp(t)).wrap.display], [0, true, 'none'], tag + ': no product picked: nothing on the store');
+  if (editing) eq([await t.root('.r7duo__card').count(), await t.root('[data-r7k-root]').evaluate(el => el.hidden)], [2, false], tag + ': the first preset draws two placeholder cards');
+  else eq([await t.root('.r7duo__card').count(), await t.root('[data-r7k-root]').evaluate(el => el.hidden), (await fp(t)).wrap.display], [0, true, 'none'], tag + ': no product picked: nothing on the store');
   eq(t.errors, [], tag + ': no errors with empty pickers');
   await t.page.close();
   /* block edge cases: one product, a third product, points before any product, no blocks */
   t = await mountWith(browser, 'product-duo', {width, editing, blocks: [{type: 'point', settings: {text: 'Early point'}}, {type: 'product', settings: {product: P1}}, {type: 'product', settings: {product: SOLO}}, {type: 'product', settings: {product: BY_ID.p3}}, {type: 'point', settings: {text: 'Late point'}}]});
   eq(await t.root('.r7duo__card').count(), 2, tag + ': two products at most');
   eq([await card(0).locator('.r7duo__point').allTextContents(), await card(1).locator('.r7duo__point').allTextContents()], [['Early point'], ['Late point']], tag + ': a point before any product goes to the first, a late one to the second');
-  eq(await t.root('.r7p-header').evaluate(el => getComputedStyle(el).display), 'none', tag + ': no header blocks, no header space');
+  eq(await t.root('.r7k-header').evaluate(el => getComputedStyle(el).display), 'none', tag + ': no header blocks, no header space');
   await t.page.close();
   t = await mountWith(browser, 'product-duo', {width, editing, blocks: []});
-  eq([await t.root('[data-r7p-root]').evaluate(el => el.hidden), await t.root('.r7duo__empty').count(), t.errors], editing ? [false, 1, []] : [true, 0, []], tag + ': no blocks: a hint in the builder, nothing on the store, no error');
-  if (editing) ok((await t.root('[data-r7p-root]').boundingBox()).height > 60, tag + ': the empty section can still be picked in the builder');
+  eq([await t.root('[data-r7k-root]').evaluate(el => el.hidden), await t.root('.r7duo__empty').count(), t.errors], editing ? [false, 1, []] : [true, 0, []], tag + ': no blocks: a hint in the builder, nothing on the store, no error');
+  if (editing) ok((await t.root('[data-r7k-root]').boundingBox()).height > 60, tag + ': the empty section can still be picked in the builder');
   await t.page.close();
   /* live edits of a product block */
   if (editing) {
@@ -827,22 +827,22 @@ async function duoLayout(browser, width, editing) {
     await t.redraw({settings: {column_gap: 96}}); await settle(t);
     const wide = await boxes();
     ok(wide[1][0] - (wide[0][0] + wide[0][2]) > b[1][0] - (b[0][0] + b[0][2]), tag + ': the gap setting widens the space between them');
-    eq(await t.root('[data-r7p-track]').getAttribute('tabindex'), null, tag + ': not a scroller on desktop, no tab stop');
+    eq(await t.root('[data-r7k-track]').getAttribute('tabindex'), null, tag + ': not a scroller on desktop, no tab stop');
   } else {
     ok(b[1][1] > b[0][1] + b[0][3] - 1, tag + ': stacked on phones');
     near(b[0][2], b[1][2], 1, tag + ': full width cards');
-    eq(await t.root('[data-r7p-track]').getAttribute('tabindex'), null, tag + ': stacked cards are no tab stop');
+    eq(await t.root('[data-r7k-track]').getAttribute('tabindex'), null, tag + ': stacked cards are no tab stop');
     /* Swipe */
     for (const how of ['live', 'redraw']) {
       if (how === 'live') await t.emit({mobile_layout: 'swipe'}); else { await t.redraw({settings: {mobile_layout: 'stack'}}); await t.redraw({settings: {mobile_layout: 'swipe'}}); }
       await settle(t);
-      const track = t.root('[data-r7p-track]');
+      const track = t.root('[data-r7k-track]');
       const css = await track.evaluate(el => { const c = getComputedStyle(el); return [c.overflowX, c.scrollSnapType, c.overscrollBehaviorX, c.scrollbarWidth, c.touchAction, getComputedStyle(el.querySelector('.r7duo__card')).scrollSnapAlign]; });
       eq(css, ['auto', 'x mandatory', 'contain', 'none', 'pan-x pan-y', 'start'], `${tag} ${how}: Swipe is a native snap scroller`);
       b = await boxes();
       eq(b[0][1], b[1][1], `${tag} ${how}: the cards sit in a row`);
       ok(b[1][0] < width && b[1][0] > width * 0.6, `${tag} ${how}: the second card peeks in`);
-      const edge = await t.root('[data-r7p-root]').evaluate(el => { const tr = el.querySelector('[data-r7p-track]').getBoundingClientRect(); return [Math.round(tr.left), Math.round(tr.right), Math.round(el.querySelector('.r7duo__card').getBoundingClientRect().left) === Math.round(el.querySelector('.r7p-sub').getBoundingClientRect().left)]; });
+      const edge = await t.root('[data-r7k-root]').evaluate(el => { const tr = el.querySelector('[data-r7k-track]').getBoundingClientRect(); return [Math.round(tr.left), Math.round(tr.right), Math.round(el.querySelector('.r7duo__card').getBoundingClientRect().left) === Math.round(el.querySelector('.r7k-sub').getBoundingClientRect().left)]; });
       eq(edge, [0, width, true], `${tag} ${how}: the row runs to both screen edges, its first card on the page's gutter`);
       eq(await t.root('.r7duo__or').isVisible(), false, `${tag} ${how}: no word in the row`);
       if (editing || how === 'redraw') eq(await track.getAttribute('tabindex'), '0', `${tag} ${how}: the row is a tab stop`);
@@ -863,9 +863,9 @@ async function duoLayout(browser, width, editing) {
     /* the builder picks the first product: its card comes into view */
     if (editing) {
       await t.page.emulateMedia({reducedMotion: 'reduce'});
-      await t.page.evaluate(id => { const el = document.querySelector('[data-r7p-block="' + id + '"]'); el.dispatchEvent(new CustomEvent('shopify:block:select', {bubbles: true, detail: {blockId: id}})); }, t.blockId('product', 0));
+      await t.page.evaluate(id => { const el = document.querySelector('[data-r7k-block="' + id + '"]'); el.dispatchEvent(new CustomEvent('shopify:block:select', {bubbles: true, detail: {blockId: id}})); }, t.blockId('product', 0));
       await settle(t);
-      near(await t.root('[data-r7p-track]').evaluate(el => el.scrollLeft), 0, 2, tag + ': picking a product block brings its card into view');
+      near(await t.root('[data-r7k-track]').evaluate(el => el.scrollLeft), 0, 2, tag + ': picking a product block brings its card into view');
     }
   }
   /* long words and many points do not break the cards */
@@ -880,13 +880,13 @@ async function duoLayout(browser, width, editing) {
 async function reducedMotion(browser, name, width, editing) {
   const tag = `${name} ${width} ${editing ? 'editor' : 'store'} reduced motion`;
   const t = await usual(browser, name, width, editing, {reducedMotion: 'reduce', ...(name === 'product-duo' ? {settings: {mobile_layout: 'swipe'}} : {})});
-  eq(await t.page.evaluate(() => document.getAnimations().filter(a => a.effect && a.effect.target && a.effect.target.closest && a.effect.target.closest('[data-r7p-root]') && !a.effect.target.closest('.product-item')).length), 0, tag + ': nothing of the section is animating (the inside of a theme product card is the card\'s own)');
-  eq(await t.root('[data-r7p-root]').evaluate(el => [el.hidden, getComputedStyle(el).opacity]), [false, '1'], tag + ': the content is fully visible');
+  eq(await t.page.evaluate(() => document.getAnimations().filter(a => a.effect && a.effect.target && a.effect.target.closest && a.effect.target.closest('[data-r7k-root]') && !a.effect.target.closest('.product-item')).length), 0, tag + ': nothing of the section is animating (the inside of a theme product card is the card\'s own)');
+  eq(await t.root('[data-r7k-root]').evaluate(el => [el.hidden, getComputedStyle(el).opacity]), [false, '1'], tag + ': the content is fully visible');
   if (name === 'recently-viewed') {
     eq(await t.css('.r7rv__arrow', 'transitionDuration'), '0s', tag + ': no arrow transition');
     eq(await t.root('[data-rv-card]').first().evaluate(el => getComputedStyle(el).opacity), '1', tag + ': cards visible');
   } else eq(await t.css('.r7duo__media img', 'transitionDuration'), '0s', tag + ': no picture transition');
-  const track = t.root('[data-r7p-track]');
+  const track = t.root('[data-r7k-track]');
   if (await track.evaluate(el => el.scrollWidth > el.clientWidth + 2)) {
     await track.focus(); await t.page.keyboard.press('ArrowRight');
     ok((await track.evaluate(el => el.scrollLeft)) > 0, tag + ': a key moves the row at once, with no smooth scroll');

@@ -43,7 +43,7 @@ function visibleIds(name) {
 async function read(t, sel, what, uid = t.section.id) {
   return t.page.evaluate(({sel, what, uid}) => {
     const scope = document.getElementById('shopify-section-' + uid);
-    const el = sel ? scope.querySelector(sel) : scope.querySelector('[data-r7f]');
+    const el = sel ? scope.querySelector(sel) : scope.querySelector('[data-r7e]');
     if (what === 'count') return scope.querySelectorAll(sel).length;
     if (!el) return '<missing ' + sel + '>';
     if (what.startsWith('@')) return el.getAttribute(what.slice(1));
@@ -109,7 +109,7 @@ async function hoverBg(t, sel) {
 /* Links and buttons that stand alone (a link inside a sentence is not a target of its own). */
 const smallTargets = t => t.page.evaluate(id => [...document.querySelectorAll('#shopify-section-' + id + ' :is(button, a):not(p a)')].filter(el => el.offsetWidth && getComputedStyle(el).visibility !== 'hidden').map(el => { const r = el.getBoundingClientRect(); return {cls: String(el.className).split(' ')[0], w: Math.round(r.width), h: Math.round(r.height)}; }).filter(r => r.w < 44 || r.h < 44), t.section.id);
 const own = (t, sel, name) => t.page.evaluate(({sel, name, id}) => { const el = document.querySelector('#shopify-section-' + id + ' ' + sel); return el ? el.hasAttribute(name) : '<missing ' + sel + '>'; }, {sel, name, id: t.section.id});
-const audit = (t, uid = t.section.id) => t.page.evaluate(uid => JSON.stringify(window.MateriaR7Features.audit(document.querySelector('#shopify-section-' + uid + ' [data-r7f]'))), uid);
+const audit = (t, uid = t.section.id) => t.page.evaluate(uid => JSON.stringify(window.MateriaR7Features.audit(document.querySelector('#shopify-section-' + uid + ' [data-r7e]'))), uid);
 const counts = page => page.evaluate(() => window.MateriaR7Features.count());
 /* A theme button drawn inside the section: what Theme settings > Buttons give every button. */
 const themeButton = (t, prop, role = 'primary') => t.page.evaluate(({prop, role}) => { const a = document.createElement('a'); a.href = '#'; a.setAttribute('data-theme-button', role); a.setAttribute('data-sl-button', ''); a.textContent = 'x'; document.querySelector('#shopify-section-test .r7s__inner').append(a); const v = getComputedStyle(a)[prop]; a.remove(); return v; }, {prop, role});
@@ -156,7 +156,7 @@ async function suite(cfg) {
         await warm.page.close();
       }
       const t = await mount(browser, cfg.name, {width, editing, blocks: cfg.full, assets: [ASSET]});
-      h.eq(await read(t, null, '@data-r7f-settings') !== null, editing, 'settings JSON is printed in the builder only ' + tag);
+      h.eq(await read(t, null, '@data-r7e-settings') !== null, editing, 'settings JSON is printed in the builder only ' + tag);
       /* Theme inheritance */
       await cfg.inherit(t, h);
       /* Colour scheme live and after a redraw */
@@ -176,10 +176,10 @@ async function suite(cfg) {
       for (const how of ['live', 'redraw']) {
         const on = {enable_custom_fonts: true, heading_font: {family: 'Verdana'}, body_font: {family: 'Tahoma'}};
         if (how === 'live') await t.emit(on); else await t.redraw({settings: on});
-        h.ok(await own(t, '[data-r7f]', 'data-own-font'), `own font attribute ${how} ${tag}`);
+        h.ok(await own(t, '[data-r7e]', 'data-own-font'), `own font attribute ${how} ${tag}`);
         for (const [sel, re] of cfg.fonts.checks) h.match(await read(t, sel, 'fontFamily'), re, `font ${how} ${sel} ${tag}`);
         if (how === 'live') await t.emit({enable_custom_fonts: false}); else await t.redraw({settings: {enable_custom_fonts: false}});
-        h.ok(!(await own(t, '[data-r7f]', 'data-own-font')), `own font attribute gone ${how} ${tag}`);
+        h.ok(!(await own(t, '[data-r7e]', 'data-own-font')), `own font attribute gone ${how} ${tag}`);
         for (const [sel, re] of cfg.fonts.off) h.match(await read(t, sel, 'fontFamily'), re, `font off ${how} ${sel} ${tag}`);
       }
       await t.redraw({settings: {heading_font: 'assistant_n4', body_font: 'assistant_n4'}});
@@ -577,7 +577,7 @@ const banner = {
     {id: 'layout', v: 'stacked', sel: '.gbn__main', css: 'textAlign', exp: 'center'},
     {id: 'frame', v: 'lines', check: async t => assert.equal([await read(t, '.gbn__band', 'borderTopWidth'), await read(t, '.gbn__band', 'borderLeftWidth')].join(), '1px,0px')},
     {id: 'content_max_width', v: 700, sel: '.gbn__band', css: 'maxWidth', exp: '700px'},
-    {id: 'icon', v: 'truck', check: async (t, w, how) => { assert.equal(await read(t, '.gbn__icon', '@data-r7f-icon'), 'truck'); assert.match(await t.page.evaluate(() => document.querySelector('#shopify-section-test .gbn__icon').innerHTML), /circle cx="17" cy="18"/, how + ' truck icon drawn'); }},
+    {id: 'icon', v: 'truck', check: async (t, w, how) => { assert.equal(await read(t, '.gbn__icon', '@data-r7e-icon'), 'truck'); assert.match(await t.page.evaluate(() => document.querySelector('#shopify-section-test .gbn__icon').innerHTML), /circle cx="17" cy="18"/, how + ' truck icon drawn'); }},
     {id: 'image', v: IMG, check: async (t, w, how) => { assert.match(await read(t, '.gbn__seal-img', '@src'), /pic-one\.png/); assert.equal(await read(t, '.gbn__seal-img', 'visible'), true, how); if (await read(t, '.gbn__icon', 'count')) assert.equal(await read(t, '.gbn__icon', 'visible'), false, how + ' the image takes the place of the icon'); }},
     {id: 'image_alt', v: 'Two year warranty seal', pre: {image: IMG}, sel: '.gbn__seal-img', css: '@alt', exp: 'Two year warranty seal'},
     {id: 'icon_size', v: 40, sel: '.gbn__seal', css: 'width', exp: '40px'},
@@ -697,8 +697,8 @@ const banner = {
     await two.emit({enable_custom_style: true, section_bg: '#abcdef', frame: 'none', icon: 'truck', icon_size: 40}, undefined, 'a');
     await two.emit({text: 'Only A'}, two.blockId('point', 0, 'a'), 'a');
     await two.emit({text: 'Only A heading'}, two.blockId('heading', 0, 'a'), 'a');
-    h.eq(await read(two, '.gbn', 'backgroundColor', 'a') + ' ' + await read(two, '.gbn__ptext', 'text', 'a') + ' ' + await read(two, '.gbn__icon', '@data-r7f-icon', 'a'), 'rgb(171, 205, 239) Only A truck', 'a edited ' + h.tag);
-    h.eq([await read(two, '.gbn', 'backgroundColor', 'b'), await read(two, '.gbn__band', 'borderTopWidth', 'b'), await read(two, '.gbn__icon', '@data-r7f-icon', 'b'), await read(two, '.gbn__seal', 'width', 'b'), await read(two, '.gbn__ptext', 'text', 'b'), await read(two, '.r7h__heading', 'text', 'b')].join('|'), 'rgb(24, 32, 40)|1px|shield_check|56px|Free returns|Thirty days to decide', 'b untouched ' + h.tag);
+    h.eq(await read(two, '.gbn', 'backgroundColor', 'a') + ' ' + await read(two, '.gbn__ptext', 'text', 'a') + ' ' + await read(two, '.gbn__icon', '@data-r7e-icon', 'a'), 'rgb(171, 205, 239) Only A truck', 'a edited ' + h.tag);
+    h.eq([await read(two, '.gbn', 'backgroundColor', 'b'), await read(two, '.gbn__band', 'borderTopWidth', 'b'), await read(two, '.gbn__icon', '@data-r7e-icon', 'b'), await read(two, '.gbn__seal', 'width', 'b'), await read(two, '.gbn__ptext', 'text', 'b'), await read(two, '.r7h__heading', 'text', 'b')].join('|'), 'rgb(24, 32, 40)|1px|shield_check|56px|Free returns|Thirty days to decide', 'b untouched ' + h.tag);
   },
   async reduced(rm, h) {
     h.eq(await read(rm, '.r7h__heading', 'visible') + ' ' + await read(rm, '.gbn__point', 'visible'), 'true true', 'content visible under reduced motion ' + h.tag);

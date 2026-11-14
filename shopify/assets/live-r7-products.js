@@ -17,7 +17,7 @@
    native scrollers. The arrows and the arrow keys call scrollBy; the scroll
    position is read in one passive listener, once a frame.
 
-   Live edits. Every root [data-r7p-root] carries its settings as JSON in the
+   Live edits. Every root [data-r7k-root] carries its settings as JSON in the
    builder, every block its own. derive() turns them into outputs (a CSS
    variable, an attribute, text) per element, the same values the section
    prints, so on load the first derive is only recorded. After that an output
@@ -27,7 +27,7 @@
    action, more sample products) waits for the builder's redraw. */
 (() => {
   if (window.MateriaR7Products) return;
-  const SEL = '[data-r7p-root]', BSEL = '[data-r7p-block]';
+  const SEL = '[data-r7k-root]', BSEL = '[data-r7k-block]';
   const KEY = 'materia__recently-viewed-products', MAX = 25;
   const roots = new Map();
   const touched = new WeakMap();
@@ -83,19 +83,19 @@
     put(root, '.remove_spacing', bool(s.reset_spacing));
     put(root, '--section-pt', String(num(s.padding_top)));
     put(root, '--section-pb', String(num(s.padding_bottom)));
-    put(root, '--r7p-hgap', px(s.header_spacing));
+    put(root, '--r7k-hgap', px(s.header_spacing));
     put(root, '@data-align', s.header_alignment || 'left');
     const w = WIDTHS.includes(s.section_width) ? s.section_width : null;
-    if (w) { put(root, '@data-width', w); const inner = q('[data-r7p-width]'); if (inner) put(inner, 'width', w); }
-    put(root, '--r7p-bg', own(custom(s), s.section_bg_override, 'var(--color-background)'));
+    if (w) { put(root, '@data-width', w); const inner = q('[data-r7k-width]'); if (inner) put(inner, 'width', w); }
+    put(root, '--r7k-bg', own(custom(s), s.section_bg_override, 'var(--color-background)'));
   }
   function textBlock(c, el, b, type) {
     const {put} = c, on = custom(b);
     put(el, type === 'eyebrow' ? 'text' : 'rich', b.text || '');
     put(el, 'hidden', blank(b.text));
-    put(el, '--r7p-c', own(on, b.color, type === 'heading' ? 'var(--color-heading)' : 'var(--color-text)'));
-    if (type === 'heading') { put(el, '--r7p-fs-d', px(b.size_desktop)); put(el, '--r7p-fs-m', px(b.size_mobile)); }
-    else put(el, '--r7p-fs', px(b.size));
+    put(el, '--r7k-c', own(on, b.color, type === 'heading' ? 'var(--color-heading)' : 'var(--color-text)'));
+    if (type === 'heading') { put(el, '--r7k-fs-d', px(b.size_desktop)); put(el, '--r7k-fs-m', px(b.size_mobile)); }
+    else put(el, '--r7k-fs', px(b.size));
   }
   const TEXT = ['eyebrow', 'heading', 'subheading'];
 
@@ -111,7 +111,7 @@
         put(root, '--rv-gap-m', px(Math.min(gap, 15)));
         put(root, '@data-arrows', bool(s.show_arrows) ? 'true' : 'false');
         put(root, '@data-progress', bool(s.show_progress) ? 'true' : 'false');
-        put(root, '--r7p-ink', own(custom(s), s.arrow_color, 'var(--color-heading)'));
+        put(root, '--r7k-ink', own(custom(s), s.arrow_color, 'var(--color-heading)'));
         put(root, '@data-rv-cols', String(cols));
         put(root, '@data-rv-cols-m', String(colsM));
         /* The sample cards: fewer show at once; more wait for the builder's redraw. */
@@ -148,20 +148,20 @@
         put(root, '--mb-padding-y', shape ? px(s.button_padding_v) : null);
         put(root, '--mb-padding-x', shape ? px(s.button_padding_h) : null);
         put(root, '--mb-font-size', shape ? px(s.button_font_size || 15) : null);
-        for (const btn of root.querySelectorAll('[data-r7p-btn]')) put(btn, '@data-own-shape', shape || null);
-        const grid = q('[data-r7p-track]'), word = String(s.divider_text || '').trim();
+        for (const btn of root.querySelectorAll('[data-r7k-btn]')) put(btn, '@data-own-shape', shape || null);
+        const grid = q('[data-r7k-track]'), word = String(s.divider_text || '').trim();
         if (grid) put(grid, '@data-or', word ? 'text' : (s.card_style || 'plain') === 'plain' ? 'line' : 'none');
-        const or = q('[data-r7p-or-text]'); if (or) put(or, 'text', word);
+        const or = q('[data-r7k-or-text]'); if (or) put(or, 'text', word);
         for (const [el, b, type] of blocks) {
           if (TEXT.includes(type)) textBlock(c, el, b, type);
           else if (type === 'point') { put(el, 'rich', b.text || ''); put(el, 'hidden', blank(b.text)); }
           else if (type === 'product') {
-            const label = el.querySelector('[data-r7p-label]');
+            const label = el.querySelector('[data-r7k-label]');
             if (label) { put(label, 'text', b.label || ''); put(label, 'hidden', !String(b.label || '').trim()); }
-            const act = el.querySelector('[data-r7p-action]'), btn = el.querySelector('[data-r7p-btn]');
+            const act = el.querySelector('[data-r7k-action]'), btn = el.querySelector('[data-r7k-btn]');
             if (btn) put(btn, '@data-theme-button', b.button_style === 'secondary' ? 'secondary' : 'primary');
             /* The label is the creator's only while the button opens the product page, as drawn. */
-            const text = btn && btn.querySelector('[data-r7p-btn-label]'), drawn = act ? act.dataset.r7pAction : '';
+            const text = btn && btn.querySelector('[data-r7k-btn-label]'), drawn = act ? act.dataset.r7kAction : '';
             if (text && drawn !== 'cart' && b.button_action !== 'cart') { put(text, 'text', b.button_label || ''); put(btn, 'hidden', !String(b.button_label || '').trim()); }
           }
         }
@@ -185,9 +185,9 @@
     const blocks = [];
     for (const el of root.querySelectorAll(BSEL)) {
       if (el.closest(SEL) !== root) continue;
-      const id = el.dataset.r7pBlock;
-      if (!st.blocks.has(id)) st.blocks.set(id, {...parse(el.dataset.r7pSettings), ...(st.liveBlocks.get(id) || {})});
-      blocks.push([el, st.blocks.get(id), el.dataset.r7pType]);
+      const id = el.dataset.r7kBlock;
+      if (!st.blocks.has(id)) st.blocks.set(id, {...parse(el.dataset.r7kSettings), ...(st.liveBlocks.get(id) || {})});
+      blocks.push([el, st.blocks.get(id), el.dataset.r7kType]);
     }
     st.type.derive({root, st, s: st.s, put, q, blocks, wrap: st.wrap, mode});
     return out;
@@ -204,7 +204,7 @@
   }
 
   /* ---------- the rows ---------- */
-  const trackOf = root => { const t = root.querySelector('[data-r7p-track]'); return t && t.closest(SEL) === root ? t : null; };
+  const trackOf = root => { const t = root.querySelector('[data-r7k-track]'); return t && t.closest(SEL) === root ? t : null; };
   const rtl = el => getComputedStyle(el).direction === 'rtl';
   function scrolls(root, st) {
     if (st.name === 'recently-viewed') return root.dataset[desktop.matches ? 'overD' : 'overM'] === 'true';
@@ -231,10 +231,10 @@
     const key = Math.round(p * 1000) / 1000;
     if (st.p !== key) {
       st.p = key;
-      const bar = root.querySelector('[data-r7p-progress]');
+      const bar = root.querySelector('[data-r7k-progress]');
       if (bar) { if (key) bar.style.setProperty('--rv-p', String(key)); else bar.style.removeProperty('--rv-p'); }
     }
-    const prev = root.querySelector('[data-r7p-prev]'), next = root.querySelector('[data-r7p-next]');
+    const prev = root.querySelector('[data-r7k-prev]'), next = root.querySelector('[data-r7k-next]');
     const start = at <= 1, end = max <= 1 || at >= max - 1;
     if (prev && prev.disabled !== start) prev.disabled = start;
     if (next && next.disabled !== end) next.disabled = end;
@@ -247,7 +247,7 @@
     if (on && !track.hasAttribute('tabindex')) track.setAttribute('tabindex', '0');
     else if (!on && track.hasAttribute('tabindex')) track.removeAttribute('tabindex');
     if (st.name === 'product-duo') {
-      if (on && !track.hasAttribute('role')) { track.setAttribute('role', 'group'); const h = root.querySelector('.r7p-heading:not([hidden])'); if (h && h.id) track.setAttribute('aria-labelledby', h.id); }
+      if (on && !track.hasAttribute('role')) { track.setAttribute('role', 'group'); const h = root.querySelector('.r7k-heading:not([hidden])'); if (h && h.id) track.setAttribute('aria-labelledby', h.id); }
       else if (!on && track.getAttribute('role') === 'group') { track.removeAttribute('role'); track.removeAttribute('aria-labelledby'); }
     }
   }
@@ -281,8 +281,8 @@
         .then(html => {
           const doc = new DOMParser().parseFromString(html, 'text/html'), found = new Map();
           for (const card of doc.querySelectorAll('[data-rv-card][data-rv-id]')) if (!found.has(card.dataset.rvId)) found.set(card.dataset.rvId, card);
-          const from = doc.querySelector('[data-r7p-root="recently-viewed"]');
-          return {found, sid: from ? from.dataset.r7pSection || '' : ''};
+          const from = doc.querySelector('[data-r7k-root="recently-viewed"]');
+          return {found, sid: from ? from.dataset.r7kSection || '' : ''};
         })
         .catch(e => { cache.delete(href); throw e; }));
     }
@@ -323,7 +323,7 @@
     root.hidden = false;
     cards(root.dataset.rvUrl || '/search', ids).then(({found, sid}) => {
       if (st.listKey !== key || !root.isConnected) return;
-      const mine = root.dataset.r7pSection || '', list = [];
+      const mine = root.dataset.r7kSection || '', list = [];
       for (const id of ids) if (found.has(id)) list.push(adopt(found.get(id), sid, mine));
       if (!list.length) { hide(root, st); return; }
       track.replaceChildren(...list);
@@ -343,13 +343,13 @@
       window.addEventListener('online', () => { if (roots.get(root) === st) load(root, st); }, {once: true, signal: st.ac.signal});
     });
   }
-  const waiting = root => root.dataset.r7pRoot === 'recently-viewed' && root.dataset.rvState === 'wait';
+  const waiting = root => root.dataset.r7kRoot === 'recently-viewed' && root.dataset.rvState === 'wait';
   const reload = () => { for (const [root, st] of roots) if (waiting(root)) load(root, st); };
 
   /* ---------- lifecycle ---------- */
   function init(root) {
-    const name = root.dataset.r7pRoot, type = TYPES[name]; if (!type) return;
-    const raw = root.dataset.r7pSettings || '';
+    const name = root.dataset.r7kRoot, type = TYPES[name]; if (!type) return;
+    const raw = root.dataset.r7kSettings || '';
     const st = {name, type, root, raw, live: {}, liveBlocks: new Map(), blocks: new Map(), last: new Map(), s: raw ? parse(raw) : null, wrap: root.closest('.shopify-section'), ac: new AbortController(), frame: 0, paintFrame: 0, p: 0};
     st.schedule = () => { if (!st.s || st.paintFrame) return; st.paintFrame = requestAnimationFrame(() => { st.paintFrame = 0; if (root.isConnected) { paint(root, st, false); focusable(root, st); queue(root, st); } }); };
     roots.set(root, st);
@@ -371,13 +371,13 @@
       const st = roots.get(root);
       if (!st) { init(root); continue; }
       /* The builder wrote new settings on the same element. */
-      const raw = root.dataset.r7pSettings || '';
+      const raw = root.dataset.r7kSettings || '';
       let changed = raw !== st.raw;
       if (changed) { st.raw = raw; st.s = raw ? {...parse(raw), ...st.live} : null; }
       for (const el of root.querySelectorAll(BSEL)) {
-        const id = el.dataset.r7pBlock, b = el.dataset.r7pSettings || '';
-        if (el.__r7pRaw !== undefined && el.__r7pRaw !== b) { st.blocks.set(id, {...parse(b), ...(st.liveBlocks.get(id) || {})}); changed = true; }
-        el.__r7pRaw = b;
+        const id = el.dataset.r7kBlock, b = el.dataset.r7kSettings || '';
+        if (el.__r7kRaw !== undefined && el.__r7kRaw !== b) { st.blocks.set(id, {...parse(b), ...(st.liveBlocks.get(id) || {})}); changed = true; }
+        el.__r7kRaw = b;
       }
       if (changed) st.schedule();
     }
@@ -387,20 +387,20 @@
     const d = e.detail || {}, id = sectionId(d.section || d.sectionId || d.section_id); if (!id || !d.settings) return;
     const bRaw = d.block || d.blockId || d.block_id, bid = bRaw ? String(bRaw.id || bRaw) : '';
     for (const [root, st] of roots) {
-      if (root.dataset.r7pSection !== id || !st.s) continue;
+      if (root.dataset.r7kSection !== id || !st.s) continue;
       if (bid) { st.liveBlocks.set(bid, {...st.liveBlocks.get(bid), ...d.settings}); if (st.blocks.has(bid)) st.blocks.set(bid, {...st.blocks.get(bid), ...d.settings}); }
       else { Object.assign(st.live, d.settings); Object.assign(st.s, d.settings); }
       st.schedule();
     }
   });
   document.addEventListener('click', e => {
-    const btn = e.target && e.target.closest && e.target.closest('[data-r7p-prev],[data-r7p-next]'); if (!btn || btn.disabled) return;
+    const btn = e.target && e.target.closest && e.target.closest('[data-r7k-prev],[data-r7k-next]'); if (!btn || btn.disabled) return;
     const root = btn.closest(SEL), track = root && roots.has(root) ? trackOf(root) : null; if (!track) return;
-    move(track, stride(track).page * (btn.matches('[data-r7p-next]') ? 1 : -1));
+    move(track, stride(track).page * (btn.matches('[data-r7k-next]') ? 1 : -1));
   });
   /* The arrow keys move a focused row by one card; Home and End go to its ends. */
   document.addEventListener('keydown', e => {
-    const track = e.target; if (!track || !track.matches || !track.matches('[data-r7p-track]') || e.altKey || e.ctrlKey || e.metaKey) return;
+    const track = e.target; if (!track || !track.matches || !track.matches('[data-r7k-track]') || e.altKey || e.ctrlKey || e.metaKey) return;
     const root = track.closest(SEL), st = roots.get(root); if (!st || !scrolls(root, st)) return;
     const flip = rtl(track) ? -1 : 1;
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); move(track, stride(track).one * (e.key === 'ArrowRight' ? 1 : -1) * flip); }
@@ -411,7 +411,7 @@
   document.addEventListener('shopify:block:select', e => {
     const d = e.detail || {}, id = d.blockId || d.block_id || '';
     let el = e.target && e.target.closest ? e.target.closest(BSEL) : null;
-    if (!el && id) el = document.querySelector('[data-r7p-block="' + CSS.escape(String(id)) + '"]');
+    if (!el && id) el = document.querySelector('[data-r7k-block="' + CSS.escape(String(id)) + '"]');
     const root = el && el.closest(SEL), st = root && roots.get(root); if (!st || !scrolls(root, st)) return;
     const track = trackOf(root), card = el.closest('.r7duo__card, .r7rv__item'); if (!track || !card || !track.contains(card)) return;
     move(track, 0, Math.max(0, Math.abs(card.offsetLeft - track.offsetLeft) - (parseFloat(getComputedStyle(track).paddingLeft) || 0)));
@@ -425,7 +425,7 @@
   const watched = n => n.nodeType === 1 && (n.matches(SEL + ',' + BSEL) || n.querySelector(SEL + ',' + BSEL));
   new MutationObserver(records => {
     if (records.some(r => r.type === 'attributes' ? r.target.matches(SEL + ',' + BSEL) : [...r.addedNodes, ...r.removedNodes].some(watched))) scan();
-  }).observe(document.documentElement, {subtree: true, childList: true, attributes: true, attributeFilter: ['data-r7p-settings']});
+  }).observe(document.documentElement, {subtree: true, childList: true, attributes: true, attributeFilter: ['data-r7k-settings']});
 
   /* Test helper: outputs whose markup differs from the derived one. */
   function audit(root) {
@@ -441,7 +441,7 @@
       else if (key === 'scheme') { have = el.classList.contains('color-' + v); want = true; }
       else if (key === 'width') { have = el.classList.contains(v); want = true; }
       else continue;
-      if (have !== want) bad.push((el.dataset.r7pBlock || el.className || el.tagName) + ' ' + key + ': markup ' + JSON.stringify(have) + ' vs ' + JSON.stringify(want));
+      if (have !== want) bad.push((el.dataset.r7kBlock || el.className || el.tagName) + ' ' + key + ': markup ' + JSON.stringify(have) + ' vs ' + JSON.stringify(want));
     }
     return bad;
   }

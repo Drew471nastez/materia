@@ -183,6 +183,19 @@ const ROOTS = {
   'testimonial-quote.js': '[data-testimonial-quote]',
   'announcement-pro-4.js': '[data-announcement-pro-four]',
   'announcement-three-colors.js': '[data-announcement-three]',
+  'live-r7-hero.js': '[data-r7h]',
+  'live-r7-products.js': '[data-r7k-root]',
+  'live-r7-collections.js': '[data-r7c]',
+  'live-r7-testimonials.js': '[data-r7t-root]',
+  'live-r7-features.js': '[data-r7e]',
+  'live-r7-media.js': '[data-r7m]',
+  'live-r7-text.js': '[data-r7t]',
+  'live-r7-faq.js': '[data-r7f]',
+  'live-r7-trust.js': '[data-r7g]',
+  'live-r7-promo.js': '[data-r7p]',
+  'live-r7-connect.js': '[data-r7n]',
+  'live-r7-stories.js': '[data-r7s]',
+  'live-r7-extras.js': '[data-r7x]',
 };
 /* The section runtimes each saved page requests (header, footer and overlay groups included), in the layout's order. */
 const GROUPS = ['live-announcements.js', 'live-popups-code.js', 'live-page-popups.js', 'live-header.js', 'announcement-three-colors.js'];
