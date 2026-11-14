@@ -477,6 +477,12 @@
       const data=embedded?.quantityBreaks?.length?embedded:await readOffers(`/api/offers?product=${encodeURIComponent(productId)}`);
       if (!this.isConnected || !data || !Array.isArray(data.quantityBreaks) || !data.quantityBreaks.length) return;
       const offer = data.quantityBreaks[0];
+      /* Storelib prices a tier in the store's base currency (offer.priceCents
+         is the offer variant there) and converts the tier total; the same
+         steps here give the cart's own number, not one a few cents off. */
+      const base = Number(offer.priceCents) || 0;
+      const shown = this.variants.find(v => String(v.id) === String(offer.variantId));
+      this.storelibRate = base > 0 && shown && shown.price > 0 ? shown.price / base : 0;
       let matched = false;
       this.radios.forEach(radio => {
         const paid = this.paidOf(radio); const free = this.freeOf(radio);
@@ -510,8 +516,15 @@
       const authorized = !!radio.dataset.offerId;
       const percent = authorized ? Math.min(100, Math.max(0, Number(radio.dataset.discount) || 0)) : 0;
       const amount = authorized ? Math.max(0, Number(radio.dataset.amount) || 0) : 0;
-      const eachPaid = Math.round(variant.price * (100 - percent) / 100);
-      const total = authorized ? Math.max(0, eachPaid * paid - amount) : variant.price * units;
+      const rate = authorized ? this.storelibRate || 0 : 0;
+      let total;
+      if (rate > 0) {
+        const eachBase = Math.round(Math.round(variant.price / rate) * (100 - percent) / 100);
+        total = Math.max(0, Math.round((eachBase * paid - amount) * rate));
+      } else {
+        const eachPaid = Math.round(variant.price * (100 - percent) / 100);
+        total = authorized ? Math.max(0, eachPaid * paid - amount) : variant.price * units;
+      }
       const plain = percent === 0 && free === 0 && amount === 0;
       const compareEach = plain ? Math.max(variant.price, variant.compare || 0) : variant.price;
       const compare = compareEach * units;
@@ -901,11 +914,16 @@
     roots.forEach(root=>{delete root._tierImageOverrides;watchTierImages(root);});
   });
   let nativeOfferSequence=0;
-  const tierPrice = (tier, variant) => {
+  /* rate: store currency per base unit, from the offer (see draw). Storelib
+     prices a tier in the base currency and converts the total, so the same
+     steps give the cart's own number. */
+  const tierPrice = (tier, variant, rate = 0) => {
     const paid = Math.max(1, Number(tier.quantity) || 1), free = Math.max(0, Number(tier.freeQuantity) || 0);
     const percent = tier.discountType === 'percent' ? Math.min(100, Math.max(0, Number(tier.discountValue) || 0)) : 0;
     const amount = tier.discountType === 'amount' ? Math.max(0, Number(tier.discountValue) || 0) : 0;
-    const total = Math.max(0, Math.round(variant.price * (100-percent) / 100) * paid - amount);
+    const total = rate > 0
+      ? Math.max(0, Math.round((Math.round(Math.round(variant.price / rate) * (100-percent) / 100) * paid - amount) * rate))
+      : Math.max(0, Math.round(variant.price * (100-percent) / 100) * paid - amount);
     const plain = !free && !percent && !amount;
     const compare = (plain ? Math.max(variant.price, variant.compare || 0) : variant.price) * (paid+free);
     return {total,compare,quantity:paid+free,each:Math.round(total/(paid+free))};
@@ -1076,10 +1094,11 @@
         this.rows.push({tier,total,compare,each,percent,you,youAmount,slot});
       });
       this.offerId=offer.offerId;this.chosen=tiers[initial]?.tier;this.syncQuantity();
+      {const base=Number(offer.priceCents)||0,v=this.variants.find(x=>String(x.id)===String(offer.variantId));this.rate=base>0&&v&&v.price>0?v.price/base:0;}
       if(!this.form())this.variantPicker(this.box);
       this.addButton=this.button(this.box,this.options.button_label||'Add to cart',()=>{
         const variant=this.variant();if(!variant?.available||!this.chosen)return [];
-        const price=tierPrice(this.chosen,variant);
+        const price=tierPrice(this.chosen,variant,this.rate);
         return [{id:variant.id,quantity:price.quantity,properties:{_sl_offer_id:offer.offerId,_sl_offer:'quantity_break',_sl_paid_qty:String(this.chosen.quantity||''),_sl_free_qty:String(this.chosen.freeQuantity||0),_sl_block:this.dataset.blockId||'',_sl_source:this.dataset.productId||''}}];
       });
       if((this.dataset.compact==='true' && this.form()) || this.options.show_button===false)this.addButton.hidden=true;
@@ -1110,7 +1129,7 @@
       const variant=this.variant();if(this.addButton)this.addButton.disabled=!variant?.available || this.addButton.getAttribute('aria-busy')==='true';
       if(!variant)return;
       for(const row of this.rows||[]){
-        const p=tierPrice(row.tier,variant), monetary=!this.market||(!['amount','percent'].includes(row.tier.discountType));
+        const p=tierPrice(row.tier,variant,this.rate), monetary=!this.market||(!['amount','percent'].includes(row.tier.discountType));
         row.total.textContent=monetary?this.amount(p.total):(row.tier.label||'');row.compare.hidden=!monetary||p.compare<=p.total||this.options.show_compare===false;
         row.compare.textContent=monetary?this.amount(p.compare):'';
         const showEach=monetary && p.quantity>1 && !!this.options.per_item_label;
