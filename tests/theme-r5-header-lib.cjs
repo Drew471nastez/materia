@@ -221,11 +221,13 @@ function changed(s, cur, ctx = {}) {
 function enabling(s, settingsKey = 'section') {
   const out = {}, vi = s.visible_if || '';
   if (/\{\{\s*false\s*\}\}/.test(vi)) return null;
-  const re = new RegExp(settingsKey + '\\.settings\\.([\\w-]+)(?:\\s*(==|!=)\\s*(?:\'([^\']*)\'|(false|true)))?', 'g');
+  const re = new RegExp(settingsKey + '\\.settings\\.([\\w-]+)(?:\\s*(==|!=|>=|<=|>|<)\\s*(?:\'([^\']*)\'|(false|true)|(-?\\d+(?:\\.\\d+)?)))?', 'g');
   let m;
   while ((m = re.exec(vi))) {
-    const [, id, op, str, lit] = m;
+    const [, id, op, str, lit, num] = m;
     if (!op) { out[id] = true; continue; }
+    /* a number comparison (border width > 0): the nearest value that meets it */
+    if (num != null) { const n = Number(num); out[id] = op === '>' ? n + 1 : op === '<' ? n - 1 : op === '!=' ? n + 1 : n; continue; }
     const val = str != null ? str : lit === 'true';
     if (op === '==') out[id] = val;
     else out[id] = typeof val === 'boolean' ? !val : '__other__:' + val;

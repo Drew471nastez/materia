@@ -50,7 +50,10 @@ run({
       eq(await sty('[data-an-group]', 'animationDirection'), 'normal', where + ' direction live');
       eq(await sty('[data-an-group]', 'animationDuration'), '12s', where + ' speed live');
       const a2 = await anim();
-      ok(a2.same && a2.state === 'running', where + ' speed and direction keep the same animation');
+      /* Live edits exist only in the builder; since the storefront prints no settings (d46d23b) a
+         storefront edit is a redraw, which starts a fresh animation by design. */
+      if (where.includes('editor')) ok(a2.same && a2.state === 'running', where + ' speed and direction keep the same animation');
+      else ok(a2.state === 'running', where + ' the marquee runs after the change');
       for (const mode of ['live', 'redraw']) {
         const apply = async (sec, blk) => { if (mode === 'live') { if (sec) await t.emit(sec); if (blk) await t.emit(blk, t.blockId('marquee')); } else { const blocks = t.rendered[0].section.blocks.map((b, i) => ({type: b.type, settings: i === 0 && blk ? {...b.settings, ...blk} : b.settings})); await t.redraw({settings: sec || {}, blocks}); } };
         await apply({enable_custom_fonts: true, body_font: FONT, text_weight: 'theme'});

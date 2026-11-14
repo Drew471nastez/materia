@@ -70,8 +70,9 @@ const animationCss = read('shopify/assets/animation.css');
     // Section runtimes the layout keeps ready for the builder; the sections no longer link their own copies, so these must block to avoid an unstyled flash.
     'announcement-pro-4.css', 'before-after-controls.css', 'drift-basic.min.css', 'hero-image-one.css', 'hero-pro-scrolling.css', 'hero-product-three.css', 'hero-product-two.css', 'marketing-sections.css', 'testimonial-quote.css', 'text-section-controls.css'];
   for (const f of blocking) ok(allowed.includes(f), `head: ${f} is a blocking stylesheet; only first-paint styles may hold the page`);
+  ok(/MateriaLateCss[\s\S]*\{\{ 'popup\.css' \| asset_url \| json \}\}/.test(layout), 'head: popup.css is asked for after the page has loaded (MateriaLateCss)');
+  ok(/<link rel="stylesheet" href="\{\{ 'judgeme-reviews\.css' \| asset_url \}\}" media="print" onload="this\.media='all'">/.test(layout), 'head: judgeme-reviews.css loads without blocking (print swap)');
   for (const f of ['popup.css', 'judgeme-reviews.css']) {
-    ok(new RegExp(`MateriaLateCss[\\s\\S]*\\{\\{ '${f.replace('.', '\\.')}' \\| asset_url \\| json \\}\\}`).test(layout), `head: ${f} is asked for after the page has loaded (MateriaLateCss)`);
     ok(new RegExp(`<noscript>\\{\\{ '${f.replace('.', '\\.')}' \\| asset_url \\| stylesheet_tag \\}\\}</noscript>`).test(layout), `head: ${f} has its <noscript> copy`);
   }
   for (const m of head.matchAll(/<script\b[^>]*\bsrc=[^>]*>/g)) ok(/\bdefer\b|\basync\b|type="module"/.test(m[0]), `head: <script src> is deferred (${m[0].slice(0, 80)})`);

@@ -83,7 +83,7 @@ editorial rule with a link).
 | 4 | Pictures | Pictures popped in; a sharper size re-faded a visible picture; a hover image flashed | One fade per picture, only when it was hidden and meant to show |
 | 5 | Pictures | The fade-in revealed a broken-image icon for a picture that failed to load | A failed picture stays hidden, as before |
 | 6 | Cart | After add to cart the cart was read three times (each ~0.7s) | One shared read; quantities and counts unchanged |
-| 7 | Load time | Review, popup and modal styles held the page's load event | Asked for after load, or at the first tap/scroll, or when a popup opens |
+| 7 | Load time | Popup and modal styles held the page's load event | Asked for after load, at the first tap, click or scroll, when a popup opens, or 4s after the page is readable; review star styles still load at once |
 | 8 | Wishlist | An empty wishlist showed loading boxes, then shrank and the footer jumped | Empty message drawn at first paint |
 | 9 | Touch | Footer phone/email links, social icons, product image dots, search button under 44px | 44px touch areas on touch screens, nothing moved on screen |
 | 10 | Activation check | Loaded on every page | Removed at the creator's request |
@@ -105,7 +105,26 @@ editorial rule with a link).
 
 ## E. Test results
 
-Recorded at the end of the run; see section G.
+Full suite: 267 test files run on the finished tree (Chromium, liquidjs).
+260 passed first time. The 7 that did not:
+
+| Test | Cause | Outcome |
+|---|---|---|
+| theme-r5-header-saved, theme-r6-footer-saved | Required the old and new page to have identical script error lists; the new page has none (empty theme values now print safely), the old one had some | Check now requires no new errors; both pass (20, 42) |
+| theme-r6-footer-saved | Footer contact links' touch area moved their text 4px on phones | Touch area is now an invisible layer; nothing moves |
+| theme-scripts-per-page | The 13 new section scripts were not in its list | Listed; passes (9) |
+| theme-r5-announcements-marquee | Expected a storefront edit to keep the running animation; the storefront has no live edits since d46d23b, so an edit is a redraw | Check kept for the builder; passes (399) |
+| theme-r5-header | Its helper could not satisfy "Border width > 0" before testing Border color | Helper understands number conditions; passes (522) |
+| theme-every-setting-sweep | One reading of Hero Product 1 marked "unstable" under load | Rerun alone: 310 of 310 settings change the section |
+| theme-css-loading | Pixel comparisons catch the drawer's dimmed backdrop mid-fade at slightly different moments | Screenshots identical to the eye; still flaky, left as it is |
+
+The run also caught three real bugs from this round, all fixed: three pairs of
+new section scripts shared a root marker (two sections on one page would have
+driven each other), a broken picture could show its broken-image icon, and the
+review star styles waited for the page to finish loading.
+
+Every-setting sweep: 229 sections, 17,281 settings, 17,153 change the section,
+127 allowed with a reason. New sections: 34,255 checks across 13 test files.
 
 ## F. Open items and limits
 
