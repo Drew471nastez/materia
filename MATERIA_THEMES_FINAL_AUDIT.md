@@ -144,4 +144,12 @@ Every-setting sweep: 229 sections, 17,281 settings, 17,153 change the section,
 
 ## G. Release
 
-Filled in after the final run and push.
+- Pushed to main at e0de9dd; Storelib took 69 files as a draft.
+- Storelib note: a Storelib site has no blog of its own yet, so Blog
+  Spotlight's blog and post pickers are hidden in the builder and the section
+  stays empty on the storefront until blogs exist.
+- Smoke check after the push, 11 pages on phone and desktop: no script
+  errors, no sideways scroll, layout shift 0 to 0.017 (the wishlist page went
+  from 0.037 to 0.003). The only failing request is still the Black Sleeves
+  image.
+- Not live until the creator presses Publish in the builder.
