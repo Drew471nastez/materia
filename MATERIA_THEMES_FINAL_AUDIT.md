@@ -170,7 +170,7 @@ Every-setting sweep: 229 sections, 17,281 settings, 17,153 change the section,
   dashes removed. No duplicate ids among the 460 settings.
 - Sections: no duplicate setting ids or block types in any section; no two
   sections share a name.
-- Removed 52 files nothing used: 33 snippets never rendered and 19 assets
+- Removed 52 files nothing used (33 snippets, 19 assets); Storelib keeps deleted files on the site and wrote them back, so they remain, unused:
   never loaded (about 1.3MB, mostly the unused map library and old font
   copies), including the activation check's snippet and script.
 - 19 saved theme values belong to settings retired earlier; nothing reads

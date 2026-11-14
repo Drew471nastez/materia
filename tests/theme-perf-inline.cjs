@@ -64,7 +64,8 @@ ok(['StorelibOverlayFade', 'StorelibPageshowUnlock', 'StorelibMenuLayer'].every(
 // 3. The page loads them: the layout renders the snippets that link the assets.
 const layout = read('layout/theme.storelib');
 ok(/\{%- render 'minicart' -%\}/.test(layout) && !/render 'materia-guard'/.test(layout), 'layout renders minicart and not the activation check');
-ok(!fs.existsSync(path.join(__dirname, '..', 'snippets/materia-guard.storelib')) && !fs.existsSync(path.join(__dirname, '..', 'shopify/assets/materia-guard.js')), 'the activation check files are gone');
+/* The activation check is not loaded: no section, snippet or the layout renders it (Storelib keeps its files on the site). */
+ok(!['sections', 'snippets', 'layout'].some(d => fs.readdirSync(path.join(__dirname, '..', d)).some(f => f !== 'materia-guard.storelib' && /render 'materia-guard'/.test(read(d + '/' + f)))), 'nothing renders the activation check');
 ok(/\{%- unless carrier -%\}\s*\{% render 'cart-drawer-presentation' %\}[\s\S]*?\{% render 'cart-drawer-sheets' %\}\s*\{%- endunless -%\}/.test(src.minicart), 'the drawer renders the snippets that load its assets (not the editor copy)');
 ok(src.presentation.includes("{{ 'cart-drawer.css' | asset_url | stylesheet_tag }}"), 'cart-drawer.css linked where the drawer styles were');
 ok(src.sheets.includes(`<script src="{{ 'cart-drawer.js' | asset_url }}" defer="defer"></script>`), 'cart-drawer.js deferred');
