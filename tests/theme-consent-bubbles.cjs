@@ -216,7 +216,14 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
     assert.equal(await bub('#wish'),'rgb(17, 17, 17) rgb(238, 238, 238) 22px 0px','wishlist keeps the default');
     await change({cart_bubble_custom:false});
     assert.equal(await bub('#cart'),'rgb(17, 17, 17) rgb(238, 238, 238) 22px 0px');passed++;
-    // A changed number pops; the wishlist count follows the saved list.
+    // A count settling while the page loads does not pop; the same number in another form is no change.
+    await page.evaluate(()=>{document.querySelector('#cart').innerHTML='5';});
+    await page.waitForTimeout(30);
+    assert.equal(await page.$eval('#cart',el=>el.classList.contains('is-count-bump')),false,'no pop without a shopper action');
+    // A number the shopper changed pops; the wishlist count follows the saved list.
+    await page.evaluate(()=>{document.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));document.querySelector('#cart').innerHTML='5<span class="visually-hidden">Cart count</span>';});
+    await page.waitForTimeout(30);
+    assert.equal(await page.$eval('#cart',el=>el.classList.contains('is-count-bump')),false,'same number written again does not pop');
     await page.evaluate(()=>{document.querySelector('#cart').innerHTML='3';});
     await page.waitForTimeout(30);
     assert.equal(await page.$eval('#cart',el=>[el.classList.contains('is-count-bump'),getComputedStyle(el).animationName].join()),'true,mt-count-pop');

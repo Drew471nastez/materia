@@ -30,16 +30,25 @@
     node.classList.add('is-count-bump');
   }
   var seen = new WeakMap();
+  /* Only the number counts: the same count written again in another form
+     ("2" with or without its hidden label) is no change. */
+  function countOf(node) { var m = node.textContent.match(/[0-9]+|~/); return m ? m[0] : ''; }
+  /* A bubble pops only for a change the shopper just caused (add to cart, a
+     wishlist heart, a quantity button), never while a page loads or settles
+     its counts from the saved and live cart. */
+  var lastAct = -1e9;
+  ['pointerdown', 'keydown', 'submit'].forEach(function (n) { document.addEventListener(n, function () { lastAct = performance.now(); }, { capture: true, passive: true }); });
+  function shopperChange() { return performance.now() - lastAct < 6000; }
   var observer = new MutationObserver(function (records) {
     for (var r = 0; r < records.length; r++) {
       var target = records[r].target;
       var node = (target.nodeType === 1 ? target : target.parentElement);
       node = node && node.closest('.h-count');
       if (!node) continue;
-      var now = node.textContent.trim();
+      var now = countOf(node);
       /* The cart's number is kept so the next page shows it before it is painted (layout). */
       if (node.classList.contains('cart-count') && /^[0-9]+$/.test(now)) { try { localStorage.setItem('materia__cart-count', now); } catch (e) {} }
-      if (seen.get(node) !== now) bump(node);
+      if (seen.get(node) !== now && shopperChange()) bump(node);
       seen.set(node, now);
     }
   });
@@ -48,7 +57,7 @@
     var nodes = document.querySelectorAll('.h-count');
     for (var i = 0; i < nodes.length; i++) {
       if (seen.has(nodes[i])) continue;
-      seen.set(nodes[i], nodes[i].textContent.trim());
+      seen.set(nodes[i], countOf(nodes[i]));
       observer.observe(nodes[i], { childList: true, characterData: true, subtree: true });
     }
   }
